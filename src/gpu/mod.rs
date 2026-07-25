@@ -14,3 +14,7 @@ pub fn trit_tensor_dot(a: &[i8], b: &[i8]) -> i32 {
     }
     acc
 }
+
+pub mod trit_tensor;
+
+pub use trit_tensor::TritTensor;
