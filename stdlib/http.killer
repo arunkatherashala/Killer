@@ -1,0 +1,75 @@
+/// HTTP Module for Killer Standard Library
+/// Simple REST API client interface
+
+def http_get(url) {
+  // Native implementation in VM
+  native_http_get(url)
+}
+
+def http_post(url, body) {
+  native_http_post(url, body)
+}
+
+def http_put(url, body) {
+  native_http_put(url, body)
+}
+
+def http_delete(url) {
+  native_http_delete(url)
+}
+
+// With timeout (in seconds)
+def http_get_timeout(url, timeout_sec) {
+  native_http_get_timeout(url, timeout_sec)
+}
+
+def http_post_timeout(url, body, timeout_sec) {
+  native_http_post_timeout(url, body, timeout_sec)
+}
+
+// Request builder pattern
+def request(method, url) {
+  return {
+    method: method,
+    url: url,
+    headers: {},
+    timeout: 30,
+    
+    header: def(name, value) {
+      self.headers[name] = value
+      return self
+    },
+    
+    with_timeout: def(sec) {
+      self.timeout = sec
+      return self
+    },
+    
+    send: def() {
+      // Send with configured options
+      if self.method == "GET" {
+        return native_http_request_with_options(self)
+      } else if self.method == "POST" {
+        return native_http_request_with_options(self)
+      }
+      // ... handle other methods
+    }
+  }
+}
+
+// Convenience methods
+def get(url) {
+  return request("GET", url).send()
+}
+
+def post(url, body) {
+  return request("POST", url).send()
+}
+
+def put(url, body) {
+  return request("PUT", url).send()
+}
+
+def delete(url) {
+  return request("DELETE", url).send()
+}

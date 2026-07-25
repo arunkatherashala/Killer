@@ -1,0 +1,137 @@
+/// Async/Await Framework for Killer
+/// Provides Promise-like futures and async primitives
+
+def Promise(executor) {
+  return {
+    state: "pending",
+    value: null,
+    error: null,
+    callbacks: [],
+    
+    resolve: def(val) {
+      if self.state == "pending" {
+        self.state = "fulfilled"
+        self.value = val
+        self.notify()
+      }
+    },
+    
+    reject: def(err) {
+      if self.state == "pending" {
+        self.state = "rejected"
+        self.error = err
+        self.notify()
+      }
+    },
+    
+    then: def(on_success, on_error) {
+      let p = self
+      return Promise(def(resolve, reject) {
+        let handle_success = def(val) {
+          try {
+            let result = on_success(val)
+            resolve(result)
+          } catch e {
+            reject(e)
+          }
+        }
+        
+        let handle_error = def(err) {
+          if on_error == null {
+            reject(err)
+          } else {
+            try {
+              let result = on_error(err)
+              resolve(result)
+            } catch e {
+              reject(e)
+            }
+          }
+        }
+        
+        if p.state == "pending" {
+          p.callbacks.push({success: handle_success, error: handle_error})
+        } else if p.state == "fulfilled" {
+          handle_success(p.value)
+        } else {
+          handle_error(p.error)
+        }
+      })
+    },
+    
+    catch: def(on_error) {
+      return self.then(null, on_error)
+    },
+    
+    finally: def(on_complete) {
+      return self.then(
+        def(val) { on_complete(); return val },
+        def(err) { on_complete(); throw err }
+      )
+    },
+    
+    notify: def() {
+      for cb in self.callbacks {
+        if self.state == "fulfilled" {
+          cb.success(self.value)
+        } else {
+          cb.error(self.error)
+        }
+      }
+      self.callbacks = []
+    }
+  }
+}
+
+// Utility: resolve a value immediately
+def resolve(value) {
+  return Promise(def(resolve, reject) {
+    resolve(value)
+  })
+}
+
+// Utility: reject with error immediately
+def reject(error) {
+  return Promise(def(resolve, reject) {
+    reject(error)
+  })
+}
+
+// Utility: race multiple promises
+def race(promises) {
+  return Promise(def(resolve, reject) {
+    for p in promises {
+      p.then(resolve, reject)
+    }
+  })
+}
+
+// Utility: wait for all promises
+def all(promises) {
+  return Promise(def(resolve, reject) {
+    let results = []
+    let count = 0
+    
+    for i in range(promises.length) {
+      let p = promises[i]
+      p.then(
+        def(val) {
+          results[i] = val
+          count = count + 1
+          if count == promises.length {
+            resolve(results)
+          }
+        },
+        reject
+      )
+    }
+  })
+}
+
+// Sleep for N milliseconds
+def sleep(ms) {
+  return Promise(def(resolve, reject) {
+    native_sleep(ms)
+    resolve(null)
+  })
+}

@@ -62,6 +62,15 @@ pub mod error;
 // SECURITY: Input validation, path safety, recursion limits (March 2026)
 pub mod security;
 
+// MODULE SYSTEM: Import/export, module registry, module loader
+pub mod module_loader;
+
+// HTTP CLIENT: REST API integration
+pub mod http_client;
+
+// LSP SERVER: IDE integration (autocomplete, diagnostics, etc)
+pub mod lsp_server;
+
 // CORE VM MODULES: Required by optimization_engine and vm (v4.3)
 pub mod ast;
 pub mod stmt_parser;
