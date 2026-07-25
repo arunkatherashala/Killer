@@ -1,0 +1,75 @@
+// Week 20: Real-Time Systems - Example 1
+// Latency Measurement Utility
+
+kfn get_current_time_ms() {
+    // Simplified: use counter (in real system would use system time)
+    return 0; // Placeholder
+}
+
+kfn measure_latency(operation_name, operation_fn) {
+    let start = get_current_time_ms();
+    
+    // Execute operation
+    operation_fn();
+    
+    let end = get_current_time_ms();
+    let latency = end - start;
+    
+    return {
+        operation: operation_name,
+        latency_ms: latency,
+        start_time: start,
+        end_time: end
+    };
+}
+
+kfn aggregate_latencies(measurements) {
+    let min = 99999999;
+    let max = 0;
+    let sum = 0;
+    
+    for i in 0..length(measurements) {
+        let lat = measurements[i].latency_ms;
+        if lat < min {
+            min = lat;
+        }
+        if lat > max {
+            max = lat;
+        }
+        sum = sum + lat;
+    }
+    
+    let avg = sum / length(measurements);
+    
+    return {
+        min: min,
+        max: max,
+        avg: avg,
+        sum: sum,
+        count: length(measurements)
+    };
+}
+
+// Test
+let measurements = [];
+
+kfn dummy_work() {
+    let x = 0;
+    for i in 0..1000 {
+        x = x + i;
+    }
+}
+
+for i in 0..5 {
+    let m = measure_latency("dummy_work", dummy_work);
+    measurements.push(m);
+}
+
+let stats = aggregate_latencies(measurements);
+print("Latency stats:");
+print("  Min: " + str(stats.min) + " ms");
+print("  Max: " + str(stats.max) + " ms");
+print("  Avg: " + str(stats.avg) + " ms");
+print("  Count: " + str(stats.count));
+
+

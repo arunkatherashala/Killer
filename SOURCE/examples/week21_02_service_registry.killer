@@ -1,0 +1,79 @@
+// Week 21: Network Services - Example 2
+// Service Registry Pattern
+
+kfn create_service_registry() {
+    return {
+        services: {},
+        request_count: 0
+    };
+}
+
+kfn register_service(registry, service_name, host, port) {
+    registry.services[service_name] = {
+        name: service_name,
+        host: host,
+        port: port,
+        status: "healthy",
+        calls: 0
+    };
+    return registry;
+}
+
+kfn get_service(registry, service_name) {
+    if registry.services[service_name] == null {
+        return {found: false, service: null};
+    }
+    return {found: true, service: registry.services[service_name]};
+}
+
+kfn call_service(registry, service_name, method) {
+    let result = get_service(registry, service_name);
+    if !result.found {
+        return {success: false, error: "Service not found"};
+    }
+    
+    let service = result.service;
+    service.calls = service.calls + 1;
+    registry.request_count = registry.request_count + 1;
+    
+    return {
+        success: true,
+        service_name: service_name,
+        endpoint: service.host + ":" + str(service.port),
+        method: method,
+        call_number: service.calls
+    };
+}
+
+kfn get_registry_stats(registry) {
+    let total_services = 0;
+    let total_calls = 0;
+    
+    for name, service in registry.services {
+        total_services = total_services + 1;
+        total_calls = total_calls + service.calls;
+    }
+    
+    return {
+        services: total_services,
+        total_request_count: registry.request_count,
+        total_service_calls: total_calls
+    };
+}
+
+// Test
+let registry = create_service_registry();
+
+registry = register_service(registry, "user-service", "localhost", 8001);
+registry = register_service(registry, "order-service", "localhost", 8002);
+registry = register_service(registry, "auth-service", "localhost", 8003);
+
+let call1 = call_service(registry, "user-service", "GET");
+let call2 = call_service(registry, "user-service", "POST");
+let call3 = call_service(registry, "order-service", "GET");
+
+let stats = get_registry_stats(registry);
+print("Services registered: " + str(stats.services));
+print("Total calls: " + str(stats.total_service_calls));
+
+

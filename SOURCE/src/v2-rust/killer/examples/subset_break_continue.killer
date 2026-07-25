@@ -1,0 +1,19 @@
+# native subset break/continue demo
+i = 0;
+while (i < 8) {
+    i = i + 1;
+
+    if (i == 3) {
+        continue;
+    }
+
+    if (i == 6) {
+        break;
+    }
+
+    print(i);
+}
+
+print("done");
+
+

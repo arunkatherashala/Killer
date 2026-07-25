@@ -1,0 +1,6 @@
+kfn test(x: number): number {
+    return x;
+}
+print(test(5));
+
+

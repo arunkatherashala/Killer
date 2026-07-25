@@ -1,0 +1,2 @@
+// Minimal Killer sample — run: killer-native hello.killer (from this directory or pass full path)
+print("Hello from Killer")

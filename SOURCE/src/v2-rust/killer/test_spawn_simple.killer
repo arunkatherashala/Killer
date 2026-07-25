@@ -1,0 +1,8 @@
+async kfn compute(x) {
+  return x * x
+}
+
+handle = spawn compute(7)
+squared = await handle
+print(squared)
+print("done")

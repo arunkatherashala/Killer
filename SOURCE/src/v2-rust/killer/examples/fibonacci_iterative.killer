@@ -1,0 +1,20 @@
+kfn fib_iterative(n: Int) -> Int {
+    if n <= 1 { return n; }
+    let mut a = 0;
+    let mut b = 1;
+    let mut i = 0;
+    while i < n - 1 {
+        let temp = a + b;
+        a = b;
+        b = temp;
+        i = i + 1;
+    }
+    return b;
+}
+
+kfn main() {
+    let result = fib_iterative(1000000);
+    println(result.to_string());
+}
+
+

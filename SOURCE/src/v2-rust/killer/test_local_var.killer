@@ -1,0 +1,16 @@
+kfn add1(x) {
+  return x + 1
+}
+
+h1 = spawn add1(5)
+r1 = await h1
+print(K"r1={r1}")
+
+kfn mul2(x) {
+  result = x * 2
+  return result
+}
+
+h2 = spawn mul2(10)
+r2 = await h2
+print(K"r2={r2}")

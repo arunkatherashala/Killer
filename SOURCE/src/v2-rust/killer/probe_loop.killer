@@ -1,0 +1,23 @@
+﻿kfn counter_loop(limit) {
+  i = 0
+  while i < limit {
+    i = i + 1
+  }
+  return i
+}
+kfn accum_loop(limit) {
+  i = 0
+  s = 0
+  while i < limit {
+    s = s + i
+    i = i + 1
+  }
+  return s
+}
+print("counter 1M")
+r1 = counter_loop(1000000)
+print(r1)
+print("accum 1M after counter")
+r2 = accum_loop(1000000)
+print(r2)
+print("done")

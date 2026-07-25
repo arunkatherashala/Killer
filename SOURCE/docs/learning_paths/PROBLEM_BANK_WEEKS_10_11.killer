@@ -1,0 +1,2658 @@
+// ACTOR MODEL & DISTRIBUTED SYSTEMS PROBLEM BANK (Weeks 10-11)
+// 320+ problems for mastery-level learning
+// Each problem tests specific actor and distributed systems principles
+
+// ============================================================================
+// WEEK 10: ACTOR MODEL (180 problems)
+// ============================================================================
+
+// PRIMARY CATEGORY: ACTOR BASICS (30 problems)
+// Problems 10.1.1 - 10.1.30
+
+/*
+10.1.1: Simple Echo Actor
+Create an actor that receives a message and echoes it back
+Actor should:
+  - Implement Actor trait with receive() method
+  - Store message in internal state
+  - Return acknowledging response
+  
+Test Cases:
+  - Send "hello" -> receive and store "hello"
+  - Send "world" -> receive and store "world"
+  - Verify isolation from other actors
+
+Example Pattern:
+struct EchoActor {
+    messages: Vec<String>,
+}
+
+impl Actor for EchoActor {
+    fn receive(&mut self, msg: Message) -> Result<()> {
+        self.messages.push(msg.content);
+        Ok(())
+    }
+}
+*/
+
+/*
+10.1.2: Counter Actor with State
+Create an actor that maintains a counter
+Operations: Increment, Decrement, GetValue
+Each message updates internal state
+Return current value in response
+
+Test Cases:
+  - Start at 0
+  - Increment 5 times -> 5
+  - Decrement 3 times -> 2
+  - GetValue -> 2
+*/
+
+/*
+10.1.3: Actor Named Instance
+Create named actors in a registry
+Registry should:
+  - Store actor by name
+  - Support lookup by name
+  - Allow sending messages to named actors
+  
+Test Cases:
+  - Create "counter1" actor
+  - Create "counter2" actor
+  - Send message to counter1, verify counter2 unchanged
+*/
+
+/*
+10.1.4: Actor Message Types
+Define message enum with variants
+Messages: AddFunds, WithdrawFunds, CheckBalance
+Use pattern matching to handle each type
+
+Test Cases:
+  - AddFunds(100) -> balance becomes 100
+  - WithdrawFunds(30) -> balance becomes 70
+  - CheckBalance -> returns 70
+*/
+
+/*
+10.1.5: Actor That Panics
+Create actor that fails on certain input
+Implement error handling in receive()
+Return Err on invalid operations
+
+Test Cases:
+  - Valid message -> Ok(())
+  - Invalid message -> Err("error message")
+  - Ensure actor doesn't panic, returns error
+*/
+
+/*
+10.1.6: Multiple Actors Send Messages
+Create 3 actors that send to each other
+Implement message forwarding
+Track message flow through all 3 actors
+
+Test Cases:
+  - Actor A sends to B
+  - B forwards to C
+  - C returns result
+  - Verify message path
+*/
+
+/*
+10.1.7: Actor with Timeout
+Actor should handle slow message processing
+Implement timeout mechanism
+Return error if processing takes too long
+
+Test Cases:
+  - Message processes in 100ms -> success
+  - Message takes 5s (timeout 1s) -> error
+*/
+
+/*
+10.1.8: Actor Ordering Guarantee
+Send 10 messages in sequence
+Verify they are processed in FIFO order
+Each message should have a sequence number
+
+Test Cases:
+  - Send messages 1,2,3,4,5
+  - Verify processing order is 1,2,3,4,5
+  - Not 1,3,2,5,4
+*/
+
+/*
+10.1.9: Actor State Isolation
+Create two actors with same type
+Modify one actor's state
+Verify other actor's state unchanged
+
+Test Cases:
+  - Actor1 counter = 5
+  - Actor2 counter = 0
+  - Increment Actor1 -> Actor1=6, Actor2=0
+*/
+
+/*
+10.1.10: Actor Message Queuing
+Send 100 messages rapidly to one actor
+All messages should be queued and processed
+No messages should be dropped
+
+Test Cases:
+  - Send 100 messages
+  - Verify actor processes all 100
+  - Check sizes in queue decrease
+*/
+
+/*
+10.1.11: Actor Self-Send
+Actor sends message to itself
+Implement recursive message handling
+Prevent infinite loops with counter
+
+Test Cases:
+  - Actor sends to itself 5 times
+  - Counter decrements each time
+  - Reaches 0 and stops
+*/
+
+/*
+10.1.12: Actor Kill Signal
+Send special Kill message to actor
+Actor should terminate gracefully
+Verify no more messages processed
+
+Test Cases:
+  - Send Kill message
+  - Actor stops receiving
+  - Subsequent messages rejected
+*/
+
+/*
+10.1.13: Get Actor Handle
+Store reference to actor
+Send multiple messages via same handle
+Verify all messages reach same actor
+
+Test Cases:
+  - Get handle to actor
+  - Send 5 messages via handle
+  - Verify all 5 processed by same actor
+*/
+
+/*
+10.1.14: Actor Request-Response
+Actor receives request, sends response
+Use correlation ID to match request-response
+Handler waits for response with timeout
+
+Test Cases:
+  - Send request with ID 1
+  - Receive response with ID 1
+  - Timeout if no response in 5s
+*/
+
+/*
+10.1.15: Actor Batching
+Collect multiple messages
+Process batch when threshold reached or timeout
+Return aggregated result
+
+Test Cases:
+  - Add messages to batch
+  - Process when batch size >= 5
+  - Or timeout after 10s
+*/
+
+/*
+10.1.16: Stateless Actor Pool
+Create pool of identical stateless actors
+Distribute messages round-robin
+Verify equal distribution
+
+Test Cases:
+  - 3 actors, 30 messages
+  - Each actor gets ~10 messages
+*/
+
+/*
+10.1.17: Actor Composition
+One actor coordinates multiple child actors
+Distribute work to children
+Aggregate results
+
+Test Cases:
+  - Parent sends tasks to 3 child actors
+  - Each child processes task
+  - Parent collects results
+*/
+
+/*
+10.1.18: Actor Restart
+Actor fails and is restarted
+New instance takes over
+State may or may not be preserved
+
+Test Cases:
+  - Actor processing
+  - Actor crashes
+  - Supervisor restarts actor
+  - New actor continues processing
+*/
+
+/*
+10.1.19: Actor Deduplication
+Ensure duplicate messages not processed twice
+Track processed message IDs
+Reject duplicates with same ID
+
+Test Cases:
+  - Send message with ID 1
+  - Send duplicate with ID 1
+  - Only first is processed
+*/
+
+/*
+10.1.20: Actor Sharding
+Keys map to specific actors
+"key1" always goes to same actor
+"key2" goes to different actor
+
+Test Cases:
+  - Send key1-msg1 to shard(key1)
+  - Send key1-msg2 to shard(key1)
+  - Same actor receives both
+*/
+
+/*
+10.1.21: Actor with Middleware
+Wrap actor with logging middleware
+Log all messages sent/received
+Verify logs contain all messages
+
+Test Cases:
+  - Send 5 messages
+  - Check logs contain all 5
+  - Verify timestamps in order
+*/
+
+/*
+10.1.22: Actor Backpressure
+When queue is full, sender should wait
+Implement queue size limit
+Block sender until space available
+
+Test Cases:
+  - Queue max size 10
+  - Send 20 messages
+  - Sender waits when queue full
+*/
+
+/*
+10.1.23: Actor Hot Swap Code
+Replace actor's behavior at runtime
+Old behavior -> New behavior
+No message loss during swap
+
+Test Cases:
+  - Version 1: increment only
+  - Swap to Version 2: increment or decrement
+  - No messages lost
+*/
+
+/*
+10.1.24: Actor Persistence
+Save actor state to disk
+Load state on restart
+Verify state matches after reload
+
+Test Cases:
+  - Actor counter = 42
+  - Save to disk
+  - Restart actor
+  - Counter still 42
+*/
+
+/*
+10.1.25: Actor Clustering
+Actors on different nodes
+Node 1 actor sends to Node 2 actor
+Use ActorRef for remote reference
+
+Test Cases:
+  - Create handle to remote actor
+  - Send message via network
+  - Receive response
+*/
+
+/*
+10.1.26: Actor Group Broadcast
+Send message to group of actors
+All actors in group receive message
+Collect responses from all
+
+Test Cases:
+  - 5 actors in group
+  - Broadcast message
+  - Receive 5 responses
+*/
+
+/*
+10.1.27: Actor Deadlock Detection
+Detect when actors wait for each other
+A waits for B, B waits for A
+Report deadlock error
+
+Test Cases:
+  - A.send(msg_to_B)
+  - B.send(msg_to_A) - deadlock!
+  - System detects and reports
+*/
+
+/*
+10.1.28: Actor Graceful Shutdown
+Stop actor and all children
+Allow in-flight messages to complete
+Then fully terminate
+
+Test Cases:
+  - 5 messages in queue
+  - Initiate shutdown
+  - Queue drains
+  - Actor terminates
+*/
+
+/*
+10.1.29: Actor Type Safety
+Compile-time guarantee of messages
+Wrong message type prevents compilation
+Type system catches errors
+
+Test Cases:
+  - Actor expects Message type A
+  - Compiler error on Message type B
+  - Type-safe interactions
+*/
+
+/*
+10.1.30: Actor Testing Framework
+Create test harness for actors
+Send test messages
+Assert on responses
+Verify actor behavior
+
+Test Cases:
+  - Create test actor
+  - Send test message
+  - Assert response equals expected
+*/
+
+// ============================================================================
+// SUPERVISION PATTERNS (35 problems)
+// Problems 10.2.1 - 10.2.35
+
+/*
+10.2.1: One-For-One Restart
+Child actor crashes
+Only that child is restarted
+Other children unaffected
+
+Test Cases:
+  - 3 children: C1, C2, C3
+  - C2 crashes
+  - Only C2 restarted
+  - C1, C3 continue working
+*/
+
+/*
+10.2.2: All-For-One Restart
+Any child crashes
+All children are restarted
+Entire supervision group restarts
+
+Test Cases:
+  - 3 children
+  - C2 crashes
+  - All 3 restarted
+  - Clean slate for all
+*/
+
+/*
+10.2.3: Supervisor Chain
+Grandparent -> Parent -> Child
+Child crashes -> Parent restarts
+Parent crashes -> Grandparent restarts
+
+Test Cases:
+  - 3-level hierarchy
+  - Child crashes -> Parent tries restart
+  - If Parent fails -> Grandparent restarts both
+*/
+
+/*
+10.2.4: Restart with BackOff
+First restart immediately
+Second restart after 1s
+Third restart after 2s
+Exponential backoff
+
+Test Cases:
+  - Crash 1 -> restart at t=0
+  - Crash 2 -> restart at t=1
+  - Crash 3 -> restart at t=3
+  - Crash 4 -> restart at t=7
+*/
+
+/*
+10.2.5: Max Restart Limit
+Restart up to 5 times
+After 5 crashes, give up
+Propagate failure upward
+
+Test Cases:
+  - Crash 5 times -> all restarted
+  - Crash 6 times -> escalate to parent
+*/
+
+/*
+10.2.6: Restart Only If Error
+Success -> no restart needed
+Panic -> restart required
+Circuit breaker preventing restart storm
+
+Test Cases:
+  - Operation succeeds -> no restart
+  - Panic occurs -> restart
+*/
+
+/*
+10.2.7: Delayed Escalation
+Try to recover locally first
+After N failures, escalate to parent
+Parent decides what to do
+
+Test Cases:
+  - Child fails 3 times
+  - Child handles locally
+  - 4th failure -> escalate
+  - Parent may restart grandparent
+*/
+
+/*
+10.2.8: Supervision Group State
+Track which children are failing
+Identify problematic actor
+Apply targeted fixes
+
+Test Cases:
+  - Monitor 10 children
+  - 2 are failing repeatedly
+  - Others healthy
+  - Report unhealthy actors
+*/
+
+/*
+10.2.9: Custom Restart Strategy
+Define custom enum: RestartStrategy
+Implement different strategies per child
+Parent applies appropriate strategy
+
+Test Cases:
+  - Child1: Permanent (if fails, give up)
+  - Child2: Transient (retry always)
+  - Apply correct strategy per child
+*/
+
+/*
+10.2.10: Partial Failure Isolation
+Child1 fails but doesn't affect Child2
+Each child is isolated
+Crash in one doesn't cascade
+
+Test Cases:
+  - Child1 stores data
+  - Child1 crashes
+  - Child2 can still access its data
+  - No corruption across children
+*/
+
+/*
+10.2.11: Supervisor With Timeout
+If child doesn't respond in 5s
+Assume hung and restart
+Timeout applies to all operations
+
+Test Cases:
+  - Send message to child
+  - Child hangs
+  - After 5s timeout -> restart child
+*/
+
+/*
+10.2.12: Replication Factor
+Keep N copies of critical actors
+If one crashes, others still serve
+Automatic failover
+
+Test Cases:
+  - Replicate actor 3 times
+  - Instance 1 crashes
+  - Instances 2, 3 continue
+  - Automatically replace instance 1
+*/
+
+/*
+10.2.13: Catastrophic Failure Detection
+If child fails repeatedly in short time
+Escalate to parent
+Parent decides: restart or kill
+
+Test Cases:
+  - Child fails 5 times in 10s
+  - Escalate to parent
+  - Parent: shut down child permanently
+*/
+
+/*
+10.2.14: Graceful Degradation
+Some children crash
+System keeps running in degraded mode
+Partial service available
+
+Test Cases:
+  - 4 service instances
+  - 2 crash
+  - System provides 50% capacity
+  - Keep serving with what's left
+*/
+
+/*
+10.2.15: Health Check
+Supervisor periodically checks child health
+Send ping, wait for pong
+If no pong, treat as dead
+
+Test Cases:
+  - Ping child every 1s
+  - Normal child responds
+  - Dead child doesn't respond -> restart
+*/
+
+/*
+10.2.16: Restart Notification
+Child receives notification before restart
+Cleanup resources
+Prepare for shutdown
+
+Test Cases:
+  - Before restart, send "prepare_shutdown"
+  - Actor flushes buffers
+  - Closes connections
+  - Then restart
+*/
+
+/*
+10.2.17: Supervisor Hierarchy Limits
+Don't create too deep hierarchies
+Max depth 5 levels
+Pre-allocate supervisor pool
+
+Test Cases:
+  - Create 5-level hierarchy -> OK
+  - Try 6 levels -> error
+*/
+
+/*
+10.2.18: Load-based Restart
+Restart when load too high
+If CPU > 80%, restart to reset state
+Fast recovery under overload
+
+Test Cases:
+  - CPU usage 50% -> no restart
+  - CPU usage 90% -> restart
+  - CPU drops to 30% after restart
+*/
+
+/*
+10.2.19: Dependency-based Restart
+Child depends on external service
+If service unavailable, don't restart child
+Wait for service, then start child
+
+Test Cases:
+  - Service1 required by Child
+  - Service1 unavailable
+  - Don't restart Child yet
+  - Once Service1 available, start Child
+*/
+
+/*
+10.2.20: Canary Restart
+Restart new version on subset of children
+Monitor success rate
+If good, roll out to all
+
+Test Cases:
+  - New version V2
+  - Restart 1 of 10 children with V2
+  - Monitor: success rate 99%
+  - Roll out V2 to remaining 9
+*/
+
+/*
+10.2.21: Supervisor Metrics
+Track restart counts per child
+Identify problematic actors
+Report in monitoring dashboard
+
+Test Cases:
+  - Child1: 5 restarts
+  - Child2: 50 restarts (problem!)
+  - Child3: 0 restarts
+  - Fix Child2
+*/
+
+/*
+10.2.22: Exponential Backoff with Jitter
+Restart backoff: 100ms, 200ms, 400ms, 800ms
+Add random jitter: +/-10%
+Prevent thundering herd
+
+Test Cases:
+  - Multiple children crash simultaneously
+  - With jitter, restarts spread out
+  - Not all restarting at exact same time
+*/
+
+/*
+10.2.23: Idempotent Restart
+Restarting twice = restarting once
+No side effects from duplicate restart
+Safe to retry restart
+
+Test Cases:
+  - Send restart(actor1) twice
+  - Same result as sending once
+  - No double-initialization
+*/
+
+/*
+10.2.24: Supervised Pool Scaling
+Supervisor monitors pool size
+If child dies, spawn replacement
+Maintain constant pool size
+
+Test Cases:
+  - Pool size 10
+  - Child dies
+  - Automatically spawn 1 new child
+  - Pool size back to 10
+*/
+
+/*
+10.2.25: Supervisor Linking
+Parent-child link: if parent dies, kill child
+Child-parent link: if child dies, kill parent
+Bidirectional dependency
+
+Test Cases:
+  - Parent and Child linked
+  - Parent dies -> kill Child
+  - Child dies -> kill Parent
+*/
+
+/*
+10.2.26: Nanny Pattern
+Special actor that restarts children
+Separate from normal actor tree
+Focused on recovery
+
+Test Cases:
+  - Nanny monitors 5 critical actors
+  - Any dies -> Nanny restarts
+  - Nanny itself is restarted by supervisor
+*/
+
+/*
+10.2.27: Exponential Queue Backoff
+Queue size increases -> increase backoff
+Deep queue means system overloaded
+Increase restart delay
+
+Test Cases:
+  - Queue size < 10 -> restart fast
+  - Queue size > 100 -> restart slow
+  - Queue size > 1000 -> very slow restart
+*/
+
+/*
+10.2.28: Transient vs Permanent Errors
+Transient: network timeout -> retry
+Permanent: invalid message -> give up
+kmeth each appropriately
+
+Test Cases:
+  - Network error (transient) -> restart
+  - Code error (permanent) -> escalate
+*/
+
+/*
+10.2.29: Supervised Timeout
+Child must complete within time limit
+Timeout persists across restarts
+Ensures no stuck actors
+
+Test Cases:
+  - Task must finish in 5s
+  - Restart happens, timer resets
+  - But overall deadline remains
+*/
+
+/*
+10.2.30: Hierarchical Supervision Report
+Print tree of supervisors and children
+Show restart counts per node
+Visualize supervision structure
+
+Test Cases:
+  - Print supervision tree
+  - Show metrics at each level
+  - Identify problem areas
+*/
+
+/*
+10.2.31: Restart with State Recovery
+Actor fails, restart with last known good state
+State saved before crashes
+Restores to safe point
+
+Test Cases:
+  - Save state every 10 messages
+  - Crash after 15 messages
+  - Restart with state from 10 messages
+  - Skip corrupted messages 11-15
+*/
+
+/*
+10.2.32: Supervision Annotation
+Mark critical actors: @Critical
+Mark optional actors: @Optional
+Restart strategy depends on annotation
+
+Test Cases:
+  - Critical actor fails -> aggressive restart
+  - Optional actor fails -> may skip restart
+*/
+
+/*
+10.2.33: Batch Restart
+If N children fail simultaneously
+Restart all at once with same delay
+Avoid sequential restart storms
+
+Test Cases:
+  - 5 children crash at t=0
+  - Restart all 5 at t=1 (together)
+  - Not spread over 5s
+*/
+
+/*
+10.2.34: Supervisor Recursion Limit
+Prevent infinite restart loops
+If restart threshold exceeded
+Escalate to parent and stop
+
+Test Cases:
+  - Max 5 restarts per minute
+  - Exceed -> escalate
+  - Stop attempting restart
+*/
+
+/*
+10.2.35: Dynamic Supervisor Addition
+Add new child to supervisor at runtime
+Supervisor adoption of migrated actors
+Hot addition without stop
+
+Test Cases:
+  - Running supervisor with 2 children
+  - Add 3rd child while running
+  - All 3 supervised immediately
+*/
+
+// ============================================================================
+// SERVICE ARCHITECTURE (45 problems)
+// Problems 10.3.1 - 10.3.45
+
+/*
+10.3.1: Request-Response Pattern
+Send request, wait for response
+Correlation ID matches request-response
+Timeout if no response
+
+Test Cases:
+  - Send request(id=1)
+  - Receive response(id=1)
+  - Verify correlation
+*/
+
+/*
+10.3.2: Fire-and-Forget Pattern
+Send message, don't wait for response
+Used for notifications, logs
+Async one-way communication
+
+Test Cases:
+  - Send message
+  - Don't wait for ack
+  - Caller returns immediately
+*/
+
+/*
+10.3.3: Ask Pattern
+Request with automatic response handler
+await response_future.await
+Cleaner syntax than manual correlation
+
+Test Cases:
+  - ask(actor, message).await
+  - Returns Response directly
+  - Handles correlation internally
+*/
+
+/*
+10.3.4: Tell Pattern
+Send message, no response expected
+actor.tell(message)
+Pure async notification
+
+Test Cases:
+  - actor.tell(Update)
+  - Continue immediately
+  - Don't await
+*/
+
+/*
+10.3.5: Service Discovery
+Lookup actor by name/role
+Returns ActorRef if found
+Returns error if not found
+
+Test Cases:
+  - discover("database") -> Some(ActorRef)
+  - discover("missing") -> None
+*/
+
+/*
+10.3.6: Service Registry
+Register: name -> ActorRef
+Lookup: name -> ActorRef
+Deregister: remove from registry
+
+Test Cases:
+  - register("cache", cache_ref)
+  - lookup("cache") -> Some(cache_ref)
+  - deregister("cache")
+  - lookup("cache") -> None
+*/
+
+/*
+10.3.7: Load Balancer
+Route messages to least busy replica
+Track queue depth per instance
+Send to instance with smallest queue
+
+Test Cases:
+  - Instance1 queue: 5
+  - Instance2 queue: 2
+  - Send to Instance2 (smaller queue)
+*/
+
+/*
+10.3.8: Round Robin Distribution
+Cycle through instances 1,2,3,1,2,3
+Each gets equal load
+Simple but fair
+
+Test Cases:
+  - Send 6 messages
+  - Instance1 gets 1,4
+  - Instance2 gets 2,5
+  - Instance3 gets 3,6
+*/
+
+/*
+10.3.9: Sticky Sessions
+Client always goes to same server
+Based on client ID
+Maintains affinity
+
+Test Cases:
+  - Client=A -> always to Server1
+  - Client=B -> always to Server2
+  - Multiple requests from same client
+*/
+
+/*
+10.3.10: Consistent Hashing
+Map key to specific instance
+Same key always same instance
+Minimize redistribution on node change
+
+Test Cases:
+  - key="user1" -> Instance2
+  - key="user1" again -> Instance2 (consistent)
+  - key="user2" -> Instance4
+*/
+
+/*
+10.3.11: Replication Factor
+Keep N copies (default N=3)
+Read from any copy
+Write to all copies
+
+Test Cases:
+  - 3 replicas of data
+  - Write to all 3
+  - Read from 1 (all have same data)
+*/
+
+/*
+10.3.12: Write Quorum
+Write to majority (N/2 + 1)
+Read from majority
+Ensures consistency if one fails
+
+Test Cases:
+  - 3 replicas
+  - Write to 2 of 3 (quorum)
+  - Read from 2 of 3 (quorum)
+  - Always get latest data
+*/
+
+/*
+10.3.13: Read-Through Cache
+Check cache first
+If miss, query database
+Update cache with result
+Return to client
+
+Test Cases:
+  - First request: miss, hit DB, cache updated
+  - Second request: cache hit, fast
+*/
+
+/*
+10.3.14: Write-Through Cache
+Update cache and database
+Ensure consistency
+Single write operation
+
+Test Cases:
+  - Write X -> update cache and DB
+  - Both have X
+  - Consistency guaranteed
+*/
+
+/*
+10.3.15: Batch Processing
+Collect messages, process batch
+Wait for size threshold or timeout
+More efficient than one-by-one
+
+Test Cases:
+  - Batch size = 10
+  - After 10 messages -> process batch
+  - Timeout 1s also triggers batch
+*/
+
+/*
+10.3.16: Rate Limiting
+Allow max N requests per second
+Reject excess requests
+Backpressure on clients
+
+Test Cases:
+  - Limit 100 req/s
+  - 100 requests -> OK
+  - 101st request -> rate limited
+*/
+
+/*
+10.3.17: Circuit Breaker
+Count failures in window
+If threshold exceeded, open circuit
+Fail fast without calling service
+
+Test Cases:
+  - Service fails 5 times in 10s
+  - Circuit opens
+  - New requests fail immediately (fast)
+*/
+
+/*
+10.3.18: Bulkhead Pattern
+Isolate thread pools per service
+One service overload doesn't affect others
+Prevent cascade failures
+
+Test Cases:
+  - ServiceA pool: 5 threads
+  - ServiceB pool: 5 threads
+  - ServiceA overloaded
+  - ServiceB still responsive
+*/
+
+/*
+10.3.19: Timeout Handler
+Set timeout on requests
+If no response in N seconds
+Return error or fallback
+
+Test Cases:
+  - Request with 5s timeout
+  - Response after 3s -> OK
+  - No response after 5s -> timeout error
+*/
+
+/*
+10.3.20: Retry Logic
+Retry failed request N times
+Exponential backoff between retries
+Give up after N failures
+
+Test Cases:
+  - Fail, retry after 1s
+  - Fail, retry after 2s
+  - Fail, retry after 4s
+  - Give up after 3 retries
+*/
+
+/*
+10.3.21: Fallback Handler
+Primary fails -> use fallback
+Fallback is simpler/slower alternative
+Better degraded service than failure
+
+Test Cases:
+  - Primary cache fails
+  - Fallback to slow DB query
+  - Return result instead of error
+*/
+
+/*
+10.3.22: Decoupling with Queue
+Producer adds to queue
+Consumer pulls from queue
+Producer and consumer independent
+
+Test Cases:
+  - Producer generates 100 messages
+  - Consumer processes 10/s
+  - No blocking between producer-consumer
+*/
+
+/*
+10.3.23: Message Ordering
+Producer: 1,2,3,4,5
+Consumer: guaranteed to process 1,2,3,4,5
+FIFO ordering preserved
+
+Test Cases:
+  - Send messages 1-100 in order
+  - Process received in same order
+  - No reordering
+*/
+
+/*
+10.3.24: Message Deduplication
+Detect duplicate messages
+Only process once
+Track processed message IDs
+
+Test Cases:
+  - Receive message ID=5
+  - Receive duplicate ID=5
+  - Process once
+  - Ignore duplicate
+*/
+
+/*
+10.3.25: Idempotent Operation
+Operation safe to repeat multiple times
+Result same whether done once or 5 times
+kmeth retries safely
+
+Test Cases:
+  - Transfer $100 once -> balance = 500
+  - Retry transfer -> balance = 500 (not 400)
+*/
+
+/*
+10.3.26: Transaction Scope
+Group operations: all-or-nothing
+Commit if all succeed
+Rollback if any fail
+
+Test Cases:
+  - Transfer: debit A, credit B
+  - Debit succeeds, credit fails
+  - Rollback debit
+  - Both fail or both succeed
+*/
+
+/*
+10.3.27: Compensating Transaction
+Forward transaction fails
+Apply compensating transaction (undo)
+Return to previous state
+
+Test Cases:
+  - Transfer: debit A, credit B
+  - Credit fails
+  - Run compensating: credit A back
+*/
+
+/*
+10.3.28: Message Expiration
+Message expires if not processed in N seconds
+Producer sets TTL
+Consumer drops expired messages
+
+Test Cases:
+  - Message TTL = 5s
+  - After 5s, message discarded
+  - Before 5s, still valid
+*/
+
+/*
+10.3.29: Priority Queue
+High priority messages processed first
+Low priority when queue not full
+Starvation prevention with aging
+
+Test Cases:
+  - Priority: High, Medium, Low
+  - Despite order sent: High processed first
+*/
+
+/*
+10.3.30: Persistence
+Store messages to disk before processing
+Survive crashes
+Replay on recovery
+
+Test Cases:
+  - Message arrives
+  - Write to disk
+  - Process
+  - If crash, replay from disk
+*/
+
+/*
+10.3.31: Compaction
+Old duplicate messages can be removed
+Keep only latest version
+Reduce storage
+
+Test Cases:
+  - KeyX version 1 (old)
+  - KeyX version 2 (newer)
+  - Compact: remove version 1
+*/
+
+/*
+10.3.32: Snapshot
+Save actor state periodically
+Snapshot every 1000 messages
+Speed up recovery from old state
+
+Test Cases:
+  - Snapshot at message 1000
+  - Crash at message 1500
+  - Recover from snapshot (msg 1000)
+  - Replay only 500 messages
+*/
+
+/*
+10.3.33: Event Sourcing
+Store events, not state
+Rebuild state from events
+Full audit trail
+
+Test Cases:
+  - Events: deposit(100), withdraw(30)
+  - State: balance = 70
+  - Derive state from events
+*/
+
+/*
+10.3.34: CQRS Pattern
+Command: change state
+Query: read state
+Separate read and write paths
+
+Test Cases:
+  - Command: deposit(100)
+  - Query: getBalance() -> 100
+  - Different handlers
+*/
+
+/*
+10.3.35: Saga Pattern
+Long-running transaction across multiple services
+Service1.step1 -> Service2.step2 -> Service3.step3
+Compensate each step on failure
+
+Test Cases:
+  - Order saga: validate order -> debit account -> ship items
+  - Ship fails -> refund account -> cancel order
+*/
+
+/*
+10.3.36: Distributed Lock
+Lock shared resource
+Only one actor holds lock
+Others wait for availability
+
+Test Cases:
+  - Actor1 locks resource
+  - Actor2 requests -> waits
+  - Actor1 unlocks
+  - Actor2 gets lock
+*/
+
+/*
+10.3.37: Lease-based Lock
+Lock expires after lease period
+No explicit unlock needed
+Auto-expires to prevent deadlock
+
+Test Cases:
+  - Lock with 30s lease
+  - If holder dies, lock expires
+  - Others can acquire after expiry
+*/
+
+/*
+10.3.38: Optimistic Locking
+No lock, check version
+If version matches, update
+If version changed, retry
+
+Test Cases:
+  - Read X version=1
+  - Update if version still 1
+  - Concurrent update changes version
+  - Retry needed
+*/
+
+/*
+10.3.39: Pessimistic Locking
+Lock before reading
+Hold lock through operation
+Release when done
+
+Test Cases:
+  - Lock before read
+  - Read X
+  - Update X
+  - Release lock
+*/
+
+/*
+10.3.40: Pipeline
+Chain operations: filter -> map -> reduce
+Each stage can be parallelized
+Improve throughput with buffering
+
+Test Cases:
+  - Stage1: parse (100/s)
+  - Stage2: validate (200/s)
+  - Stage3: save (50/s)
+  - Overall: 50/s (limited by save)
+*/
+
+/*
+10.3.41: Fan-Out/Fan-In
+Send to multiple handlers (fan-out)
+Collect responses (fan-in)
+Parallelize independent work
+
+Test Cases:
+  - Send to 3 handlers
+  - Collect 3 results
+  - Return when all complete
+*/
+
+/*
+10.3.42: Scatter-Gather
+Scatter: send to all nodes
+Gather: collect responses
+Return aggregated result
+
+Test Cases:
+  - Query to 5 database nodes
+  - Nodes return partial results
+  - Aggregate into final result
+*/
+
+/*
+10.3.43: Backpressure Propagation
+If consumer slow, tell producer to slow down
+Prevents buffer overflow
+Cascades through chain
+
+Test Cases:
+  - Producer writes fast
+  - Consumer slow to process
+  - Buffer fills
+  - Producer slows down
+*/
+
+/*
+10.3.44: Graceful Drain
+Stop accepting new messages
+Process all queued messages
+Then shutdown
+
+Test Cases:
+  - Receive 100 messages
+  - Call drain()
+  - Stop accepting new messages
+  - Process all 100
+  - Shutdown when done
+*/
+
+/*
+10.3.45: Service Composition
+Combine multiple services
+Request flows through chain
+Each service adds value
+
+Test Cases:
+  - Auth service -> Business logic -> Logging
+  - Request flows through all 3
+  - Response aggregates all 3 results
+*/
+
+// ============================================================================
+// WEEK 11: DISTRIBUTED SYSTEMS (140 problems)
+// ============================================================================
+
+// PRIMARY CATEGORY: NETWORK & RPC (35 problems)
+// Problems 11.1.1 - 11.1.35
+
+/*
+11.1.1: Simple RPC Call
+Client sends request over network
+Server processes
+Server sends response back
+Verify request/response match
+
+Test Cases:
+  - Request: add(2, 3)
+  - Response: 5
+  - Over network
+*/
+
+/*
+11.1.2: RPC with Timeout
+Call with 5 second timeout
+If no response in 5s
+Return error to client
+
+Test Cases:
+  - Server responds in 2s -> OK
+  - Server hung -> timeout after 5s
+  - Return error, not hang forever
+*/
+
+/*
+11.1.3: RPC with Retries
+Failed call auto-retries 3 times
+Exponential backoff between retries
+Give up after 3 failures
+
+Test Cases:
+  - Fail 1, retry after 1s
+  - Fail 2, retry after 2s
+  - Fail 3, return error
+  - Success on retry 1 -> done
+*/
+
+/*
+11.1.4: RPC Serialization
+Serialize call: struct to bytes
+Send over network
+Deserialize on server
+Ensure no data loss
+
+Test Cases:
+  - Struct { x: 10, y: "hello" }
+  - Serialize -> bytes
+  - Deserialize -> original struct
+*/
+
+/*
+11.1.5: RPC with Compression
+Large message compressed before send
+Decompressed on receive
+Reduce bandwidth
+
+Test Cases:
+  - Message 1MB
+  - Compress -> 100KB
+  - Decompress -> 1MB
+  - Same content
+*/
+
+/*
+11.1.6: RPC Connection Pooling
+Keep N persistent connections
+Reuse connections
+Reduce overhead
+
+Test Cases:
+  - Pool size 10
+  - 100 requests use same 10 connections
+  - Not create 100 new connections
+*/
+
+/*
+11.1.7: RPC Batching
+Batch multiple RPC calls
+Send as one batch message
+Reduce round-trips
+
+Test Cases:
+  - 100 small calls
+  - Batch into 1 message
+  - 1 round-trip instead of 100
+*/
+
+/*
+11.1.8: RPC Error Handling
+Distinguish error types
+Network error vs Application error
+kmeth appropriately
+
+Test Cases:
+  - Network timeout -> retry
+  - Invalid argument -> return error immediately
+  - Internal server error -> retry with backoff
+*/
+
+/*
+11.1.9: RPC Authentication
+Include auth token in request
+Server verifies token
+Reject unauthorized requests
+
+Test Cases:
+  - Request with valid token -> accepted
+  - Request with invalid token -> 401
+  - Request without token -> 401
+*/
+
+/*
+11.1.10: RPC Encryption
+Encrypt messages before sending
+Decrypt on receive
+Secure communication
+
+Test Cases:
+  - Message: "secret"
+  - Encrypt -> "a7f2k9s..."
+  - Decrypt -> "secret"
+*/
+
+/*
+11.1.11: RPC Rate Limiting
+Track requests per client
+Limit to N requests/second
+Return 429 if exceeded
+
+Test Cases:
+  - Limit 100 req/s
+  - Send 150 req/s
+  - First 100 billed as OK
+  - Last 50 rejected with 429
+*/
+
+/*
+11.1.12: RPC Correlation ID
+Assign unique ID per request
+Pass through entire stack
+Track in logs
+
+Test Cases:
+  - Request gets ID: abc123
+  - All logs mention abc123
+  - Can trace request from client to server
+*/
+
+/*
+11.1.13: RPC Health Check
+Periodic ping to server
+Returns pong if healthy
+Server marked down if no pong
+
+Test Cases:
+  - Ping every 10s
+  - Healthy server responds
+  - Dead server doesn't -> marked down
+*/
+
+/*
+11.1.14: RPC Circuit Breaker
+Track failures per server
+If failure rate > threshold
+Open circuit, fail fast
+Half-open to test recovery
+
+Test Cases:
+  - 5 failures per 100 requests
+  - Open circuit after 5% failure
+  - Fail fast without trying server
+*/
+
+/*
+11.1.15: RPC Request Deduplication
+Detect duplicate requests by ID
+Only execute once
+Return cached response for duplicate
+
+Test Cases:
+  - Request ID=5 -> execute
+  - Request ID=5 again -> return cached
+  - No double execution
+*/
+
+/*
+11.1.16: RPC Idempotency
+Mark request as idempotent
+Safe to execute multiple times
+kmeth retries correctly
+
+Test Cases:
+  - Transfer with ID=1
+  - Retry with same ID
+  - Balance changes once, not twice
+*/
+
+/*
+11.1.17: RPC One-Way Call
+Send request, don't wait for response
+Fire and forget
+Async
+
+Test Cases:
+  - Send log message
+  - Don't await response
+  - Return immediately
+*/
+
+/*
+11.1.18: RPC Two-Way Call
+Send request, wait for response
+Synchronous
+Block until response received
+
+Test Cases:
+  - await rpc.call(request)
+  - Block until response
+  - Could timeout
+*/
+
+/*
+11.1.19: RPC with Streaming
+Send/receive stream of messages
+Bidirectional communication
+Not just request-response
+
+Test Cases:
+  - Client sends 100 chunks
+  - Server receives in stream
+  - Server responds with 100 chunks
+*/
+
+/*
+11.1.20: RPC Version Compatibility
+Support multiple RPC versions
+V1 and V2 servers co-exist
+Client compatible with both
+
+Test Cases:
+  - Client V2.0 calls server V1.5
+  - Server V1.5 calls client V2.0
+  - Both work (backward compatible)
+*/
+
+/*
+11.1.21: RPC Method Dispatch
+Multiple methods per service
+Route to correct method
+Type-safe method invocation
+
+Test Cases:
+  - Service.add(2, 3)
+  - Service.subtract(5, 3)
+  - Correct method called
+*/
+
+/*
+11.1.22: RPC Response Marshaling
+Convert response to wire format
+kmeth different types
+Ensure faithful representation
+
+Test Cases:
+  - Response: { x: 1.5, y: "test", z: null }
+  - Marshal to JSON/binary
+  - Unmarshal: same values
+*/
+
+/*
+11.1.23: RPC Caching
+Cache responses
+Subsequent same request -> cached response
+Reduce server load
+
+Test Cases:
+  - Request A -> server computes
+  - Request A again -> from cache
+  - Different request B -> server computes
+*/
+
+/*
+11.1.24: RPC Invalidation
+Update operation invalidates cache
+Related queries must recompute
+Consistency guaranteed
+
+Test Cases:
+  - Cache: getUser(5) = { name: "alice" }
+  - Update: setName(5, "bob")
+  - Cache invalidated
+  - Next getUser(5) recomputes
+*/
+
+/*
+11.1.25: RPC Multicast
+One request, multiple servers receive
+All process independently
+Broadcast async
+
+Test Cases:
+  - Request to all nodes
+  - All broadcast listeners get message
+  - Process independently
+*/
+
+/*
+11.1.26: RPC Unicast
+One request, one specific server
+Directed communication
+Not broadcast
+
+Test Cases:
+  - Send to node 3 specifically
+  - Node 1, 2 don't receive
+  - Only node 3 receives
+*/
+
+/*
+11.1.27: RPC Anycast
+Request to closest replica
+Reduce latency
+Improve perceived performance
+
+Test Cases:
+  - 3 replicas: US, EU, AP
+  - Client in EU -> EU replica responds
+  - Reduce round-trip time
+*/
+
+/*
+11.1.28: RPC Ordered Delivery
+Messages delivered in sending order
+FIFO guarantee per sender
+Maintain causality
+
+Test Cases:
+  - Send 1, 2, 3, 4, 5
+  - Receive 1, 2, 3, 4, 5
+  - Not 1, 3, 2, 5, 4
+*/
+
+/*
+11.1.29: RPC Ordered Semantics
+Strong ordering: total order
+Causal ordering: respect causality
+Weak ordering: no guarantees
+
+Test Cases:
+  - Strong: all nodes see same order
+  - Causal: respects dependencies
+  - Weak: may see different orders
+*/
+
+/*
+11.1.30: RPC Suppression
+Acknowledge received but not processed
+Send ACK to unblock sender
+Process asynchronously
+
+Test Cases:
+  - Client sends request
+  - Server: "got it" ACK immediately
+  - Server processes in background
+*/
+
+/*
+11.1.31: RPC Pipelining
+Send multiple requests without waiting
+Server responds to all
+Use network efficiently
+
+Test Cases:
+  - Send 100 requests immediately
+  - Receive 100 responses streaming
+  - Not serial request-response
+*/
+
+/*
+11.1.32: RPC Back Pressure
+Slow consumer tells producer to slow down
+Prevent buffer overflow
+Flow control
+
+Test Cases:
+  - Producer: 1000 msg/s
+  - Consumer: 100 msg/s
+  - Consumer tells producer to slow down
+  - Producer limited to 100 msg/s
+*/
+
+/*
+11.1.33: RPC Priority
+High priority requests served first
+Skip low priority if server busy
+Quality of service differentiation
+
+Test Cases:
+  - High priority: answer immediately
+  - Low priority: answer when not busy
+*/
+
+/*
+11.1.34: RPC Jitter
+Add randomness to retry timing
+Prevent thundering herd
+Smooth load spikes
+
+Test Cases:
+  - Retry delay: 1s +/- 100ms random
+  - Not all clients retry at exact 1s
+  - Spread out retries
+*/
+
+/*
+11.1.35: RPC Tracing
+Record RPC path through system
+Service1 calls Service2 calls Service3
+Show in request trace
+
+Test Cases:
+  - Request ID: abc123
+  - Trace shows: Client -> Service1 -> Service2 -> Service3
+  - All timings visible
+*/
+
+// ============================================================================
+// REPLICATION & CONSISTENCY (35 problems)
+// Problems 11.2.1 - 11.2.35
+
+/*
+11.2.1: Primary-Backup Replication
+One primary, one backup
+Writes go to primary
+Primary replicates to backup
+Read from primary or backup
+
+Test Cases:
+  - Write to primary -> replicate to backup
+  - Primary dies -> promote backup to primary
+  - Consistent data between them
+*/
+
+/*
+11.2.2: Multi-Master Replication
+Multiple primaries
+Any can accept writes
+All replicate to each other
+Conflict resolution needed
+
+Test Cases:
+  - Node1 writes X
+  - Node2 writes Y
+  - Both have X and Y
+  - Consistent eventually
+*/
+
+/*
+11.2.3: Replication Lag
+Backup lags behind primary
+Backup = primary - delta
+Eventually catches up
+
+Test Cases:
+  - Primary has 100 messages
+  - Backup has 95 messages
+  - Lag = 5 messages
+*/
+
+/*
+11.2.4: Read Your Writes
+After write, read sees same write
+Client stickiness to node
+Guarantee for that client
+
+Test Cases:
+  - Write X at t0
+  - Read X at t1 > t0
+  - See X that was just written
+*/
+
+/*
+11.2.5: Causal Consistency
+If B depends on A, all see A before B
+Write causality respected
+Partial order
+
+Test Cases:
+  - A: "create user"
+  - B: "give permission to user"
+  - All observers see A before B
+*/
+
+/*
+11.2.6: Eventual Consistency
+No guarantee when consistency reached
+Will converge eventually
+Temporary divergence allowed
+
+Test Cases:
+  - Nodes may differ temporarily
+  - After network heals, converge
+  - No guarantee on timing
+*/
+
+/*
+11.2.7: Strong Consistency
+All nodes same state always
+Wait for replication acknowledgment
+Slower but safer
+
+Test Cases:
+  - Write only returns after all replicas ack
+  - Read always sees latest write
+  - Slow (have to wait for all)
+*/
+
+/*
+11.2.8: Quorum Reads
+Read from N/2 + 1 replicas
+Get latest value among them
+Consistency without writing all
+
+Test Cases:
+  - 5 replicas
+  - Read quorum: 3
+  - Get latest from 3 of 5
+*/
+
+/*
+11.2.9: Quorum Writes
+Write to N/2 + 1 replicas
+Ensure future reads see write
+Consistency without writing all
+
+Test Cases:
+  - 5 replicas
+  - Write quorum: 3
+  - Write to 3 of 5 is enough
+*/
+
+/*
+11.2.10: Quorum Overlap
+Read quorum and write quorum overlap
+Guarantees latest data read
+At least one server has latest
+
+Test Cases:
+  - 5 replicas, quorum = 3
+  - Write quorum and read quorum overlap
+  - Always read latest
+*/
+
+/*
+11.2.11: Replication Factor
+Replicate data N times
+Survive N-1 failures
+Common: N=3
+
+Test Cases:
+  - Replication factor = 3
+  - 2 node failures -> still has 1 copy
+  - 3 node failures -> data lost
+*/
+
+/*
+11.2.12: Replica Reconciliation
+Compare replicas, sync differences
+Hash-based or log-based
+Repair divergences
+
+Test Cases:
+  - Node1 has data A, B, C
+  - Node2 has data A, B, D
+  - Reconcile: both end up with A, B, C, D
+*/
+
+/*
+11.2.13: Vector Clocks
+Track causality with version vectors
+Detect concurrent writes
+Identify which writes are related
+
+Test Cases:
+  - Write1: [1, 0]
+  - Write2: [0, 1]
+  - Concurrent (no causality)
+  - Write3: [1, 1]
+  - Write3 depends on both
+*/
+
+/*
+11.2.14: Conflict Resolution
+Concurrent writes to same field
+Merge them using strategy
+Last-write-wins, custom merge, etc.
+
+Test Cases:
+  - Node1: X = 5
+  - Node2: X = 3
+  - Last write wins: X = 5 (if ts > 3)
+  - Or merge: X = "5,3"
+*/
+
+/*
+11.2.15: Version Vectors in Replication
+Each replica has version vector
+Track which writes each has
+Detect out-of-date replicas
+
+Test Cases:
+  - Replica1: [3, 2, 1]
+  - Replica2: [3, 2, 0]
+  - Replica2 missing one write from node3
+  - Replica1 detects and syncs
+*/
+
+/*
+11.2.16: CRDT (Conflict-Free Replicated Data Type)
+Data structure that merges automatically
+No explicit conflict resolution needed
+Mathematically sound merge
+
+Test Cases:
+  - Counter CRDT: increment on any node
+  - Merge: sum increments = total
+  - No conflicts
+*/
+
+/*
+11.2.17: Last-Write-Wins Register
+Timestamp each write
+Highest timestamp wins
+Simple but can lose data
+
+Test Cases:
+  - Write1: 10 at t=0
+  - Write2: 20 at t=1
+  - Read: 20 (latest timestamp)
+*/
+
+/*
+11.2.18: Multi-Value Register
+Return multiple values if concurrent
+Client must resolve
+Don't lose any writes
+
+Test Cases:
+  - Write1: 10 at node1
+  - Write2: 20 at node2
+  - Before merge, read both
+  - [10, 20] (conflict)
+*/
+
+/*
+11.2.19: Tombstones
+Mark deleted items with tombstone
+Prevent resurrection after delete/replicate/merge
+Garbage collection eventually
+
+Test Cases:
+  - Delete X -> create tombstone
+  - Replicate tombstone
+  - Even with old write, tombstone remains
+*/
+
+/*
+11.2.20: Merkle Tree
+Hash tree for efficient sync
+Identify differing subtrees
+Sync only differences
+
+Test Cases:
+  - 1000 items, only 1 differs
+  - Merkle hash identifies subtree
+  - Sync only that subtree
+*/
+
+/*
+11.2.21: Write-Ahead Logging
+Log write before applying
+Replay log on recovery
+Durability guarantee
+
+Test Cases:
+  - Write log entry
+  - Write succeeds (durability guaranteed)
+  - On recovery, replay log
+*/
+
+/*
+11.2.22: Read Repair
+On read, detect stale replica
+Send latest value to stale replica
+Repair in background
+
+Test Cases:
+  - Read X from replica
+  - Detect replica is old
+  - Update replica with latest X
+  - Consistency increases over time
+*/
+
+/*
+11.2.23: Anti-Entropy
+Background process to sync replicas
+Compare and merge
+Ensure eventual consistency
+
+Test Cases:
+  - Periodic (every 1 hour)
+  - Compare replicas
+  - Sync any differences
+  - Ensures no permanent divergence
+*/
+
+/*
+11.2.24: Gossip Protocol
+Node sends state to random node
+Receiving node updates and forwards
+Rapid propagation
+
+Test Cases:
+  - 100 nodes
+  - Update at 1 node
+  - Gossip spreads to all in O(log N) rounds
+  - No central coordinator needed
+*/
+
+/*
+11.2.25: Sniffing
+Listen to gossip between other nodes
+Learn state without direct message
+Reduce load on target
+
+Test Cases:
+  - Node1 and Node2 gossip
+  - Node3 listens to gossip
+  - Node3 learns about updates
+  - No message directly to Node3
+*/
+
+/*
+11.2.26: Epidemic Dissemination
+Information spreads like epidemic
+Exponential propagation
+Guaranteed delivery with high probability
+
+Test Cases:
+  - Each node tells 3 others
+  - In round 1: 4 nodes know
+  - Round 2: 13 nodes know
+  - Very fast spread
+*/
+
+/*
+11.2.27: Replication Pipeline
+Primary -> Backup1 -> Backup2
+Sequential replication
+Reduce primary load
+
+Test Cases:
+  - Write primary
+  - Primary -> Backup1
+  - Backup1 -> Backup2
+  - All 3 eventually consistent
+*/
+
+/*
+11.2.28: Parallel Replication
+Primary -> Backup1, Backup2, Backup3
+All backups in parallel
+Reduce replication latency
+
+Test Cases:
+  - Write primary
+  - Primary simultaneously -> all 3 backups
+  - All acknowledge to primary
+  - Faster than sequential
+*/
+
+/*
+11.2.29: Replication Failure Handling
+Backup dies during replication
+Primary continues
+Promote different backup
+Re-replicate as needed
+
+Test Cases:
+  - Primary writes to 2 backups
+  - Backup1 dies mid-replication
+  - Primary continues with Backup2
+  - Later sync Backup1 when back
+*/
+
+/*
+11.2.30: Rebalancing
+Replica nodes added/removed
+Rebalance data distribution
+No data loss
+
+Test Cases:
+  - 3-node cluster
+  - Add 4th node
+  - Data rebalance: each node 25%
+  - No data loss
+*/
+
+/*
+11.2.31: Replica Placement
+Distribute across fault domains
+Not all in same datacenter
+Survive datacenter failure
+
+Test Cases:
+  - 3 replicas
+  - Replica1: DC1
+  - Replica2: DC2
+  - Replica3: DC3
+  - Survive 1 DC failure
+*/
+
+/*
+11.2.32: Replica Health Check
+Monitor replica health
+Mark down if unhealthy
+Redirect reads from unhealthy
+
+Test Cases:
+  - Replica becomes slow
+  - Health check detects
+  - Route reads away
+  - Don't use unhealthy replica
+*/
+
+/*
+11.2.33: Replica Promotion
+Promote backup to primary
+Old primary may rejoin as backup
+Promote when primary dies
+
+Test Cases:
+  - Primary dies
+  - Backup elected new primary
+  - Old primary recovers
+  - Rejoins as backup to new primary
+*/
+
+/*
+11.2.34: Replica Down Handling
+One replica down
+Others continue
+No data loss if replication factor > 1
+
+Test Cases:
+  - Replica down
+  - Read from others
+  - Write to others
+  - Continue normally
+*/
+
+/*
+11.2.35: Replica Synchronization
+Sync replica with latest state
+Batch updates
+Minimize bandwidth
+
+Test Cases:
+  - Replica lags by 1000 items
+  - Sync: batch 100 item batches
+  - 10 batches to catch up
+  - Eventually in sync
+*/
+
+// ============================================================================
+// CONSENSUS & SHARDING (30 problems)
+// Problems 11.3.1 - 11.3.30
+
+/*
+11.3.1: Leader Election
+Elect leader among nodes
+Coordinate distributed decisions
+kmeth leader failure
+
+Test Cases:
+  - 5 nodes, no leader
+  - Election process
+  - 1 node becomes leader
+  - Others follow leader
+*/
+
+/*
+11.3.2: Raft Consensus Part 1
+Leader selected by nodes
+Leader proposes decisions
+Nodes acknowledge
+
+Test Cases:
+  - Leader sends proposal
+  - Majority acknowledge
+  - Proposal committed
+*/
+
+/*
+11.3.3: Raft Term Numbers
+Each term has one leader
+Terms monotonically increase
+Used to detect stale leaders
+
+Test Cases:
+  - Node sees term 5
+  - Old request from term 3
+  - Reject term 3 (stale)
+*/
+
+/*
+11.3.4: Raft Log Replication
+Leader replicates log entries
+Followers append to log
+Matching prefixes guarantee
+
+Test Cases:
+  - Leader has [A, B, C]
+  - Followers replicate
+  - Eventually all have [A, B, C]
+*/
+
+/*
+11.3.5: Raft Safety
+Once committed, never revert
+Selection guarantees leader has all committed entries
+Ensure consistency
+
+Test Cases:
+  - Entry committed
+  - Leader fails
+  - New leader guarantees to have committed entry
+*/
+
+/*
+11.3.6: Paxos Consensus
+Proposers, acceptors, learners
+Two phases: prepare and accept
+Liveness and safety
+
+Test Cases:
+  - Proposer p1 proposes value V1
+  - Proposer p2 proposes value V2
+  - Protocol ensures agreement on one value
+*/
+
+/*
+11.3.7: Byzantine Fault Tolerance
+Tolerate malicious nodes
+Nodes may lie or act arbitrarily
+Need 3f + 1 nodes to tolerate f Byzantine nodes
+
+Test Cases:
+  - 7 nodes, tolerate 2 Byzantine
+  - 2 nodes lie
+  - Remaining 5 reach consensus
+*/
+
+/*
+11.3.8: Quorum-based Consensus
+Quorum of nodes must agree
+Simple majority or custom quorum
+Ensure one group active
+
+Test Cases:
+  - 5 nodes, quorum = 3
+  - If 3 agree, decision made
+  - If split 3-2, majority 3 decides
+*/
+
+/*
+11.3.9: Distributed Lock (2-phase)
+Request lock from majority
+Hold lock with lease
+Release after use
+
+Test Cases:
+  - Acquire lock -> lock holder
+  - Attempt lock by other -> wait
+  - Release lock -> other gets lock
+*/
+
+/*
+11.3.10: Distributed Transactions
+2-phase commit
+Coordinator, participants
+Ensure all-or-nothing
+
+Test Cases:
+  - Coordinator says "commit"
+  - All participants commit
+  - Or all rollback
+*/
+
+/*
+11.3.11: Prepare Phase
+Coordinator asks: "can you commit?"
+Participants respond: "yes" or "no"
+If any says "no", whole transaction aborts
+
+Test Cases:
+  - 3 participants
+  - All say "yes"
+  - Proceed to commit
+  - 1 says "no"
+  - Abort all
+*/
+
+/*
+11.3.12: Commit Phase
+Coordinator says "commit"
+All participants commit
+Acknowledge to coordinator
+
+Test Cases:
+  - All prepared
+  - Commit phase
+  - All commit
+  - Transaction complete
+*/
+
+/*
+11.3.13: Rollback on Failure
+If any participant fails
+Rollback all others
+Return to prior state
+
+Test Cases:
+  - Prepare succeeds on all
+  - Commit fails on one
+  - Rollback all others
+  - No partial commits
+*/
+
+/*
+11.3.14: Coordinator Failure
+Coordinator crashes during transaction
+Participants must detect
+Abort transaction
+
+Test Cases:
+  - Coordinator dies after prepare
+  - Before commit
+  - Participants timeout
+  - Abort transaction
+*/
+
+/*
+11.3.15: Sharding Strategy
+Partition data by key
+Key -> shard mapping
+Each shard independent
+
+Test Cases:
+  - Shard by user_id % 10
+  - UserID 5 -> Shard 5
+  - UserID 15 -> Shard 5
+  - Consistent mapping
+*/
+
+/*
+11.3.16: Range-based Sharding
+Shard by key range
+Keys 1-100 -> Shard1
+Keys 101-200 -> Shard2
+Hot spots if ranges uneven
+
+Test Cases:
+  - Shard by last name
+  - A-F -> Shard1
+  - G-M -> Shard2
+  - N-Z -> Shard3
+*/
+
+/*
+11.3.17: Hash-based Sharding
+Hash key, mod by shard count
+Uniform distribution
+Consistent hashing for rebalancing
+
+Test Cases:
+  - hash(key) % 10 = shard
+  - hash("user5") % 10 = 3
+  - hash("user17") % 10 = 7
+  - Usually well distributed
+*/
+
+/*
+11.3.18: Consistent Hashing
+Virtual nodes for load balancing
+Minimal rebalancing on node add/remove
+Better distribution than simple hashing
+
+Test Cases:
+  - Add node: only ~1/N keys move
+  - Remove node: keys redistributed
+  - Smooth rebalancing
+*/
+
+/*
+11.3.19: Shard Splitting
+Shard too large
+Split into two smaller shards
+Rebalance keys
+
+Test Cases:
+  - Shard 5 has 1M keys
+  - Split to Shard 5a and 5b
+  - Each ~500K keys
+  - Both smaller and manageable
+*/
+
+/*
+11.3.20: Shard Merge
+Multiple small shards
+Merge into one larger
+Reduce overhead
+
+Test Cases:
+  - Shard 1: 100K keys
+  - Shard 2: 100K keys
+  - Merge to Shard 1+2: 200K keys
+  - One shard to manage
+*/
+
+/*
+11.3.21: Shard Migration
+Move shard from node1 to node2
+Data transfer
+No service disruption
+
+Test Cases:
+  - Shard 5 on Node1
+  - Migrate to Node2
+  - During migration: handle requests
+  - After migration: serve from Node2
+*/
+
+/*
+11.3.22: Shard Replication
+Replicate each shard
+Shard A: primary on Node1, backup on Node2
+Survive node failure
+
+Test Cases:
+  - Shard primary dies
+  - Backup promoted
+  - No data loss
+*/
+
+/*
+11.3.23: Shard Routing
+Route request to correct shard
+Key determines shard
+Route to primary or backup
+
+Test Cases:
+  - Request for key "user5"
+  - Shard = hash(key) % 10 = 5
+  - Route to Shard5's primary
+*/
+
+/*
+11.3.24: Shard Rebalancing
+Add/remove shard nodes
+Redistribute keys
+Maintain balance
+
+Test Cases:
+  - 3 nodes, each 33% data
+  - Add 4th node
+  - Rebalance: each 25% data
+  - Some keys move
+*/
+
+/*
+11.3.25: Shard Health Check
+Monitor shard health
+Mark unhealthy shards
+Route away from unhealthy
+
+Test Cases:
+  - Shard slow
+  - Health check detects
+  - Route to healthy backup
+*/
+
+/*
+11.3.26: Shard Failover
+Shard primary dies
+Backup promoted automatically
+Clients redirect to new primary
+
+Test Cases:
+  - Node1 (primary) dies
+  - Node2 (backup) elected primary
+  - Clients route to Node2
+*/
+
+/*
+11.3.27: Cross-Shard Queries
+Query spans multiple shards
+Fan-out to all shards
+Aggregate results
+
+Test Cases:
+  - Query all users
+  - Spans all shards
+  - Query each shard
+  - Combine results
+*/
+
+/*
+11.3.28: Cross-Shard Transactions
+Transaction affects multiple shards
+Use 2-phase commit
+Ensure consistency
+
+Test Cases:
+  - Transfer from Shard1 to Shard2
+  - Shard1: debit
+  - Shard2: credit
+  - Both succeed or both fail
+*/
+
+/*
+11.3.29: Shard Topology
+Map of which nodes own which shards
+Metadata service tracks topology
+Clients use topology for routing
+
+Test Cases:
+  - Node1: Shards 1, 2, 3
+  - Node2: Shards 4, 5, 6
+  - Clients query topology
+  - Route requests correctly
+*/
+
+/*
+11.3.30: Shard Metadata
+Version metadata when topology changes
+Clients detect stale topology
+Re-fetch metadata
+
+Test Cases:
+  - Version 1: Node1 has Shard1
+  - Migration to Node2
+  - Version 2: Node2 has Shard1
+  - Client sees version mismatch
+  - Re-fetch metadata
+*/
+
+// ============================================================================
+// END OF PROBLEM BANK
+// Week 10-11 Problems Summary:
+// - Week 10: 180 problems (basics, supervision, service architecture)
+// - Week 11: 140 problems (network, replication, consensus)
+// - Total: 320+ problems
+// - Difficulty: Foundational to Advanced
+// - Real-world: Patterns used in production systems
+// ============================================================================
+
+

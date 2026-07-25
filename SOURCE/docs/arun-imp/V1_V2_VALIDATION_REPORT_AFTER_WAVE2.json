@@ -1,0 +1,146 @@
+﻿[
+    {
+        "example":  "01_hello.killer",
+        "v1_pass":  true,
+        "v2_pass":  true,
+        "v1_exit":  0,
+        "v2_exit":  0,
+        "v2_out_head":  "Welcome to Killer! || x = 10"
+    },
+    {
+        "example":  "02_conditionals.killer",
+        "v1_pass":  true,
+        "v2_pass":  true,
+        "v1_exit":  0,
+        "v2_exit":  0,
+        "v2_out_head":  "Testing conditionals... || You are an adult!"
+    },
+    {
+        "example":  "03_loops.killer",
+        "v1_pass":  true,
+        "v2_pass":  true,
+        "v1_exit":  0,
+        "v2_exit":  0,
+        "v2_out_head":  "While loop counting from 0 to 4: || 0"
+    },
+    {
+        "example":  "04_calculator.killer",
+        "v1_pass":  true,
+        "v2_pass":  true,
+        "v1_exit":  0,
+        "v2_exit":  0,
+        "v2_out_head":  "=== Killer Calculator === || Numbers: 10 3"
+    },
+    {
+        "example":  "05_functions.killer",
+        "v1_pass":  true,
+        "v2_pass":  true,
+        "v1_exit":  0,
+        "v2_exit":  0,
+        "v2_out_head":  "5 + 3 = 8 || Hello,  World"
+    },
+    {
+        "example":  "06_arrays.killer",
+        "v1_pass":  true,
+        "v2_pass":  true,
+        "v1_exit":  0,
+        "v2_exit":  0,
+        "v2_out_head":  "First number: 1 || Last name: Charlie"
+    },
+    {
+        "example":  "07_dicts.killer",
+        "v1_pass":  true,
+        "v2_pass":  true,
+        "v1_exit":  0,
+        "v2_exit":  0,
+        "v2_out_head":  "Name: Alice || Age: 30"
+    },
+    {
+        "example":  "08_for_loops.killer",
+        "v1_pass":  true,
+        "v2_pass":  true,
+        "v1_exit":  0,
+        "v2_exit":  0,
+        "v2_out_head":  "--- || 0"
+    },
+    {
+        "example":  "09_string_methods.killer",
+        "v1_pass":  true,
+        "v2_pass":  true,
+        "v1_exit":  0,
+        "v2_exit":  0,
+        "v2_out_head":  "11 || HELLO WORLD"
+    },
+    {
+        "example":  "10_try_catch.killer",
+        "v1_pass":  true,
+        "v2_pass":  true,
+        "v1_exit":  0,
+        "v2_exit":  0,
+        "v2_out_head":  "Caught error: || Division by zero"
+    },
+    {
+        "example":  "11_classes.killer",
+        "v1_pass":  true,
+        "v2_pass":  true,
+        "v1_exit":  0,
+        "v2_exit":  0,
+        "v2_out_head":  "Hello, I am  || Alice"
+    },
+    {
+        "example":  "12_advanced_features.killer",
+        "v1_pass":  true,
+        "v2_pass":  false,
+        "v1_exit":  0,
+        "v2_exit":  1,
+        "v2_out_head":  "Parse error: Parser error: unexpected token: Plus"
+    },
+    {
+        "example":  "13_complete_features.killer",
+        "v1_pass":  true,
+        "v2_pass":  false,
+        "v1_exit":  0,
+        "v2_exit":  1,
+        "v2_out_head":  "Parse error: Parser error: expected RParen, got Identifier(\"x\")"
+    },
+    {
+        "example":  "14_more_features.killer",
+        "v1_pass":  true,
+        "v2_pass":  false,
+        "v1_exit":  0,
+        "v2_exit":  1,
+        "v2_out_head":  "Parse error: Parser error: expected Colon, got Number(90.0)"
+    },
+    {
+        "example":  "15_phase1.killer",
+        "v1_pass":  true,
+        "v2_pass":  true,
+        "v1_exit":  0,
+        "v2_exit":  0,
+        "v2_out_head":  "=== ARROW FUNCTIONS === || 15"
+    },
+    {
+        "example":  "16_phase2_oop.killer",
+        "v1_pass":  true,
+        "v2_pass":  true,
+        "v1_exit":  0,
+        "v2_exit":  0,
+        "v2_out_head":  "Buddy says woof! || Buddy"
+    },
+    {
+        "example":  "killer_showcase_examples.killer",
+        "v1_pass":  true,
+        "v2_pass":  false,
+        "v1_exit":  0,
+        "v2_exit":  1,
+        "v2_out_head":  "Parse error: Parser error: unexpected token: Arrow"
+    },
+    {
+        "example":  "killer-v2-showcase.killer",
+        "v1_pass":  false,
+        "v2_pass":  false,
+        "v1_exit":  1,
+        "v2_exit":  1,
+        "v2_out_head":  "Parse error: Parser error: unexpected token: Minus"
+    }
+]

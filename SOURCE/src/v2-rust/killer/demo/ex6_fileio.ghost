@@ -1,0 +1,45 @@
+# Example 6: File I/O — Ghost writes a file and reads it back
+.fuel 10000
+.data 0 "ghost_note.txt"
+.data 50 "Hello from Ghost VM! I wrote this file myself.\n"
+.data 150 "Ghost wrote file: ghost_note.txt\n"
+.data 200 "Ghost reads back: "
+.data 220 "\nDone! Ghost can read and write files!\n"
+
+# Write data to file
+# SYS_FILE_WRITE: pop filename_len, pop filename_addr, pop data_len, pop data_addr
+push 50         # data_addr
+push 48         # data_len  
+push 0          # filename_addr
+push 14         # filename_len ("ghost_note.txt")
+syscall 31      # SYS_FILE_WRITE → bytes written on stack
+pop             # discard result
+
+# Print confirmation
+push 150
+push 33
+syscall 4
+
+# Now read it back into RAM[300..]
+# SYS_FILE_READ: pop filename_len, pop filename_addr, pop dest_addr
+push 300        # dest_addr 
+push 0          # filename_addr
+push 14         # filename_len
+syscall 30      # SYS_FILE_READ → bytes_read on stack
+
+# Print "Ghost reads back: "
+push 200
+push 18
+syscall 4
+
+# Print what we read (addr=300, len=bytes_read from stack)
+push 300
+swap
+syscall 4       # SYS_PRINT_STR
+
+# Celebration
+push 220
+push 39
+syscall 4
+
+halt

@@ -1,0 +1,96 @@
+-- test_tailcall.killer — Verify tail-call optimization
+-- A tail-recursive function should handle deep recursion without stack overflow
+
+print("=== TAIL-CALL OPTIMIZATION TEST ===")
+print("")
+
+passed = 0
+failed = 0
+
+-- Tail-recursive sum: sum(n, acc) = sum(n-1, acc+n) 
+kfn sum_tail(n, acc) {
+    if n <= 0 {
+        return acc
+    }
+    return sum_tail(n - 1, acc + n)
+}
+
+-- Test 1: Basic correctness
+r1 = sum_tail(100, 0)
+if r1 == 5050 {
+    print(K"  [PASS] 1. sum_tail(100,0) = {r1}")
+    passed = passed + 1
+} else {
+    print(K"  [FAIL] 1. sum_tail(100,0) = {r1}, expected 5050")
+    failed = failed + 1
+}
+
+-- Test 2: Medium depth (1000)
+r2 = sum_tail(1000, 0)
+if r2 == 500500 {
+    print(K"  [PASS] 2. sum_tail(1000,0) = {r2}")
+    passed = passed + 1
+} else {
+    print(K"  [FAIL] 2. sum_tail(1000,0) = {r2}, expected 500500")
+    failed = failed + 1
+}
+
+-- Test 3: Deep recursion (10000) — would stack-overflow without TailCall
+r3 = sum_tail(10000, 0)
+if r3 == 50005000 {
+    print(K"  [PASS] 3. sum_tail(10000,0) = {r3} (deep recursion OK!)")
+    passed = passed + 1
+} else {
+    print(K"  [FAIL] 3. sum_tail(10000,0) = {r3}, expected 50005000")
+    failed = failed + 1
+}
+
+-- Test 4: Tail-recursive countdown (just returns at the end)
+kfn countdown(n) {
+    if n <= 0 {
+        return 0
+    }
+    return countdown(n - 1)
+}
+
+r4 = countdown(50000)
+if r4 == 0 {
+    print(K"  [PASS] 4. countdown(50000) = {r4} (50K depth OK!)")
+    passed = passed + 1
+} else {
+    print(K"  [FAIL] 4. countdown(50000) = {r4}")
+    failed = failed + 1
+}
+
+-- Test 5: Tail-recursive GCD
+kfn gcd(a, b) {
+    if b == 0 {
+        return a
+    }
+    return gcd(b, a % b)
+}
+
+r5 = gcd(48, 18)
+if r5 == 6 {
+    print(K"  [PASS] 5. gcd(48,18) = {r5}")
+    passed = passed + 1
+} else {
+    print(K"  [FAIL] 5. gcd(48,18) = {r5}, expected 6")
+    failed = failed + 1
+}
+
+r6 = gcd(1071, 462)
+if r6 == 21 {
+    print(K"  [PASS] 6. gcd(1071,462) = {r6}")
+    passed = passed + 1
+} else {
+    print(K"  [FAIL] 6. gcd(1071,462) = {r6}, expected 21")
+    failed = failed + 1
+}
+
+print("")
+total = passed + failed
+print(K"RESULTS: {passed}/{total} passed, {failed} failed")
+if failed == 0 {
+    print("ALL TAIL-CALL TESTS PASSED")
+}

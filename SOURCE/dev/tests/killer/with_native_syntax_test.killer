@@ -1,0 +1,17 @@
+print("=== Native With Syntax ===")
+
+path = "tests/killer/_tmp_with_native.txt"
+writeFile(path, "hello from with")
+
+with readFile(path) as content {
+    print("with read:", content)
+    print("with length:", content.length)
+}
+
+with 10 + 5 as value {
+    print("with expression value:", value)
+}
+
+print("=== Native With Syntax Done ===")
+
+

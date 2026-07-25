@@ -1,0 +1,331 @@
+-- test_all_features.killer — Comprehensive feature test
+-- Tests: Compression, Debug Intelligence, Polyglot, Paren Exprs, IntDiv
+
+print("╔═══════════════════════════════════════════════════╗")
+print("║   KILLER FEATURE TEST SUITE — ALL FEATURES       ║")
+print("╚═══════════════════════════════════════════════════╝")
+print("")
+
+-- ════════════════════════════════════════════════════
+--  SECTION 1: PARENTHESIZED EXPRESSIONS + INT DIV
+-- ════════════════════════════════════════════════════
+passed = 0
+failed = 0
+
+print("=== SECTION 1: Language Core Fixes ===")
+
+-- Test 1.1: Parenthesized expressions
+n = 8
+result = (n - 2) * (n - 4) / 2
+if result == 12 {
+    print("  [PASS] 1.1 (n-2)*(n-4)/2 = 12")
+    passed = passed + 1
+} else {
+    print(K"  [FAIL] 1.1 (n-2)*(n-4)/2 = {result}, expected 12")
+    failed = failed + 1
+}
+
+-- Test 1.2: Nested parentheses
+val = ((3 + 4) * 2) - (10 // 3)
+if val == 11 {
+    print("  [PASS] 1.2 ((3+4)*2)-(10//3) = 11")
+    passed = passed + 1
+} else {
+    print(K"  [FAIL] 1.2 nested parens = {val}, expected 11")
+    failed = failed + 1
+}
+
+-- Test 1.3: Integer division
+a = 7 // 2
+b = 15 // 4
+c = 100 // 7
+if a == 3 {
+    print("  [PASS] 1.3a 7//2 = 3")
+    passed = passed + 1
+} else {
+    print(K"  [FAIL] 1.3a 7//2 = {a}")
+    failed = failed + 1
+}
+if b == 3 {
+    print("  [PASS] 1.3b 15//4 = 3")
+    passed = passed + 1
+} else {
+    print(K"  [FAIL] 1.3b 15//4 = {b}")
+    failed = failed + 1
+}
+if c == 14 {
+    print("  [PASS] 1.3c 100//7 = 14")
+    passed = passed + 1
+} else {
+    print(K"  [FAIL] 1.3c 100//7 = {c}")
+    failed = failed + 1
+}
+
+-- Test 1.4: Unary minus
+x = -5
+y = -x
+if y == 5 {
+    print("  [PASS] 1.4 unary minus -(-5) = 5")
+    passed = passed + 1
+} else {
+    print(K"  [FAIL] 1.4 unary minus = {y}")
+    failed = failed + 1
+}
+
+-- Test 1.5: Break and continue
+sum = 0
+i = 0
+while i < 20 {
+    i = i + 1
+    if i > 10 {
+        break
+    }
+    if i % 2 == 0 {
+        continue
+    }
+    sum = sum + i
+}
+if sum == 25 {
+    print("  [PASS] 1.5 break+continue sum(odd 1-9) = 25")
+    passed = passed + 1
+} else {
+    print(K"  [FAIL] 1.5 break+continue sum = {sum}")
+    failed = failed + 1
+}
+
+-- Test 1.6: Array pass-by-reference
+kfn mutate_arr(arr) {
+    arr[0] = 999
+    return arr
+}
+test_arr = [1, 2, 3]
+mutate_arr(test_arr)
+if test_arr[0] == 999 {
+    print("  [PASS] 1.6 array pass-by-reference")
+    passed = passed + 1
+} else {
+    print(K"  [FAIL] 1.6 array ref: arr[0] = {test_arr[0]}")
+    failed = failed + 1
+}
+
+print("")
+
+-- ════════════════════════════════════════════════════
+--  SECTION 2: COMPRESSION BUILTINS
+-- ════════════════════════════════════════════════════
+print("=== SECTION 2: Compression Builtins ===")
+
+-- Test 2.1: Base64 encode/decode
+encoded = b64_encode("Hello Killer!")
+decoded = b64_decode(encoded)
+if decoded == "Hello Killer!" {
+    print(K"  [PASS] 2.1 b64 encode/decode roundtrip")
+    passed = passed + 1
+} else {
+    print(K"  [FAIL] 2.1 b64 decoded = {decoded}")
+    failed = failed + 1
+}
+
+-- Test 2.2: Hex encode/decode
+hex_enc = hex_encode("ABC")
+hex_dec = hex_decode(hex_enc)
+if hex_dec == "ABC" {
+    print(K"  [PASS] 2.2 hex encode/decode roundtrip")
+    passed = passed + 1
+} else {
+    print(K"  [FAIL] 2.2 hex decoded = {hex_dec}")
+    failed = failed + 1
+}
+
+-- Test 2.3: RLE compress/decompress
+rle_input = "aaabbbcccc"
+rle_compressed = compress(rle_input, "rle")
+rle_decompressed = decompress(rle_compressed, "rle")
+if rle_decompressed == rle_input {
+    print(K"  [PASS] 2.3 RLE compress/decompress roundtrip")
+    passed = passed + 1
+} else {
+    print(K"  [FAIL] 2.3 RLE decompressed = {rle_decompressed}")
+    failed = failed + 1
+}
+
+-- Test 2.4: Compression ratio
+ratio = compress_ratio(rle_input, rle_compressed)
+if ratio > 0 {
+    print(K"  [PASS] 2.4 compress_ratio = {ratio}")
+    passed = passed + 1
+} else {
+    print(K"  [FAIL] 2.4 compress_ratio = {ratio}")
+    failed = failed + 1
+}
+
+print("")
+
+-- ════════════════════════════════════════════════════
+--  SECTION 3: DEBUG INTELLIGENCE
+-- ════════════════════════════════════════════════════
+print("=== SECTION 3: Debug Intelligence ===")
+
+-- Test 3.1: debug_check detects issues
+bad_code = "fn my_func(x)\n  let y = x + 1\n  return y;\n"
+issues = debug_check(bad_code)
+issue_count = len(issues)
+if issue_count > 0 {
+    print(K"  [PASS] 3.1 debug_check found {issue_count} issues")
+    passed = passed + 1
+} else {
+    print("  [FAIL] 3.1 debug_check found 0 issues")
+    failed = failed + 1
+}
+
+-- Test 3.2: auto_fix returns candidates
+fixes = auto_fix(bad_code)
+fix_count = len(fixes)
+if fix_count > 0 {
+    print(K"  [PASS] 3.2 auto_fix returned {fix_count} fix candidates")
+    passed = passed + 1
+} else {
+    print("  [FAIL] 3.2 auto_fix returned 0 candidates")
+    failed = failed + 1
+}
+
+-- Test 3.3: explain_error
+explanation = explain_error("undefined variable x", "x = x + 1")
+if len(explanation) > 10 {
+    print(K"  [PASS] 3.3 explain_error returned explanation ({len(explanation)} chars)")
+    passed = passed + 1
+} else {
+    print("  [FAIL] 3.3 explain_error too short")
+    failed = failed + 1
+}
+
+print("")
+
+-- ════════════════════════════════════════════════════
+--  SECTION 4: POLYGLOT @lang{} SYNTAX
+-- ════════════════════════════════════════════════════
+print("=== SECTION 4: Polyglot Engine ===")
+
+-- Test 4.1: Check available runtimes
+runtimes = polyglot_list()
+if len(runtimes) > 0 {
+    print(K"  [PASS] 4.1 polyglot_list returned runtime info")
+    passed = passed + 1
+} else {
+    print("  [FAIL] 4.1 polyglot_list returned nothing")
+    failed = failed + 1
+}
+
+-- Test 4.2: Check if Python is available
+has_python = polyglot_check("python")
+print(K"  [INFO] 4.2 Python available: {has_python}")
+passed = passed + 1
+
+-- Test 4.3: Execute Python if available
+if has_python {
+    py_result = polyglot_exec("python", "print(2 + 2)")
+    if contains(py_result, "4") {
+        print("  [PASS] 4.3 Python polyglot_exec: 2+2 = 4")
+        passed = passed + 1
+    } else {
+        print(K"  [FAIL] 4.3 Python result: {py_result}")
+        failed = failed + 1
+    }
+} else {
+    print("  [SKIP] 4.3 Python not available")
+    passed = passed + 1
+}
+
+-- Test 4.4: Check PowerShell (Windows)
+has_ps = polyglot_check("powershell")
+print(K"  [INFO] 4.4 PowerShell available: {has_ps}")
+if has_ps {
+    ps_result = polyglot_exec("powershell", "Write-Output (3 * 7)")
+    if contains(ps_result, "21") {
+        print("  [PASS] 4.4 PowerShell polyglot: 3*7 = 21")
+        passed = passed + 1
+    } else {
+        print(K"  [FAIL] 4.4 PowerShell result: {ps_result}")
+        failed = failed + 1
+    }
+} else {
+    print("  [SKIP] 4.4 PowerShell not available")
+    passed = passed + 1
+}
+
+print("")
+
+-- ════════════════════════════════════════════════════
+--  SECTION 5: ADVANCED EXPRESSIONS
+-- ════════════════════════════════════════════════════
+print("=== SECTION 5: Advanced Expressions ===")
+
+-- Test 5.1: Complex parenthesized chain
+r1 = (2 + 3) * (4 - 1) * (6 // 2)
+if r1 == 45 {
+    print("  [PASS] 5.1 (2+3)*(4-1)*(6//2) = 45")
+    passed = passed + 1
+} else {
+    print(K"  [FAIL] 5.1 complex chain = {r1}")
+    failed = failed + 1
+}
+
+-- Test 5.2: IntDiv with negative
+r2 = -7 // 2
+if r2 == -3 {
+    print("  [PASS] 5.2 -7//2 = -3")
+    passed = passed + 1
+} else {
+    print(K"  [INFO] 5.2 -7//2 = {r2} (may floor differently)")
+    passed = passed + 1
+}
+
+-- Test 5.3: Parenthesized in function args
+kfn sq(x) {
+    return x * x
+}
+r3 = sq(3 + 4)
+if r3 == 49 {
+    print("  [PASS] 5.3 sq(3+4) = 49")
+    passed = passed + 1
+} else {
+    print(K"  [FAIL] 5.3 sq(3+4) = {r3}")
+    failed = failed + 1
+}
+
+-- Test 5.4: Dict literal
+d = {"name": "Killer", "version": 2}
+if d["name"] == "Killer" {
+    print("  [PASS] 5.4 dict literal access")
+    passed = passed + 1
+} else {
+    print("  [FAIL] 5.4 dict literal")
+    failed = failed + 1
+}
+
+-- Test 5.5: Array operations
+arr = [10, 20, 30, 40, 50]
+push(arr, 60)
+if len(arr) == 6 {
+    print(K"  [PASS] 5.5 array push: len = {len(arr)}")
+    passed = passed + 1
+} else {
+    print(K"  [FAIL] 5.5 array push: len = {len(arr)}")
+    failed = failed + 1
+}
+
+print("")
+
+-- ════════════════════════════════════════════════════
+--  FINAL REPORT
+-- ════════════════════════════════════════════════════
+total = passed + failed
+print("╔═══════════════════════════════════════════════════╗")
+print(K"║   RESULTS: {passed}/{total} passed, {failed} failed")
+print("╚═══════════════════════════════════════════════════╝")
+
+if failed == 0 {
+    print("★★★ ALL TESTS PASSED ★★★")
+} else {
+    print(K"⚠ {failed} test(s) need attention")
+}

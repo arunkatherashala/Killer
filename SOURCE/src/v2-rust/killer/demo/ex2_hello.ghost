@@ -1,0 +1,16 @@
+# Example 2: Strings — Ghost says hello
+.fuel 100
+.data 0 "Namaste from Ghost VM!\n"
+.data 50 "I am alive in 340 KB.\n"
+
+# Print first string (addr=0, len=23)
+push 0
+push 23
+syscall 4     # SYS_PRINT_STR
+
+# Print second string (addr=50, len=22)
+push 50
+push 22
+syscall 4     # SYS_PRINT_STR
+
+halt

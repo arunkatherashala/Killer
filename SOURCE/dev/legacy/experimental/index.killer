@@ -1,0 +1,21 @@
+#!/usr/bin/env killer
+# ============================================================================
+# KILLER PROGRAMMING LANGUAGE - SHOWCASE & DEMO
+# A modern programming language with classes, arrow functions, and more!
+# ============================================================================
+
+print("============================");
+print("KILLER LANGUAGE SHOWCASE");
+print("============================");
+print("");
+
+# ============================================================================
+# SECTION 1: Basic Data Types & Variables
+# ============================================================================
+print("--- Basic Types ---");
+age = 25;
+score = 99.5;
+print(age);
+print(score);
+
+

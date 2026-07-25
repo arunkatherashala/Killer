@@ -1,0 +1,16 @@
+# Root scope x = 10
+CONST_NUM 10
+STORE x
+
+# Inner scope x = 99 (shadow)
+ENTER_SCOPE
+CONST_NUM 99
+STORE x
+LOAD x
+PRINT
+EXIT_SCOPE
+
+# Back to root scope x = 10
+LOAD x
+PRINT
+HALT

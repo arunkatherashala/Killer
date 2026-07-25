@@ -1,0 +1,1752 @@
+﻿cargo : warning: unused import: `crate::builtin::BuiltinFunctions`
+At line:1 char:1
++ cargo test --lib 2>&1 | Out-File test_final.txt -Encoding UTF8; Get-C ...
++ ~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (warning: unused...iltinFunctions` 
+   :String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+ --> src\vm.rs:6:5
+  |
+6 | use crate::builtin::BuiltinFunctions;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused imports: `GCStrategy` and `OptimizationLevel`
+  --> src\vm.rs:11:97
+   |
+11 | use crate::runtime_optimization::{HotCodeDetector, BasecodeJITCompiler, 
+ArithmeticLoopFastPath, OptimizationLevel, GCStrategy};
+   |                                                                           
+                      ^^^^^^^^^^^^^^^^^  ^^^^^^^^^^
+
+warning: unused import: `std::mem`
+  --> src\native_codegen.rs:13:5
+   |
+13 | use std::mem;
+   |     ^^^^^^^^
+
+warning: unused import: `crate::lexer`
+ --> src\formatter.rs:7:5
+  |
+7 | use crate::lexer;
+  |     ^^^^^^^^^^^^
+
+warning: unused import: `std::collections::HashMap`
+ --> src\config.rs:8:5
+  |
+8 | use std::collections::HashMap;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `std::collections::HashMap`
+ --> src\types_module.rs:6:5
+  |
+6 | use std::collections::HashMap;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `Duration`
+ --> src\datetime_module.rs:5:41
+  |
+5 | use std::time::{SystemTime, UNIX_EPOCH, Duration};
+  |                                         ^^^^^^^^
+
+warning: unused import: `BTreeMap`
+ --> src\data_engineering.rs:4:33
+  |
+4 | use std::collections::{HashMap, BTreeMap};
+  |                                 ^^^^^^^^
+
+warning: unused import: `std::collections::HashMap`
+ --> src\ml_module.rs:4:5
+  |
+4 | use std::collections::HashMap;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::value::Value`
+ --> src\ml_module.rs:5:5
+  |
+5 | use crate::value::Value;
+  |     ^^^^^^^^^^^^^^^^^^^
+
+warning: unnecessary parentheses around closure body
+   --> src\ml_module.rs:241:55
+    |
+241 |         Ok(a.data.iter().zip(&b.data).filter(|(x, y)| (x != y)).count())
+    |                                                       ^      ^
+    |
+    = note: `#[warn(unused_parens)]` (part of `#[warn(unused)]`) on by default
+help: remove these parentheses
+    |
+241 -         Ok(a.data.iter().zip(&b.data).filter(|(x, y)| (x != y)).count())
+241 +         Ok(a.data.iter().zip(&b.data).filter(|(x, y)| x != y).count())
+    |
+
+warning: unused import: `crate::value::Value`
+ --> src\web_framework.rs:5:5
+  |
+5 | use crate::value::Value;
+  |     ^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::value::Value`
+ --> src\package_manager.rs:5:5
+  |
+5 | use crate::value::Value;
+  |     ^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::value::Value`
+ --> src\plugin_architecture.rs:5:5
+  |
+5 | use crate::value::Value;
+  |     ^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `std::sync::Arc`
+ --> src\spark\dataframe.rs:6:5
+  |
+6 | use std::sync::Arc;
+  |     ^^^^^^^^^^^^^^
+
+warning: unused import: `Field`
+ --> src\spark\dataframe.rs:8:36
+  |
+8 | use crate::spark::schema::{Schema, Field, DataType};
+  |                                    ^^^^^
+
+warning: unused import: `crate::value::Value`
+ --> src\spark\ml.rs:5:5
+  |
+5 | use crate::value::Value;
+  |     ^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `std::collections::HashMap`
+ --> src\spark\ml.rs:6:5
+  |
+6 | use std::collections::HashMap;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `std::collections::VecDeque`
+ --> src\spark\streaming.rs:5:5
+  |
+5 | use std::collections::VecDeque;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `Arc` and `Mutex`
+ --> src\spark\streaming.rs:6:17
+  |
+6 | use std::sync::{Arc, Mutex};
+  |                 ^^^  ^^^^^
+
+warning: unused import: `WebServer`
+ --> src\http_server.rs:9:75
+  |
+9 | use crate::web_framework::{HttpRequest, HttpResponse, HttpMethod, Router, 
+WebServer, StatusCode};
+  |                                                                           
+^^^^^^^^^
+
+warning: unused import: `crate::value::Value`
+ --> src\http_bindings.rs:6:5
+  |
+6 | use crate::value::Value;
+  |     ^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `std::collections::HashMap`
+ --> src\http_bindings.rs:7:5
+  |
+7 | use std::collections::HashMap;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `InsertBuilder` and `UpdateBuilder`
+ --> src\orm_helpers.rs:7:42
+  |
+7 | use crate::query_builder::{QueryBuilder, InsertBuilder, UpdateBuilder};
+  |                                          ^^^^^^^^^^^^^  ^^^^^^^^^^^^^
+
+warning: unused import: `DatabaseError`
+ --> src\async_database.rs:7:40
+  |
+7 | use crate::database::{Connection, Row, DatabaseError};
+  |                                        ^^^^^^^^^^^^^
+
+warning: unused import: `AsyncTask`
+ --> src\async_database.rs:8:36
+  |
+8 | use crate::async_runtime::{Future, AsyncTask, FutureState};
+  |                                    ^^^^^^^^^
+
+warning: unused imports: `AsyncTask`, `FutureState`, and `Promise`
+ --> src\async_http.rs:6:36
+  |
+6 | use crate::async_runtime::{Future, Promise, AsyncTask, FutureState};
+  |                                    ^^^^^^^  ^^^^^^^^^  ^^^^^^^^^^^
+
+warning: unused import: `GlobalAlloc`
+ --> src\memory_optimization.rs:7:18
+  |
+7 | use std::alloc::{GlobalAlloc, Layout};
+  |                  ^^^^^^^^^^^
+
+warning: unused variable: `fn_id`
+    --> src\compiler.rs:1294:17
+     |
+1294 |             let fn_id = state.function_counter;
+     |                 ^^^^^ help: if this is intentional, prefix it with an 
+underscore: `_fn_id`
+     |
+     = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by 
+default
+
+warning: unused variable: `start_pos`
+   --> src\parser.rs:661:21
+    |
+661 |                 let start_pos = self.position;
+    |                     ^^^^^^^^^ help: if this is intentional, prefix it 
+with an underscore: `_start_pos`
+
+warning: unused variable: `remainder`
+    --> src\vm.rs:3102:13
+     |
+3102 |         let remainder = iterations % chunk_size;
+     |             ^^^^^^^^^ help: if this is intentional, prefix it with an 
+underscore: `_remainder`
+
+warning: unused variable: `saved_scopes_len`
+    --> src\vm.rs:3371:20
+     |
+3371 |                let saved_scopes_len = self.scopes.len();
+     |                    ^^^^^^^^^^^^^^^^ help: if this is intentional, 
+prefix it with an underscore: `_saved_scopes_len`
+
+warning: unused variable: `value`
+   --> src\objects.rs:102:37
+    |
+102 |                         if let Some(value) = 
+obj_inst.fields.get(method_name) {
+    |                                     ^^^^^ help: if this is intentional, 
+prefix it with an underscore: `_value`
+
+warning: unused variable: `last_start`
+   --> src\instruction_cache.rs:124:26
+    |
+124 |             if let Some((last_start, last_end)) = merged.last_mut() {
+    |                          ^^^^^^^^^^ help: if this is intentional, prefix 
+it with an underscore: `_last_start`
+
+warning: variable does not need to be mutable
+   --> src\memoization.rs:112:17
+    |
+112 |             let mut removed = 0;
+    |                 ----^^^^^^^
+    |                 |
+    |                 help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `count`
+   --> src\adaptive_compiler.rs:102:34
+    |
+102 |         if let Some((_type_name, count)) = stats.dominant_type() {
+    |                                  ^^^^^ help: if this is intentional, 
+prefix it with an underscore: `_count`
+
+warning: variable does not need to be mutable
+   --> src\vector_optimizer.rs:101:13
+    |
+101 |         let mut optimized = base_code.to_vec();
+    |             ----^^^^^^^^^
+    |             |
+    |             help: remove this `mut`
+
+warning: unused variable: `threats1`
+   --> src\threat_intelligence.rs:371:13
+    |
+371 |         let threats1 = engine.analyze_event("container1", "execve", 
+None, "Blocked syscall");
+    |             ^^^^^^^^ help: if this is intentional, prefix it with an 
+underscore: `_threats1`
+
+warning: unused variable: `threats2`
+   --> src\threat_intelligence.rs:374:13
+    |
+374 |         let threats2 = engine.analyze_event("container1", "execve", 
+None, "Blocked syscall");
+    |             ^^^^^^^^ help: if this is intentional, prefix it with an 
+underscore: `_threats2`
+
+warning: unused variable: `feature`
+  --> src\version.rs:90:26
+   |
+90 | pub fn feature_available(feature: &str, since_version: &str) -> bool {
+   |                          ^^^^^^^ help: if this is intentional, prefix it 
+with an underscore: `_feature`
+
+warning: unused variable: `source`
+   --> src\linter.rs:250:50
+    |
+250 |     fn check_tokens(&mut self, tokens: &[Token], source: &str) {
+    |                                                  ^^^^^^ help: if this is 
+intentional, prefix it with an underscore: `_source`
+
+warning: value assigned to `result` is never read
+   --> src\formatter.rs:135:26
+    |
+135 |         let mut result = String::new();
+    |                          ^^^^^^^^^^^^^
+    |
+    = help: maybe it is overwritten before being read?
+    = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by 
+default
+
+warning: unused variable: `pattern`
+   --> src\formatter.rs:266:21
+    |
+266 |                 let pattern = format!("\\b{}\\b", keyword);
+    |                     ^^^^^^^ help: if this is intentional, prefix it with 
+an underscore: `_pattern`
+
+warning: unused variable: `json_str_clone2`
+   --> src\benchmarking.rs:248:13
+    |
+248 |         let json_str_clone2 = json_str.to_string();
+    |             ^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with 
+an underscore: `_json_str_clone2`
+
+warning: unused variable: `db`
+   --> src\database_module.rs:528:24
+    |
+528 |     pub fn execute_sql(db: &Database, sql: &str) -> Result<Value, 
+String> {
+    |                        ^^ help: if this is intentional, prefix it with 
+an underscore: `_db`
+
+warning: unused variable: `i`
+   --> src\security_module.rs:125:14
+    |
+125 |         for (i, byte) in message.bytes().enumerate() {
+    |              ^ help: if this is intentional, prefix it with an 
+underscore: `_i`
+
+warning: unused variable: `secret`
+   --> src\security_module.rs:158:54
+    |
+158 |     pub fn generate_jwt(header: &str, payload: &str, secret: &str) -> 
+String {
+    |                                                      ^^^^^^ help: if 
+this is intentional, prefix it with an underscore: `_secret`
+
+warning: unused variable: `secret`
+   --> src\security_module.rs:167:36
+    |
+167 |     pub fn verify_jwt(token: &str, secret: &str) -> bool {
+    |                                    ^^^^^^ help: if this is intentional, 
+prefix it with an underscore: `_secret`
+
+warning: unused variable: `result`
+   --> src\testing_framework.rs:215:23
+    |
+215 |             if let Ok(result) = self.run_suite(&name) {
+    |                       ^^^^^^ help: if this is intentional, prefix it 
+with an underscore: `_result`
+
+warning: unused variable: `args`
+   --> src\wasm_support.rs:488:45
+    |
+488 |     pub fn call(&mut self, func_name: &str, args: Vec<JSValue>) -> 
+Result<JSValue, String> {
+    |                                             ^^^^ help: if this is 
+intentional, prefix it with an underscore: `_args`
+
+warning: variable does not need to be mutable
+   --> src\runtime_optimization.rs:469:13
+    |
+469 |         let mut result = self.optimize_runtime();
+    |             ----^^^^^^
+    |             |
+    |             help: remove this `mut`
+
+warning: unused variable: `original`
+   --> src\spark\context.rs:237:13
+    |
+237 |         let original = ctx.parallelism();
+    |             ^^^^^^^^ help: if this is intentional, prefix it with an 
+underscore: `_original`
+
+warning: unused variable: `name`
+   --> src\spark\dataframe.rs:243:36
+    |
+243 |     pub fn create_temp_view(&self, name: &str) -> Result<(), String> {
+    |                                    ^^^^ help: if this is intentional, 
+prefix it with an underscore: `_name`
+
+warning: variable does not need to be mutable
+  --> src\spark\io_parallel.rs:52:25
+   |
+52 |                     let mut recv = receiver.lock().unwrap();
+   |                         ----^^^^
+   |                         |
+   |                         help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src\spark\io_parallel.rs:340:25
+    |
+340 |                     let mut reader = BufReader::new(file);
+    |                         ----^^^^^^
+    |                         |
+    |                         help: remove this `mut`
+
+warning: unused variable: `reader`
+   --> src\spark\io_parallel.rs:340:25
+    |
+340 |                     let mut reader = BufReader::new(file);
+    |                         ^^^^^^^^^^ help: if this is intentional, prefix 
+it with an underscore: `_reader`
+
+warning: variable does not need to be mutable
+   --> src\spark\memory.rs:508:13
+    |
+508 |         let mut stats = MemoryStats {
+    |             ----^^^^^
+    |             |
+    |             help: remove this `mut`
+
+warning: unused variable: `expr`
+   --> src\python\mod.rs:136:5
+    |
+136 |     expr: String,
+    |     ^^^^ help: if this is intentional, prefix it with an underscore: 
+`_expr`
+
+warning: unused variable: `for_clause`
+   --> src\python\mod.rs:137:5
+    |
+137 |     for_clause: &ForClause,
+    |     ^^^^^^^^^^ help: if this is intentional, prefix it with an 
+underscore: `_for_clause`
+
+warning: unused variable: `key_expr`
+   --> src\python\mod.rs:162:5
+    |
+162 |     key_expr: String,
+    |     ^^^^^^^^ help: if this is intentional, prefix it with an underscore: 
+`_key_expr`
+
+warning: unused variable: `value_expr`
+   --> src\python\mod.rs:163:5
+    |
+163 |     value_expr: String,
+    |     ^^^^^^^^^^ help: if this is intentional, prefix it with an 
+underscore: `_value_expr`
+
+warning: unused variable: `for_clause`
+   --> src\python\mod.rs:164:5
+    |
+164 |     for_clause: &ForClause,
+    |     ^^^^^^^^^^ help: if this is intentional, prefix it with an 
+underscore: `_for_clause`
+
+warning: unused variable: `expr`
+   --> src\python\mod.rs:186:5
+    |
+186 |     expr: String,
+    |     ^^^^ help: if this is intentional, prefix it with an underscore: 
+`_expr`
+
+warning: unused variable: `for_clause`
+   --> src\python\mod.rs:187:5
+    |
+187 |     for_clause: &ForClause,
+    |     ^^^^^^^^^^ help: if this is intentional, prefix it with an 
+underscore: `_for_clause`
+
+warning: unused variable: `conditions`
+   --> src\python\mod.rs:211:5
+    |
+211 |     conditions: &[String],
+    |     ^^^^^^^^^^ help: if this is intentional, prefix it with an 
+underscore: `_conditions`
+
+warning: unused variable: `items`
+   --> src\python\mod.rs:212:5
+    |
+212 |     items: Vec<Value>,
+    |     ^^^^^ help: if this is intentional, prefix it with an underscore: 
+`_items`
+
+warning: variable `body_start` is assigned to, but never used
+  --> src\http_server.rs:70:9
+   |
+70 |     let mut body_start = 0;
+   |         ^^^^^^^^^^^^^^
+   |
+   = note: consider using `_body_start` instead
+
+warning: variable `header_count` is assigned to, but never used
+  --> src\http_server.rs:71:9
+   |
+71 |     let mut header_count = 0;
+   |         ^^^^^^^^^^^^^^^^
+   |
+   = note: consider using `_header_count` instead
+
+warning: value assigned to `body_start` is never read
+  --> src\http_server.rs:74:13
+   |
+74 |             body_start = idx;
+   |             ^^^^^^^^^^^^^^^^
+   |
+   = help: maybe it is overwritten before being read?
+
+warning: value assigned to `header_count` is never read
+  --> src\http_server.rs:77:9
+   |
+77 |         header_count += 1;
+   |         ^^^^^^^^^^^^^^^^^
+   |
+   = help: maybe it is overwritten before being read?
+
+warning: unused variable: `filters`
+   --> src\database.rs:313:9
+    |
+313 |         filters: Option<HashMap<String, Value>>,
+    |         ^^^^^^^ help: if this is intentional, prefix it with an 
+underscore: `_filters`
+
+warning: unused variable: `filters`
+   --> src\database.rs:327:9
+    |
+327 |         filters: Option<HashMap<String, Value>>,
+    |         ^^^^^^^ help: if this is intentional, prefix it with an 
+underscore: `_filters`
+
+warning: unused variable: `query`
+  --> src\orm_helpers.rs:63:13
+   |
+63 |         let query = QueryBuilder::select(&self.table_name)
+   |             ^^^^^ help: if this is intentional, prefix it with an 
+underscore: `_query`
+
+warning: unused variable: `table_name`
+  --> src\async_database.rs:30:32
+   |
+30 |     pub fn insert_async(&self, table_name: &str, _row: &Row) -> 
+crate::async_runtime::Future {
+   |                                ^^^^^^^^^^ help: if this is intentional, 
+prefix it with an underscore: `_table_name`
+
+warning: unused variable: `table_name`
+  --> src\async_database.rs:39:32
+   |
+39 |     pub fn select_async(&self, table_name: &str) -> 
+crate::async_runtime::Future {
+   |                                ^^^^^^^^^^ help: if this is intentional, 
+prefix it with an underscore: `_table_name`
+
+warning: unused variable: `table_name`
+  --> src\async_database.rs:48:32
+   |
+48 |     pub fn update_async(&self, table_name: &str, _updates: 
+&HashMap<String, Value>) -> crate::async_runtime::Future {
+   |                                ^^^^^^^^^^ help: if this is intentional, 
+prefix it with an underscore: `_table_name`
+
+warning: unused variable: `table_name`
+  --> src\async_database.rs:57:32
+   |
+57 |     pub fn delete_async(&self, table_name: &str) -> 
+crate::async_runtime::Future {
+   |                                ^^^^^^^^^^ help: if this is intentional, 
+prefix it with an underscore: `_table_name`
+
+warning: unused variable: `conn`
+   --> src\async_database.rs:263:13
+    |
+263 |         let conn = AsyncConnection::new(":memory:".to_string(), 
+scheduler);
+    |             ^^^^ help: if this is intentional, prefix it with an 
+underscore: `_conn`
+
+warning: useless assignment of variable of type `bool` to itself
+   --> src\python\mod.rs:149:13
+    |
+149 |             all_true = all_true; // Placeholder
+    |             ^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: useless assignment of variable of type `bool` to itself
+   --> src\python\mod.rs:174:13
+    |
+174 |             all_true = all_true;
+    |             ^^^^^^^^^^^^^^^^^^^
+
+warning: useless assignment of variable of type `bool` to itself
+   --> src\python\mod.rs:197:13
+    |
+197 |             all_true = all_true;
+    |             ^^^^^^^^^^^^^^^^^^^
+
+warning: method `parse_for_init` is never used
+   --> src\parser.rs:754:8
+    |
+  9 | impl Parser {
+    | ----------- method in this implementation
+...
+754 |     fn parse_for_init(&mut self) -> Result<Stmt, String> {
+    |        ^^^^^^^^^^^^^^
+
+warning: field `collecting_yields` is never read
+  --> src\vm.rs:33:5
+   |
+23 | pub struct VirtualMachine {
+   |            -------------- field in this struct
+...
+33 |     collecting_yields: bool,  // Flag to track if we're inside a 
+generator function
+   |     ^^^^^^^^^^^^^^^^^
+
+warning: methods `execute_compiled_loop` and `execute_hot_arithmetic_loop` are 
+never used
+    --> src\vm.rs:3082:8
+     |
+  44 | impl VirtualMachine {
+     | ------------------- methods in this implementation
+...
+3082 |     fn execute_compiled_loop(&mut self, _compiled_code: &[u8]) -> 
+Result<(), VmError> {
+     |        ^^^^^^^^^^^^^^^^^^^^^
+...
+3093 |     fn execute_hot_arithmetic_loop(&mut self, iterations: u64) -> i64 {
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: methods `generate_array_code`, `expr_to_specialized_code`, 
+`expr_to_numeric`, `expr_to_string`, and `expr_to_boolean` are never used
+   --> src\rust_generator.rs:176:8
+    |
+ 32 | impl RustGenerator {
+    | ------------------ methods in this implementation
+...
+176 |     fn generate_array_code(&self, elements: &[Expr]) -> (String, 
+InferredType) {
+    |        ^^^^^^^^^^^^^^^^^^^
+...
+500 |     fn expr_to_specialized_code(&self, var_name: &str, expr: &Expr) -> 
+String {
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^
+...
+541 |     fn expr_to_numeric(&self, expr: &Expr) -> String {
+    |        ^^^^^^^^^^^^^^^
+...
+565 |     fn expr_to_string(&self, expr: &Expr) -> String {
+    |        ^^^^^^^^^^^^^^
+...
+583 |     fn expr_to_boolean(&self, expr: &Expr) -> String {
+    |        ^^^^^^^^^^^^^^^
+
+warning: fields `cycles_per_instruction` and `hot_instruction_threshold` are 
+never read
+  --> src\hot_path_detector.rs:74:5
+   |
+66 | pub struct HotPathDetector {
+   |            --------------- fields in this struct
+...
+74 |     cycles_per_instruction: f64,
+   |     ^^^^^^^^^^^^^^^^^^^^^^
+...
+77 |     hot_instruction_threshold: usize,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: fields `total_memory_saved` and `ttl_seconds` are never read
+  --> src\memoization.rs:24:5
+   |
+17 | pub struct MemoizationCache {
+   |            ---------------- fields in this struct
+...
+24 |     total_memory_saved: u64,  // Cycles saved by avoiding recomputation
+   |     ^^^^^^^^^^^^^^^^^^
+...
+28 |     ttl_seconds: u64,         // Time-to-live for entries
+   |     ^^^^^^^^^^^
+
+warning: function `str` is never used
+   --> src\array_utils.rs:338:8
+    |
+338 |     fn str(s: &str) -> Value { Value::Str(s.to_string()) }
+    |        ^^^
+
+warning: associated function `unescape_string` is never used
+   --> src\json_module.rs:172:8
+    |
+ 42 | impl JsonModule {
+    | --------------- associated function in this implementation
+...
+172 |     fn unescape_string(s: &str) -> String {
+    |        ^^^^^^^^^^^^^^^
+
+warning: field `json_options` is never read
+   --> src\spark\io.rs:258:5
+    |
+254 | pub struct FileBuilder {
+    |            ----------- field in this struct
+...
+258 |     json_options: JSONOptions,
+    |     ^^^^^^^^^^^^
+
+warning: field `id` is never read
+  --> src\spark\io_parallel.rs:25:5
+   |
+24 | pub struct Worker {
+   |            ------ field in this struct
+25 |     id: usize,
+   |     ^^
+
+warning: field `partition_count` is never read
+   --> src\spark\io_parallel.rs:149:5
+    |
+147 | pub struct PartitionManager {
+    |            ---------------- field in this struct
+148 |     partitions: Vec<Partition>,
+149 |     partition_count: usize,
+    |     ^^^^^^^^^^^^^^^
+
+warning: field `max_depth` is never read
+   --> src\spark\ml.rs:145:5
+    |
+143 | pub struct DecisionTreeModel {
+    |            ----------------- field in this struct
+144 |     root: TreeNode,
+145 |     max_depth: usize,
+    |     ^^^^^^^^^
+    |
+    = note: `DecisionTreeModel` has derived impls for the traits `Debug` and 
+`Clone`, but these are intentionally ignored during dead code analysis
+
+warning: field `max_connections` is never read
+   --> src\http_server.rs:103:5
+    |
+ 97 | pub struct HttpServer {
+    |            ---------- field in this struct
+...
+103 |     max_connections: usize,
+    |     ^^^^^^^^^^^^^^^
+
+warning: fields `db_path` and `scheduler` are never read
+  --> src\async_database.rs:12:5
+   |
+11 | pub struct AsyncConnection {
+   |            --------------- fields in this struct
+12 |     db_path: String,
+   |     ^^^^^^^
+13 |     scheduler: Arc<crate::async_runtime::TaskScheduler>,
+   |     ^^^^^^^^^
+
+warning: field `threads` is never read
+   --> src\scheduler_optimization.rs:382:5
+    |
+380 | pub struct CoreAwareThreadPool {
+    |            ------------------- field in this struct
+381 |     scheduler: WorkStealingScheduler,
+382 |     threads: Vec<thread::JoinHandle<()>>,
+    |     ^^^^^^^
+
+warning: field `false_sharing_threshold` is never read
+   --> src\memory_optimization.rs:120:5
+    |
+118 | pub struct CacheLayout {
+    |            ----------- field in this struct
+119 |     cache_line_size: usize,
+120 |     false_sharing_threshold: usize,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: field `last_adjustment` is never read
+   --> src\thermal_management.rs:203:5
+    |
+199 | pub struct ThermalAwareScheduler {
+    |            --------------------- field in this struct
+...
+203 |     last_adjustment: Instant,
+    |     ^^^^^^^^^^^^^^^
+
+warning: creating a mutable reference to mutable static
+   --> src\version.rs:232:9
+    |
+232 |         DEPRECATION_REGISTRY.as_mut().expect("Deprecation registry 
+uninitialized")
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ mutable reference to mutable static
+    |
+    = note: for more information, see 
+<https://doc.rust-lang.org/edition-guide/rust-2024/static-mut-references.html>
+    = note: mutable references to mutable statics are dangerous; it's 
+undefined behavior if any other pointer to the static is used or if any other 
+reference is created for the static while the mutable reference lives
+    = note: `#[warn(static_mut_refs)]` (part of 
+`#[warn(rust_2024_compatibility)]`) on by default
+
+warning: `killer-native` (lib test) generated 99 warnings (run `cargo fix 
+--lib -p killer-native --tests` to apply 73 suggestions)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.25s
+     Running unittests src\lib.rs 
+(target\debug\deps\killer_native-ef163f500a9a3cab.exe)
+
+running 892 tests
+test advanced_networking::tests::test_message_router_register_route ... ok
+test adaptive_compiler::tests::test_strategy_success_rate_update ... ok
+test adaptive_compiler::tests::test_threshold_adaptation ... ok
+test advanced_networking::tests::test_message_router_route_message ... ok
+test advanced_networking::tests::test_message_type_as_str ... ok
+test adaptive_compiler::tests::test_adaptive_feedback ... ok
+test advanced_networking::tests::test_network_message_creation ... ok
+test advanced_networking::tests::test_network_message_size ... ok
+test advanced_networking::tests::test_network_message_ttl_decrement ... ok
+test advanced_networking::tests::test_network_protocol_as_str ... ok
+test advanced_networking::tests::test_network_protocol_default_ports ... ok
+test advanced_networking::tests::test_p2p_node_creation ... ok
+test advanced_networking::tests::test_peer_discovery_register ... ok
+test advanced_networking::tests::test_peer_discovery_unregister ... ok
+test advanced_networking::tests::test_peer_id_creation ... ok
+test advanced_networking::tests::test_peer_id_random ... ok
+test advanced_networking::tests::test_peer_info_creation ... ok
+test advanced_networking::tests::test_websocket_connection_creation ... ok
+test advanced_networking::tests::test_websocket_connection_increment_sent ... ok
+test advanced_networking::tests::test_websocket_server_add_connection ... ok
+test advanced_networking::tests::test_websocket_server_remove_connection ... ok
+test analytics_telemetry::tests::test_event_stream_add_event ... ok
+test analytics_telemetry::tests::test_event_stream_get_by_source ... ok
+test analytics_telemetry::tests::test_event_stream_get_by_type ... ok
+test analytics_telemetry::tests::test_event_type_as_str ... ok
+test analytics_telemetry::tests::test_log_event_creation ... ok
+test analytics_telemetry::tests::test_log_event_with_context ... ok
+test analytics_telemetry::tests::test_metric_average ... ok
+test analytics_telemetry::tests::test_metric_creation ... ok
+test analytics_telemetry::tests::test_metric_data_point_creation ... ok
+test analytics_telemetry::tests::test_metric_data_point_with_label ... ok
+test analytics_telemetry::tests::test_metric_latest_value ... ok
+test analytics_telemetry::tests::test_metric_min_max ... ok
+test analytics_telemetry::tests::test_metric_record ... ok
+test analytics_telemetry::tests::test_metric_sum ... ok
+test analytics_telemetry::tests::test_metric_type_as_str ... ok
+test analytics_telemetry::tests::test_metrics_collector_register ... ok
+test analytics_telemetry::tests::test_metrics_collector_record ... ok
+test analytics_telemetry::tests::test_metrics_collector_unregister ... ok
+test analytics_telemetry::tests::test_performance_profile_creation ... ok
+test analytics_telemetry::tests::test_performance_profile_record_call ... ok
+test analytics_telemetry::tests::test_profiler_start_end ... ok
+test analytics_telemetry::tests::test_telemetry_aggregator_creation ... ok
+test analytics_telemetry::tests::test_telemetry_aggregator_export ... ok
+test analytics_telemetry::tests::test_trace_collector_get_trace ... ok
+test analytics_telemetry::tests::test_trace_collector_record_span ... ok
+test analytics_telemetry::tests::test_profiler_get_slowest ... ok
+test analytics_telemetry::tests::test_trace_event_creation ... ok
+test analytics_telemetry::tests::test_trace_span_add_tag ... ok
+test analytics_telemetry::tests::test_trace_span_creation ... ok
+test analytics_telemetry::tests::test_trace_span_end ... ok
+test analytics_telemetry::tests::test_trace_span_with_parent ... ok
+test api::tests::test_api_contract_filtering ... ok
+test api::tests::test_api_compatibility_report ... ok
+test api::tests::test_api_contract_registration ... ok
+test api::tests::test_api_contract_statistics ... ok
+test api::tests::test_api_function_creation ... ok
+test api::tests::test_backward_compatibility_aliases ... ok
+test api::tests::test_default_api_contract ... ok
+test api::tests::test_migration_paths ... ok
+test array_utils::tests::test_aggregation ... ok
+test array_utils::tests::test_basic_operations ... ok
+test array_utils::tests::test_searching ... ok
+test array_utils::tests::test_sorting ... ok
+test array_utils::tests::test_transformation ... ok
+test async_database::tests::test_async_batch_add ... ok
+test async_database::tests::test_async_batch_creation ... ok
+test async_database::tests::test_async_connection_creation ... ok
+test async_database::tests::test_async_query_result ... ok
+test async_database::tests::test_async_transaction ... ok
+test async_database::tests::test_connection_pool ... ok
+test async_http::tests::test_async_handler_creation ... ok
+test async_http::tests::test_async_handler_id ... ok
+test async_http::tests::test_async_middleware_creation ... ok
+test async_http::tests::test_async_request_body ... ok
+test async_http::tests::test_async_request_creation ... ok
+test async_http::tests::test_async_request_headers ... ok
+test async_http::tests::test_async_response_bad_request ... ok
+test async_http::tests::test_async_response_created ... ok
+test async_http::tests::test_async_response_internal_error ... ok
+test async_http::tests::test_async_response_not_found ... ok
+test async_http::tests::test_async_response_ok ... ok
+test async_http::tests::test_async_router_creation ... ok
+test async_http::tests::test_async_router_middleware ... ok
+test async_http::tests::test_request_batch ... ok
+test async_http::tests::test_request_timeout_creation ... ok
+test async_runtime::tests::test_async_all ... ok
+test async_runtime::tests::test_async_race ... ok
+test async_runtime::tests::test_async_task_creation ... ok
+test async_runtime::tests::test_async_task_lifecycle ... ok
+test async_runtime::tests::test_async_task_priority ... ok
+test async_runtime::tests::test_delay_timer_remaining ... ok
+test async_runtime::tests::test_execution_pool_creation ... ok
+test async_runtime::tests::test_execution_pool_submit ... ok
+test async_runtime::tests::test_execution_pool_utilization ... ok
+test async_runtime::tests::test_future_creation ... ok
+test async_runtime::tests::test_future_is_resolved ... ok
+test async_runtime::tests::test_future_reject ... ok
+test async_runtime::tests::test_future_resolve ... ok
+test async_runtime::tests::test_promise_catch ... ok
+test async_runtime::tests::test_promise_creation ... ok
+test async_runtime::tests::test_promise_finally ... ok
+test async_runtime::tests::test_promise_then ... ok
+test async_runtime::tests::test_task_scheduler_execute ... ok
+test async_runtime::tests::test_task_scheduler_execute_all ... ok
+test async_runtime::tests::test_task_scheduler_schedule ... ok
+test audit_logger::tests::test_audit_event_creation ... ok
+test audit_logger::tests::test_audit_logger ... ok
+test audit_logger::tests::test_component_filter ... ok
+test benchmarking::tests::test_benchmark_format ... ok
+test benchmarking::tests::test_detailed_bench ... ok
+test bytecode_specialization::tests::test_arithmetic_only_detection ... ok
+test bytecode_specialization::tests::test_non_arithmetic_detection ... ok
+test bytecode_specialization::tests::test_specialization ... ok
+test bytecode_specialization::tests::test_speedup_estimation ... ok
+test cgroups::tests::test_cpu_time_limit_check ... ok
+test cgroups::tests::test_memory_limit_check ... ok
+test cgroups::tests::test_standard_limits ... ok
+test cgroups::tests::test_untrusted_limits ... ok
+test compression_module::tests::test_base64_encode ... ok
+test compression_module::tests::test_base64_roundtrip ... ok
+test compression_module::tests::test_compression_ratio ... ok
+test compression_module::tests::test_hex_decode ... ok
+test compression_module::tests::test_hex_encode ... ok
+test compression_module::tests::test_rle_decode ... ok
+test compression_module::tests::test_rle_encode ... ok
+test compression_module::tests::test_rle_roundtrip ... ok
+test compression_module::tests::test_size_functions ... ok
+test config::tests::test_config_with_comments ... ok
+test config::tests::test_default_config ... ok
+test config::tests::test_disabled_rules ... ok
+test config::tests::test_formatter_config_defaults ... ok
+test config::tests::test_invalid_indent_style ... ok
+test config::tests::test_invalid_trailing_comma_style ... ok
+test config::tests::test_linter_config_defaults ... ok
+test config::tests::test_parse_bool ... ok
+test config::tests::test_parse_config_basic ... ok
+test config::tests::test_parse_string_list ... ok
+test config::tests::test_parse_usize ... ok
+test config::tests::test_unquote ... ok
+test container_lifecycle::tests::test_container_creation ... ok
+test container_lifecycle::tests::test_container_limits ... ok
+test container_lifecycle::tests::test_lifecycle_manager ... ok
+test container_runtime::tests::test_container_config_add_env ... ok
+test container_runtime::tests::test_container_config_creation ... ok
+test async_runtime::tests::test_delay_timer_elapsed ... ok
+test container_runtime::tests::test_container_config_expose_port ... ok
+test container_runtime::tests::test_container_config_with_command ... ok
+test container_runtime::tests::test_container_creation ... ok
+test container_runtime::tests::test_container_is_healthy ... ok
+test container_runtime::tests::test_container_pause_resume ... ok
+test container_runtime::tests::test_container_restart ... ok
+test container_runtime::tests::test_container_runtime_create ... ok
+test container_runtime::tests::test_container_runtime_remove ... ok
+test container_runtime::tests::test_container_runtime_start ... ok
+test container_runtime::tests::test_container_runtime_stop ... ok
+test container_runtime::tests::test_container_start ... ok
+test container_runtime::tests::test_container_state_as_str ... ok
+test container_runtime::tests::test_container_state_is_running ... ok
+test container_runtime::tests::test_container_state_is_stopped ... ok
+test container_runtime::tests::test_container_stop ... ok
+test container_runtime::tests::test_health_check_creation ... ok
+test container_runtime::tests::test_health_check_with_interval ... ok
+test container_runtime::tests::test_orchestrator_create_service ... ok
+test container_runtime::tests::test_orchestrator_creation ... ok
+test benchmarking::tests::test_quick_bench ... ok
+test container_runtime::tests::test_orchestrator_delete_service ... ok
+test container_runtime::tests::test_orchestrator_scale_service ... ok
+test container_runtime::tests::test_resource_limits_check ... ok
+test container_runtime::tests::test_resource_limits_creation ... ok
+test container_runtime::tests::test_resource_limits_default ... ok
+test container_runtime::tests::test_resource_usage_cpu_percentage ... ok
+test container_runtime::tests::test_resource_usage_memory_percentage ... ok
+test container_runtime::tests::test_service_add_container ... ok
+test container_runtime::tests::test_service_creation ... ok
+test container_runtime::tests::test_service_is_ready ... ok
+test data_engineering::tests::test_aggregation_avg ... ok
+test data_engineering::tests::test_aggregation_count ... ok
+test data_engineering::tests::test_aggregation_max ... ok
+test data_engineering::tests::test_aggregation_min ... ok
+test data_engineering::tests::test_aggregation_sum ... ok
+test data_engineering::tests::test_count_distinct ... ok
+test data_engineering::tests::test_data_quality_score ... ok
+test data_engineering::tests::test_etl_pipeline ... ok
+test data_engineering::tests::test_group_by ... ok
+test data_engineering::tests::test_pipeline_creation ... ok
+test data_engineering::tests::test_pipeline_limit ... ok
+test data_engineering::tests::test_pipeline_load_data ... ok
+test data_engineering::tests::test_timeseries_add_points ... ok
+test data_engineering::tests::test_timeseries_creation ... ok
+test data_engineering::tests::test_timeseries_moving_average ... ok
+test data_engineering::tests::test_validation_not_null ... ok
+test data_quality::tests::test_audit_trail ... ok
+test data_quality::tests::test_create_quality_variable ... ok
+test data_quality::tests::test_guarantee ... ok
+test data_quality::tests::test_quality_calculation ... ok
+test data_quality::tests::test_quality_level_excellent ... ok
+test data_quality::tests::test_trim_metrics ... ok
+test data_quality::tests::test_trim_vs_six_metrics ... ok
+test data_quality::tests::test_validate_array_all_numeric_mixed ... ok
+test data_quality::tests::test_validate_array_all_numeric_valid ... ok
+test data_quality::tests::test_validate_array_all_positive_negative ... ok
+test data_quality::tests::test_validate_array_all_positive_valid ... ok
+test data_quality::tests::test_validate_array_items_in_range_out ... ok
+test data_quality::tests::test_validate_array_items_in_range_valid ... ok
+test data_quality::tests::test_validate_array_length_invalid ... ok
+test data_quality::tests::test_validate_array_length_valid ... ok
+test data_quality::tests::test_validate_array_no_nulls_valid ... ok
+test data_quality::tests::test_validate_array_no_nulls_with_null ... ok
+test data_quality::tests::test_validate_array_unique_duplicates ... ok
+test data_quality::tests::test_validate_array_unique_valid ... ok
+test data_quality::tests::test_validate_dict_max_size_exceeded ... ok
+test data_quality::tests::test_validate_dict_max_size_valid ... ok
+test data_quality::tests::test_validate_dict_no_empty_values_empty ... ok
+test data_quality::tests::test_validate_dict_no_empty_values_valid ... ok
+test data_quality::tests::test_validate_dict_required_keys_missing ... ok
+test data_quality::tests::test_validate_dict_required_keys_valid ... ok
+test data_quality::tests::test_validate_email_invalid ... ok
+test data_quality::tests::test_validate_email_valid ... ok
+test data_quality::tests::test_validate_object_all_fields_not_null_valid ... ok
+test data_quality::tests::test_validate_object_all_fields_not_null_with_null ... ok
+test data_quality::tests::test_validate_object_class_mismatch ... ok
+test data_quality::tests::test_validate_object_class_valid ... ok
+test data_quality::tests::test_validate_object_max_fields_exceeded ... ok
+test data_quality::tests::test_validate_object_max_fields_valid ... ok
+test data_quality::tests::test_validate_object_min_fields_insufficient ... ok
+test data_quality::tests::test_validate_object_min_fields_valid ... ok
+test data_quality::tests::test_validate_object_required_fields_missing ... ok
+test data_quality::tests::test_validate_object_required_fields_valid ... ok
+test data_quality::tests::test_validate_phone_invalid ... ok
+test data_quality::tests::test_validate_phone_valid ... ok
+test data_quality::tests::test_validate_positive ... ok
+test data_quality::tests::test_validate_positive_negative ... ok
+test data_quality::tests::test_validate_range ... ok
+test data_quality::tests::test_validate_range_out ... ok
+test database::tests::test_column_creation ... ok
+test database::tests::test_column_sql_generation ... ok
+test database::tests::test_connection_open ... ok
+test database::tests::test_create_table_in_connection ... ok
+test database::tests::test_query_result ... ok
+test database::tests::test_row_validation ... ok
+test database::tests::test_row_validation_fails_missing_required ... ok
+test database::tests::test_table_creation ... ok
+test database::tests::test_table_sql_generation ... ok
+test database_module::tests::test_create_table ... ok
+test database_module::tests::test_create_index ... ok
+test database_module::tests::test_database_create_insert_select ... ok
+test database_module::tests::test_delete ... ok
+test database_module::tests::test_insert_multiple_rows ... ok
+test database_module::tests::test_insert_row ... ok
+test database_module::tests::test_not_null_constraint ... ok
+test database_module::tests::test_primary_key_uniqueness ... ok
+test database_module::tests::test_select_all ... ok
+test database_module::tests::test_select_with_where ... ok
+test database_module::tests::test_truncate ... ok
+test database_module::tests::test_type_validation ... ok
+test database_module::tests::test_update ... ok
+test datetime_module::tests::test_add_days ... ok
+test datetime_module::tests::test_add_seconds ... ok
+test datetime_module::tests::test_day_name ... ok
+test datetime_module::tests::test_days_in_month ... ok
+test datetime_module::tests::test_difference ... ok
+test datetime_module::tests::test_format_time ... ok
+test datetime_module::tests::test_from_timestamp ... ok
+test datetime_module::tests::test_is_valid_date ... ok
+test datetime_module::tests::test_leap_year ... ok
+test datetime_module::tests::test_now ... ok
+test debugger::tests::test_breakpoint_add ... ok
+test debugger::tests::test_breakpoint_remove ... ok
+test debugger::tests::test_parse_variable ... ok
+test debugger::tests::test_stack_frame ... ok
+test distributed_system::tests::test_cluster_config_add_node ... ok
+test distributed_system::tests::test_cluster_config_quorum ... ok
+test distributed_system::tests::test_consensus_state_machine_creation ... ok
+test distributed_system::tests::test_consensus_state_machine_set_get ... ok
+test distributed_system::tests::test_distributed_coordinator_creation ... ok
+test distributed_system::tests::test_log_entry_creation ... ok
+test distributed_system::tests::test_node_info_creation ... ok
+test distributed_system::tests::test_node_role_as_str ... ok
+test distributed_system::tests::test_node_state_become_candidate ... ok
+test distributed_system::tests::test_node_state_become_leader ... ok
+test distributed_system::tests::test_node_state_creation ... ok
+test distributed_system::tests::test_replication_log_append ... ok
+test distributed_system::tests::test_replication_log_get ... ok
+test distributed_system::tests::test_replication_log_truncate ... ok
+test distributed_system::tests::test_shard_key_range ... ok
+test distributed_system::tests::test_shard_map_add ... ok
+test distributed_system::tests::test_shard_map_get_shard ... ok
+test distributed_system::tests::test_state_snapshot ... ok
+test documentation_generator::tests::test_api_doc_add_module ... ok
+test documentation_generator::tests::test_api_doc_creation ... ok
+test documentation_generator::tests::test_api_doc_get_items_by_type ... ok
+test documentation_generator::tests::test_api_doc_search ... ok
+test documentation_generator::tests::test_doc_block_add_example ... ok
+test documentation_generator::tests::test_doc_block_add_parameter ... ok
+test documentation_generator::tests::test_doc_block_creation ... ok
+test documentation_generator::tests::test_doc_block_is_documented ... ok
+test documentation_generator::tests::test_doc_block_with_description ... ok
+test documentation_generator::tests::test_doc_block_with_return_type ... ok
+test documentation_generator::tests::test_doc_type_as_str ... ok
+test documentation_generator::tests::test_documentation_generator_creation ... ok
+test documentation_generator::tests::test_documentation_generator_statistics ... ok
+test documentation_generator::tests::test_example_add_tag ... ok
+test documentation_generator::tests::test_example_collection_add ... ok
+test documentation_generator::tests::test_example_collection_get_by_category ... ok
+test documentation_generator::tests::test_example_collection_search ... ok
+test documentation_generator::tests::test_example_creation ... ok
+test documentation_generator::tests::test_example_with_description ... ok
+test documentation_generator::tests::test_module_doc_add_item ... ok
+test documentation_generator::tests::test_module_doc_coverage ... ok
+test documentation_generator::tests::test_module_doc_creation ... ok
+test documentation_generator::tests::test_module_doc_get_functions ... ok
+test exception::tests::test_arithmetic_error_handling ... ok
+test exception::tests::test_error_value_lifecycle ... ok
+test exception::tests::test_push_and_pop_try_frames ... ok
+test exception::tests::test_throw_uncaught ... ok
+test exception::tests::test_throw_with_catch_target ... ok
+test exception::tests::test_throw_with_finally_target ... ok
+test file_io::tests::test_exists ... ok
+test file_io::tests::test_extension ... ok
+test file_io::tests::test_file_name ... ok
+test filesystem_sandbox::tests::test_access_control ... ok
+test filesystem_sandbox::tests::test_path_permission ... ok
+test filesystem_sandbox::tests::test_sandbox_creation ... ok
+test filesystem_sandbox::tests::test_violation_tracking ... ok
+test formatter::tests::test_blank_line_cleanup ... ok
+test formatter::tests::test_brace_style_new_line ... ok
+test formatter::tests::test_brace_style_same_line ... ok
+test formatter::tests::test_default_config ... ok
+test formatter::tests::test_diff_summary ... ok
+test formatter::tests::test_formatter_creation ... ok
+test formatter::tests::test_formatter_no_changes_needed ... ok
+test formatter::tests::test_indent_style_spaces ... ok
+test formatter::tests::test_indent_style_tabs ... ok
+test formatter::tests::test_indentation_formatting ... ok
+test formatter::tests::test_spaces_around_operators ... ok
+test file_io::tests::test_read_write ... ok
+test formatter::tests::test_trailing_comma_always ... ok
+test formatter::tests::test_spaces_after_keywords ... ok
+test formatter::tests::test_trailing_comma_never ... ok
+test function_parameters::tests::test_complex_defaults ... ok
+test function_parameters::tests::test_default_parameters ... ok
+test function_parameters::tests::test_duplicate_parameter ... ok
+test function_parameters::tests::test_missing_required_parameter ... ok
+test function_parameters::tests::test_mixed_positional_and_named ... ok
+test function_parameters::tests::test_named_args_only ... ok
+test function_parameters::tests::test_parameter_creation ... ok
+test function_parameters::tests::test_positional_args_only ... ok
+test function_parameters::tests::test_signature_generation ... ok
+test function_parameters::tests::test_too_many_arguments ... ok
+test function_parameters::tests::test_unknown_named_parameter ... ok
+test generator::tests::test_create_generator ... ok
+test generator::tests::test_generator_clear ... ok
+test generator::tests::test_generator_default_value ... ok
+test generator::tests::test_generator_exhaustion ... ok
+test generator::tests::test_generator_next ... ok
+test generator::tests::test_generator_remaining ... ok
+test generator::tests::test_generator_remove ... ok
+test generator::tests::test_generator_reset ... ok
+test generator::tests::test_generator_stats ... ok
+test http_bindings::tests::test_http_server_creation ... ok
+test http_bindings::tests::test_http_server_get_route ... ok
+test hot_path_detector::tests::test_hot_path_detection ... ok
+test hot_path_detector::tests::test_numeric_loop_detection ... ok
+test http_bindings::tests::test_http_server_post_route ... ok
+test http_server::tests::test_http_server_creation ... ok
+test http_server::tests::test_parse_post_request ... ok
+test http_server::tests::test_parse_simple_request ... ok
+test http_server::tests::test_parse_with_query_params ... ok
+test http_server::tests::test_response_formatting ... ok
+test ide_extensions::tests::test_code_intelligence_provider_creation ... ok
+test ide_extensions::tests::test_code_intelligence_provider_register_quick_fix ... ok
+test ide_extensions::tests::test_completion_item_creation ... ok
+test ide_extensions::tests::test_completion_item_kind_as_str ... ok
+test ide_extensions::tests::test_completion_item_with_detail ... ok
+test ide_extensions::tests::test_diagnostic_creation ... ok
+test ide_extensions::tests::test_diagnostic_severity_as_str ... ok
+test ide_extensions::tests::test_diagnostic_with_code ... ok
+test ide_extensions::tests::test_document_symbol_add_child ... ok
+test ide_extensions::tests::test_document_symbol_creation ... ok
+test ide_extensions::tests::test_hover_creation ... ok
+test ide_extensions::tests::test_hover_with_range ... ok
+test ide_extensions::tests::test_language_server_close_document ... ok
+test ide_extensions::tests::test_language_server_creation ... ok
+test ide_extensions::tests::test_language_server_initialize ... ok
+test ide_extensions::tests::test_language_server_open_document ... ok
+test ide_extensions::tests::test_language_server_publish_diagnostics ... ok
+test ide_extensions::tests::test_language_server_update_document ... ok
+test ide_extensions::tests::test_location_creation ... ok
+test ide_extensions::tests::test_lsp_message_type_as_str ... ok
+test ide_extensions::tests::test_position_creation ... ok
+test ide_extensions::tests::test_quick_fix_creation ... ok
+test ide_extensions::tests::test_range_contains ... ok
+test ide_extensions::tests::test_range_creation ... ok
+test ide_extensions::tests::test_symbol_kind_as_str ... ok
+test ide_extensions::tests::test_text_document_creation ... ok
+test ide_extensions::tests::test_text_document_get_line ... ok
+test ide_extensions::tests::test_text_document_line_count ... ok
+test ide_extensions::tests::test_text_document_update ... ok
+test instruction_cache::tests::test_hot_path_detection ... ok
+test instruction_cache::tests::test_instruction_caching ... ok
+test jit_compiler::tests::test_jit_compilation ... ok
+test jit_compiler::tests::test_jit_execution ... ok
+test json_module::tests::test_is_valid ... ok
+test jit_engine::tests::test_jit_compilation_attempt ... ok
+test json_module::tests::test_keys ... ok
+test json_module::tests::test_parse_array ... ok
+test json_module::tests::test_parse_bool ... ok
+test json_module::tests::test_parse_null ... ok
+test json_module::tests::test_parse_number ... ok
+test jit_engine::tests::test_jit_rejects_non_numeric ... FAILED
+test json_module::tests::test_parse_object ... ok
+test json_module::tests::test_parse_string ... ok
+test json_module::tests::test_stringify ... ok
+test linter::tests::test_enable_disable_rules ... ok
+test linter::tests::test_hardcoded_test_data ... ok
+test linter::tests::test_lint_empty_blocks ... ok
+test linter::tests::test_lint_eval_usage ... ok
+test linter::tests::test_lint_max_line_length ... ok
+test linter::tests::test_lint_trailing_whitespace ... ok
+test linter::tests::test_linter_creation ... ok
+test linter::tests::test_linter_passes ... ok
+test linter::tests::test_linter_report_generation ... ok
+test linter::tests::test_mixed_quotes ... ok
+test linter::tests::test_violation_severity_counting ... ok
+test linter::tests::test_violation_with_suggestion ... ok
+test logging_module::tests::test_log_filtering ... ok
+test logging_module::tests::test_log_levels ... ok
+test logging_module::tests::test_log_source ... ok
+test logging_module::tests::test_logger_creation ... ok
+test logging_module::tests::test_logging_basic ... ok
+test logging_module::tests::test_logs_since ... ok
+test logging_module::tests::test_search ... ok
+test logging_module::tests::test_summary ... ok
+test math::tests::test_basic_operations ... ok
+test math::tests::test_constants ... ok
+test math::tests::test_gcd_lcm ... ok
+test math::tests::test_logarithms ... ok
+test math::tests::test_powers ... ok
+test math::tests::test_random ... ok
+test math::tests::test_rounding ... ok
+test math::tests::test_special_functions ... ok
+test math::tests::test_trigonometric ... ok
+test memoization::tests::test_hit_rate ... ok
+test memoization::tests::test_memoization_hit ... ok
+test memoization::tests::test_memoization_miss ... ok
+test memory_optimization::tests::test_adaptive_memory_sizer ... ok
+test memory_optimization::tests::test_cache_layout ... ok
+test memory_optimization::tests::test_ddr4_optimizer ... ok
+test memory_optimization::tests::test_memory_pool ... ok
+test ml_module::tests::test_classification_accuracy ... ok
+test ml_module::tests::test_classification_precision ... ok
+test ml_module::tests::test_classification_recall ... ok
+test ml_module::tests::test_distance_metrics_euclidean ... ok
+test ml_module::tests::test_euclidean_distance ... ok
+test ml_module::tests::test_feature_scaling_minmax ... ok
+test ml_module::tests::test_feature_scaling_standardize ... ok
+test ml_module::tests::test_kmeans_clustering ... ok
+test ml_module::tests::test_manhattan_distance ... ok
+test ml_module::tests::test_neural_network_layer ... ok
+test ml_module::tests::test_neural_network_relu ... ok
+test ml_module::tests::test_vector_cosine_similarity ... ok
+test ml_module::tests::test_vector_creation ... ok
+test ml_module::tests::test_vector_dot_product ... ok
+test ml_module::tests::test_vector_magnitude ... ok
+test ml_module::tests::test_vector_normalize ... ok
+test namespace_manager::tests::test_isolation_validation ... ok
+test namespace_manager::tests::test_namespace_config_creation ... ok
+test namespace_manager::tests::test_namespace_manager ... ok
+test namespace_manager::tests::test_user_mapping ... ok
+test native_codegen::tests::test_arithmetic_loop_detection ... ok
+test native_codegen::tests::test_code_generation ... ok
+test objects::tests::test_array_method_includes ... ok
+test objects::tests::test_array_method_length ... ok
+test objects::tests::test_create_simple_instance ... ok
+test objects::tests::test_string_method_length ... ok
+test objects::tests::test_string_method_upper ... ok
+test operations::tests::test_add_numbers ... ok
+test operations::tests::test_add_strings ... ok
+test operations::tests::test_comparison ... ok
+test operations::tests::test_mul_repeat_string ... ok
+test orm_helpers::tests::test_change_tracker ... ok
+test orm_helpers::tests::test_entity_creation ... ok
+test orm_helpers::tests::test_find_by_id ... ok
+test orm_helpers::tests::test_pagination ... ok
+test orm_helpers::tests::test_query_helper ... ok
+test orm_helpers::tests::test_repository_creation ... ok
+test orm_helpers::tests::test_result_mapper ... ok
+test package_manager::tests::test_dependency_creation ... ok
+test package_manager::tests::test_dependency_resolver ... ok
+test package_manager::tests::test_dependency_satisfies_caret ... ok
+test package_manager::tests::test_dependency_satisfies_exact ... ok
+test package_manager::tests::test_dependency_satisfies_tilde ... ok
+test package_manager::tests::test_package_creation ... ok
+test package_manager::tests::test_package_installer ... ok
+test package_manager::tests::test_package_installer_uninstall ... ok
+test package_manager::tests::test_package_with_metadata ... ok
+test package_manager::tests::test_registry_get_latest ... ok
+test package_manager::tests::test_registry_package_count ... ok
+test package_manager::tests::test_registry_publish ... ok
+test package_manager::tests::test_registry_search ... ok
+test package_manager::tests::test_version_bump_major ... ok
+test package_manager::tests::test_version_bump_minor ... ok
+test package_manager::tests::test_version_bump_patch ... ok
+test package_manager::tests::test_version_compatibility ... ok
+test package_manager::tests::test_version_creation ... ok
+test package_manager::tests::test_version_parse ... ok
+test package_manager::tests::test_version_to_string ... ok
+test pgo_engine::tests::test_best_variant_selection ... ok
+test pgo_engine::tests::test_numeric_optimization_hint ... ok
+test pgo_engine::tests::test_variant_generation ... ok
+test plugin_architecture::tests::test_capability_creation ... ok
+test plugin_architecture::tests::test_hook_context_creation ... ok
+test plugin_architecture::tests::test_hook_context_with_data ... ok
+test plugin_architecture::tests::test_hook_result_error ... ok
+test plugin_architecture::tests::test_hook_result_success ... ok
+test plugin_architecture::tests::test_hook_result_with_output ... ok
+test plugin_architecture::tests::test_hook_type_creation ... ok
+test plugin_architecture::tests::test_hook_type_from_str ... ok
+test plugin_architecture::tests::test_plugin_descriptor_creation ... ok
+test plugin_architecture::tests::test_plugin_descriptor_with_load_time ... ok
+test plugin_architecture::tests::test_plugin_factory_create_manager ... ok
+test plugin_architecture::tests::test_plugin_factory_create_metadata ... ok
+test plugin_architecture::tests::test_plugin_lifecycle_manager_load ... ok
+test plugin_architecture::tests::test_plugin_manager_enable_disable ... ok
+test plugin_architecture::tests::test_plugin_manager_list_enabled ... ok
+test plugin_architecture::tests::test_plugin_manager_register ... ok
+test plugin_architecture::tests::test_plugin_manager_unregister ... ok
+test plugin_architecture::tests::test_plugin_metadata_creation ... ok
+test plugin_architecture::tests::test_plugin_metadata_with_capability ... ok
+test plugin_architecture::tests::test_plugin_metadata_with_properties ... ok
+test plugin_architecture::tests::test_plugin_state_as_str ... ok
+test ptrace_audit::tests::test_audit_level_filtering ... FAILED
+test ptrace_audit::tests::test_audit_recording ... ok
+test ptrace_audit::tests::test_suspicious_activity_detection ... ok
+test ptrace_audit::tests::test_syscall_classification ... ok
+test python::tests::test_class_add_method ... ok
+test python::tests::test_class_creation ... ok
+test python::tests::test_decorator_classmethod ... ok
+test python::tests::test_decorator_property ... ok
+test python::tests::test_decorator_staticmethod ... ok
+test python::tests::test_dict_comprehension ... ok
+test python::tests::test_event_loop ... ok
+test python::tests::test_file_context_manager ... ok
+test python::tests::test_future_error ... ok
+test python::tests::test_future_ready ... ok
+test python::tests::test_generator_creation ... ok
+test python::tests::test_list_comprehension ... ok
+test python::tests::test_type_checker ... ok
+test python::tests::test_type_checker_mismatch ... ok
+test python::tests::test_type_hint_generic ... ok
+test python::tests::test_type_hint_optional ... ok
+test python::tests::test_type_hint_simple ... ok
+test python::tests::test_with_statement ... ok
+test query_builder::tests::test_complex_select ... ok
+test query_builder::tests::test_delete_builder ... ok
+test query_builder::tests::test_insert_builder ... ok
+test query_builder::tests::test_select_builder_basic ... ok
+test query_builder::tests::test_select_builder_columns ... ok
+test query_builder::tests::test_select_builder_limit ... ok
+test query_builder::tests::test_select_builder_order ... ok
+test query_builder::tests::test_select_builder_pagination ... ok
+test query_builder::tests::test_select_builder_where ... ok
+test query_builder::tests::test_select_builder_with_params ... ok
+test query_builder::tests::test_update_builder ... ok
+test regex_module::tests::test_contains ... ok
+test regex_module::tests::test_count ... ok
+test regex_module::tests::test_dot_wildcard ... ok
+test regex_module::tests::test_exact_match ... ok
+test regex_module::tests::test_extract ... ok
+test regex_module::tests::test_find ... ok
+test regex_module::tests::test_split ... ok
+test regex_module::tests::test_replace ... ok
+test regex_module::tests::test_replace_all ... ok
+test repl::tests::test_complete_statement ... ok
+test request_validation::tests::test_validation_email ... ok
+test request_validation::tests::test_validation_required_field ... ok
+test request_validation::tests::test_validation_strict_mode ... ok
+test request_validation::tests::test_validation_string_length ... ok
+test request_validation::tests::test_validation_type ... ok
+test request_validation::tests::test_validation_url ... ok
+test runtime_optimization::tests::test_baseline_jit_compiler_cache ... ok
+test runtime_optimization::tests::test_baseline_jit_compiler_clear_cache ... ok
+test runtime_optimization::tests::test_baseline_jit_compiler_compile_loop ... ok
+test runtime_optimization::tests::test_baseline_jit_compiler_creation ... ok
+test runtime_optimization::tests::test_baseline_jit_compiler_speedup ... ok
+test runtime_optimization::tests::test_gc_statistics_avg_pause_time ... ok
+test runtime_optimization::tests::test_gc_statistics_creation ... ok
+test runtime_optimization::tests::test_gc_statistics_record_collection ... ok
+test runtime_optimization::tests::test_gc_strategy_name ... ok
+test runtime_optimization::tests::test_gc_strategy_pause_time ... ok
+test runtime_optimization::tests::test_hot_code_detector_clear ... ok
+test runtime_optimization::tests::test_hot_code_detector_creation ... ok
+test runtime_optimization::tests::test_hot_code_detector_multiple_loops ... ok
+test runtime_optimization::tests::test_hot_code_detector_record_loop_above_threshold ... ok
+test runtime_optimization::tests::test_jit_compiler_compile_function ... ok
+test runtime_optimization::tests::test_hot_code_detector_record_loop_below_threshold ... ok
+test runtime_optimization::tests::test_jit_compiler_creation ... ok
+test runtime_optimization::tests::test_jit_compiler_optimize_o2 ... ok
+test runtime_optimization::tests::test_jit_enabled_optimizer_creation ... ok
+test runtime_optimization::tests::test_jit_enabled_optimizer_performance_multiplier ... ok
+test runtime_optimization::tests::test_jit_enabled_optimizer_compile_hot_loops ... ok
+test runtime_optimization::tests::test_jit_tier_name ... ok
+test runtime_optimization::tests::test_jit_enabled_optimizer_full_optimization ... ok
+test runtime_optimization::tests::test_jit_tier_speed_score ... ok
+test runtime_optimization::tests::test_jit_enabled_optimizer_record_loop_hot ... ok
+test runtime_optimization::tests::test_memory_optimizer_collect ... ok
+test runtime_optimization::tests::test_memory_optimizer_compact ... ok
+test runtime_optimization::tests::test_memory_optimizer_creation ... ok
+test runtime_optimization::tests::test_memory_optimizer_set_heap_size ... ok
+test runtime_optimization::tests::test_optimization_config_has_pass ... ok
+test runtime_optimization::tests::test_optimization_config_o0 ... ok
+test runtime_optimization::tests::test_optimization_config_o1 ... ok
+test runtime_optimization::tests::test_optimization_config_o3 ... ok
+test runtime_optimization::tests::test_optimization_level_as_str ... ok
+test runtime_optimization::tests::test_optimization_level_number ... ok
+test runtime_optimization::tests::test_optimization_result_overall_improvement ... ok
+test runtime_optimization::tests::test_performance_profiler_creation ... ok
+test runtime_optimization::tests::test_performance_profiler_identify_hotspots ... ok
+test runtime_optimization::tests::test_performance_profiler_record_sample ... ok
+test runtime_optimization::tests::test_runtime_optimizer_creation ... ok
+test runtime_optimization::tests::test_runtime_optimizer_full_optimization ... ok
+test runtime_optimization::tests::test_runtime_optimizer_optimize_runtime ... ok
+test runtime_optimization::tests::test_runtime_optimizer_profile ... ok
+test scheduler_optimization::tests::test_cpu_detection ... ok
+test scheduler_optimization::tests::test_thread_pool ... ok
+test scheduler_optimization::tests::test_work_stealing_scheduler ... ok
+test seccomp::tests::test_compute_only_profile ... ok
+test seccomp::tests::test_read_only_profile ... ok
+test seccomp::tests::test_safe_io_profile ... ok
+test seccomp::tests::test_seccomp_enforcement ... ok
+test security_module::tests::test_acl_get_permissions ... ok
+test security_module::tests::test_acl_grant_and_check ... ok
+test security_module::tests::test_acl_revoke ... ok
+test security_module::tests::test_audit_log_by_principal ... ok
+test security_module::tests::test_audit_log_creation ... ok
+test security_module::tests::test_audit_log_failures ... ok
+test security_module::tests::test_audit_log_logging ... ok
+test security_module::tests::test_encryption_decryption ... ok
+test security_module::tests::test_mac_generation ... ok
+test security_module::tests::test_mac_verification_fail ... ok
+test security_module::tests::test_password_hashing ... ok
+test security_module::tests::test_password_verification ... ok
+test security_module::tests::test_password_verification_fail ... ok
+test security_module::tests::test_rate_limiter_allow ... ok
+test security_module::tests::test_rate_limiter_exceeded ... ok
+test security_module::tests::test_rate_limiter_reset ... ok
+test security_module::tests::test_token_generation ... ok
+test security_module::tests::test_xor_encryption ... ok
+test server::tests::test_completion_provider ... ok
+test server::tests::test_debugger_breakpoint ... ok
+test server::tests::test_debugger_stack ... ok
+test server::tests::test_definition_finder ... ok
+test server::tests::test_document_store ... ok
+test server::tests::test_hover_provider ... ok
+test server::tests::test_language_server_did_change ... ok
+test server::tests::test_language_server_did_open ... ok
+test server::tests::test_language_server_initialize ... ok
+test server::tests::test_position_creation ... ok
+test server::tests::test_semantic_analyzer ... ok
+test server::tests::test_symbol_table ... ok
+test server::tests::test_text_document_lines ... ok
+test simd_ops::tests::test_array_add_scalar ... ok
+test simd_ops::tests::test_array_sum ... ok
+test simd_ops::tests::test_numeric_indices ... ok
+test spark::context::tests::test_spark_context_creation ... ok
+test spark::context::tests::test_spark_context_default ... ok
+test spark::context::tests::test_spark_context_from_session ... ok
+test spark::context::tests::test_spark_context_parallelism ... ok
+test spark::context::tests::test_spark_context_parallelize ... ok
+test spark::context::tests::test_spark_context_text_file ... ok
+test spark::context::tests::test_spark_context_text_file_invalid ... ok
+test spark::context::tests::test_spark_session_builder ... ok
+test spark::context::tests::test_spark_session_config ... ok
+test spark::context::tests::test_spark_session_creation ... ok
+test spark::context::tests::test_spark_session_default ... ok
+test spark::dataframe::tests::test_column_names ... ok
+test spark::dataframe::tests::test_dataframe_creation ... ok
+test spark::dataframe::tests::test_dataframe_select ... ok
+test spark::dataframe::tests::test_dataframe_with_data ... ok
+test spark::dataframe::tests::test_repartition ... ok
+test spark::graph::tests::test_clustering_coefficient ... ok
+test spark::graph::tests::test_connected_components ... FAILED
+test spark::graph::tests::test_graph_creation ... ok
+test spark::graph::tests::test_neighbors ... ok
+test spark::graph::tests::test_page_rank ... ok
+test spark::graph::tests::test_shortest_path ... ok
+test spark::graph::tests::test_triangle_count ... FAILED
+test spark::io::tests::test_csv_options_default ... ok
+test spark::io::tests::test_file_builder_creation ... ok
+test spark::io::tests::test_file_builder_csv_separator ... ok
+test spark::io::tests::test_file_format_enum ... ok
+test spark::io::tests::test_json_options_default ... ok
+test spark::io::tests::test_read_csv_invalid_format ... ok
+test spark::io::tests::test_read_csv_valid ... ok
+test spark::io::tests::test_read_parquet_invalid_format ... ok
+test spark::io::tests::test_write_csv_invalid_format ... ok
+test spark::io::tests::test_write_csv_valid ... ok
+test spark::io::tests::test_write_parquet_valid ... ok
+test spark::io_parallel::tests::test_io_metrics ... ok
+test spark::io_parallel::tests::test_io_metrics_stats ... ok
+test spark::io_parallel::tests::test_partition_distribution ... ok
+test spark::io_parallel::tests::test_partition_task_creation ... ok
+test spark::io_parallel::tests::test_partition_manager ... ok
+test spark::memory::tests::test_lru_cache_eviction ... ok
+test spark::io_parallel::tests::test_parallel_data_sink ... ok
+test spark::io_parallel::tests::test_thread_pool_creation ... ok
+test spark::memory::tests::test_lru_cache_get_updates_order ... ok
+test spark::io_parallel::tests::test_thread_pool_execution ... FAILED
+test spark::io_parallel::tests::test_file_builder ... FAILED
+test spark::memory::tests::test_memory_pool_deallocation ... ok
+test spark::memory::tests::test_memory_pool_overflow ... ok
+test spark::memory::tests::test_memory_pool_allocation ... ok
+test spark::memory::tests::test_memory_manager ... ok
+test spark::memory::tests::test_memory_stats ... ok
+test spark::io_parallel::tests::test_parallel_data_source ... ok
+test spark::ml::tests::test_decision_tree ... ok
+test spark::ml::tests::test_kmeans ... ok
+test spark::ml::tests::test_kmeans_predict ... ok
+test spark::ml::tests::test_linear_regression ... ok
+test spark::ml::tests::test_logistic_regression ... ok
+test spark::optimizer::tests::test_complex_query_optimization ... ok
+test spark::optimizer::tests::test_cost_model_defaults ... ok
+test spark::optimizer::tests::test_display_formatting ... ok
+test spark::optimizer::tests::test_filter_selectivity ... ok
+test spark::optimizer::tests::test_join_reordering ... ok
+test spark::optimizer::tests::test_optimizer_improves_plan ... ok
+test spark::optimizer::tests::test_plan_cost_estimation ... ok
+test spark::optimizer::tests::test_query_cost_combine ... ok
+test spark::optimizer::tests::test_table_scan_cost ... ok
+test spark::io_parallel::tests::test_thread_pool_active_tasks ... ok
+test spark::rdd::tests::test_rdd_creation ... ok
+test spark::rdd::tests::test_rdd_max ... ok
+test spark::rdd::tests::test_rdd_mean ... ok
+test spark::rdd::tests::test_rdd_min ... ok
+test spark::rdd::tests::test_rdd_repartition ... ok
+test spark::rdd::tests::test_rdd_sum ... ok
+test spark::schema::tests::test_datatype_display ... ok
+test spark::schema::tests::test_field_by_name ... ok
+test spark::schema::tests::test_field_creation ... ok
+test spark::schema::tests::test_field_non_nullable ... ok
+test spark::schema::tests::test_schema_creation ... ok
+test spark::schema::tests::test_schema_from_tuples ... ok
+test spark::schema::tests::test_select_fields ... ok
+test spark::sql::tests::test_sql_parse_simple_select ... ok
+test spark::sql::tests::test_sql_parse_with_group_by ... ok
+test spark::sql::tests::test_sql_parse_with_limit ... ok
+test spark::sql::tests::test_sql_parse_with_order_by ... ok
+test spark::sql::tests::test_sql_parse_with_where ... ok
+test spark::sql::tests::test_sql_validate ... ok
+test spark::streaming::tests::test_dstream_count ... ok
+test spark::streaming::tests::test_dstream_creation ... ok
+test spark::streaming::tests::test_dstream_filter ... ok
+test spark::streaming::tests::test_dstream_map ... ok
+test spark::streaming::tests::test_dstream_reduce_window ... ok
+test spark::streaming::tests::test_rdd_creation ... ok
+test spark::streaming::tests::test_streaming_context ... ok
+test spark::streaming::tests::test_streaming_context_checkpoint ... ok
+test spark::tests::test_context_creation ... ok
+test spark::tests::test_spark_session_creation ... ok
+test spark::tests::test_sql_parsing ... ok
+test stack::tests::test_push_pop_scope ... ok
+test stack::tests::test_stack_operations ... ok
+test stack::tests::test_store_load_var ... ok
+test string_utils::tests::test_case_conversion ... ok
+test string_utils::tests::test_extraction ... ok
+test string_utils::tests::test_queries ... ok
+test string_utils::tests::test_replacing ... ok
+test string_utils::tests::test_searching ... ok
+test string_utils::tests::test_splitting_joining ... ok
+test string_utils::tests::test_trimming_padding ... ok
+test testing_framework::tests::test_benchmark_result_avg_ms ... ok
+test testing_framework::tests::test_benchmark_result_creation ... ok
+test testing_framework::tests::test_benchmarker_get_fastest ... ok
+test testing_framework::tests::test_benchmarker_get_result ... ok
+test testing_framework::tests::test_benchmarker_get_slowest ... ok
+test testing_framework::tests::test_benchmarker_record ... ok
+test testing_framework::tests::test_code_coverage_add_file_coverage ... ok
+test testing_framework::tests::test_code_coverage_branch_coverage ... ok
+test testing_framework::tests::test_code_coverage_creation ... ok
+test testing_framework::tests::test_code_coverage_line_coverage ... ok
+test testing_framework::tests::test_code_coverage_overall_coverage ... ok
+test testing_framework::tests::test_property_test_case_creation ... ok
+test testing_framework::tests::test_property_test_case_is_successful ... ok
+test testing_framework::tests::test_property_test_case_pass_rate ... ok
+test testing_framework::tests::test_property_test_case_record ... ok
+test testing_framework::tests::test_property_test_runner_overall_success_rate ... ok
+test testing_framework::tests::test_property_test_runner_register ... ok
+test testing_framework::tests::test_test_case_creation ... ok
+test testing_framework::tests::test_test_case_increment_assertions ... ok
+test testing_framework::tests::test_test_case_with_description ... ok
+test spark::memory::tests::test_spillable_cache ... FAILED
+test testing_framework::tests::test_test_case_with_duration ... ok
+test testing_framework::tests::test_test_case_with_result ... ok
+test spark::memory::tests::test_disk_buffer_write_read ... ok
+test testing_framework::tests::test_test_result_as_str ... ok
+test testing_framework::tests::test_test_result_is_passed ... ok
+test testing_framework::tests::test_test_runner_register_suite ... ok
+test testing_framework::tests::test_test_runner_run_suite ... ok
+test testing_framework::tests::test_test_suite_add_test ... ok
+test testing_framework::tests::test_test_suite_creation ... ok
+test testing_framework::tests::test_test_suite_pass_rate ... ok
+test testing_framework::tests::test_test_suite_result_is_successful ... ok
+test testing_framework::tests::test_test_suite_result_success_rate ... ok
+test testing_framework::tests::test_test_suite_run ... ok
+test thermal_management::tests::test_thermal_scheduler ... ok
+test thermal_management::tests::test_thermal_status ... ok
+test thermal_management::tests::test_temperature_prediction ... ok
+test threat_intelligence::tests::test_entity_blocking ... ok
+test threat_intelligence::tests::test_threat_detection ... FAILED
+test threat_intelligence::tests::test_threat_intelligence_init ... ok
+test threat_intelligence::tests::test_threat_threshold ... FAILED
+test type_specializer::tests::test_numeric_specialization ... ok
+test type_specializer::tests::test_specialization_caching ... ok
+test types_module::tests::test_cast ... ok
+test types_module::tests::test_equals ... ok
+test types_module::tests::test_inspect ... ok
+test types_module::tests::test_loose_equals ... ok
+test types_module::tests::test_to_number ... ok
+test types_module::tests::test_type_checking ... ok
+test types_module::tests::test_typeof ... ok
+test variable_caching::tests::test_cache_dirty_tracking ... ok
+test variable_caching::tests::test_speedup_estimation ... ok
+test variable_caching::tests::test_loop_variable_analysis ... ok
+test variable_caching::tests::test_variable_cache_access ... ok
+test variable_caching::tests::test_variable_cache_allocation ... ok
+test variable_caching::tests::test_variable_lookup ... ok
+test vector_optimizer::tests::test_performance_profiler ... ok
+test vector_optimizer::tests::test_vector_optimizer ... ok
+test vector_optimizer::tests::test_vectorization_analysis ... ok
+test vector_optimizer::tests::test_vectorization_barriers ... ok
+test version::tests::test_deprecation_info_creation ... ok
+test version::tests::test_deprecation_registry ... ok
+test version::tests::test_deprecation_registry_by_version ... ok
+test version::tests::test_deprecation_warning_message ... ok
+test version::tests::test_feature_available ... ok
+test version::tests::test_global_deprecation_functions ... ok
+test version::tests::test_version_compatibility ... ok
+test version::tests::test_version_incompatibility ... ok
+test version::tests::test_version_parsing ... ok
+test wasm_support::tests::test_function_type_creation ... ok
+test wasm_support::tests::test_js_value_bool ... ok
+test wasm_support::tests::test_js_value_number ... ok
+test wasm_support::tests::test_js_value_string ... ok
+test wasm_support::tests::test_js_value_typename ... ok
+test wasm_support::tests::test_value_type_code ... ok
+test wasm_support::tests::test_wasm_compiler_compile ... ok
+test wasm_support::tests::test_wasm_compiler_creation ... ok
+test wasm_support::tests::test_wasm_compiler_get_module ... ok
+test wasm_support::tests::test_wasm_export_creation ... ok
+test wasm_support::tests::test_wasm_function_add_instruction ... ok
+test wasm_support::tests::test_wasm_function_add_local ... ok
+test wasm_support::tests::test_wasm_function_counts ... ok
+test wasm_support::tests::test_wasm_function_creation ... ok
+test wasm_support::tests::test_wasm_global_creation ... ok
+test wasm_support::tests::test_wasm_global_mutable ... ok
+test wasm_support::tests::test_wasm_import_creation ... ok
+test wasm_support::tests::test_wasm_instruction_opcode ... ok
+test wasm_support::tests::test_wasm_memory_creation ... ok
+test wasm_support::tests::test_wasm_memory_size_bytes ... ok
+test wasm_support::tests::test_wasm_memory_with_maximum ... ok
+test wasm_support::tests::test_wasm_module_add_export ... ok
+test wasm_support::tests::test_wasm_module_add_function ... ok
+test wasm_support::tests::test_wasm_module_add_global ... ok
+test wasm_support::tests::test_wasm_module_add_import ... ok
+test wasm_support::tests::test_wasm_module_add_memory ... ok
+test wasm_support::tests::test_wasm_module_add_table ... ok
+test wasm_support::tests::test_wasm_module_creation ... ok
+test wasm_support::tests::test_wasm_runtime_creation ... ok
+test wasm_support::tests::test_wasm_runtime_memory_size ... ok
+test wasm_support::tests::test_wasm_runtime_read_memory ... ok
+test wasm_support::tests::test_wasm_runtime_write_memory ... ok
+test wasm_support::tests::test_wasm_table_creation ... ok
+test web_framework::tests::test_http_method_parsing ... ok
+test web_framework::tests::test_http_request_creation ... ok
+test web_framework::tests::test_http_request_headers ... ok
+test web_framework::tests::test_http_response_cors ... ok
+test web_framework::tests::test_http_response_creation ... ok
+test web_framework::tests::test_http_response_json ... ok
+test web_framework::tests::test_middleware_auth ... ok
+test web_framework::tests::test_middleware_creation ... ok
+test web_framework::tests::test_router_creation ... ok
+test web_framework::tests::test_router_match ... ok
+test web_framework::tests::test_router_path_params ... ok
+test web_framework::tests::test_router_register ... ok
+test web_framework::tests::test_status_code ... ok
+test web_framework::tests::test_template_multiple_vars ... ok
+test web_framework::tests::test_template_rendering ... ok
+test web_framework::tests::test_web_server_creation ... ok
+test web_framework::tests::test_web_server_middleware ... ok
+test web_framework::tests::test_web_server_start_stop ... ok
+test web_framework::tests::test_web_server_static_files ... ok
+
+failures:
+
+---- jit_engine::tests::test_jit_rejects_non_numeric stdout ----
+
+thread 'jit_engine::tests::test_jit_rejects_non_numeric' (14700) panicked at src\jit_engine.rs:186:9:
+assertion failed: compiled.is_some() || jit.compilation_count == 1
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- ptrace_audit::tests::test_audit_level_filtering stdout ----
+
+thread 'ptrace_audit::tests::test_audit_level_filtering' (24660) panicked at src\ptrace_audit.rs:286:9:
+assertion `left == right` failed
+  left: 1
+ right: 0
+
+---- spark::graph::tests::test_connected_components stdout ----
+
+thread 'spark::graph::tests::test_connected_components' (19540) panicked at src\spark\graph.rs:322:9:
+assertion failed: components.get(&1) == components.get(&2)
+
+---- spark::graph::tests::test_triangle_count stdout ----
+
+thread 'spark::graph::tests::test_triangle_count' (8836) panicked at src\spark\graph.rs:336:9:
+assertion `left == right` failed
+  left: 0
+ right: 1
+
+---- spark::io_parallel::tests::test_thread_pool_execution stdout ----
+
+thread 'spark::io_parallel::tests::test_thread_pool_execution' (8728) panicked at src\spark\io_parallel.rs:503:9:
+assertion `left == right` failed
+  left: 0
+ right: 10
+
+---- spark::io_parallel::tests::test_file_builder stdout ----
+
+thread 'spark::io_parallel::tests::test_file_builder' (3584) panicked at src\spark\io_parallel.rs:360:40:
+called `Result::unwrap()` on an `Err` value: Mutex { data: [], poisoned: false, .. }
+
+---- spark::memory::tests::test_spillable_cache stdout ----
+
+thread 'spark::memory::tests::test_spillable_cache' (19040) panicked at src\spark\memory.rs:490:9:
+assertion failed: retrieved.is_some()
+
+---- threat_intelligence::tests::test_threat_detection stdout ----
+
+thread 'threat_intelligence::tests::test_threat_detection' (10440) panicked at src\threat_intelligence.rs:351:9:
+assertion failed: !threats.is_empty()
+
+---- threat_intelligence::tests::test_threat_threshold stdout ----
+
+thread 'threat_intelligence::tests::test_threat_threshold' (7000) panicked at src\threat_intelligence.rs:377:9:
+assertion failed: !threats3.is_empty()
+
+
+failures:
+    jit_engine::tests::test_jit_rejects_non_numeric
+    ptrace_audit::tests::test_audit_level_filtering
+    spark::graph::tests::test_connected_components
+    spark::graph::tests::test_triangle_count
+    spark::io_parallel::tests::test_file_builder
+    spark::io_parallel::tests::test_thread_pool_execution
+    spark::memory::tests::test_spillable_cache
+    threat_intelligence::tests::test_threat_detection
+    threat_intelligence::tests::test_threat_threshold
+
+test result: FAILED. 883 passed; 9 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.16s
+
+error: test failed, to rerun pass `--lib`

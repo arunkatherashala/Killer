@@ -1,0 +1,31 @@
+// Phase 10: Simple Quality Method Test
+print "=== Phase 10: Quality Method Test ==="
+print ""
+
+// Test with reassignment
+print "Test 1: Email with reassignment"
+quality email = "alice@example.com"
+quality validated = email.validate_email()
+print "Validated status: " + validated.is_valid()
+print "Validated score: " + validated.get_quality_score()
+print ""
+
+// Test 2: Check quality object directly
+print "Test 2: Score access"
+quality x = 42
+let s = x.get_quality_score()
+print "Quality score of 42: " + s
+print ""
+
+// Test 3: Get level
+print "Test 3: Level test"
+quality y = "hello"
+y.validate_not_null()
+quality y_validated = y.validate_not_null()
+let level = y_validated.get_level()
+print "Level: " + level
+print ""
+
+print "=== Tests complete ==="
+
+

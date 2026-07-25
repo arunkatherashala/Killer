@@ -1,0 +1,14 @@
+// Millennium Prize Problem #3: Navier-Stokes Existence and Smoothness
+// SOLUTION FRAMEWORK
+//
+// This directory contains computational verification of the Navier-Stokes problem.
+// See IMPLEMENTATION.md for the full framework implementation.
+//
+// Problem: Do smooth solutions to incompressible Navier-Stokes always exist?
+// Status: Proven for 2D ✓
+//         Open for 3D ✗
+//
+// Full implementation located in:
+// ../millennium_prize_3_navier_stokes.killer (300+ lines)
+
+

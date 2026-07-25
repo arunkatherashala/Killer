@@ -1,0 +1,109 @@
+// COMPREHENSIVE PHASE 1 - ALL FEATURES COMBINED
+// Tests that show all 4 Phase 1 features working together
+
+// Data structure with contracts
+struct SafeArray[n: nat] {
+    data: Vector[n],
+    
+    invariant data.len() == n;
+}
+
+// Pure computation with dependent types
+kfn matrix_sum[m: nat, n: nat](
+    mat: Matrix[m][n]
+) -> i32 pure {
+    let mut total = 0;
+    for i in 0..m {
+        for j in 0..n {
+            total = total + mat.data[i * n + j];
+        }
+    }
+    total
+}
+
+// Async I/O with dependent type contracts
+async fn load_matrix[m: nat, n: nat](
+    filename: String
+) -> Matrix[m][n] uses io
+    requires filename.len() > 0;
+    ensures result.rows == m;
+    ensures result.cols == n;
+{
+    let data = fetch(filename).await;
+    Matrix {
+        data: [],
+        rows: m,
+        cols: n,
+    }
+}
+
+// Complex pipeline: async + effects + dependent types + contracts
+async fn analyze_data[n: nat](
+    urls: Vector[n]
+) -> i32 uses (io, allocate)
+    requires n > 0;
+    ensures result >= 0;
+{
+    // Effect: async I/O on n elements, guaranteed at compile time
+    let results = join_all(urls.map(fn(url) {
+        async {
+            fetch(url).await
+        }
+    })).await;
+    
+    // Dependent type: results has exactly n elements
+    let mut score = 0;
+    for i in 0..n {
+        score = score + results[i].len();
+    }
+    
+    score
+}
+
+// Pure transformation with contracts
+kfn normalize[n: nat](
+    v: Vector[n]
+) -> Vector[n] pure
+    requires n > 0;
+{
+    let max = max_element(v);
+    let mut result = Vector { data: [], len: n };
+    for i in 0..n {
+        result.data[i] = v.data[i] / max;
+    }
+    result
+}
+
+// Main with all features
+async fn main_comprehensive() {
+    // Create dependent type data
+    let urls_5 = Vector {
+        data: ["url1", "url2", "url3", "url4", "url5"],
+        len: 5,
+    };
+    
+    // Call async function with dependent types, effects, and contracts
+    let score = analyze_data(urls_5).await;  // uses io, allocate
+    
+    // Pure computation
+    let normalized = normalize(urls_5);  // pure
+    
+    println("Analysis complete");
+}
+
+kfn main() {
+    println("✓ Comprehensive Phase 1 Tests Loaded");
+}
+
+// Helper functions
+kfn max_element[n: nat](v: Vector[n]) -> i32 pure {
+    let mut max = 0;
+    for i in 0..n {
+        if v.data[i] > max {
+            max = v.data[i];
+        }
+    }
+    max
+}
+
+

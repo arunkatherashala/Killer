@@ -1,0 +1,6 @@
+i=0
+while i<1000{
+  s=K"v={i}"
+  i=i+1
+}
+print(K"done i={i}")

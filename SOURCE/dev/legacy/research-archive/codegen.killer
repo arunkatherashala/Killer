@@ -1,0 +1,169 @@
+# Killer Code Generator
+# Converts AST to C code for compilation
+# Phase 2: Bootstrap - Generate C code that compiles to native executable
+
+class CodeGenerator {
+    fn constructor() {
+        self.code = ""
+        self.indent_level = 0
+        self.var_counter = 0
+        self.temp_counter = 0
+        self.output = ""
+    }
+
+    # Helper: Add indentation
+    fn add_line(line) {
+        self.code = self.code + "  " ** self.indent_level + line + "\n"
+    }
+
+    # Helper: Get temporary variable
+    fn get_temp() {
+        self.temp_counter = self.temp_counter + 1
+        return "temp_" + self.temp_counter
+    }
+
+    # Generate C code header
+    fn generate_header() {
+        self.add_line("#include <stdio.h>")
+        self.add_line("#include <stdlib.h>")
+        self.add_line("#include <string.h>")
+        self.add_line("#include <math.h>")
+        self.add_line("")
+        self.add_line("# Type definitions for Killer runtime")
+        self.add_line("typedef struct {")
+        self.indent_level = self.indent_level + 1
+        self.add_line("int type;  # 0=null, 1=number, 2=string, 3=bool, 4=array, 5=object")
+        self.add_line("double num_val;")
+        self.add_line("char* str_val;")
+        self.add_line("int bool_val;")
+        self.add_line("struct Value** array_val;")
+        self.add_line("int array_len;")
+        self.indent_level = self.indent_level - 1
+        self.add_line("} Value;")
+        self.add_line("")
+    }
+
+    # Generate C main function
+    fn generate_main() {
+        self.add_line("int main(int argc, char* argv[]) {")
+        self.indent_level = self.indent_level + 1
+    }
+
+    # Close main function
+    fn close_main() {
+        self.indent_level = self.indent_level - 1
+        self.add_line("    return 0;")
+        self.add_line("}")
+    }
+
+    # Generate print statement
+    fn generate_print(expr) {
+        self.add_line("printf(\"%lf\\n\", " + expr + ");")
+    }
+
+    # Generate variable declaration
+    fn generate_var(name, value) {
+        self.add_line("Value " + name + " = " + value + ";")
+    }
+
+    # Generate expression
+    fn generate_expression(node) {
+        if (node.type == "NumberLiteral") {
+            return node.value
+        } else {
+            if (node.type == "BinaryExpression") {
+                left = self.generate_expression(node.left)
+                right = self.generate_expression(node.right)
+                op = self.get_operator(node.operator)
+                return left + " " + op + " " + right
+            }
+        }
+        return "0"
+    }
+
+    # Map Killer operators to C operators
+    fn get_operator(op) {
+        if (op == "+") {
+            return "+"
+        } else {
+            if (op == "-") {
+                return "-"
+            } else {
+                if (op == "*") {
+                    return "*"
+                } else {
+                    if (op == "/") {
+                        return "/"
+                    } else {
+                        if (op == "%") {
+                            return "%"
+                        }
+                    }
+                }
+            }
+        }
+        return op
+    }
+
+    # Walk AST and generate code
+    fn generate_from_ast(ast) {
+        self.generate_header()
+        self.generate_main()
+        
+        # Generate code for each statement
+        for (stmt in ast.body) {
+            self.generate_statement(stmt)
+        }
+        
+        self.close_main()
+        return self.code
+    }
+
+    # Generate statement code
+    fn generate_statement(stmt) {
+        if (stmt.type == "ExpressionStatement") {
+            expr = self.generate_expression(stmt.expression)
+            self.add_line(expr + ";")
+        } else {
+            if (stmt.type == "VariableDeclaration") {
+                for (decl in stmt.declarations) {
+                    self.add_line("Value " + decl.id.name + " = " + self.generate_expression(decl.init) + ";")
+                }
+            } else {
+                if (stmt.type == "FunctionDeclaration") {
+                    self.generate_function(stmt)
+                }
+            }
+        }
+    }
+
+    # Generate function declaration
+    fn generate_function(func) {
+        self.add_line("")
+        self.add_line("Value " + func.id.name + "(")
+        
+        # Parameters
+        for (i = 0; i < func.params.length; i = i + 1) {
+            self.add_line("    Value " + func.params[i].name)
+            if (i < func.params.length - 1) {
+                self.code = self.code + ",\n"
+            }
+        }
+        
+        self.add_line(") {")
+        self.indent_level = self.indent_level + 1
+        
+        # Function body
+        for (stmt in func.body.body) {
+            self.generate_statement(stmt)
+        }
+        
+        self.indent_level = self.indent_level - 1
+        self.add_line("}")
+    }
+}
+
+# Export the code generator
+export { CodeGenerator }
+
+

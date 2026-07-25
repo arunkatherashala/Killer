@@ -1,0 +1,19 @@
+# Test array literals and indexing
+arr = [1, 2, 3, 4, 5];
+print(arr);
+
+# Access array elements
+first = arr[0];
+second = arr[1];
+print(first);
+print(second);
+
+# Modify array element
+arr[0] = 10;
+print(arr);
+
+# Array with mixed types
+mixed = ["hello", 42, true];
+print(mixed);
+
+

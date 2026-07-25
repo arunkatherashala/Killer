@@ -1,0 +1,61 @@
+# KhLM-Polyglot 5-Tier Router Test Suite
+# Tests: CAG pattern match, LLM/RLM config, all 5 builtins, status
+
+# ── 1. Check KhLM-Polyglot tier status (initial) ──────────────────────────────
+s = khlm_status()
+print(s)
+
+# ── 2. CAG Tier 0: Go error keyword → instant answer ─────────────────────────
+# "declared and not used" is in the CAG knowledge base for Go
+go_debug = khlm_debug("x := 5", "go", "x declared and not used")
+print(K"CAG Go debug: {go_debug}")
+
+# ── 3. CAG Tier 0: Python NameError ──────────────────────────────────────────
+py_debug = khlm_debug("print(result)", "python", "NameError: name result is not defined")
+print(K"CAG Python debug: {py_debug}")
+
+# ── 4. CAG Tier 0: Rust borrow error ─────────────────────────────────────────
+rs_debug = khlm_debug("let r = &s; s.push('x');", "rust", "cannot borrow s as mutable because it is also borrowed as immutable")
+print(K"CAG Rust debug: {rs_debug}")
+
+# ── 5. khlm_suggest: code improvement hints ──────────────────────────────────
+go_code = "package main\nimport fmt\nfunc main() { for i := 0; i < 100; i++ { fmt.Println(i) } }"
+suggestions = khlm_suggest(go_code, "go")
+print(K"Go suggestions: {suggestions}")
+
+# ── 6. khlm_explain: explain code ────────────────────────────────────────────
+ps_code = "$result = 1..10 | Where-Object { $_ % 2 -eq 0 } | Measure-Object -Sum"
+explanation = khlm_explain(ps_code, "powershell")
+print(K"PowerShell explanation: {explanation}")
+
+# ── 7. khlm_fix: fix code given error ────────────────────────────────────────
+broken = "package main\nimport fmt\nfunc main() { fmt.Println(undefined_var) }"
+fixed = khlm_fix(broken, "undefined: undefined_var", "go")
+print(K"Go fix: {fixed}")
+
+# ── 8. khlm_translate: Python → Go ───────────────────────────────────────────
+py_code = "nums = [1, 2, 3, 4, 5]\ntotal = sum(nums)\nprint(total)"
+translated = khlm_translate(py_code, "python", "go")
+print(K"Python → Go: {translated}")
+
+# ── 9. Configure Ollama LLM (Tier 2) - will be "offline" but tests the config ─
+llm_msg = khlm_set_llm("ollama", "", "llama3")
+print(llm_msg)
+
+# ── 10. Check status again (LLM now configured) ───────────────────────────────
+s2 = khlm_status()
+print(s2)
+
+# ── 11. Cache clear ───────────────────────────────────────────────────────────
+cleared = khlm_cache_clear()
+print(cleared)
+
+# ── 12. Verify the Assassin layer now uses the 5-tier router ─────────────────
+@go {
+package main
+import "fmt"
+func main() { fmt.Println("KhLM-Polyglot is the AI brain of Nova Galaxy!") }
+}
+
+final = nova_assist_status()
+print(final)

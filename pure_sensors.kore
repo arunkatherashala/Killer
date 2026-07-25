@@ -1,0 +1,7 @@
+KORE-K
+SCHEMA timestamp:int:delta temp:float:plain humidity:float:plain
+ROWS 6
+COL timestamp 1711234000,1000,1000,1000,1000,1000
+COL temp 23.5,23.6,23.4,23.7,23.8,23.6
+COL humidity 45.2,45.1,45.3,45.0,44.9,45.1
+END

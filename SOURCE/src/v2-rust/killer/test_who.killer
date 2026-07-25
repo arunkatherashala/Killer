@@ -1,0 +1,2 @@
+r = native_think("Who is sai arun kumar katherashala?")
+print(r)

@@ -1,0 +1,73 @@
+// week24_02_csv_parsing.killer
+// Parsing and processing CSV data
+
+println("=== CSV Parsing Examples ===\n")
+
+// Sample CSV data - users
+csv_users = "id,name,email,role,active
+1,Alice,alice@example.com,Engineer,true
+2,Bob,bob@example.com,Manager,true
+3,Charlie,charlie@example.com,Designer,false
+4,Diana,diana@example.com,Engineer,true
+5,Eve,eve@example.com,Analyst,true
+"
+
+// Parse CSV
+users = parse_csv(csv_users)
+println("Parsed " + str(len(users)) + " users from CSV")
+println()
+
+// Display each user
+println("User directory:")
+for user in users {
+    println("  " + user.name + " (" + user.role + ") - " + user.email)
+}
+
+// Filter operation
+println("\n=== Filtering CSV Data ===")
+engineers = []
+for user in users {
+    if user.role == "Engineer" {
+        engineers.push(user)
+    }
+}
+println("Engineers on team:")
+for eng in engineers {
+    println("  " + eng.name + " - " + eng.email)
+}
+
+// Count by role
+println("\n=== Counting by Role ===")
+roles = {}
+for user in users {
+    if keys(roles).includes(user.role) {
+        roles[user.role] = str(int(roles[user.role]) + 1)
+    }
+    else {
+        roles[user.role] = "1"
+    }
+}
+for role in keys(roles) {
+    println(role + ": " + roles[role])
+}
+
+// Sample product CSV
+product_csv = "sku,name,category,price,stock
+PHONE001,Smartphone,Electronics,799.99,45
+LAPTOP001,Laptop,Electronics,1299.99,12
+DESK001,Desk,Furniture,249.99,8
+CHAIR001,Office Chair,Furniture,199.99,23
+MONITOR001,4K Monitor,Electronics,599.99,35
+"
+
+products = parse_csv(product_csv)
+println("\n=== Product Inventory ===")
+total_value = 0
+for product in products {
+    price = product.price
+    stock = product.stock
+    value = str(float(price) * float(stock))
+    println(product.sku + ": " + product.name + " x" + stock + " = $" + value)
+}
+
+

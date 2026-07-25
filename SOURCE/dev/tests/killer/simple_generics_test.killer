@@ -1,0 +1,40 @@
+// Simple Generics Test
+print("=== Simple Generics Test ===\n");
+
+// Test 1: Generic function
+kfn identity<T>(value: T): T {
+    return value;
+}
+
+print("Test 1 - Generic function identity<T>:");
+result1 = identity(42);
+print("identity(42) = " + result1);
+
+result2 = identity("Hello");
+print("identity('Hello') = " + result2);
+
+print("\n");
+
+// Test 2: Generic class
+class Box<T> {
+    init(value: T) {
+        this.value = value;
+    }
+    
+    getValue(): T {
+        return this.value;
+    }
+}
+
+print("Test 2 - Generic class Box<T>:");
+box1 = new Box(100);
+print("Box(100).getValue() = " + box1.getValue());
+
+box2 = new Box("World");
+print("Box('World').getValue() = " + box2.getValue());
+
+print("\n");
+
+print("=== Generics Test Complete ===");
+
+

@@ -1,0 +1,176 @@
+// Week 21: HTTP Server Example (v2.2 - Real Socket API)
+// Demonstrates basic HTTP server using TcpListener and TcpStream
+// Curriculum: Real-time systems, networking, HTTP services
+// Status: Ready for Week 21 (HTTP Services & Networking)
+
+// Simple HTTP response helper
+class HttpResponse {
+    var statusCode = 200;
+    var statusText = "OK";
+    var headers = {};
+    var body = "";
+    
+    fn toString() {
+        var response = `HTTP/1.1 ${statusCode} ${statusText}\r\n`;
+        
+        // Add headers
+        for (var key in headers) {
+            response = response + `${key}: ${headers[key]}\r\n`;
+        }
+        
+        response = response + "\r\n" + body;
+        return response;
+    }
+}
+
+// Simple HTTP request parser
+kfn parseHttpRequest(rawRequest) {
+    var lines = rawRequest.split("\n");
+    
+    if (lines.length == 0) {
+        return null;
+    }
+    
+    var requestLine = lines[0].split(" ");
+    if (requestLine.length < 3) {
+        return null;
+    }
+    
+    var request = {};
+    request["method"] = requestLine[0];
+    request["path"] = requestLine[1];
+    request["version"] = requestLine[2];
+    request["headers"] = {};
+    request["body"] = "";
+    
+    var headerEnd = 0;
+    for (var i = 1; i < lines.length; i = i + 1) {
+        var line = lines[i];
+        
+        // Check for empty line (end of headers)
+        if (line.length == 0 || line == "\r") {
+            headerEnd = i + 1;
+            break;
+        }
+        
+        // Parse header
+        var colonIdx = line.indexOf(":");
+        if (colonIdx > 0) {
+            var headerName = line.slice(0, colonIdx);
+            var headerValue = line.slice(colonIdx + 1).trim();
+            request["headers"][headerName] = headerValue;
+        }
+    }
+    
+    // Parse body (everything after headers)
+    if (headerEnd > 0 && headerEnd < lines.length) {
+        request["body"] = lines.slice(headerEnd).join("\n");
+    }
+    
+    return request;
+}
+
+// Simple HTTP request handler
+kfn handleRequest(request) {
+    var response = new HttpResponse();
+    
+    if (request == null) {
+        response.statusCode = 400;
+        response.statusText = "Bad Request";
+        response.body = "Invalid HTTP request";
+        return response;
+    }
+    
+    var method = request["method"];
+    var path = request["path"];
+    
+    // Simple routing
+    if (path == "/") {
+        response.statusCode = 200;
+        response.statusText = "OK";
+        response.headers["Content-Type"] = "text/html";
+        response.body = "<html><body><h1>Welcome to Killer HTTP Server</h1><p>Connected via real sockets!</p></body></html>";
+    } else if (path == "/json") {
+        response.statusCode = 200;
+        response.statusText = "OK";
+        response.headers["Content-Type"] = "application/json";
+        response.body = "{\"message\": \"Hello from Killer\", \"timestamp\": " + system_time_ms() + "}";
+    } else if (path.startsWith("/echo")) {
+        response.statusCode = 200;
+        response.statusText = "OK";
+        response.headers["Content-Type"] = "text/plain";
+        response.body = `Received ${method} request to ${path}`;
+    } else if (path == "/health") {
+        response.statusCode = 200;
+        response.statusText = "OK";
+        response.headers["Content-Type"] = "application/json";
+        response.body = "{\"status\": \"healthy\", \"uptime_ms\": " + system_time_ms() + "}";
+    } else {
+        response.statusCode = 404;
+        response.statusText = "Not Found";
+        response.headers["Content-Type"] = "text/plain";
+        response.body = `Path "${path}" not found`;
+    }
+    
+    // Add common headers
+    response.headers["Server"] = "Killer/2.2";
+    response.headers["Connection"] = "close";
+    response.headers["Content-Length"] = response.body.length();
+    
+    return response;
+}
+
+// Main server
+kfn main() {
+    print("Week 21: HTTP Server (v2.2 with Real Sockets)");
+    print("Starting server on 127.0.0.1:8080...");
+    
+    // Create listener (Week 2 Socket API)
+    var listener = TcpListener_bind("127.0.0.1:8080");
+    print(`Listening: ${listener["address"]}`);
+    
+    var requestCount = 0;
+    var errorCount = 0;
+    
+    // In real implementation, this would be a proper loop
+    // For v2.2, we simulate handling 5 requests
+    for (var i = 0; i < 5; i = i + 1) {
+        print(`Waiting for connection ${i+1}...`);
+        
+        // Accept connection (Week 2 Socket API)
+        var stream = TcpListener_accept(listener);
+        print(`Connected from ${stream["remote_addr"]}`);
+        
+        // Read request (Week 2 Socket API)
+        var readResult = TcpStream_read(stream, 4096);
+        var bytesRead = readResult["bytes_read"];
+        var requestData = readResult["data"];
+        
+        print(`Received ${bytesRead} bytes`);
+        
+        // Parse and handle request
+        var request = parseHttpRequest(requestData);
+        var response = handleRequest(request);
+        
+        // Write response (Week 2 Socket API)
+        var responseText = response.toString();
+        var bytesWritten = TcpStream_write(stream, responseText);
+        print(`Sent ${bytesWritten} bytes`);
+        
+        // Close connection (Week 2 Socket API)
+        TcpStream_close(stream);
+        print(`Connection closed`);
+        
+        requestCount = requestCount + 1;
+    }
+    
+    print("");
+    print("=== Server Statistics ===");
+    print(`Total requests handled: ${requestCount}`);
+    print(`Total errors: ${errorCount}`);
+    print(`Shutdown complete`);
+}
+
+main();
+
+

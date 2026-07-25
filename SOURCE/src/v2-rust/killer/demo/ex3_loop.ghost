@@ -1,0 +1,33 @@
+# Example 3: Loop — Count from 1 to 5
+# Uses RAM[0..4] as counter
+.fuel 1000
+.data 100 "Count: "
+.data 110 "\n"
+
+# Initialize counter = 1
+push 1
+store 0         # RAM[0..4] = 1
+
+loop:
+    # Print "Count: "
+    push 100
+    push 7
+    syscall 4   # SYS_PRINT_STR
+
+    # Print counter value
+    load 0      # push RAM[0..4] onto stack
+    syscall 3   # SYS_PRINT_NUM
+
+    # Increment: counter = counter + 1
+    load 0
+    push 1
+    add
+    store 0     # RAM[0..4] = counter + 1
+
+    # Check if counter > 5
+    load 0
+    push 6
+    lt          # counter < 6 ? push 1 : push 0
+    jmpif loop  # if true, jump back
+
+halt

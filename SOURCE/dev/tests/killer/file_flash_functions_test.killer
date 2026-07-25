@@ -1,0 +1,15 @@
+print("=== File Flash Functions ===")
+
+path = "tests/killer/_tmp_file_flash.txt"
+
+print("exists before:", exists(path))
+print("writeFile:", writeFile(path, "hello"))
+print("exists after write:", exists(path))
+print("read after write:", readFile(path))
+
+print("appendFile:", appendFile(path, " world"))
+print("read after append:", readFile(path))
+
+print("=== File Flash Functions Done ===")
+
+

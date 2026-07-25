@@ -1,0 +1,2 @@
+r = khlm_ask("Who is Thorsten Ball")
+print(r)

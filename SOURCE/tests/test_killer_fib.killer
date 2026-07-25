@@ -1,0 +1,87 @@
+// KILLER FIBONACCI TEST - CORRECT SYNTAX
+
+kfn fib_mod(n, mod_val) {
+    if (n == 0) {
+        return 0;
+    }
+    if (n == 1) {
+        return 1;
+    }
+    
+    a = 1;
+    b = 1;
+    c = 1;
+    d = 0;
+    ma = 1;
+    mb = 1;
+    mc = 1;
+    md = 0;
+    exp = n;
+    
+    while (exp > 0) {
+        if ((exp % 2) == 1) {
+            na = (a * ma + b * mc) % mod_val;
+            nb = (a * mb + b * md) % mod_val;
+            nc = (c * ma + d * mc) % mod_val;
+            nd = (c * mb + d * md) % mod_val;
+            a = na;
+            b = nb;
+            c = nc;
+            d = nd;
+        }
+        
+        sa = (ma * ma + mb * mc) % mod_val;
+        sb = (ma * mb + mb * md) % mod_val;
+        sc = (mc * ma + md * mc) % mod_val;
+        sd = (mc * mb + md * md) % mod_val;
+        ma = sa;
+        mb = sb;
+        mc = sc;
+        md = sd;
+        
+        exp = exp / 2;
+    }
+    
+    return b;
+}
+
+print("KILLER FIBONACCI TEST");
+print("====================");
+print("");
+
+MOD = 1000000007;
+
+print("Test 1: Small numbers (0-10)");
+print(fib_mod(0, MOD));
+print(fib_mod(1, MOD));
+print(fib_mod(2, MOD));
+print(fib_mod(3, MOD));
+print(fib_mod(4, MOD));
+print(fib_mod(5, MOD));
+print(fib_mod(6, MOD));
+print(fib_mod(7, MOD));
+print(fib_mod(8, MOD));
+print(fib_mod(9, MOD));
+print(fib_mod(10, MOD));
+print("");
+
+print("Test 2: Medium scale");
+print(fib_mod(100, MOD));
+print(fib_mod(1000, MOD));
+print(fib_mod(10000, MOD));
+print("");
+
+print("Test 3: Large scale");
+print(fib_mod(1000000, MOD));
+print(fib_mod(10000000, MOD));
+print("");
+
+print("Test 4: Extreme scale");
+print(fib_mod(1000000000, MOD));
+print(fib_mod(1000000000000, MOD));
+print("");
+
+print("ALL TESTS COMPLETE");
+print("Killer Fibonacci implementation working!");
+
+

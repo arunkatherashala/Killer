@@ -1,0 +1,128 @@
+[
+    {
+        "file":  "01_hello.killer",
+        "v1_exit":  0,
+        "v2_exit":  0,
+        "v1_pass":  true,
+        "v2_pass":  true
+    },
+    {
+        "file":  "02_conditionals.killer",
+        "v1_exit":  0,
+        "v2_exit":  0,
+        "v1_pass":  true,
+        "v2_pass":  true
+    },
+    {
+        "file":  "03_loops.killer",
+        "v1_exit":  0,
+        "v2_exit":  0,
+        "v1_pass":  true,
+        "v2_pass":  true
+    },
+    {
+        "file":  "04_calculator.killer",
+        "v1_exit":  0,
+        "v2_exit":  0,
+        "v1_pass":  true,
+        "v2_pass":  true
+    },
+    {
+        "file":  "05_functions.killer",
+        "v1_exit":  0,
+        "v2_exit":  0,
+        "v1_pass":  true,
+        "v2_pass":  true
+    },
+    {
+        "file":  "06_arrays.killer",
+        "v1_exit":  0,
+        "v2_exit":  0,
+        "v1_pass":  true,
+        "v2_pass":  true
+    },
+    {
+        "file":  "07_dicts.killer",
+        "v1_exit":  0,
+        "v2_exit":  0,
+        "v1_pass":  true,
+        "v2_pass":  true
+    },
+    {
+        "file":  "08_for_loops.killer",
+        "v1_exit":  0,
+        "v2_exit":  0,
+        "v1_pass":  true,
+        "v2_pass":  true
+    },
+    {
+        "file":  "09_string_methods.killer",
+        "v1_exit":  0,
+        "v2_exit":  0,
+        "v1_pass":  true,
+        "v2_pass":  true
+    },
+    {
+        "file":  "10_try_catch.killer",
+        "v1_exit":  0,
+        "v2_exit":  0,
+        "v1_pass":  true,
+        "v2_pass":  true
+    },
+    {
+        "file":  "11_classes.killer",
+        "v1_exit":  0,
+        "v2_exit":  0,
+        "v1_pass":  true,
+        "v2_pass":  true
+    },
+    {
+        "file":  "12_advanced_features.killer",
+        "v1_exit":  0,
+        "v2_exit":  0,
+        "v1_pass":  true,
+        "v2_pass":  true
+    },
+    {
+        "file":  "13_complete_features.killer",
+        "v1_exit":  0,
+        "v2_exit":  0,
+        "v1_pass":  true,
+        "v2_pass":  true
+    },
+    {
+        "file":  "14_more_features.killer",
+        "v1_exit":  0,
+        "v2_exit":  0,
+        "v1_pass":  true,
+        "v2_pass":  true
+    },
+    {
+        "file":  "15_phase1.killer",
+        "v1_exit":  0,
+        "v2_exit":  0,
+        "v1_pass":  true,
+        "v2_pass":  true
+    },
+    {
+        "file":  "16_phase2_oop.killer",
+        "v1_exit":  0,
+        "v2_exit":  0,
+        "v1_pass":  true,
+        "v2_pass":  true
+    },
+    {
+        "file":  "killer_showcase_examples.killer",
+        "v1_exit":  0,
+        "v2_exit":  0,
+        "v1_pass":  true,
+        "v2_pass":  true
+    },
+    {
+        "file":  "killer-v2-showcase.killer",
+        "v1_exit":  1,
+        "v2_exit":  1,
+        "v1_pass":  false,
+        "v2_pass":  false
+    }
+]

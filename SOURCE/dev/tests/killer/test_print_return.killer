@@ -1,0 +1,8 @@
+kfn test(): string {
+    print("hello");
+    return "world";
+}
+
+print(test());
+
+

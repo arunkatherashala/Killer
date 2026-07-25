@@ -1,0 +1,233 @@
+print("============================================================")
+print("  KILLER VM - FULL BENCHMARK SUITE  (Release Build)")
+print("  1,000,000 iterations  -  ms total == ns/iter")
+print("============================================================")
+
+ITERS = 1000000
+
+t0 = system_time_ms()
+i = 0
+while i < ITERS {
+  i = i + 1
+}
+t1 = system_time_ms()
+base_ms = t1 - t0
+print(K"[CORE-1] Counter loop:        {base_ms} ms = {base_ms} ns/iter")
+
+t0 = system_time_ms()
+i = 0
+s = 0
+while i < ITERS {
+  s = s + i
+  i = i + 1
+}
+t1 = system_time_ms()
+arith_ms = t1 - t0
+print(K"[CORE-2] Arithmetic sum+i:    {arith_ms} ms = {arith_ms} ns/iter  result={s}")
+
+t0 = system_time_ms()
+i = 0
+while i < ITERS {
+  r = i + i
+  i = i + 1
+}
+t1 = system_time_ms()
+fn_ms = t1 - t0
+print(K"[CORE-3] Double op (i+i):     {fn_ms} ms = {fn_ms} ns/iter")
+
+print("------------------------------------------------------------")
+
+ap = T_POS()
+an = T_NEG()
+
+t0 = system_time_ms()
+i = 0
+while i < ITERS {
+  r = trit_and(ap, an)
+  i = i + 1
+}
+t1 = system_time_ms()
+tand_ms = t1 - t0
+print(K"[PhaseA] trit_and:            {tand_ms} ms = {tand_ms} ns/op")
+
+t0 = system_time_ms()
+i = 0
+while i < ITERS {
+  r = trit_or(ap, an)
+  i = i + 1
+}
+t1 = system_time_ms()
+tor_ms = t1 - t0
+print(K"[PhaseA] trit_or:             {tor_ms} ms = {tor_ms} ns/op")
+
+t0 = system_time_ms()
+i = 0
+while i < ITERS {
+  r = trit_not(ap)
+  i = i + 1
+}
+t1 = system_time_ms()
+tnot_ms = t1 - t0
+print(K"[PhaseA] trit_not:            {tnot_ms} ms = {tnot_ms} ns/op")
+
+print("------------------------------------------------------------")
+
+fa = 0.8
+fb = 0.6
+
+t0 = system_time_ms()
+i = 0
+while i < ITERS {
+  r = fuzzy_and(fa, fb)
+  i = i + 1
+}
+t1 = system_time_ms()
+fand_ms = t1 - t0
+print(K"[PhaseD] fuzzy_and:           {fand_ms} ms = {fand_ms} ns/op")
+
+t0 = system_time_ms()
+i = 0
+while i < ITERS {
+  r = fuzzy_or(fa, fb)
+  i = i + 1
+}
+t1 = system_time_ms()
+f_or_ms = t1 - t0
+print(K"[PhaseD] fuzzy_or:            {f_or_ms} ms = {f_or_ms} ns/op")
+
+t0 = system_time_ms()
+i = 0
+while i < ITERS {
+  r = fuzzy_not(fa)
+  i = i + 1
+}
+t1 = system_time_ms()
+fnot_ms = t1 - t0
+print(K"[PhaseD] fuzzy_not:           {fnot_ms} ms = {fnot_ms} ns/op")
+
+print("------------------------------------------------------------")
+
+sig = signal_create(T_POS(), 0.94, "auth")
+
+t0 = system_time_ms()
+i = 0
+while i < ITERS {
+  r = signal_value(sig)
+  i = i + 1
+}
+t1 = system_time_ms()
+sval_ms = t1 - t0
+print(K"[PhaseB] signal_value:        {sval_ms} ms = {sval_ms} ns/op")
+
+t0 = system_time_ms()
+i = 0
+while i < ITERS {
+  r = signal_confidence(sig)
+  i = i + 1
+}
+t1 = system_time_ms()
+sconf_ms = t1 - t0
+print(K"[PhaseB] signal_confidence:   {sconf_ms} ms = {sconf_ms} ns/op")
+
+print("------------------------------------------------------------")
+
+q = qubit_create(1.0, 0.0)
+
+t0 = system_time_ms()
+i = 0
+while i < ITERS {
+  r = qubit_hadamard(q)
+  i = i + 1
+}
+t1 = system_time_ms()
+qhad_ms = t1 - t0
+print(K"[PhaseC] qubit_hadamard:      {qhad_ms} ms = {qhad_ms} ns/op")
+
+t0 = system_time_ms()
+i = 0
+while i < ITERS {
+  r = qubit_pauli_x(q)
+  i = i + 1
+}
+t1 = system_time_ms()
+qpx_ms = t1 - t0
+print(K"[PhaseC] qubit_pauli_x:       {qpx_ms} ms = {qpx_ms} ns/op")
+
+t0 = system_time_ms()
+i = 0
+while i < ITERS {
+  r = qubit_measure(q)
+  i = i + 1
+}
+t1 = system_time_ms()
+qmeas_ms = t1 - t0
+print(K"[PhaseC] qubit_measure:       {qmeas_ms} ms = {qmeas_ms} ns/op")
+
+print("------------------------------------------------------------")
+
+ta = tryte_create(T_POS(), T_ZERO(), T_NEG(), T_POS(), T_ZERO(), T_NEG())
+tb = tryte_create(T_NEG(), T_POS(), T_ZERO(), T_NEG(), T_POS(), T_ZERO())
+
+t0 = system_time_ms()
+i = 0
+while i < ITERS {
+  r = tryte_and(ta, tb)
+  i = i + 1
+}
+t1 = system_time_ms()
+tyand_ms = t1 - t0
+print(K"[PhaseE] tryte_and:           {tyand_ms} ms = {tyand_ms} ns/op")
+
+t0 = system_time_ms()
+i = 0
+while i < ITERS {
+  r = tryte_or(ta, tb)
+  i = i + 1
+}
+t1 = system_time_ms()
+tyor_ms = t1 - t0
+print(K"[PhaseE] tryte_or:            {tyor_ms} ms = {tyor_ms} ns/op")
+
+t0 = system_time_ms()
+i = 0
+while i < ITERS {
+  r = tryte_not(ta)
+  i = i + 1
+}
+t1 = system_time_ms()
+tynot_ms = t1 - t0
+print(K"[PhaseE] tryte_not:           {tynot_ms} ms = {tynot_ms} ns/op")
+
+t0 = system_time_ms()
+i = 0
+while i < ITERS {
+  r = tryte_add(ta, tb)
+  i = i + 1
+}
+t1 = system_time_ms()
+tyadd_ms = t1 - t0
+print(K"[PhaseE] tryte_add:           {tyadd_ms} ms = {tyadd_ms} ns/op  (6-trit encode)")
+
+print("============================================================")
+print("  RANKED SUMMARY  (fastest to slowest, ns/op at 1M iters)")
+print("============================================================")
+print(K"  trit_not       {tnot_ms} ns/op   Phase A")
+print(K"  fuzzy_not      {fnot_ms} ns/op   Phase D")
+print(K"  qubit_pauli_x  {qpx_ms} ns/op   Phase C")
+print(K"  qubit_hadamard {qhad_ms} ns/op   Phase C")
+print(K"  trit_and       {tand_ms} ns/op   Phase A")
+print(K"  trit_or        {tor_ms} ns/op   Phase A")
+print(K"  fuzzy_and      {fand_ms} ns/op   Phase D")
+print(K"  fuzzy_or       {f_or_ms} ns/op   Phase D")
+print(K"  qubit_measure  {qmeas_ms} ns/op   Phase C")
+print(K"  signal_value   {sval_ms} ns/op   Phase B")
+print(K"  signal_conf    {sconf_ms} ns/op   Phase B")
+print(K"  tryte_and      {tyand_ms} ns/op   Phase E  6-trit SIMD")
+print(K"  tryte_or       {tyor_ms} ns/op   Phase E  6-trit SIMD")
+print(K"  tryte_not      {tynot_ms} ns/op   Phase E  6-trit negate")
+print(K"  tryte_add      {tyadd_ms} ns/op   Phase E  balanced ternary encode")
+print(K"  double op (i+i) {fn_ms} ns/iter  CORE add+store")
+print("------------------------------------------------------------")
+print(K"  BASELINE loop  {base_ms} ns/iter CORE pure counter")
+print("============================================================")
+print("FULL BENCHMARK COMPLETE")

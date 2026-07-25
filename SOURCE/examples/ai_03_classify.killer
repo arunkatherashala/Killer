@@ -1,0 +1,110 @@
+// Example: AI Classification & Sentiment Analysis
+// Demonstrates how to use ai_classify() for zero-shot classification
+
+kfn main() {
+    print("=== Killer AI Classification Example ===\n");
+    
+    // Define categories for classification
+    let sentiment_categories = ["positive", "negative", "neutral"];
+    
+    // Sample texts to classify
+    let reviews = [
+        "This product is absolutely amazing! I love it!",
+        "Terrible experience, would not recommend",
+        "It's okay, nothing special",
+        "Best purchase I've ever made",
+        "Waste of money"
+    ];
+    
+    print("=== Sentiment Classification ===\n");
+    for review in reviews {
+        print("Text: ");
+        print(review);
+        print("\n");
+        
+        let result = ai_classify(review, sentiment_categories);
+        
+        print("Classification Result:\n");
+        print("  Category: ");
+        print(result["category"]);
+        print("\n");
+        print("  Confidence: ");
+        print(result["confidence"]);
+        print("\n");
+        print("  Scores: ");
+        print(result["all_scores"]);
+        print("\n\n");
+    }
+    
+    // Topic classification example
+    print("=== Topic Classification ===\n");
+    
+    let topics = ["sports", "politics", "technology", "entertainment"];
+    
+    let articles = [
+        "The new AI model achieves state-of-the-art performance on multiple benchmarks",
+        "The team won the championship with an incredible final game",
+        "Congress debates new technology regulations",
+        "The latest superhero movie breaks box office records"
+    ];
+    
+    for article in articles {
+        print("Text: ");
+        print(article);
+        print("\n");
+        
+        let classification = ai_classify(article, topics);
+        
+        print("Classified as: ");
+        print(classification["category"]);
+        print(" (confidence: ");
+        print(classification["confidence"]);
+        print(")\n\n");
+    }
+    
+    // Intent classification example
+    print("=== Intent Classification ===\n");
+    
+    let intents = ["purchase", "support", "information", "complaint"];
+    let user_messages = [
+        "I'd like to buy your product",
+        "My device is not working",
+        "What features do you offer?",
+        "Your service is terrible"
+    ];
+    
+    for message in user_messages {
+        print("User: ");
+        print(message);
+        print("\n");
+        
+        let intent = ai_classify(message, intents);
+        print("Detected Intent: ");
+        print(intent["category"]);
+        print("\n\n");
+    }
+    
+    // Custom model classification
+    print("=== Classification with Custom Model ===\n");
+    
+    let custom_text = "I love this product";
+    let custom_options = {
+        "model": "gpt-4",
+        "temperature": 0.3
+    };
+    
+    let custom_result = ai_classify(
+        custom_text,
+        ["good", "bad"],
+        custom_options
+    );
+    
+    print("Custom classification done\n");
+    print("Result: ");
+    print(custom_result["category"]);
+    print("\n");
+    
+    print("=== Classification Example Complete ===\n");
+}
+
+

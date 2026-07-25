@@ -1,0 +1,13 @@
+print("=== Logging Flash Functions ===")
+
+ok1 = logInfo("service started", 200)
+ok2 = logWarn("retry in", 3, "seconds")
+ok3 = logError("connection failed", "code", 500)
+
+print("logInfo returned:", ok1)
+print("logWarn returned:", ok2)
+print("logError returned:", ok3)
+
+print("=== Logging Flash Functions Done ===")
+
+

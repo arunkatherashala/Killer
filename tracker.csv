@@ -1,0 +1,95 @@
+entry_id,date,area,title,description,status,key_paths
+1,2026-03-29,trits,NOVT trit codec,"Packed balanced trits {-1;0;1} at 2 bits/trit; magic NOVT; pack/unpack APIs",done,SOURCE/src/v2-rust/killer/src/nova_trit_codec.rs
+2,2026-03-31,trits,NOVD dense trit codec,"Base-3 integer packing ~log2(3) bits/trit; magic NOVD; pack_trits_novd / unpack_novd_trits",done,SOURCE/src/v2-rust/killer/src/nova_trit_codec.rs
+3,2026-03-31,benchmark,csv_format_compare binary,"~10 MiB CSV size table: CSV to NOVZ; CSV to KORE; CSV to KPAR; KORE to NOVZ; NOVT/NOVD demos and NOVZ stack; human Size + Bytes columns",done,"SOURCE/src/v2-rust/killer/src/bin/csv_format_compare.rs; cargo run --release --bin csv_format_compare"
+4,2026-03-31,benchmark,kore_nova_format_bench binary,"~10 MiB CSV encode/decode ms + size table vs NOVZ; KORE KPAR KORE-NOVZ rows; human Size + comma bytes",done,"SOURCE/src/v2-rust/killer/src/bin/kore_nova_format_bench.rs; cargo run --release --bin kore_nova_format_bench"
+5,2026-03-31,docs,QUICKSTART bench sections,Documented csv_format_compare and kore_nova_format_bench commands,done,SOURCE/src/v2-rust/killer/QUICKSTART.md
+6,2026-03-29,tests,NOVT NOVD integration,"Round-trip and size checks for trit codecs",done,SOURCE/src/v2-rust/killer/tests/nova_trit_codec_integration.rs
+7,2026-03-29,language,killer_super kfn + trinary examples,kfn transpiler support and trinary .killer examples (trinary_awake etc.),done,SOURCE/src/v2-rust/killer/examples/trinary_awake.killer
+8,2026-03-29,nova,KORE vs NOVT positioning,Columnar KORE uses LZ internally; NOVT is trit packing only — documented in codec module comments,done,SOURCE/src/v2-rust/killer/src/nova_trit_codec.rs
+9,2026-03-31,ui,killer_ui engine roadmap,Phased plan for native UI and operator-style graphs (TouchDesigner-inspired goals); stub module + docs,done,"SOURCE/docs/KILLER_UI_ENGINE.md; SOURCE/src/v2-rust/killer/src/killer_ui/mod.rs"
+10,2026-03-31,ui,killer_ui A+B+C+D parallel,A patch model; B run_demo_window stub offline; C OperatorGraph topo+cook; D Workspace+panels; killer_ui_demo + ui_parallel_sketch.killer,done,"SOURCE/src/v2-rust/killer/src/killer_ui/; SOURCE/src/v2-rust/killer/src/bin/killer_ui_demo.rs; examples/ui_parallel_sketch.killer"
+11,2026-03-31,ui,Web stack concepts in killer_ui,Three.js Angular React Node patterns documented; web_stack module UiParadigm LayoutHints hooks; KILLER_UI_ENGINE.md table,done,"SOURCE/docs/KILLER_UI_ENGINE.md; SOURCE/src/v2-rust/killer/src/killer_ui/web_stack.rs"
+12,2026-03-31,language,EBNF grammar extended,"match async_fn spawn import switch do_while added spec-ahead; parser/compiler catch up later",done,SOURCE/docs/KILLER_GRAMMAR.ebnf
+13,2026-05-30,language,Merge parsers single pipeline,"parser.rs folded into lexer.rs + stmt_parser.rs one AST path - COMPLETE: Deleted legacy parser.rs (not imported anywhere), lexer.rs + stmt_parser.rs form unified AST pipeline",done,"SOURCE/src/v2-rust/killer/src/lexer.rs; stmt_parser.rs"
+14,2026-03-31,language,kfn to fn deprecation note,Guide migration away from duplicate kfn keyword,pending,SOURCE/docs/KILLER_LANGUAGE_GUIDE.md
+15,2026-05-30,language,match expression wired,"Stmt::Match Token Match compile to Eq + JumpIfFalse chains - COMPLETE: Added TokenKind::Match to lexer, parse_match/parse_match_pattern to stmt_parser, wired parse_stmt",done,"SOURCE/src/v2-rust/killer/src/lexer.rs; stmt_parser.rs; examples/test_match.killer"
+16,2026-03-31,language,Destructuring let bindings,"let [a b] = arr emit IndexRead + StoreSlot per Pattern",pending,SOURCE/src/v2-rust/killer/src/compiler.rs
+17,2026-03-31,compiler,Constant folding optimizer,fuse_slot_patterns numeric bool compare,done,SOURCE/src/v2-rust/killer/src/optimizer.rs
+18,2026-03-31,compiler,Dead store to Pop,dead_store_unused_slot_becomes_pop slot liveness,done,SOURCE/src/v2-rust/killer/src/optimizer.rs
+19,2026-03-31,compiler,TailCall opcode,self tail calls compiler + VM + mini interpreter approx,done,"SOURCE/src/v2-rust/killer/src/bytecode.rs; compiler.rs; vm.rs"
+20,2026-03-31,compiler,NaN-boxing VM values,Use nanbox.rs for inline scalars heap only for aggregate values,pending,"SOURCE/src/v2-rust/killer/src/nanbox.rs; vm.rs; value.rs"
+21,2026-03-31,compiler,Register temps for expressions,Extend slot allocation for temporaries in expr codegen,pending,SOURCE/src/v2-rust/killer/src/compiler.rs
+22,2026-03-31,compiler,Loop-invariant hoisting,Optimizer pass hoist LoadSlot CallBuiltin above loop header,pending,SOURCE/src/v2-rust/killer/src/optimizer.rs
+23,2026-03-31,security,CapabilitySet enforced builtins,require_* thread-local CapabilityScopeGuard VM run spawn ImportPkg child VM caps gated builtins,done,"SOURCE/src/v2-rust/killer/src/security.rs; vm.rs; builtin.rs; http_client.rs; polyglot.rs; khlm_polyglot.rs; vision.rs; image_gen.rs; tool_calling.rs; kala_ui.rs"
+24,2026-03-31,security,Execution budget in VM,Per-opcode step limit wall ms on backward Jump,done,"SOURCE/src/v2-rust/killer/src/vm.rs; security.rs"
+25,2026-03-31,security,allow_native_jit gate,JIT fast path skipped when allow_native_jit false,done,SOURCE/src/v2-rust/killer/src/vm.rs
+26,2026-03-31,security,Fuzz lexer and parser,cargo-fuzz lexer_parser 100k+ fix panics,pending,SOURCE/docs/FUZZING.md
+27,2026-03-31,security,CLI allow-all-paths flag,Replace loose allow_unrestricted_file_access with explicit flag,pending,"SOURCE/src/v2-rust/killer/src/main.rs; security.rs"
+28,2026-03-31,security,Unsafe audit deny policy,UNSAFE_AUDIT targeted allows JIT VM value,done,SOURCE/docs/UNSAFE_AUDIT.md
+29,2026-03-31,docs,IMPROVEMENT_10_TRACKER markdown,Living checklist synced with roadmap,done,SOURCE/docs/IMPROVEMENT_10_TRACKER.md
+30,2026-03-31,docs,KILLER_LANGUAGE_GUIDE,Exists baseline expand to 300+ lines tutorials,pending,SOURCE/docs/KILLER_LANGUAGE_GUIDE.md
+31,2026-03-31,docs,BUILTIN_REFERENCE plus gen script,Builtin index automation,done,"SOURCE/docs/BUILTIN_REFERENCE.md; SOURCE/src/v2-rust/killer/scripts/gen-builtin-reference.ps1"
+32,2026-03-31,docs,Archive session logs,Move DOCS MARCH SESSION phase1 logs to archive sessions,pending,DOCS/archive/sessions/
+33,2026-03-31,docs,PERFORMANCE_ROADMAP native bench,Document manual tokens per sec for killer-native --model,done,SOURCE/docs/PERFORMANCE_ROADMAP.md
+34,2026-03-31,docs,KILLER_ROADMAP_TO_10,Strategic roadmap companion to tracker,pending,SOURCE/docs/KILLER_ROADMAP_TO_10.md
+35,2026-05-30,quality,cargo clippy -D warnings,"Zero warnings policy complete - Fixed 10 warnings: animation.rs (Default+sort_by), component.rs (Default), patch.rs (Default+sort_by), layout.rs (enumerate), variable_caching.rs (sort_by), runtime_optimization.rs (sort_by). All 1802 tests passing.",done,SOURCE/src/v2-rust/killer
+36,2026-03-31,quality,Remove src bak files,ai_old.rs.bak absent inventory only,n/a,_LOGS and docs only
+37,2026-03-31,quality,phase stub delete policy,phase_46 and phase_49 contain real tests do not delete blindly,done,SOURCE/docs/IMPROVEMENT_10_TRACKER.md
+38,2026-03-31,quality,Consolidate JIT modules,jit_compiler jit_engine week6 into jit submodule,pending,SOURCE/src/v2-rust/killer/src/jit*.rs
+39,2026-03-31,quality,deny unsafe_code crate-wide,Explicit allows in JIT FFI VM,done,SOURCE/src/v2-rust/killer/src/lib.rs
+40,2026-03-31,ai,kala-setup.ps1,Ollama detect pull model smoke optional killer-native kala_ask,done,SOURCE/scripts/kala-setup.ps1
+41,2026-03-31,ai,tool_calling_demo killer plus JSON,readFile parse_json khlm_with_tools full loop example,done,"SOURCE/src/v2-rust/killer/examples/tool_calling_demo.killer; tool_calling_demo_data.json"
+42,2026-03-31,ai,builtin_dispatch module,Breaks builtin tool_calling cycle forward BuiltinFunctions::call,done,SOURCE/src/v2-rust/killer/src/builtin_dispatch.rs; lib.rs
+43,2026-03-31,ai,Tool registry readFile parse_json,KhLM dispatcher routes to builtins via builtin_dispatch,done,SOURCE/src/v2-rust/killer/src/tool_calling.rs
+44,2026-03-31,ai,Prune imagination affect placeholders,Real logic or remove canned strings,pending,"SOURCE/src/v2-rust/killer/src/imagination.rs; affect.rs"
+45,2026-03-31,ai,Record native inference benchmark,Run --model qwen2.5 note tok per sec in roadmap,pending,SOURCE/docs/PERFORMANCE_ROADMAP.md
+46,2026-03-31,tooling,killer fmt command,Wire formatter.rs --fmt to killer-native main,pending,"SOURCE/src/v2-rust/killer/src/formatter.rs; main.rs"
+47,2026-03-31,tooling,killer test runner,Scan test star killer assert builtins pass fail count,pending,SOURCE/src/v2-rust/killer/src/main.rs
+48,2026-03-31,tooling,LSP publishDiagnostics,compile_killer_default errors to textDocument,pending,SOURCE/src/v2-rust/lsp-server/src/main.rs
+49,2026-03-31,tooling,VS Code extension publish,publisher field vsce package,pending,vscode extension package.json
+50,2026-03-31,testing,Inline hash tests core,lexer compiler vm nova target 50 plus tests,pending,SOURCE/src/v2-rust/killer/src/
+51,2026-03-31,testing,Fuzz target lexer_parser,Create fuzz run 100k iterations,pending,fuzz/
+52,2026-03-31,testing,CI coverage tarpaulin,70 percent goal on core modules,pending,.github/workflows/
+53,2026-03-31,testing,tests error_cases.rs,Division by zero syntax errors VmError variants not panic,pending,SOURCE/src/v2-rust/killer/tests/error_cases.rs
+54,2026-03-31,performance,JIT hot loops with if else,jit_x86 detect_hot_pattern JumpIfFalse native jcc,pending,SOURCE/src/v2-rust/killer/src/jit_x86.rs
+55,2026-03-31,performance,String interning ConstStr,HashSet Arc str in compiler,pending,SOURCE/src/v2-rust/killer/src/compiler.rs
+56,2026-03-31,performance,PGO build script,profile generate run bench profile use rebuild,pending,SOURCE/scripts/pgo-build.ps1
+57,2026-03-31,nova,CRC32 per column block,Four byte CRC after column payload verify decode,pending,SOURCE/src/v2-rust/killer/src/nova.rs
+58,2026-03-31,nova,NOVA_FORMAT_SPEC formal doc,Byte layout codecs test vectors,pending,SOURCE/docs/NOVA_FORMAT_SPEC.md
+59,2026-03-31,innovation,trit_sensor_demo killer,Fuzzy threshold Signal signal_and signal_or demo,done,SOURCE/src/v2-rust/killer/examples/trit_sensor_demo.killer
+60,2026-03-31,innovation,Whitepaper trit signal qubit,Nova benchmarks 8 to 10 pages,pending,SOURCE/docs/
+61,2026-03-31,meta,tracker.csv roadmap mirror,This file; keep in sync with IMPROVEMENT_10_TRACKER and KILLER_ROADMAP,done,tracker.csv
+62,2026-03-31,scorecard,Language Design 8.5,match AST parser then compile_match merge parser.rs stmt_parser,pending,"SOURCE/docs/SCORECARD_TO_10.md; ast.rs; stmt_parser.rs; compiler.rs"
+63,2026-03-31,scorecard,Compiler VM 9.0,NaN-boxing VM dispatch CFG liveness dead-store beyond conservative,pending,"SOURCE/docs/SCORECARD_TO_10.md; nanbox.rs; vm.rs; optimizer.rs"
+64,2026-03-31,scorecard,Performance 9.5,Computed-goto or JIT non-counter loops full branchy loops,pending,"SOURCE/docs/SCORECARD_TO_10.md; jit_x86.rs; vm.rs"
+65,2026-03-31,scorecard,Nova 9.5,Parallel encode low contention streaming decode,pending,"SOURCE/docs/SCORECARD_TO_10.md; nova.rs"
+66,2026-03-31,scorecard,Innovation 9.5,Publish paper or spec trit Signal qubit type system,pending,SOURCE/docs/SCORECARD_TO_10.md
+67,2026-03-31,scorecard,AI 8.5,Scripted Ollama to tool-call to structured parse e2e demo,pending,"SOURCE/docs/SCORECARD_TO_10.md; scripts/kala-setup.ps1; examples/tool_calling_demo.killer; tool_calling.rs"
+68,2026-03-31,scorecard,Tooling 9.5,killer test runner VS Code syntax highlight,pending,"SOURCE/docs/SCORECARD_TO_10.md; main.rs; vscode extension"
+69,2026-03-31,scorecard,Code quality 9.0,27 lib warnings to zero clippy -D warnings clean,pending,SOURCE/docs/SCORECARD_TO_10.md
+70,2026-03-31,scorecard,Documentation 9.5,User guide 300+ lines tutorials per feature,pending,"SOURCE/docs/SCORECARD_TO_10.md; KILLER_LANGUAGE_GUIDE.md"
+71,2026-03-31,scorecard,Testing 9.5,cargo-fuzz real run coverage tarpaulin proptest,pending,"SOURCE/docs/SCORECARD_TO_10.md; fuzz/; .github/workflows/"
+72,2026-03-31,scorecard,SCORECARD_TO_10 living doc,Category table dependency-aware priority stack,done,SOURCE/docs/SCORECARD_TO_10.md
+73,2026-03-29,kala,CSV full telemetry,killer_kala_full_log.csv all HTTP events; kala_chat_log extended q_fp16 r_fp16 flags history_msgs; ui_serve session_clear http_404,done,"SOURCE/src/v2-rust/killer/src/kala_ui.rs; killer_kala_full_log.csv; kala_chat_log.csv"
+74,2026-04-12,kore,KORE v2 columnar engine,"10 codecs (Raw/RLE/Delta/DictRLE/Bitpack/BDict/CDelta/FOR/HuffDict); LZ77+Huffman compression; CRC32 integrity; bloom filters; min/max stats; parallel encode/decode; 65536-row chunks; per-chunk adaptive float scale; fast custom parsers; zero external deps; 3000+ LOC; 17/17 tests passing",done,"SOURCE/src/v2-rust/killer/src/kore_v2.rs"
+75,2026-04-12,kore,KORE v15 benchmark results,"1.14 GB CSV (10M rows x 15 cols) → 145.7 MB KORE (87.2% compression); Write 31.3s Read 8.5s; beats Parquet+Brotli by 25% / Gzip by 30% / Zstd by 38% / Snappy by 47%",done,"SOURCE/src/v2-rust/killer/src/bin/kore_bench.rs; SOURCE/src/v2-rust/killer/src/bin/kore_profile.rs"
+76,2026-04-12,kore,KORE v3→v15 optimization journey,"v3 229MB → v10 148MB → v12 147MB → v13 146MB → v14 146MB → v15 145.7MB; parallel encoding via std::thread::scope; HuffDict codec; per-chunk float scale; FOR decode optimization; memchr CSV parsing; LZ77 decompression speedup",done,"SOURCE/src/v2-rust/killer/src/kore_v2.rs"
+77,2026-04-14,ui,killer_ui VM builtins and JSON snapshot,"VM: ui_core_version ui_headless_tick ui_headless_snapshot_json ui_help ui_native_window; killer_ui::snapshot headless_frame_json; compiler BUILTINS; examples/ui_builtin_demo.killer",done,"SOURCE/src/v2-rust/killer/src/killer_ui/builtins.rs; SOURCE/src/v2-rust/killer/src/killer_ui/snapshot.rs; SOURCE/src/v2-rust/killer/src/builtin.rs; SOURCE/src/v2-rust/killer/src/compiler.rs; SOURCE/src/v2-rust/killer/examples/ui_builtin_demo.killer"
+78,2026-04-14,ui,killer_ui Tier 2 native window hook,"run_demo_window stderr stub; feature killer-ui-egui reserved for optional eframe; killer_ui window|demo CLI calls hook; real pixels = add eframe when crates.io available",done,"SOURCE/src/v2-rust/killer/src/killer_ui/runtime_native.rs; SOURCE/src/v2-rust/killer/Cargo.toml; SOURCE/docs/KILLER_UI_ENGINE.md"
+79,2026-04-14,ui,killer_ui Tier 3 HTTP control plane,"http_panel run_headless_panel_server: GET /killer-ui/headless.json and /killer-ui/version.json; OPTIONS CORS; killer_ui_serve binary wrapper",done,"SOURCE/src/v2-rust/killer/src/killer_ui/http_panel.rs; SOURCE/src/v2-rust/killer/src/bin/killer_ui_serve.rs"
+80,2026-04-14,ui,killer_ui Tier 4 line sugar,"preprocess_ui_sugar + try_ui_assign_sugar (ui version; v = ui snapshot; etc.); examples/ui_tier4_sugar.killer; pipeline_conformance tests",done,"SOURCE/src/v2-rust/killer/src/compiler.rs; SOURCE/src/v2-rust/killer/examples/ui_tier4_sugar.killer; SOURCE/src/v2-rust/killer/tests/pipeline_conformance.rs"
+81,2026-04-14,ui,killer_ui Tier 5 CLI,"killer_ui binary: serve|demo|window|help; mirrors HTTP demo and stub window; QUICKSTART + examples README updated",done,"SOURCE/src/v2-rust/killer/src/bin/killer_ui.rs; SOURCE/src/v2-rust/killer/QUICKSTART.md; SOURCE/src/v2-rust/killer/examples/README.md"
+82,2026-04-14,docs,KILLER_UI_ENGINE parallel tiers,"Shared contract section; tier program table Tiers 1-6; Phase B eframe instructions; Related files links killer_ui_serve and killer_ui CLI",done,SOURCE/docs/KILLER_UI_ENGINE.md
+83,2026-04-14,meta,tracker.csv killer_ui tier batch,Rows 77-82 log killer_ui VM/HTTP/sugar/CLI/docs; Tier 2 pixels remains future eframe,done,tracker.csv
+84,2026-04-14,docs,BUILTIN_REFERENCE regen + killer_ui note,"gen-builtin-reference.ps1: 512-name index from builtin.rs; Notes bullet for killer_ui builtins and line sugar; run script after dispatch changes",done,"SOURCE/docs/BUILTIN_REFERENCE.md; SOURCE/src/v2-rust/killer/scripts/gen-builtin-reference.ps1"
+85,2026-04-14,ui,killer_ui Tier 4 ui tick sugar,"preprocess_ui_sugar: ui tick and v = ui tick -> ui_headless_tick(); ui_help text updated",done,SOURCE/src/v2-rust/killer/src/compiler.rs
+86,2026-04-14,docs,KILLER_UI_ENGINE Tier 2 eframe copy-paste,"Concrete Cargo.toml snippets for eframe 0.29 and killer-ui-egui; docs.rs link for run_native",done,SOURCE/docs/KILLER_UI_ENGINE.md
+87,2026-04-14,testing,pipeline ui_tick integration test,default_pipeline_ui_tick_sugar in pipeline_conformance.rs,done,SOURCE/src/v2-rust/killer/tests/pipeline_conformance.rs
+88,2026-04-14,meta,tracker.csv continuation batch,Rows 84-87: ordered follow-up BUILTIN Tier4 doc tests,done,tracker.csv
+89,2026-04-14,ui,killer_ui Tier 3 health and bind,"GET /health JSON; OPTIONS /health; index link; killer_ui serve HOST PORT and killer_ui_serve HOST PORT; ui_help Tier3 line",done,"SOURCE/src/v2-rust/killer/src/killer_ui/http_panel.rs; SOURCE/src/v2-rust/killer/src/bin/killer_ui.rs; SOURCE/src/v2-rust/killer/src/bin/killer_ui_serve.rs"
+90,2026-04-14,docs,KILLER_UI_ENGINE cargo SSL troubleshooting,Windows crates.io SSL revocation note + link for Tier 2 eframe fetch,done,SOURCE/docs/KILLER_UI_ENGINE.md
+91,2026-04-14,meta,tracker.csv Tier3 follow-up,Rows 89-90,done,tracker.csv
+92,2026-04-14,ui,killer_ui builtin ui_health VM parity,"builtin_ui_health + killer_ui_health_json shared with GET /health; line sugar ui health; pipeline test; BUILTIN_REFERENCE regen",done,"SOURCE/src/v2-rust/killer/src/killer_ui/builtins.rs; SOURCE/src/v2-rust/killer/src/killer_ui/http_panel.rs; SOURCE/docs/KILLER_UI_ENGINE.md"
+93,2026-04-14,meta,tracker.csv ui_health batch,Row 92,done,tracker.csv
+94,2026-04-14,compiler,top-level reassignment StoreSlot,"split_assignment: if name already in slot_map emit StoreSlot before known_top_level_vars; stop inserting slot-backed names into known_top_level_vars — fixes infinite loop in default_pipeline_while_multiline_condition (LtSlotConst vs Store)",done,SOURCE/src/v2-rust/killer/src/compiler.rs

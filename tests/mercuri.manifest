@@ -1,0 +1,65 @@
+// File: tests/mercuri.manifest
+// Killer v4.2 Indentation Tests - Mercuri Manifest
+
+[manifest]
+version = "1.0"
+suite = "Killer v4.2 Hybrid Indentation"
+created = "2026-03-20"
+
+[[test_groups]]
+name = "Phase 1: Lexer Unit Tests (Indentation Tokenization)"
+path = "tests/phase1_lexer/"
+test_count = 20
+timeout_ms = 1000
+tags = ["unit", "lexer", "indentation", "tokens"]
+owner = "Parser Team"
+priority = "critical"
+
+[[test_groups]]
+name = "Phase 1: Parser Unit Tests (Hybrid Blocks)"
+path = "tests/phase1_parser/"
+test_count = 10
+timeout_ms = 1000
+tags = ["unit", "parser", "hybrid", "ast"]
+owner = "Parser Team"
+priority = "critical"
+
+[[test_groups]]
+name = "Phase 1: Regression Tests (Backward Compatibility)"
+path = "tests/phase1_regression/"
+test_count = 10
+timeout_ms = 5000
+tags = ["regression", "compatibility", "v4.1-compat"]
+owner = "QA Team"
+priority = "blocker"
+
+[[test_groups]]
+name = "Phase 3: Full Regression Suite (Mercuri)"
+path = "tests/phase3_full/"
+test_count = 1903
+timeout_ms = 300000
+tags = ["regression", "full-suite", "mercuri-run"]
+owner = "QA Team"
+priority = "release-gate"
+
+[metadata]
+total_tests = 1943
+total_timeout_ms = 307000
+estimated_duration_sec = 45
+parallel_threads = 4
+fail_fast = false
+coverage_target_percent = 95
+
+[phases]
+phase_1_week_one = "2026-03-20"
+phase_1_week_two = "2026-03-27"
+phase_2_week_three = "2026-04-03"
+phase_3_week_four = "2026-04-10"
+phase_4_release = "2026-04-17"
+
+[success_criteria]
+phase_1_unit_tests = "40/40 passing (100%)"
+phase_3_regression = "1903/1903 passing (100%) + 40 new tests (40/40)"
+code_coverage = ">= 95% on parser.rs"
+build_status = "✅ All passing"
+performance = "<5% regression vs v4.1"

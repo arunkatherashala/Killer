@@ -1,0 +1,57 @@
+# Verify 1st_data.kore using kore_pure engine
+
+# --- KORE-K pure Killer reader (kfile_info only) ---
+
+kfn arr_index_of(arr, val) {
+  result = -1
+  i = 0
+  while (i < len(arr)) {
+    if (arr[i] == val) {
+      if (result == -1) {
+        result = i
+      }
+    }
+    i = i + 1
+  }
+  return result
+}
+
+kfn kfile_info(path) {
+  content = readFile(path)
+  lines = split(content, "\n")
+  schema_part = substring(lines[1], 7, len(lines[1]))
+  col_defs = split(schema_part, " ")
+  ncols = len(col_defs)
+  rows_line = lines[2]
+  p = indexOf(rows_line, " ")
+  nrows = substring(rows_line, p + 1, len(rows_line))
+  c0 = col_defs[0]
+  c1 = col_defs[1]
+  c2 = col_defs[2]
+  c3 = col_defs[3]
+  c4 = col_defs[4]
+  return K"KORE file: {path}\nColumns: {ncols}\nRows: {nrows}\nFirst 5 cols: {c0} {c1} {c2} {c3} {c4}"
+}
+
+info = kfile_info("C:/Users/skathera/Downloads/kore/1st_data.kore")
+print(info)
+
+# Also decode column 0 (TRANSSOURCE) to verify dict decode works
+kpath = "C:/Users/skathera/Downloads/kore/1st_data.kore"
+content = readFile(kpath)
+lines = split(content, "\n")
+col0_line = lines[3]
+p1 = indexOf(col0_line, " ")
+rest = substring(col0_line, p1 + 1, len(col0_line))
+p2 = indexOf(rest, " ")
+encoded = substring(rest, p2 + 1, len(rest))
+star_pos = indexOf(encoded, "*")
+dict_part = substring(encoded, 0, star_pos)
+idx_part = substring(encoded, star_pos + 1, len(encoded))
+dict_arr = split(dict_part, "^")
+idx_arr = split(idx_part, ",")
+print("TRANSSOURCE unique values: ")
+print(dict_part)
+print("First 5 row indices: ")
+i5 = str(idx_arr[0]) + "," + str(idx_arr[1]) + "," + str(idx_arr[2]) + "," + str(idx_arr[3]) + "," + str(idx_arr[4])
+print(i5)

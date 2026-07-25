@@ -1,0 +1,91 @@
+// week23_07_http_server.killer
+// Basic HTTP Server setup (v3.0 demonstration)
+
+println("=== Creating HTTP Server ===\n")
+
+// Create server on localhost:8080
+server = HttpServer_new("0.0.0.0", 8080)
+println("Server type: " + server.type)
+println("Server host: " + server.host)
+println("Server port: " + str(server.port))
+println("Running: " + str(server.running))
+
+// Simulate server startup
+server = HttpServer_listen(server)
+println("\nServer is now listening on " + server.host + ":" + str(server.port))
+println("Server running: " + str(server.running))
+
+// In v3.0, this demonstrates the API structure
+// In v3.1+, actual HTTP server will bind to port and accept connections
+
+// Example: handling different routes
+println("\n=== Route Examples (v3.1+) ===")
+
+routes = [
+    {
+        "method": "GET",
+        "path": "/",
+        "response": "Welcome to Killer HTTP Server",
+    },
+    {
+        "method": "GET",
+        "path": "/api/users",
+        "response": "{\"users\": []}",
+    },
+    {
+        "method": "POST",
+        "path": "/api/users",
+        "response": "{\"id\": 1, \"created\": true}",
+    },
+    {
+        "method": "GET",
+        "path": "/health",
+        "response": "{\"status\": \"healthy\"}",
+    },
+]
+
+// Print route table
+println("Registered routes:")
+for route in routes {
+    println("  " + route.method + " " + route.path)
+}
+
+// Simulate request handling
+println("\n=== Simulating Requests ===")
+
+test_requests = [
+    {"method": "GET", "path": "/"},
+    {"method": "GET", "path": "/api/users"},
+    {"method": "POST", "path": "/api/users"},
+    {"method": "GET", "path": "/health"},
+]
+
+for request in test_requests {
+    println("Request: " + request.method + " " + request.path)
+    
+    // Find matching route
+    for route in routes {
+        if route.method == request.method && route.path == request.path {
+            println("  Response: " + route.response)
+            println("  Status: 200")
+        }
+    }
+}
+
+// Server configuration (v3.1+)
+println("\n=== Server Configuration (v3.1+) ===")
+config = {
+    "host": "0.0.0.0",
+    "port": "8080",
+    "workers": "4",
+    "timeout_ms": "30000",
+    "max_body_size": "1048576",
+}
+
+for key in keys(config) {
+    println(key + ": " + config[key])
+}
+
+println("\nServer ready to handle requests at http://" + server.host + ":" + str(server.port))
+
+

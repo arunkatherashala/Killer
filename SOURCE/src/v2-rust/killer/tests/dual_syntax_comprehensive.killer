@@ -1,0 +1,264 @@
+// ============================================================================
+// DUAL SYNTAX COMPREHENSIVE TEST SUITE
+// Tests all Killer language features in both syntax styles
+// ============================================================================
+
+// ============================================================================
+// 1. BRACE-BASED SYNTAX (Go/Java style)
+// ============================================================================
+
+kfn brace_variables() {
+    x = 10
+    y = 20
+    z = x + y
+    print(z)
+}
+
+kfn brace_arrays() {
+    arr = [1, 2, 3, 4, 5]
+    print(len(arr))
+    print(arr[0])
+    print(arr[len(arr) - 1])
+}
+
+kfn brace_dictionary() {
+    obj = {"name": "Alice", "age": 30, "score": 95.5}
+    print(obj["name"])
+    print(obj["age"])
+    print(len(obj))
+    keys_list = keys(obj)
+    values_list = values(obj)
+    print(len(keys_list))
+}
+
+kfn brace_control_flow() {
+    x = 5
+    if (x > 0) {
+        print("positive")
+    } else {
+        print("negative")
+    }
+}
+
+kfn brace_loops() {
+    sum = 0
+    for (i in range(1, 6)) {
+        sum = sum + i
+    }
+    print(sum)
+}
+
+kfn brace_nested_control() {
+    for (i in range(1, 4)) {
+        if (i > 1) {
+            print(i)
+        }
+    }
+}
+
+kfn brace_function_call() {
+    add_result = brace_helper(3, 4)
+    print(add_result)
+}
+
+kfn brace_helper(a, b) {
+    a + b
+}
+
+// ============================================================================
+// 2. INDENTATION-BASED SYNTAX (Python style)
+// ============================================================================
+
+kfn indent_variables()
+    x = 10
+    y = 20
+    z = x + y
+    print(z)
+
+kfn indent_arrays()
+    arr = [1, 2, 3, 4, 5]
+    print(len(arr))
+    print(arr[0])
+    print(arr[len(arr) - 1])
+
+kfn indent_dictionary()
+    obj = {"name": "Bob", "age": 25, "score": 88.5}
+    print(obj["name"])
+    print(obj["age"])
+    print(len(obj))
+    keys_list = keys(obj)
+    values_list = values(obj)
+    print(len(keys_list))
+
+kfn indent_control_flow()
+    x = 5
+    if x > 0
+        print("positive")
+    else
+        print("negative")
+
+kfn indent_loops()
+    sum = 0
+    for i in range(1, 6)
+        sum = sum + i
+    print(sum)
+
+kfn indent_nested_control()
+    for i in range(1, 4)
+        if i > 1
+            print(i)
+
+kfn indent_function_call()
+    add_result = indent_helper(3, 4)
+    print(add_result)
+
+kfn indent_helper(a, b)
+    a + b
+
+// ============================================================================
+// 3. ARROW FUNCTION SYNTAX (one-liners)
+// ============================================================================
+
+add(a, b) => a + b
+multiply(a, b) => a * b
+square(x) => x * x
+is_positive(x) => x > 0
+get_type(val) => type(val)
+
+// ============================================================================
+// 4. STDLIB FUNCTIONS - Comprehensive Tests
+// ============================================================================
+
+kfn test_len_function() {
+    // Test len on arrays
+    nums = [10, 20, 30, 40, 50]
+    print(len(nums))  // 5
+    
+    // Test len on strings
+    str_val = "hello"
+    print(len(str_val))  // 5
+    
+    // Test len on dict
+    dict_val = {"a": 1, "b": 2, "c": 3}
+    print(len(dict_val))  // 3
+}
+
+kfn test_range_function() {
+    // range(end) - single arg
+    r1 = range(3)
+    print(len(r1))  // 3
+    
+    // range(start, end) - two args
+    r2 = range(2, 5)
+    print(len(r2))  // 3
+    
+    // range(start, end, step) - three args
+    r3 = range(0, 10, 2)
+    print(len(r3))  // 5
+}
+
+kfn test_type_function() {
+    print(type(42))  // "number"
+    print(type("hello"))  // "string"
+    print(type([1, 2, 3]))  // "array"
+    print(type({"x": 1}))  // "dict"
+    print(type(true))  // "bool"
+    print(type(null))  // "null"
+}
+
+kfn test_conversion_functions() {
+    // str() function
+    print(str(42))  // "42"
+    print(str(3.14))  // "3.14"
+    print(str([1, 2, 3]))  // converts to string
+    
+    // int() function
+    print(int(3.14))  // 3
+    print(int("42"))  // 42
+}
+
+kfn test_dict_functions() {
+    person = {"name": "Charlie", "age": 28, "active": true}
+    
+    // keys() function
+    person_keys = keys(person)
+    print(len(person_keys))
+    
+    // values() function
+    person_values = values(person)
+    print(len(person_values))
+}
+
+// ============================================================================
+// 5. MIXED SYNTAX (real-world code)
+// ============================================================================
+
+kfn mixed_style_example() {
+    data = [5, 12, 8, 23, 15]
+    
+    // Using indentation-based loop with brace-based condition
+    for score in data {
+        if score > 10
+            print(score)
+    }
+}
+
+kfn mixed_processing() {
+    items = [
+        {"id": 1, "value": 100},
+        {"id": 2, "value": 200},
+        {"id": 3, "value": 150}
+    ]
+    
+    total = 0
+    // Indentation-based for, brace-based if
+    for item in items {
+        if item["value"] > 120
+            total = total + item["value"]
+    }
+    print(total)  // 350
+}
+
+// ============================================================================
+// 6. MAIN EXECUTION - Run all tests
+// ============================================================================
+
+print("=== BRACE-BASED SYNTAX TESTS ===")
+brace_variables()  // 30
+brace_arrays()     // 5, 1, 5
+brace_dictionary() // Alice, 30, 3, 3
+brace_control_flow()  // positive
+brace_loops()      // 15
+brace_nested_control()  // 2, 3
+brace_function_call()  // 7
+
+print("=== INDENTATION-BASED SYNTAX TESTS ===")
+indent_variables()  // 30
+indent_arrays()     // 5, 1, 5
+indent_dictionary() // Bob, 25, 3, 3
+indent_control_flow()  // positive
+indent_loops()      // 15
+indent_nested_control()  // 2, 3
+indent_function_call()  // 7
+
+print("=== ARROW FUNCTION SYNTAX TESTS ===")
+print(add(5, 3))  // 8
+print(multiply(4, 6))  // 24
+print(square(7))  // 49
+print(is_positive(-5))  // false
+print(get_type(123))  // "number"
+
+print("=== STDLIB FUNCTION TESTS ===")
+test_len_function()  // 5, 5, 3
+test_range_function()  // 3, 3, 5
+test_type_function()  // All type names
+test_conversion_functions()  // Conversion results
+test_dict_functions()  // Dict key/value counts
+
+print("=== MIXED SYNTAX TESTS ===")
+mixed_style_example()  // 12, 23, 15
+mixed_processing()  // 350
+
+print("=== ALL TESTS COMPLETE ===")
+
+

@@ -1,0 +1,214 @@
+#!/usr/bin/env killer
+# Killer V2 Language Feature Showcase
+# Demonstrates all major features of the Killer runtime
+
+print("╔════════════════════════════════════════════════════════════╗");
+print("║      Killer V2 Runtime - Complete Feature Demo           ║");
+print("╚════════════════════════════════════════════════════════════╝");
+print("");
+
+# === BASIC DATA TYPES ===
+print("1. BASIC DATA TYPES");
+print("══════════════════");
+num = 42;
+str = "Hello, Killer!";
+bool = true;
+none = null;
+arr = [1, 2, 3, 4, 5];
+obj = {"name": "Alice", "age": 30};
+
+print("Number:", num);
+print("String:", str);
+print("Boolean:", bool);
+print("Null:", none);
+print("Array:", arr);
+print("Object:", obj);
+print("");
+
+# === STRING METHODS ===
+print("2. STRING METHODS");
+print("═════════════════");
+text = "Hello World";
+print("Original:", text);
+print("upper():", upper(text));
+print("lower():", lower(text));
+print("charAt(0):", charAt(text, 0));
+print("substring(0, 5):", substring(text, 0, 5));
+print("indexOf('World'):", indexOf(text, "World"));
+print("repeat('Ha', 3):", repeat("Ha", 3));
+print("");
+
+# === ARRAY METHODS ===
+print("3. ARRAY METHODS");
+print("════════════════");
+numbers = [3, 1, 4, 1, 5, 9];
+print("Original:", numbers);
+print("length:", len(numbers));
+print("includes(5):", includes(numbers, 5));
+print("includes(7):", includes(numbers, 7));
+print("");
+
+arr2 = [10, 20, 30];
+print("Array:", arr2);
+arr2_pushed = arr2;
+push(arr2_pushed, 40);
+print("After push(40):", arr2_pushed);
+print("slice(1, 3):", slice(arr2_pushed, 1, 3));
+print("reversed:", reverse(arr2_pushed));
+print("concat([50, 60]):", concat(arr2, [50, 60]));
+print("");
+
+# === OBJECT/DICT METHODS ===
+print("4. OBJECT METHODS");
+print("═════════════════");
+user = {"firstName": "Bob", "lastName": "Smith", "email": "bob@example.com"};
+print("Object:", user);
+print("keys():", keys(user));
+print("values():", values(user));
+print("entries():", entries(user));
+print("");
+
+# === CONTROL FLOW ===
+print("5. CONTROL FLOW & LOOPS");
+print("══════════════════════");
+
+# If-Else
+x = 15;
+if (x > 10) {
+    print("x is greater than 10");
+} else {
+    print("x is 10 or less");
+}
+print("");
+
+# While loop
+print("While loop (count 1-3):");
+i = 1;
+while (i <= 3) {
+    print("  " + String(i));
+    i = i + 1;
+}
+print("");
+
+# For...of loop
+print("For...of loop:");
+for (item of [10, 20, 30]) {
+    print("  item:", item);
+}
+print("");
+
+# For with range
+print("For...of with range(2, 5):");
+for (num of range(2, 5)) {
+    print("  num:", num);
+}
+print("");
+
+# === MATH LIBRARY ===
+print("6. MATH LIBRARY");
+print("═══════════════");
+print("Math.sqrt(16):", Math.sqrt(16));
+print("Math.pow(2, 3):", Math.pow(2, 3));
+print("Math.abs(-42):", Math.abs(-42));
+print("Math.min(5, 3):", Math.min(5, 3));
+print("Math.max(5, 3):", Math.max(5, 3));
+print("Math.floor(3.7):", Math.floor(3.7));
+print("Math.ceil(3.2):", Math.ceil(3.2));
+print("Math.round(3.5):", Math.round(3.5));
+print("");
+
+# === TYPE CHECKING ===
+print("7. TYPE CHECKING & CONVERSION");
+print("════════════════════════════");
+print("type(42):", type(42));
+print("type('hello'):", type("hello"));
+print("type(true):", type(true));
+print("type([1,2,3]):", type([1, 2, 3]));
+print("type({}):", type({}));
+print("");
+
+print("String(42):", String(42));
+print("Number('42'):", Number("42"));
+print("Boolean(1):", Boolean(1));
+print("Boolean(0):", Boolean(0));
+print("");
+
+# === STRING INTERPOLATION ===
+print("8. STRING INTERPOLATION");
+print("══════════════════════");
+name = "World";
+greeting = interpolate("Hello, {0}!", name);
+print(greeting);
+
+age = 25;
+city = "NYC";
+info = interpolate("{0} is {1} years old and lives in {2}", name, age, city);
+print(info);
+print("");
+
+# === FILE I/O ===
+# print("9. FILE I/O");
+# print("═══════════");
+# Note: FILE I/O functions not yet implemented
+# filename = "demo_output.txt";
+# print("Writing to file:", filename);
+# writeFile(filename, "This is a test file.\nLine 2: Created by Killer!\n");
+# print("Write successful!");
+# print("");
+
+# print("Reading file contents:");
+# contents = readFile(filename);
+# print(contents);
+# print("");
+
+# === ERROR HANDLING ===
+print("10. TRY/CATCH/FINALLY");
+print("═══════════════════════");
+try {
+    print("In try block");
+    throw "Custom error message";
+    print("This won't execute");
+} catch (err) {
+    print("Caught error:", err);
+} finally {
+    print("Finally block always executes");
+}
+print("");
+
+# === CLASSES (Basic) ===
+# print("11. CLASSES");
+# print("═══════════");
+# Note: Class implementation with 'new' keyword not yet supported
+# class Dog {
+#     fn bark() {
+#         print("Woof!");
+#     }
+#     fn getName() {
+#         print("Dog");
+#     }
+# }
+#
+# dog = new Dog();
+# dog.bark();
+# dog.getName();
+# print("");
+
+# === FINAL SUMMARY ===
+print("╔════════════════════════════════════════════════════════════╗");
+print("║             Feature Demo Complete! ✓                      ║");
+print("╚════════════════════════════════════════════════════════════╝");
+print("");
+print("Killer V2 features demonstrated:");
+print("  ✓ Data types (number, string, boolean, null, array, object)");
+print("  ✓ String methods (10+ methods)");
+print("  ✓ Array methods (11+ methods)");
+print("  ✓ Object methods (keys, values, entries)");
+print("  ✓ Control flow (if/else, while, for...of)");
+print("  ✓ Math library (11+ methods)");
+print("  ✓ Type checking & conversion");
+print("  ✓ String interpolation");
+print("  ✓ Exception handling (try/catch/finally)");
+print("  • File I/O, Classes - coming soon!");
+print("");
+
+

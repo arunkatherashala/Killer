@@ -1,0 +1,295 @@
+// Example: Causal AI (CAI)
+// Understanding cause and effect, not just correlation
+
+kfn main() {
+    print("=== Killer CAI: Causal AI Framework ===\n\n");
+    
+    print("Context: Why correlation is dangerous\n");
+    print("Correlation just says: X and Y both happen together\n");
+    print("Causality explains: X CAUSES Y (or something else causes both)\n\n");
+    
+    // Example 1: Ice Cream Sales vs Drowning Deaths
+    print("=== Example 1: Ice Cream & Drowning (The Classic Example) ===\n\n");
+    
+    let monthly_data = [
+        {"month": "January", "ice_cream": 100, "deaths": 10},
+        {"month": "February", "ice_cream": 110, "deaths": 12},
+        {"month": "March", "ice_cream": 200, "deaths": 25},
+        {"month": "April", "ice_cream": 300, "deaths": 45},
+        {"month": "May", "ice_cream": 450, "deaths": 80},
+        {"month": "June", "ice_cream": 600, "deaths": 120},
+        {"month": "July", "ice_cream": 700, "deaths": 150},
+        {"month": "August", "ice_cream": 650, "deaths": 140},
+        {"month": "September", "ice_cream": 400, "deaths": 70},
+        {"month": "October", "ice_cream": 250, "deaths": 35},
+        {"month": "November", "ice_cream": 150, "deaths": 15},
+        {"month": "December", "ice_cream": 120, "deaths": 12}
+    ];
+    
+    print("Monthly Data:\n");
+    for entry in monthly_data {
+        print("  ");
+        print(entry["month"]);
+        print(": Ice Cream Sales = ");
+        print(entry["ice_cream"]);
+        print("k units, Deaths = ");
+        print(entry["deaths"]);
+        print("\n");
+    }
+    print("\n");
+    
+    // Naive analysis: Sees correlation
+    print("WRONG ANALYSIS (Naive Correlation):\n");
+    print("Ice cream sales and drowning deaths are highly correlated!\n");
+    print("Correlation coefficient: 0.987 (nearly perfect!)\n");
+    print("NAIVE CONCLUSION: Ice cream causes drowning!\n\n");
+    
+    // Correct analysis: Causal inference
+    print("CORRECT ANALYSIS (Causal Inference):\n");
+    print("Build a causal graph:\n\n");
+    
+    let causal_graph = {
+        "root_cause": "temperature",
+        "nodes": [
+            "summer_temperature",
+            "ice_cream_sales",
+            "swimming_activity",
+            "drowning_deaths"
+        ],
+        "edges": [
+            {
+                "from": "summer_temperature",
+                "to": "ice_cream_sales",
+                "strength": 0.85,
+                "mechanism": "People want cold treats when hot"
+            },
+            {
+                "from": "summer_temperature",
+                "to": "swimming_activity",
+                "strength": 0.90,
+                "mechanism": "People swim when hot"
+            },
+            {
+                "from": "swimming_activity",
+                "to": "drowning_deaths",
+                "strength": 0.75,
+                "mechanism": "More swimming = more drowning risk"
+            }
+        ]
+    };
+    
+    print("Causal Graph:\n");
+    print("  Temperature\n");
+    print("    ├─→ (0.85) Ice Cream Sales\n");
+    print("    └─→ (0.90) Swimming Activity\n");
+    print("           └─→ (0.75) Drowning Deaths\n\n");
+    
+    print("Causal Analysis:\n");
+    print("1. Temperature is the TRUE cause\n");
+    print("2. Ice Cream Sales DON'T cause Drowning\n");
+    print("3. They're both CAUSED by temperature\n");
+    print("4. This is called a CONFOUNDER\n\n");
+    
+    print("CORRECT CONCLUSION:\n");
+    print("Direct causal effect of ice cream on drowning: 0% (None!)\n");
+    print("But they're correlated because they share a common cause\n\n");
+    
+    // Example 2: Real-World Application - Healthcare
+    print("=== Example 2: Healthcare - Drug Efficacy ===\n\n");
+    
+    let healthcare_case = {
+        "question": "Does Drug X cure disease Y?",
+        "observation": "Patients taking Drug X recover faster",
+        "naive_conclusion": "Drug X causes faster recovery",
+        "reality": {
+            "patients_taking_drug": {
+                "age_avg": 35,
+                "health_score": 0.7,
+                "severity": "mild"
+            },
+            "control_group": {
+                "age_avg": 65,
+                "health_score": 0.3,
+                "severity": "severe"
+            }
+        }
+    };
+    
+    print("Case Study:\n");
+    print("Question: Does Drug X cure Disease Y?\n");
+    print("Observation: Patients on Drug X recover faster\n\n");
+    
+    print("NAIVE ANALYSIS:\n");
+    print("Drug X works! (Recommend to everyone)\n\n");
+    
+    print("REAL CAUSAL ANALYSIS:\n");
+    print("Problem: Patients on drug are DIFFERENT!\n\n");
+    print("Drug Group Statistics:\n");
+    print("  Average Age: ");
+    print(healthcare_case["patients_taking_drug"]["age_avg"]);
+    print("\n");
+    print("  Health Score: ");
+    print(healthcare_case["patients_taking_drug"]["health_score"]);
+    print("\n");
+    print("  Severity: ");
+    print(healthcare_case["patients_taking_drug"]["severity"]);
+    print("\n\n");
+    
+    print("Control Group Statistics:\n");
+    print("  Average Age: ");
+    print(healthcare_case["control_group"]["age_avg"]);
+    print("\n");
+    print("  Health Score: ");
+    print(healthcare_case["control_group"]["health_score"]);
+    print("\n");
+    print("  Severity: ");
+    print(healthcare_case["control_group"]["severity"]);
+    print("\n\n");
+    
+    print("CORRECT CONCLUSION:\n");
+    print("Confounders are at play:\n");
+    print("  - Younger patients (naturally recover faster)\n");
+    print("  - Healthier baseline (more likely to recover)\n");
+    print("  - Milder disease (easier to overcome)\n");
+    print("Drug X's ACTUAL effect: Much smaller (if any)\n\n");
+    
+    // Example 3: Causal Inference Implementation
+    print("=== Example 3: Causal Inference Framework ===\n\n");
+    
+    let causal_framework = build_causal_framework();
+    
+    // Define a real scenario
+    let company_data = {
+        "variable_a": "Marketing Spend",
+        "variable_b": "Sales Revenue",
+        "correlation": 0.82,
+        "observations": [
+            {"spend": 10000, "sales": 50000, "market_size": 100000, "season": "Q1"},
+            {"spend": 15000, "sales": 75000, "market_size": 120000, "season": "Q2"},
+            {"spend": 12000, "sales": 80000, "market_size": 150000, "season": "Q3"},
+            {"spend": 20000, "sales": 120000, "market_size": 180000, "season": "Q4"}
+        ]
+    };
+    
+    print("Business Case: Marketing ROI\n");
+    print("Question: Does more marketing spending cause more sales?\n\n");
+    
+    print("Raw Correlation: ");
+    print(company_data["correlation"]);
+    print("\n");
+    print("Naive Interpretation: Yes, marketing works great!\n\n");
+    
+    print("CAUSAL ANALYSIS:\n");
+    print("Identified confounders:\n");
+    print("  1. Market size (grows in Q4 holiday)\n");
+    print("  2. Seasonality (natural sales variation)\n");
+    print("  3. Competitive activity\n");
+    print("  4. Product launches\n\n");
+    
+    print("After controlling for confounders:\n");
+    print("  True causal effect of marketing: 0.45 (45% of apparent effect)\n");
+    print("  Confounder effect: 0.37 (37% of apparent effect)\n");
+    print("  Other factors: 0.18 (18% remaining)\n\n");
+    
+    // Example 4: Counterfactual Reasoning
+    print("=== Example 4: Counterfactual Reasoning ===\n\n");
+    
+    print("Question: What would have happened if...\n\n");
+    
+    let counterfactuals = [
+        {
+            "scenario": "What if we didn't spend on marketing in Q4?",
+            "predicted_sales": 90000,
+            "actual_sales": 120000,
+            "marketing_impact": 30000
+        },
+        {
+            "scenario": "What if market size didn't grow?",
+            "predicted_sales": 70000,
+            "actual_sales": 120000,
+            "market_impact": 50000
+        },
+        {
+            "scenario": "What if seasonality was controlled?",
+            "predicted_sales": 100000,
+            "actual_sales": 120000,
+            "true_marketing_effect": 20000
+        }
+    ];
+    
+    print("Counterfactual Analysis:\n");
+    for cf in counterfactuals {
+        print("  ");
+        print(cf["scenario"]);
+        print("\n");
+        print("    Predicted: ");
+        print(cf["predicted_sales"]);
+        print(" vs Actual: ");
+        print(cf["actual_sales"]);
+        print("\n\n");
+    }
+    
+    // Example 5: Making Decisions with Causal Knowledge
+    print("=== Example 5: Decision Making with Causality ===\n\n");
+    
+    print("SCENARIO A: Ice Cream Company\n");
+    print("Observation: People eat more ice cream when drowning increases\n");
+    print("Causal Understanding: Temperature causes both\n");
+    print("Decision: Don't reduce ice cream to prevent drowning!\n");
+    print("Better Decision: Add lifeguards in summer\n\n");
+    
+    print("SCENARIO B: Hospital\n");
+    print("Observation: Patients with more doctor visits recover slower\n");
+    print("Causal Understanding: Sicker patients need more visits\n");
+    print("Decision: Don't reduce doctor visits!\n");
+    print("Better Decision: Improve treatment for severe cases\n\n");
+    
+    print("SCENARIO C: Marketing Manager\n");
+    print("Observation: Marketing correlates with sales\n");
+    print("Causal Understanding: Market growth causes both spending & sales\n");
+    print("Decision: Don't increase spending blindly\n");
+    print("Better Decision: Baseline marketing + incremental testing\n\n");
+    
+    // Example 6: Causal Methods Comparison
+    print("=== Example 6: When Causal Inference Fails ===\n\n");
+    
+    print("Correlation Methods:\n");
+    print("  • Fast\n");
+    print("  • Easy to implement\n");
+    print("  • WRONG when confounders exist\n\n");
+    
+    print("Causal Methods:\n");
+    print("  • Slower\n");
+    print("  • Require domain knowledge\n");
+    print("  • RIGHT even with confounders\n\n");
+    
+    print("Intervention/Experimentation:\n");
+    print("  • Randomized controlled trials (RCT)\n");
+    print("  • Gold standard (eliminates confounders)\n");
+    print("  • Expensive & slow\n\n");
+    
+    print("=== Causal AI Example Complete ===\n");
+    print("\nKey Takeaway:\n");
+    print("Always ask: 'What CAUSES this relationship?'\n");
+    print("Not just: 'Are they correlated?'\n");
+}
+
+kfn build_causal_framework() {
+    return {
+        "name": "Killer Causal Framework",
+        "methods": [
+            "Causal graphs",
+            "Backdoor criterion",
+            "Confounder analysis",
+            "Counterfactual reasoning",
+            "Causal forests"
+        ],
+        "output": {
+            "direct_effects": "A → B",
+            "confounded_effects": "Z → A, B (spurious correlation)",
+            "interaction_effects": "A × Z → B"
+        }
+    };
+}
+
+

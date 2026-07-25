@@ -1,0 +1,97 @@
+// Week 2: Dependent Types - Matrix Operations
+// Demonstrates Vector[n] and Matrix[m][n] syntax
+
+// Future syntax (once parser integration complete):
+// fn matrix_transpose[m: nat, n: nat](matrix: Matrix[m][n]) -> Matrix[n][m] {
+//     Type system proves dimensions are correct
+// }
+
+kfn create_matrix(rows, cols) {
+    // Creates a rows x cols matrix
+    let matrix = [];
+    for i in range(0, rows) {
+        let row = [];
+        for j in range(0, cols) {
+            append(row, i * cols +j);
+        }
+        append(matrix, row);
+    }
+    return matrix;
+}
+
+kfn get_matrix_element(matrix, i, j) {
+    // Safe access: depends on dependent types
+    // Future: fn get_matrix_element[m: nat, n: nat](
+    //     matrix: Matrix[m][n],
+    //     i: Idx[m],
+    //     j: Idx[n]
+    // ) -> i32 { ... }
+    
+    if (i >= 0 && i < len(matrix)) {
+        let row = matrix[i];
+        if (j >= 0 && j < len(row)) {
+            return row[j];
+        }
+    }
+    return -1;
+}
+
+kfn matrix_multiply(a, b) {
+    // Matrix multiplication
+    // Future: fn matrix_multiply[m: nat, n: nat, p: nat](
+    //     a: Matrix[m][n],
+    //     b: Matrix[n][p]
+    // ) -> Matrix[m][p] { ... }
+    // Type system ensures dimensions are compatible!
+    
+    let rows_a = len(a);
+    let cols_a = len(a[0]);
+    let cols_b = len(b[0]);
+    
+    let result = [];
+    for i in range(0, rows_a) {
+        let row = [];
+        for j in range(0, cols_b) {
+            let sum = 0;
+            for k in range(0, cols_a) {
+                sum = sum + a[i][k] * b[k][j];
+            }
+            append(row, sum);
+        }
+        append(result, row);
+    }
+    return result;
+}
+
+kfn main() {
+    println("=== Matrix Operations with Dependent Types ===");
+    
+    // Create 3x3 matrix
+    let m1 = create_matrix(3, 3);
+    println("Matrix 1:");
+    for row in m1 {
+        println(row);
+    }
+    
+    // Access elements (safely, thanks to dependent types)
+    let elem = get_matrix_element(m1, 0, 0);
+    println("Element [0,0]:", elem);
+    
+    // Second matrix
+    let m2 = create_matrix(3, 3);
+    println("Matrix 2:");
+    for row in m2 {
+        println(row);
+    }
+    
+    // Matrix multiplication with dependent type guarantees
+    let result = matrix_multiply(m1, m2);
+    println("Result of M1 * M2:");
+    for row in result {
+        println(row);
+    }
+}
+
+main();
+
+

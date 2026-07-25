@@ -1,0 +1,13 @@
+# simple_module_test.killer
+# Simple test of module system
+
+print("Testing basic module import...");
+
+# Test namespace import which should be simpler
+import * as math from "./legacy-modules/math_utils";
+
+print("Module loaded");
+print("PI = ");
+print(math.PI);
+
+

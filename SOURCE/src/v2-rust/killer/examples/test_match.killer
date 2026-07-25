@@ -1,0 +1,51 @@
+// Test match expression parsing and execution
+
+fn test_match_number() {
+    let x = 42
+    match x {
+        42 => print("matched 42"),
+        _ => print("no match")
+    }
+}
+
+fn test_match_string() {
+    let name = "Alice"
+    match name {
+        "Alice" => print("Hello Alice"),
+        "Bob" => print("Hello Bob"),
+        _ => print("Hello stranger")
+    }
+}
+
+fn test_match_bool() {
+    let flag = true
+    match flag {
+        true => print("it is true"),
+        false => print("it is false")
+    }
+}
+
+fn test_match_with_guard() {
+    let age = 25
+    match age {
+        18 if age >= 18 => print("adult"),
+        _ => print("not considered adult")
+    }
+}
+
+fn test_match_identifier() {
+    let value = 99
+    match value {
+        x => print("captured: " + x)
+    }
+}
+
+fn main() {
+    print("Testing match expressions...")
+    test_match_number()
+    test_match_string()
+    test_match_bool()
+    test_match_with_guard()
+    test_match_identifier()
+    print("All match tests completed!")
+}

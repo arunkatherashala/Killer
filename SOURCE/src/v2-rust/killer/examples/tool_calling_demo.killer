@@ -1,0 +1,20 @@
+# Tool-calling demo — KhLM + TOOL_CALL protocol
+#
+# Prerequisites (for a real tool loop):
+#   • Ollama or another Tier-2 LLM configured for KhLM (see scripts/kala-setup.ps1)
+#   • Run from this directory so readFile finds the JSON:
+#       cd SOURCE/src/v2-rust/killer/examples
+#       killer-native tool_calling_demo.killer
+#
+# Flow: khlm_with_tools() injects tool list (includes readFile, parse_json). The model
+# may emit lines like:
+#   TOOL_CALL: {"name":"readFile","args":["tool_calling_demo_data.json"]}
+#   TOOL_CALL: {"name":"parse_json","args":["...json string..."]}
+# The engine executes tools and feeds TOOL_RESULT back until the answer is final.
+
+println("=== tool_calling_demo.killer ===")
+println(tool_list())
+
+prompt = "You have tools readFile and parse_json. Read the file tool_calling_demo_data.json from the current working directory, parse it as JSON, and reply with one sentence that includes the value of the answer field."
+println("--- khlm_with_tools (may take a while if LLM is remote) ---")
+println(khlm_with_tools(prompt))

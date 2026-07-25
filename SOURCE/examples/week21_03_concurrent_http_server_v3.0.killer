@@ -1,0 +1,143 @@
+// Week 21: Concurrent HTTP Server (v3.0 - Real Threading)
+// Demonstrates HTTP server handling multiple simultaneous clients
+// Curriculum: Real-time systems, networking, concurrency, HTTP services
+// Status: Ready for Week 21 (HTTP Services & Networking with threading)
+
+kfn parseHttpRequest(rawRequest) {
+    var lines = rawRequest.split("\n");
+    
+    if (lines.length == 0) {
+        return null;
+    }
+    
+    var requestLine = lines[0].split(" ");
+    if (requestLine.length < 3) {
+        return null;
+    }
+    
+    var request = {};
+    request["method"] = requestLine[0];
+    request["path"] = requestLine[1];
+    request["version"] = requestLine[2];
+    
+    return request;
+}
+
+kfn buildHttpResponse(status, statusText, contentType, body) {
+    var response = `HTTP/1.1 ${status} ${statusText}\r\n`;
+    response = response + `Server: Killer/3.0\r\n`;
+    response = response + `Content-Type: ${contentType}\r\n`;
+    response = response + `Content-Length: ${body.length()}\r\n`;
+    response = response + `Connection: close\r\n`;
+    response = response + `\r\n`;
+    response = response + body;
+    return response;
+}
+
+kfn handleClient(clientId, stream) {
+    var startTime = system_time_ms();
+    print(`[Client ${clientId}] Connected from ${stream["remote_addr"]}`);
+    
+    // Read request
+    var readResult = TcpStream_read(stream, 4096);
+    var bytesRead = readResult["bytes_read"];
+    var requestData = readResult["data"];
+    
+    print(`[Client ${clientId}] Received ${bytesRead} bytes`);
+    
+    // Parse request
+    var request = parseHttpRequest(requestData);
+    
+    if (request == null) {
+        print(`[Client ${clientId}] Invalid request`);
+        TcpStream_close(stream);
+        return;
+    }
+    
+    var method = request["method"];
+    var path = request["path"];
+    
+    print(`[Client ${clientId}] ${method} ${path}`);
+    
+    // Route request
+    var response = "";
+    
+    if (path == "/") {
+        var html = "<html><body><h1>Concurrent HTTP Server</h1><p>Powered by Killer v3.0 threads</p></body></html>";
+        response = buildHttpResponse(200, "OK", "text/html", html);
+    } else if (path == "/time") {
+        var json = `{"time_ms": ${system_time_ms()}, "client_id": ${clientId}}`;
+        response = buildHttpResponse(200, "OK", "application/json", json);
+    } else if (path == "/delay") {
+        // Simulate slow operation (should not block other clients)
+        thread_sleep_ms(500);
+        var json = `{"status": "delayed response", "delay_ms": 500}`;
+        response = buildHttpResponse(200, "OK", "application/json", json);
+    } else {
+        var text = `Path "${path}" not found`;
+        response = buildHttpResponse(404, "Not Found", "text/plain", text);
+    }
+    
+    // Send response
+    var bytesWritten = TcpStream_write(stream, response);
+    print(`[Client ${clientId}] Sent ${bytesWritten} bytes`);
+    
+    // Close connection
+    TcpStream_close(stream);
+    
+    var endTime = system_time_ms();
+    var duration = endTime - startTime;
+    print(`[Client ${clientId}] Disconnected (handled in ${duration}ms)`);
+}
+
+kfn main() {
+    print("=== Week 21: Concurrent HTTP Server (v3.0) ===");
+    print("Starting server on 127.0.0.1:9000...");
+    print("");
+    
+    // Create listener
+    var listener = TcpListener_bind("127.0.0.1:9000");
+    print(`Server listening on: ${listener["address"]}`);
+    print("Waiting for connections (handling up to 3 concurrent clients)...");
+    print("");
+    
+    var threads = [];
+    var clientCount = 0;
+    
+    // Accept up to 3 connections
+    for (var i = 0; i < 3; i = i + 1) {
+        print(`Waiting for client ${i+1}...`);
+        
+        // Accept connection
+        var stream = TcpListener_accept(listener);
+        clientCount = clientCount + 1;
+        
+        // Create handler closure
+        var handler = fn() {
+            handleClient(i + 1, stream);
+        };
+        
+        // Spawn thread to handle client (Week 3 API)
+        var handle = spawn_thread(handler);
+        threads.push(handle);
+        
+        print(`Client ${i+1} handler spawned in thread: ${handle["id"]}`);
+    }
+    
+    print("");
+    print("Waiting for all client handlers to complete...");
+    
+    // Wait for all handlers to finish
+    for (var i = 0; i < threads.length; i = i + 1) {
+        join_thread(threads[i]);
+    }
+    
+    print("");
+    print("=== Server Statistics ===");
+    print(`Total clients handled: ${clientCount}`);
+    print("Server shutdown complete");
+}
+
+main();
+
+

@@ -1,0 +1,58 @@
+// Example: AI Text Generation
+// Demonstrates how to use ai_generate() to create text with Killer AI
+
+// Simple text generation example
+kfn main() {
+    print("=== Killer AI Text Generation Example ===\n");
+    
+    // Generate text with a simple prompt
+    let prompt = "Write a short haiku about programming";
+    print("Prompt: ");
+    print(prompt);
+    print("\n\n");
+    
+    let response = ai_generate(prompt);
+    print("AI Response:\n");
+    print(response);
+    print("\n\n");
+    
+    // Generate text with custom options
+    let prompt2 = "Explain quantum computing in 2 sentences";
+    let options = {
+        "model": "gpt-4",
+        "max_tokens": 100,
+        "temperature": 0.7
+    };
+    
+    print("Prompt 2: ");
+    print(prompt2);
+    print("\n\n");
+    
+    let response2 = ai_generate(prompt2, options);
+    print("AI Response:\n");
+    print(response2);
+    print("\n\n");
+    
+    // Batch generation example
+    let prompts = [
+        "What is machine learning?",
+        "How does AI work?",
+        "What is deep learning?"
+    ];
+    
+    print("=== Batch Generation ===\n");
+    for prompt in prompts {
+        print("Q: ");
+        print(prompt);
+        print("\n");
+        
+        let answer = ai_generate(prompt);
+        print("A: ");
+        print(answer);
+        print("\n\n");
+    }
+    
+    print("=== Generation Complete ===\n");
+}
+
+

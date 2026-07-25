@@ -1,0 +1,72 @@
+[package]
+name = "killer-native"
+version = "1.0.0"
+edition = "2021"
+description = "Killer V2.1 - Native runtime with automatic type specialization (41% performance improvement)"
+license = "MIT"
+authors = ["Sai Arun Kumar Katherashala <arunkatherashala@gmail.com>"]
+repository = "https://github.com/arunkatherashala/Killer"
+homepage = "https://github.com/arunkatherashala/Killer"
+documentation = "https://docs.rs/killer-native"
+readme = "../../README.md"
+keywords = ["language", "runtime", "vm", "jit", "ai"]
+categories = ["command-line-utilities", "development-tools", "algorithms"]
+
+[lib]
+# Many module docs use illustrative snippets that are not rustdoc-runnable; unit + integration tests cover behavior.
+doctest = false
+
+[features]
+default = []
+# Tier 2: reserve for eframe/winit — add `eframe = { version = "0.29", optional = true }` and `["dep:eframe"]` when online.
+killer-ui-egui = []
+# Gates integration tests that `use killer_rcore::*`. killer-native does **not** depend on that crate by default (avoids pulling tokio/sqlx/axum into this crate’s resolve graph).
+# To run them: add `killer_rcore = { path = "../../../../_TOOLS/killer_rcore", optional = true }` under [dependencies] and set `legacy-killer-rcore-tests = ["dep:killer_rcore"]` above, then `cargo test --features legacy-killer-rcore-tests`.
+legacy-killer-rcore-tests = []
+# Spawns `cargo run --bin killer_super` — slow; not part of default CI.
+cli-e2e-tests = []
+# `cluster_coordinator` is not wired in killer-native yet.
+cluster-demo-tests = []
+
+[dependencies]
+# Ghost VM signing uses in-crate SHA-256 + HMAC (no extra crates.io deps).
+# JIT: src/jit_x86.rs — no default crates.io deps.
+
+[[bench]]
+name = "ai_benchmark"
+harness = false
+# std-only timing (no crates.io) — see `PERFORMANCE_ROADMAP.md` for optional Criterion on CI
+
+[[bench]]
+name = "vm_runtime"
+harness = false
+
+[[bin]]
+name = "killer-mcp"
+path = "src/bin/killer_mcp.rs"
+
+[[bin]]
+name = "ghost_hive"
+path = "src/bin/ghost_hive.rs"
+
+[[bin]]
+name = "kore_bench"
+path = "src/bin/kore_bench.rs"
+
+[[bin]]
+name = "killer_ui_serve"
+path = "src/bin/killer_ui_serve.rs"
+
+[[bin]]
+name = "killer_ui"
+path = "src/bin/killer_ui.rs"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+
+[profile.bench]
+inherits = "release"
+

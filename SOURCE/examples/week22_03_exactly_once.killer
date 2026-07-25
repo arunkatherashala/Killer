@@ -1,0 +1,70 @@
+// Week 22: Large-Scale Data Processing - Example 3
+// Exactly-Once Semantics with Deduplication
+
+kfn create_dedup_state() {
+    return {
+        seen_ids: {},
+        processed_count: 0,
+        duplicates_found: 0
+    };
+}
+
+kfn process_with_dedup(state, message) {
+    let msg_id = str(message.id);
+    
+    // Check if we've seen this message before
+    if state.seen_ids[msg_id] != null {
+        // Duplicate detected
+        state.duplicates_found = state.duplicates_found + 1;
+        return {
+            status: "duplicate",
+            message_id: message.id,
+            action: "skipped"
+        };
+    }
+    
+    // Mark as seen
+    state.seen_ids[msg_id] = true;
+    state.processed_count = state.processed_count + 1;
+    
+    return {
+        status: "processed",
+        message_id: message.id,
+        action: "new",
+        data: message.data
+    };
+}
+
+kfn get_dedup_stats(state) {
+    return {
+        processed: state.processed_count,
+        duplicates: state.duplicates_found,
+        total_attempted: state.processed_count + state.duplicates_found,
+        dedup_ratio: (state.duplicates_found * 100) / (state.processed_count + state.duplicates_found)
+    };
+}
+
+// Test: Exactly-once with duplicate messages
+let state = create_dedup_state();
+
+let messages = [
+    {id: 1, data: "transaction_1"},
+    {id: 2, data: "transaction_2"},
+    {id: 1, data: "transaction_1"},  // Duplicate!
+    {id: 3, data: "transaction_3"},
+    {id: 2, data: "transaction_2"},  // Duplicate!
+    {id: 4, data: "transaction_4"}
+];
+
+for i in 0..length(messages) {
+    let msg = messages[i];
+    let result = process_with_dedup(state, msg);
+    print("Message " + str(msg.id) + ": " + result.status);
+}
+
+let stats = get_dedup_stats(state);
+print("Processed: " + str(stats.processed));
+print("Duplicates: " + str(stats.duplicates));
+print("Dedup ratio: " + str(stats.dedup_ratio) + "%");
+
+

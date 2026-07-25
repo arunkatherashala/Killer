@@ -1,0 +1,16 @@
+// Example 2: Fibonacci computation
+// Demonstrates recursion and performance-critical code
+
+kfn fib(n: Int) -> Int {
+    if n <= 1 {
+        return n;
+    }
+    return fib(n - 1) + fib(n - 2);
+}
+
+kfn main() {
+    let result: Int = fib(30);
+    println("fib(30) = " + result.to_string());
+}
+
+

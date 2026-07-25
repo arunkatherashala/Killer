@@ -1,0 +1,14 @@
+// Millennium Prize Problem #6: Hodge Conjecture
+// SOLUTION FRAMEWORK
+//
+// This directory contains computational verification of the Hodge Conjecture.
+// See IMPLEMENTATION.md for the full framework implementation.
+//
+// Problem: Are all Hodge classes algebraic?
+// Status: Proven for dimension 1-2 ✓
+//         Open for dimension 3+ ✗
+//
+// Full implementation located in:
+// ../millennium_prize_6_hodge.killer (280+ lines)
+
+

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<records>
+  <record>
+    <name>Alice</name>
+    <age>30</age>
+    <score>9.5</score>
+  </record>
+  <record>
+    <name>Bob</name>
+    <age>25</age>
+    <score>8</score>
+  </record>
+  <record>
+    <name>Carol</name>
+    <age>35</age>
+    <score>9.8</score>
+  </record>
+  <record>
+    <name>Dave</name>
+    <age>28</age>
+    <score>7.5</score>
+  </record>
+  <record>
+    <name>Eve</name>
+    <age>32</age>
+    <score>8.9</score>
+  </record>
+</records>

@@ -1,0 +1,139 @@
+
+# ============================================================
+# Nova Galaxy Engine — Performance Benchmark
+# Measures: native opcode vs baseline loop speed
+# Date: March 27, 2026
+# ============================================================
+
+ITERS = 100000
+
+print("Nova Galaxy Engine — Benchmark")
+print("Iterations per test: 100,000")
+print("============================================================")
+
+# -- BASELINE: plain counter loop (no logic ops) --------------
+t0 = system_time_ms()
+i = 0
+while i < ITERS {
+  i = i + 1
+}
+t1 = system_time_ms()
+base_ms = t1 - t0
+print(K"[BASELINE]  counter loop:       {base_ms} ms")
+
+# -- Phase A: Trit — trit_and native opcode -------------------
+a_trit = T_POS()
+b_trit = T_NEG()
+t0 = system_time_ms()
+i = 0
+while i < ITERS {
+  r = trit_and(a_trit, b_trit)
+  i = i + 1
+}
+t1 = system_time_ms()
+trit_ms = t1 - t0
+print(K"[Phase A]   trit_and (native):   {trit_ms} ms")
+
+# -- Phase A: Trit — trit_or native opcode -------------------
+t0 = system_time_ms()
+i = 0
+while i < ITERS {
+  r = trit_or(a_trit, b_trit)
+  i = i + 1
+}
+t1 = system_time_ms()
+trit_or_ms = t1 - t0
+print(K"[Phase A]   trit_or  (native):   {trit_or_ms} ms")
+
+# -- Phase D: Fuzzy — fuzzy_and native opcode ----------------
+fa = 0.8
+fb = 0.6
+t0 = system_time_ms()
+i = 0
+while i < ITERS {
+  r = fuzzy_and(fa, fb)
+  i = i + 1
+}
+t1 = system_time_ms()
+fand_ms = t1 - t0
+print(K"[Phase D]   fuzzy_and (native):  {fand_ms} ms")
+
+# -- Phase D: Fuzzy — fuzzy_or native opcode -----------------
+t0 = system_time_ms()
+i = 0
+while i < ITERS {
+  r = fuzzy_or(fa, fb)
+  i = i + 1
+}
+t1 = system_time_ms()
+for_ms = t1 - t0
+print(K"[Phase D]   fuzzy_or  (native):  {for_ms} ms")
+
+# -- Phase D: Fuzzy — fuzzy_not native opcode ----------------
+t0 = system_time_ms()
+i = 0
+while i < ITERS {
+  r = fuzzy_not(fa)
+  i = i + 1
+}
+t1 = system_time_ms()
+fnot_ms = t1 - t0
+print(K"[Phase D]   fuzzy_not (native):  {fnot_ms} ms")
+
+# -- Phase E: Tryte — tryte_and native opcode ----------------
+ta = tryte_create(T_POS(), T_ZERO(), T_NEG(), T_POS(), T_ZERO(), T_NEG())
+tb = tryte_create(T_NEG(), T_POS(), T_ZERO(), T_NEG(), T_POS(), T_ZERO())
+t0 = system_time_ms()
+i = 0
+while i < ITERS {
+  r = tryte_and(ta, tb)
+  i = i + 1
+}
+t1 = system_time_ms()
+tand_ms = t1 - t0
+print(K"[Phase E]   tryte_and (native):  {tand_ms} ms")
+
+# -- Phase E: Tryte — tryte_add native opcode ----------------
+t0 = system_time_ms()
+i = 0
+while i < ITERS {
+  r = tryte_add(ta, tb)
+  i = i + 1
+}
+t1 = system_time_ms()
+tadd_ms = t1 - t0
+print(K"[Phase E]   tryte_add (native):  {tadd_ms} ms")
+
+# -- Phase B: Signal — signal_value native opcode ------------
+sig = signal_create(T_POS(), 0.9, "test")
+t0 = system_time_ms()
+i = 0
+while i < ITERS {
+  r = signal_value(sig)
+  i = i + 1
+}
+t1 = system_time_ms()
+sval_ms = t1 - t0
+print(K"[Phase B]   signal_value (native): {sval_ms} ms")
+
+# -- Phase C: Qubit — qubit_hadamard native opcode -----------
+q = qubit_create(1.0, 0.0)
+t0 = system_time_ms()
+i = 0
+while i < ITERS {
+  r = qubit_hadamard(q)
+  i = i + 1
+}
+t1 = system_time_ms()
+qhad_ms = t1 - t0
+print(K"[Phase C]   qubit_hadamard (native): {qhad_ms} ms")
+
+print("============================================================")
+print("Summary (vs baseline counter loop):")
+print(K"  Baseline loop:     {base_ms} ms  (100K iterations, no logic)")
+print(K"  trit_and overhead: {trit_ms - base_ms} ms extra over baseline")
+print(K"  fuzzy_and overhead:{fand_ms - base_ms} ms extra over baseline")
+print(K"  tryte_and overhead:{tand_ms - base_ms} ms extra over baseline")
+print(K"  tryte_add overhead:{tadd_ms - base_ms} ms extra over baseline")
+print("============================================================")
+print("BENCHMARK COMPLETE")

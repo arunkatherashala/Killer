@@ -1,0 +1,2 @@
+r = khlm_ask("Who is Sundar Pichai")
+print(r)

@@ -1,0 +1,143 @@
+## =============================================================================
+## K-STRING COMPREHENSIVE TEST SUITE
+## =============================================================================
+## Tests for K-string functionality (simple variable interpolation)
+## Version: 1.0 | Date: March 20, 2026
+## =============================================================================
+
+kfn test_simple_variable
+  x = 42
+  result = k"Value: {x}"
+  print(k"Test 1 - Simple Variable: {result}")
+  assert(result == "Value: 42")
+
+kfn test_multiple_variables
+  name = "Alice"
+  age = 30
+  msg = k"User {name} is {age} years old"
+  print(k"Test 2 - Multiple Variables: {msg}")
+  assert(msg == "User Alice is 30 years old")
+
+kfn test_nested_field_access
+  person = {"name": "Bob", "city": "NYC"}
+  person_name = person["name"]
+  person_city = person["city"]
+  result = k"Person: {person_name} from {person_city}"
+  print(k"Test 3 - Nested Access: {result}")
+  assert(result == "Person: Bob from NYC")
+
+kfn test_function_call
+  numbers = [1, 2, 3, 4, 5]
+  length = numbers.len()
+  msg = k"List has {length} items"
+  print(k"Test 4 - Function Call: {msg}")
+  assert(msg == "List has 5 items")
+
+kfn test_arithmetic_expression
+  a = 10
+  b = 5
+  result = a + b
+  msg = k"Math: {result}"
+  print(k"Test 5 - Arithmetic Expression: {msg}")
+  assert(msg == "Math: 15")
+
+kfn test_escape_sequences
+  x = "test"
+  result = k"Tab:\t{x}\nDone"
+  print(k"Test 6 - Escape Sequences: {result}")
+  ## Should contain newline and tab
+
+kfn test_string_concatenation_in_placeholder
+  first = "Hello"
+  second = "World"
+  full = first + " " + second
+  msg = k"Message: {full}"
+  print(k"Test 7 - String in Placeholder: {msg}")
+  assert(msg == "Message: Hello World")
+
+kfn test_boolean_value
+  active = True
+  msg = k"Active: {active}"
+  print(k"Test 8 - Boolean Value: {msg}")
+  assert(msg == "Active: true")
+
+kfn test_numeric_types
+  int_val = 42
+  float_val = 3.14
+  int_msg = k"Integer: {int_val}"
+  float_msg = k"Float: {float_val}"
+  print(k"Test 9a - Integer: {int_msg}")
+  print(k"Test 9b - Float: {float_msg}")
+
+kfn test_empty_string_placeholder
+  x = ""
+  msg = k"Empty[{x}]End"
+  print(k"Test 10 - Empty String: {msg}")
+  assert(msg == "Empty[]End")
+
+kfn test_special_characters
+  special = "!@#$%"
+  msg = k"Chars: {special}"
+  print(k"Test 11 - Special Characters: {msg}")
+  assert(msg == "Chars: !@#$%")
+
+kfn test_zero_value
+  zero = 0
+  msg = k"Zero is {zero}"
+  print(k"Test 12 - Zero Value: {msg}")
+  assert(msg == "Zero is 0")
+
+kfn test_negative_number
+  neg = -42
+  msg = k"Negative: {neg}"
+  print(k"Test 13 - Negative Number: {msg}")
+  assert(msg == "Negative: -42")
+
+kfn test_whitespace_preservation
+  value = "test"
+  msg = k"  {value}  "
+  print(k"Test 14 - Whitespace: [{msg}]")
+  assert(msg == "  test  ")
+
+kfn test_multiple_placeholders_same_line
+  a = 1
+  b = 2
+  c = 3
+  msg = k"{a}-{b}-{c}"
+  print(k"Test 15 - Multiple Placeholders: {msg}")
+  assert(msg == "1-2-3")
+
+## Helper function
+kfn assert(condition)
+  if condition
+    print("PASS")
+  else
+    print("FAIL")
+
+## Main test runner
+kfn main
+  print("=== K-STRING TEST SUITE ===")
+  print("")
+  
+  test_simple_variable()
+  test_multiple_variables()
+  test_nested_field_access()
+  test_function_call()
+  test_arithmetic_expression()
+  test_escape_sequences()
+  test_string_concatenation_in_placeholder()
+  test_boolean_value()
+  test_numeric_types()
+  test_empty_string_placeholder()
+  test_special_characters()
+  test_zero_value()
+  test_negative_number()
+  test_whitespace_preservation()
+  test_multiple_placeholders_same_line()
+  
+  print("")
+  print("=== TEST SUITE COMPLETE ===")
+
+## =============================================================================
+## END
+## =============================================================================

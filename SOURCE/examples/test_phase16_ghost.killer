@@ -1,0 +1,60 @@
+// Phase 16: Numeric Loop Benchmark
+// Demonstrates hot path detection and type specialization
+
+// Numeric-heavy loop - perfect for specialization
+kfn numeric_loop() {
+    let sum = 0;
+    let i = 0;
+    while (i < 10000) {
+        sum = sum + i;
+        i = i + 1;
+    }
+    print("Sum: ");
+    print(sum);
+    print("");
+}
+
+// String concatenation - different optimization strategy
+kfn string_loop() {
+    let result = "";
+    let i = 0;
+    while (i < 100) {
+        result = result + str(i) + " ";
+        i = i + 1;
+    }
+    print("String length: ");
+    print(len(result));
+    print("");
+}
+
+// Mixed types - won't optimize as aggressively
+kfn mixed_loop() {
+    let values = [1, "two", 3, "four", 5];
+    let i = 0;
+    while (i < 5) {
+        print(values[i]);
+        print(" ");
+        i = i + 1;
+    }
+    print("");
+}
+
+// Run all loops
+print("=== Phase 16: Ghost Layer Testing ===");
+print("");
+
+print("1. Numeric Loop (hot path candidate):");
+numeric_loop();
+print("");
+
+print("2. String Loop (string optimization candidate):");
+string_loop();
+print("");
+
+print("3. Mixed Type Loop (limited optimization):");
+mixed_loop();
+print("");
+
+print("=== Phase 16 Tests Complete ===");
+
+

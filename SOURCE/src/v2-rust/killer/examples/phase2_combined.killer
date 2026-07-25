@@ -1,0 +1,33 @@
+kfn sum_array(arr) {
+    total = 0;
+    for (i in range(len(arr))) {
+        total = total + arr[i];
+    }
+    return total;
+}
+
+kfn sum_simple(arr) {
+    total = 0;
+    for (item in arr) {
+        total = total + item;
+    }
+    return total;
+}
+
+nums = [1, 2, 3, 4, 5];
+result = sum_array(nums);
+print(result);
+
+result2 = sum_simple(nums);
+print(result2);
+
+config = {"version": "1.0", "debug": "true"};
+print(config);
+
+keys_list = keys(config);
+print(keys_list);
+
+combined = [nums, config];
+print(combined);
+
+

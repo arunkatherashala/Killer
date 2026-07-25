@@ -1,0 +1,486 @@
+# KORE-K: Pure Killer Language Implementation
+# All compression algorithms written in Killer -- no dependency on kore.rs
+# Uses only: readFile, writeFile, split, join, push, len, indexOf, substring, str, parseInt
+#
+# Algorithms:
+#   delta   -- integers: stores base value + diffs   [25,30,25] -> "25,5,-5"
+#   rle     -- booleans: count~value pairs           [T,T,F,T]  -> "2~true,1~false,1~true"
+#   dict    -- strings:  dictionary + indices        [E,M,E]    -> "Engineering^Management*0,1,0"
+#   plain   -- floats:   comma-separated as-is       [9.9,5.5]  -> "9.9,5.5"
+#
+# KORE-K file format (text):
+#   KORE-K
+#   SCHEMA  name:str:dict  age:int:delta  salary:float:plain
+#   ROWS    5
+#   COL     name    Eng^Mgmt*0,1,0,1,0
+#   COL     age     25,5,-5,10,-7
+#   COL     salary  90000.0,120000.0,95000.0
+#   END
+
+# ============================================================
+# PART 1: HELPER
+# ============================================================
+
+kfn arr_index_of(arr, val) {
+  result = -1
+  i = 0
+  while (i < len(arr)) {
+    if (arr[i] == val) {
+      if (result == -1) {
+        result = i
+      }
+    }
+    i = i + 1
+  }
+  return result
+}
+
+# ============================================================
+# PART 2: DELTA ENCODING  (integers)
+# ============================================================
+
+kfn delta_encode(nums) {
+  n = len(nums)
+  if (n == 0) {
+    return "EMPTY"
+  }
+  result = str(parseInt(nums[0]))
+  i = 1
+  while (i < n) {
+    prev = i - 1
+    diff = parseInt(nums[i]) - parseInt(nums[prev])
+    result = result + "," + str(diff)
+    i = i + 1
+  }
+  return result
+}
+
+kfn delta_decode(enc) {
+  parts = split(enc, ",")
+  result = []
+  cur = parseInt(parts[0])
+  result = push(result, str(cur))
+  i = 1
+  while (i < len(parts)) {
+    cur = cur + parseInt(parts[i])
+    result = push(result, str(cur))
+    i = i + 1
+  }
+  return result
+}
+
+# ============================================================
+# PART 3: RLE ENCODING  (booleans)
+# ============================================================
+# Format: count~value pairs separated by comma
+# ["true","true","false","true"] -> "2~true,1~false,1~true"
+
+kfn rle_encode(vals) {
+  n = len(vals)
+  if (n == 0) {
+    return "EMPTY"
+  }
+  parts = []
+  count = 1
+  cur = vals[0]
+  i = 1
+  while (i < n) {
+    if (vals[i] == cur) {
+      count = count + 1
+    } else {
+      parts = push(parts, str(count) + "~" + cur)
+      cur = vals[i]
+      count = 1
+    }
+    i = i + 1
+  }
+  parts = push(parts, str(count) + "~" + cur)
+  return join(parts, ",")
+}
+
+kfn rle_decode(enc) {
+  parts = split(enc, ",")
+  result = []
+  i = 0
+  while (i < len(parts)) {
+    kv = split(parts[i], "~")
+    cnt = parseInt(kv[0])
+    val = kv[1]
+    j = 0
+    while (j < cnt) {
+      result = push(result, val)
+      j = j + 1
+    }
+    i = i + 1
+  }
+  return result
+}
+
+# ============================================================
+# PART 4: DICTIONARY ENCODING  (strings)
+# ============================================================
+# Format: entries separated by ^ then * then comma-separated indices
+# ["Eng","Mgmt","Eng"] -> "Eng^Mgmt*0,1,0"
+
+kfn dict_encode(vals) {
+  dict_arr = []
+  idx_arr = []
+  i = 0
+  while (i < len(vals)) {
+    val = vals[i]
+    idx = arr_index_of(dict_arr, val)
+    if (idx == -1) {
+      dict_arr = push(dict_arr, val)
+      idx = len(dict_arr) - 1
+    }
+    idx_arr = push(idx_arr, str(idx))
+    i = i + 1
+  }
+  return join(dict_arr, "^") + "*" + join(idx_arr, ",")
+}
+
+kfn dict_decode(enc) {
+  star_pos = indexOf(enc, "*")
+  dict_part = substring(enc, 0, star_pos)
+  idx_part = substring(enc, star_pos + 1, len(enc))
+  dict_arr = split(dict_part, "^")
+  idx_parts = split(idx_part, ",")
+  result = []
+  i = 0
+  while (i < len(idx_parts)) {
+    result = push(result, dict_arr[parseInt(idx_parts[i])])
+    i = i + 1
+  }
+  return result
+}
+
+# ============================================================
+# PART 5: PLAIN ENCODING  (floats)
+# ============================================================
+
+kfn plain_encode(vals) {
+  return join(vals, ",")
+}
+
+kfn plain_decode(enc) {
+  return split(enc, ",")
+}
+
+# ============================================================
+# PART 6: AUTO ALGORITHM SELECTION
+# ============================================================
+
+kfn auto_algo(col_type) {
+  if (col_type == "int") {
+    return "delta"
+  } else {
+    if (col_type == "float") {
+      return "plain"
+    } else {
+      if (col_type == "bool") {
+        return "rle"
+      } else {
+        return "dict"
+      }
+    }
+  }
+}
+
+kfn encode_col(vals, algo) {
+  if (algo == "delta") {
+    return delta_encode(vals)
+  } else {
+    if (algo == "rle") {
+      return rle_encode(vals)
+    } else {
+      if (algo == "dict") {
+        return dict_encode(vals)
+      } else {
+        return plain_encode(vals)
+      }
+    }
+  }
+}
+
+kfn decode_col(enc, algo) {
+  if (algo == "delta") {
+    return delta_decode(enc)
+  } else {
+    if (algo == "rle") {
+      return rle_decode(enc)
+    } else {
+      if (algo == "dict") {
+        return dict_decode(enc)
+      } else {
+        return plain_decode(enc)
+      }
+    }
+  }
+}
+
+# ============================================================
+# PART 7: INPUT PARSING
+# ============================================================
+# Parse "[[a,b,c],[d,e,f]]" into array of row arrays
+
+kfn parse_rows(data_str) {
+  inner = substring(data_str, 2, len(data_str) - 2)
+  row_strs = split(inner, "],[")
+  rows = []
+  i = 0
+  while (i < len(row_strs)) {
+    row = split(row_strs[i], ",")
+    rows = push(rows, row)
+    i = i + 1
+  }
+  return rows
+}
+
+kfn extract_col(rows, col_idx) {
+  col = []
+  i = 0
+  while (i < len(rows)) {
+    row = rows[i]
+    col = push(col, row[col_idx])
+    i = i + 1
+  }
+  return col
+}
+
+# ============================================================
+# PART 8: KORE-K FILE API
+# ============================================================
+
+kfn kfile_write(path, schema_str, data_str) {
+  rows = parse_rows(data_str)
+  nrows = len(rows)
+  col_defs = split(schema_str, ",")
+  ncols = len(col_defs)
+
+  schema_parts = []
+  i = 0
+  while (i < ncols) {
+    def = split(col_defs[i], ":")
+    algo = auto_algo(def[1])
+    schema_parts = push(schema_parts, def[0] + ":" + def[1] + ":" + algo)
+    i = i + 1
+  }
+  schema_line = "SCHEMA " + join(schema_parts, " ")
+
+  data_lines = []
+  i = 0
+  while (i < ncols) {
+    def = split(col_defs[i], ":")
+    algo = auto_algo(def[1])
+    col_vals = extract_col(rows, i)
+    encoded = encode_col(col_vals, algo)
+    data_lines = push(data_lines, "COL " + def[0] + " " + encoded)
+    i = i + 1
+  }
+
+  content = "KORE-K\n" + schema_line + "\nROWS " + str(nrows) + "\n" + join(data_lines, "\n") + "\nEND"
+  ok = writeFile(path, content)
+  return K"kfile: wrote {nrows} rows x {ncols} cols to {path}"
+}
+
+kfn kfile_read(path) {
+  content = readFile(path)
+  lines = split(content, "\n")
+  schema_part = substring(lines[1], 7, len(lines[1]))
+  col_defs = split(schema_part, " ")
+  ncols = len(col_defs)
+  nrows = parseInt(substring(lines[2], 5, len(lines[2])))
+
+  cols = []
+  i = 0
+  while (i < ncols) {
+    def = split(col_defs[i], ":")
+    algo = def[2]
+    line = lines[3 + i]
+    p1 = indexOf(line, " ")
+    rest = substring(line, p1 + 1, len(line))
+    p2 = indexOf(rest, " ")
+    encoded = substring(rest, p2 + 1, len(rest))
+    col_vals = decode_col(encoded, algo)
+    cols = push(cols, col_vals)
+    i = i + 1
+  }
+
+  result = []
+  i = 0
+  while (i < nrows) {
+    row_parts = []
+    j = 0
+    while (j < ncols) {
+      col_j = cols[j]
+      row_parts = push(row_parts, col_j[i])
+      j = j + 1
+    }
+    result = push(result, "[" + join(row_parts, ",") + "]")
+    i = i + 1
+  }
+  return "[" + join(result, ",") + "]"
+}
+
+kfn kfile_read_col(path, col_name) {
+  content = readFile(path)
+  lines = split(content, "\n")
+  schema_part = substring(lines[1], 7, len(lines[1]))
+  col_defs = split(schema_part, " ")
+  ncols = len(col_defs)
+
+  col_idx = -1
+  col_algo = "plain"
+  i = 0
+  while (i < ncols) {
+    def = split(col_defs[i], ":")
+    if (def[0] == col_name) {
+      col_idx = i
+      col_algo = def[2]
+    }
+    i = i + 1
+  }
+
+  if (col_idx == -1) {
+    return K"ERROR: column {col_name} not found"
+  }
+  line = lines[3 + col_idx]
+  p1 = indexOf(line, " ")
+  rest = substring(line, p1 + 1, len(line))
+  p2 = indexOf(rest, " ")
+  encoded = substring(rest, p2 + 1, len(rest))
+  col_vals = decode_col(encoded, col_algo)
+  return "[" + join(col_vals, ",") + "]"
+}
+
+kfn kfile_info(path) {
+  content = readFile(path)
+  lines = split(content, "\n")
+  schema_part = substring(lines[1], 7, len(lines[1]))
+  nrows = parseInt(substring(lines[2], 5, len(lines[2])))
+  col_defs = split(schema_part, " ")
+  ncols = len(col_defs)
+  return K"kfile: {nrows} rows x {ncols} cols | {schema_part}"
+}
+
+# ============================================================
+# DEMOS
+# ============================================================
+
+print("KORE-K: Pure Killer Implementation")
+print("All algorithms written in Killer language")
+print("No dependency on kore.rs Rust file")
+print("")
+
+# DEMO 1: Delta encoding algorithm verification
+print("--- DEMO 1: Delta Encoding (integers) ---")
+ages = ["25", "30", "25", "35", "28"]
+enc_ages = delta_encode(ages)
+dec_ages = delta_decode(enc_ages)
+print(K"Original: {ages}")
+print(K"Encoded:  {enc_ages}")
+print(K"Decoded:  {dec_ages}")
+print("")
+
+# DEMO 2: RLE encoding algorithm verification
+print("--- DEMO 2: RLE Encoding (booleans) ---")
+flags = ["true", "true", "true", "false", "false", "true"]
+enc_flags = rle_encode(flags)
+dec_flags = rle_decode(enc_flags)
+print(K"Original: {flags}")
+print(K"Encoded:  {enc_flags}")
+print(K"Decoded:  {dec_flags}")
+print("")
+
+# DEMO 3: Dictionary encoding algorithm verification
+print("--- DEMO 3: Dictionary Encoding (strings) ---")
+depts = ["Engineering", "Management", "Engineering", "Engineering", "Management"]
+enc_depts = dict_encode(depts)
+dec_depts = dict_decode(enc_depts)
+print(K"Original: {depts}")
+print(K"Encoded:  {enc_depts}")
+print(K"Decoded:  {dec_depts}")
+print("")
+
+# DEMO 4: Full write and read
+print("--- DEMO 4: Full Write + Read (employees) ---")
+schema4 = "name:str,age:int,salary:float,dept:str,active:bool"
+data4 = "[[Alice,25,90000.0,Engineering,true],[Bob,30,120000.0,Management,true],[Charlie,25,90000.0,Engineering,true],[Diana,35,150000.0,Management,true],[Eve,28,95000.0,Engineering,false]]"
+w4 = kfile_write("pure_employees.kore", schema4, data4)
+print(K"Write: {w4}")
+info4 = kfile_info("pure_employees.kore")
+print(K"Info:  {info4}")
+rows4 = kfile_read("pure_employees.kore")
+print(K"Rows:  {rows4}")
+print("")
+
+# DEMO 5: Column pruning
+print("--- DEMO 5: Column Pruning ---")
+names5 = kfile_read_col("pure_employees.kore", "name")
+print(K"Names:    {names5}")
+salaries5 = kfile_read_col("pure_employees.kore", "salary")
+print(K"Salaries: {salaries5}")
+depts5 = kfile_read_col("pure_employees.kore", "dept")
+print(K"Depts:    {depts5}")
+active5 = kfile_read_col("pure_employees.kore", "active")
+print(K"Active:   {active5}")
+print("")
+
+# DEMO 6: Time-series (delta on sequential integers)
+print("--- DEMO 6: Time-Series (Delta on timestamps) ---")
+schema6 = "timestamp:int,temp:float,humidity:float"
+data6 = "[[1711234000,23.5,45.2],[1711235000,23.6,45.1],[1711236000,23.4,45.3],[1711237000,23.7,45.0],[1711238000,23.8,44.9],[1711239000,23.6,45.1]]"
+w6 = kfile_write("pure_sensors.kore", schema6, data6)
+print(K"Write: {w6}")
+ts6 = kfile_read_col("pure_sensors.kore", "timestamp")
+print(K"Timestamps: {ts6}")
+temp6 = kfile_read_col("pure_sensors.kore", "temp")
+print(K"Temps:      {temp6}")
+print("")
+
+# DEMO 7: Products with booleans
+print("--- DEMO 7: Products (RLE on booleans) ---")
+schema7 = "product:str,category:str,price:float,in_stock:bool"
+data7 = "[[Laptop,Electronics,999.99,true],[Mouse,Electronics,29.99,true],[Desk,Furniture,299.99,false],[Chair,Furniture,199.99,true],[Monitor,Electronics,399.99,true],[Keyboard,Electronics,79.99,true],[Lamp,Furniture,49.99,false]]"
+w7 = kfile_write("pure_products.kore", schema7, data7)
+print(K"Write: {w7}")
+cats7 = kfile_read_col("pure_products.kore", "category")
+print(K"Categories (dict): {cats7}")
+stock7 = kfile_read_col("pure_products.kore", "in_stock")
+print(K"In stock (rle):    {stock7}")
+print("")
+
+# DEMO 8: Multi-table pipeline
+print("--- DEMO 8: Multi-Table Pipeline ---")
+wu = kfile_write("pure_users.kore", "user_id:int,username:str,country:str,tier:str", "[[1,alice,India,premium],[2,bob,USA,free],[3,charlie,UK,premium],[4,diana,India,enterprise],[5,eve,Germany,free]]")
+wc = kfile_write("pure_catalog.kore", "prod_id:int,name:str,category:str,price:float", "[[101,Killer-Pro,Software,49.99],[102,KORE-Studio,Tools,29.99],[103,Ghost-Agent,AI,99.99],[104,RLM-Engine,AI,199.99]]")
+print(K"Users:   {wu}")
+print(K"Catalog: {wc}")
+tiers = kfile_read_col("pure_users.kore", "tier")
+print(K"User tiers:     {tiers}")
+countries = kfile_read_col("pure_users.kore", "country")
+print(K"User countries: {countries}")
+prod_names = kfile_read_col("pure_catalog.kore", "name")
+print(K"Product names:  {prod_names}")
+prices = kfile_read_col("pure_catalog.kore", "price")
+print(K"Product prices: {prices}")
+print("")
+
+# DEMO 9: Info for all files
+print("--- DEMO 9: All File Info ---")
+i1 = kfile_info("pure_employees.kore")
+i2 = kfile_info("pure_sensors.kore")
+i3 = kfile_info("pure_products.kore")
+i4 = kfile_info("pure_users.kore")
+i5 = kfile_info("pure_catalog.kore")
+print(K"employees -> {i1}")
+print(K"sensors   -> {i2}")
+print(K"products  -> {i3}")
+print(K"users     -> {i4}")
+print(K"catalog   -> {i5}")
+print("")
+
+print("All 9 demos complete.")
+print("KORE-K fully implemented in pure Killer language.")
+print("Algorithms: delta / rle / dict / plain")
+print("File I/O:   readFile / writeFile only")

@@ -1,0 +1,39 @@
+# Test dictionaries
+
+# Create a dictionary
+person = {
+    name: "Alice",
+    age: 30,
+    city: "New York"
+};
+
+# Access dictionary elements
+print("Name:", person["name"]);
+print("Age:", person["age"]);
+print("City:", person["city"]);
+
+# Modify dictionary
+person["age"] = 31;
+person["job"] = "Engineer";
+
+print("Updated age:", person["age"]);
+print("New field:", person["job"]);
+
+# Empty dictionary
+empty = {};
+print("Empty dict:", empty);
+
+# Dictionary with different values
+data = {
+    count: 5,
+    active: true,
+    label: "test"
+};
+
+print("Count:", data["count"]);
+print("Active:", data["active"]);
+print("Label:", data["label"]);
+
+print("--- Dictionaries work! ---");
+
+

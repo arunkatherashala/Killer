@@ -1,0 +1,31 @@
+[workspace]
+members = ["../SOURCE/src/v2-rust/killer", "../_TOOLS/killer_rcore"]
+resolver = "2"
+
+[workspace.package]
+version = "4.2.0"
+edition = "2021"
+
+# Optimized build profiles for maximum performance
+[profile.release]
+opt-level = 3          # Maximum optimization
+lto = "thin"           # Thin LTO: 90% benefits with 50% faster linking
+codegen-units = 16     # Parallel code generation (faster builds)
+strip = true
+split-debuginfo = "off"
+panic = "abort"        # Faster panic handling
+overflow-checks = false
+incremental = false    # Disable incremental for max optimization
+debug-assertions = false
+debug = 0              # Strip all debug info
+# Advanced LLVM optimizations (if supported)
+# rpath = false
+# embed-bitcode = false
+
+# Fast release build (optimized for build time, 30-40% faster)
+[profile.release-fast]
+inherits = "release"
+opt-level = 2          # Good optimization, less compilation work
+lto = false            # Skip LTO for speed
+codegen-units = 256    # Maximum parallelism
+

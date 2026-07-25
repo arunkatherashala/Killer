@@ -1,0 +1,149 @@
+// Killer Programming Language - Advanced Features Test
+
+print("=== ADVANCED LANGUAGE FEATURES ===");
+print("");
+
+// Test 1: Increment and Decrement Operators
+print("Test 1: Increment/Decrement");
+print("-" + "-" + "-" + "-" + "-" + "-");
+
+x = 5;
+print("x = " + x);
+print(x++);  // Postfix: returns 5, then increments
+print("x = " + x);       // Now x is 6
+val = ++x;  // Prefix: increments first, then returns 7
+print("++x = " + val);
+print(x--);  // Postfix: returns 7, then decrements
+val2 = --x;  // Prefix: decrements first, then returns 5
+print("--x = " + val2);
+print("");
+
+// Test 2: Compound Assignment Operators
+print("Test 2: Compound Assignments");
+print("-" + "-" + "-" + "-" + "-" + "-");
+
+a = 10;
+print("a = " + a);
+a += 5;
+print("a += 5 -> " + a);
+a -= 3;
+print("a -= 3 -> " + a);
+a *= 2;
+print("a *= 2 -> " + a);
+a /= 4;
+print("a /= 4 -> " + a);
+a %= 3;
+print("a %= 3 -> " + a);
+print("");
+
+// Test 3: Ternary Operator
+print("Test 3: Ternary Operator");
+print("-" + "-" + "-" + "-" + "-" + "-");
+
+age = 25;
+status = age >= 18 ? "Adult" : "Minor";
+print("Age " + age + " -> " + status);
+
+score = 75;
+grade = score >= 90 ? "A" : score >= 80 ? "B" : score >= 70 ? "C" : "F";
+print("Score " + score + " -> Grade " + grade);
+
+result = 0 > 1 ? "true" : "false";
+print("0 > 1 ? true : false -> " + result);
+print("");
+
+// Test 4: Logical AND Operator
+print("Test 4: Logical AND (&&)");
+print("-" + "-" + "-" + "-" + "-" + "-");
+
+p = true;
+q = false;
+r = true;
+
+print("true && false = " + (p && q ? "true" : "false"));
+print("true && true = " + (p && r ? "true" : "false"));
+print("false && true = " + (q && r ? "true" : "false"));
+
+// Short-circuit evaluation test
+if (false && true)
+{
+  print("This should not print (short-circuit prevented)");
+}
+
+if (true && true)
+{
+  print("This should print (both true)");
+}
+print("");
+
+// Test 5: Logical OR Operator
+print("Test 5: Logical OR (||)");
+print("-" + "-" + "-" + "-" + "-" + "-");
+
+print("true || false = " + (p || q ? "true" : "false"));
+print("false || false = " + (q || q ? "true" : "false"));
+print("false || true = " + (q || r ? "true" : "false"));
+
+// Short-circuit evaluation test
+if (true || false)
+{
+  print("This should print (one is true)");
+}
+
+if (false || false)
+{
+  print("This should not print (both false)");
+}
+print("");
+
+// Test 6: Break Statement
+print("Test 6: Break Statement");
+print("-" + "-" + "-" + "-" + "-" + "-");
+
+i = 0;
+while (i < 10)
+{
+  if (i == 5)
+    break;
+  print(i);
+  i++;
+}
+
+print("Broke out when i = " + i);
+print("");
+
+// Test 7: Continue Statement
+print("Test 7: Continue Statement");
+print("-" + "-" + "-" + "-" + "-" + "-");
+
+for j in 0..10
+{
+  if (j == 3 || j == 7)
+    continue;
+  print(j);
+}
+print("");
+
+// Test 8: Combination of Features
+print("Test 8: Combination of Features");
+print("-" + "-" + "-" + "-" + "-" + "-");
+
+numbers = [1, 2, 3, 4, 5];
+sum = 0;
+for num in numbers
+{
+  sum += num;
+}
+print("Sum of [1,2,3,4,5]: " + sum);
+
+product = 1;
+for n in numbers
+{
+  product *= n;
+}
+print("Product: " + product);
+
+print("");
+print("=== ALL TESTS PASSED ===");
+
+

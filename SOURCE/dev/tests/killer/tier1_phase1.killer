@@ -1,0 +1,81 @@
+// TEST SUITE: Phase 1 - Variables, Functions, Loops, Arrays, Dicts
+// Variables
+x = 42;
+y = "hello";
+z = true;
+arr = [1, 2, 3];
+print("TEST 1: Variables - PASS");
+
+// Functions
+kfn add(a, b) { return a + b; }
+kfn greet(name) { return "Hello, " + name; }
+assert(add(3, 4) == 7, "add failed");
+assert(greet("World") == "Hello, World", "greet failed");
+print("TEST 2: Functions - PASS");
+
+// Arrow functions
+double = (x) => x * 2;
+assert(double(5) == 10, "arrow failed");
+print("TEST 3: Arrow Functions - PASS");
+
+// While loop
+counter = 0;
+sum = 0;
+while(counter < 5) {
+    sum = sum + counter;
+    counter = counter + 1;
+}
+assert(sum == 10, "while failed");
+print("TEST 4: While Loop - PASS");
+
+// For loop
+result = 0;
+for(i = 0; i < 5; i = i + 1) {
+    result = result + i;
+}
+assert(result == 10, "for failed");
+print("TEST 5: For Loop - PASS");
+
+// Arrays
+nums = [1, 2, 3, 4, 5];
+assert(nums[0] == 1, "array[0] failed");
+assert(nums.length == 5, "length failed");
+nums.push(6);
+assert(nums.length == 6, "push failed");
+print("TEST 6: Arrays - PASS");
+
+// Dictionary
+person = {"name": "Alice", "age": 30};
+assert(person["name"] == "Alice", "dict failed");
+print("TEST 7: Dictionary - PASS");
+
+// String methods
+str = "Hello World";
+assert(str.length == 11, "str.length failed");
+assert(str.upper() == "HELLO WORLD", "upper failed");
+assert(str.lower() == "hello world", "lower failed");
+print("TEST 8: String Methods - PASS");
+
+// If/Else
+x = 10;
+result = "";
+if(x < 5) {
+    result = "small";
+} else if(x < 15) {
+    result = "medium";
+} else {
+    result = "large";
+}
+assert(result == "medium", "if/else failed");
+print("TEST 9: If/Else - PASS");
+
+print("PHASE 1: COMPLETE");
+
+kfn assert(condition, message) {
+    if(condition == false) {
+        print("[ERROR] " + message);
+        throw message;
+    }
+}
+
+

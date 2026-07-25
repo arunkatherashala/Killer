@@ -1,0 +1,104 @@
+// Week 22: Backpressure & Flow Control (Data Processing Gap #3)
+// Demonstrates handling producer-consumer rate mismatches
+// Curriculum: Backpressure, flow control, buffering strategies
+// Status: Week 22 completion (+20%)
+
+kfn producerThread(queue, totalItems) {
+    print("Producer: Starting to produce items");
+    
+    for (var i = 0; i < totalItems; i = i + 1) {
+        // Check if queue is full (backpressure)
+        while (queue["items"].length >= queue["max_size"]) {
+            print(`Producer: Queue full (${queue["items"].length}/${queue["max_size"]}), waiting...`);
+            thread_sleep_ms(100);  // Wait before retrying
+        }
+        
+        // Add item to queue
+        var item = {
+            "id": i,
+            "produced_at": system_time_ms(),
+            "data": `Item ${i}`
+        };
+        queue["items"].push(item);
+        queue["produced"] = queue["produced"] + 1;
+        
+        if (i % 5 == 0) {
+            print(`Producer: Added item ${i} (queue: ${queue["items"].length}/${queue["max_size"]})`);
+        }
+    }
+    
+    print("Producer: All items produced");
+}
+
+kfn consumerThread(queue, consumeRate) {
+    print("Consumer: Starting to consume items");
+    
+    var consumed = 0;
+    while (consumed < 20 || queue["items"].length > 0) {
+        if (queue["items"].length > 0) {
+            var item = queue["items"].pop();  // Remove from end
+            queue["consumed"] = queue["consumed"] + 1;
+            consumed = consumed + 1;
+            
+            if (consumed % 5 == 0) {
+                print(`Consumer: Consumed item ${item["id"]} (queue: ${queue["items"].length})`);
+            }
+            
+            // Simulate processing time
+            thread_sleep_ms(consumeRate);
+        } else {
+            print("Consumer: Queue empty, waiting...");
+            thread_sleep_ms(50);
+        }
+    }
+    
+    print("Consumer: All items consumed");
+}
+
+kfn main() {
+    print("Week 22: Backpressure & Flow Control");
+    print("====================================");
+    print("");
+    
+    // Create shared queue with size limit
+    var queue = {
+        "items": [],
+        "max_size": 5,  // Can only hold 5 items
+        "produced": 0,
+        "consumed": 0
+    };
+    
+    print(`Queue setup: Max size = ${queue["max_size"]} items`);
+    print("");
+    
+    print("Scenario: Producer slower than consumer (high throughput)");
+    print("-" * 50);
+    
+    var producer = spawn_thread(fn() {
+        producerThread(queue, 20);
+    });
+    
+    // Consumer thread (processes items slower)
+    var consumer = spawn_thread(fn() {
+        consumerThread(queue, 150);  // Slow consumer
+    });
+    
+    join_thread(producer);
+    join_thread(consumer);
+    
+    print("");
+    print("Statistics:");
+    print(`  Total produced: ${queue["produced"]}`);
+    print(`  Total consumed: ${queue["consumed"]}`);
+    print(`  Queue at end: ${queue["items"].length}`);
+    print("");
+    print("Flow Control in Action:");
+    print("- Producer paused when queue reached max");
+    print("- Consumer kept processing available items");
+    print("- Queue size bounded at ${queue["max_size"]} items");
+    print("- Prevents memory overflow from fast producers");
+}
+
+main();
+
+

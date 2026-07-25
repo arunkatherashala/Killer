@@ -1,0 +1,78 @@
+# shapes.killer
+# Shapes module demonstrating abstract classes
+
+export interface Shape {
+    area();
+    perimeter();
+    describe();
+}
+
+# Base abstract class for 2D shapes
+export abstract class Shape2DBase {
+    abstract area();
+    abstract perimeter();
+    
+    describe() {
+        print("This is a 2D shape");
+    }
+}
+
+# Circle implementation
+export class Circle {
+    init(radius) {
+        this.radius = radius;
+    }
+    
+    area() {
+        return 3.14159 * this.radius * this.radius;
+    }
+    
+    perimeter() {
+        return 2 * 3.14159 * this.radius;
+    }
+}
+
+# Rectangle implementation
+export class Rectangle {
+    init(width, height) {
+        this.width = width;
+        this.height = height;
+    }
+    
+    area() {
+        return this.width * this.height;
+    }
+    
+    perimeter() {
+        return 2 * (this.width + this.height);
+    }
+}
+
+# Triangle implementation
+export class Triangle {
+    init(a, b, c) {
+        this.a = a;
+        this.b = b;
+        this.c = c;
+    }
+    
+    area() {
+        # Using Heron's formula
+        s = (this.a + this.b + this.c) / 2;
+        area = s * (s - this.a) * (s - this.b) * (s - this.c);
+        # Simple approximation since we can't easily compute square root
+        return area;
+    }
+    
+    perimeter() {
+        return this.a + this.b + this.c;
+    }
+}
+
+# Utility function
+export fn printShapeInfo(shape) {
+    print("Area: " + shape.area());
+    print("Perimeter: " + shape.perimeter());
+}
+
+

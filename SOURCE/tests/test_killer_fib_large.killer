@@ -1,0 +1,69 @@
+// Test simple Fibonacci
+
+kfn fib_mod(n, mod_val) {
+    if (n == 0) {
+        return 0;
+    }
+    if (n == 1) {
+        return 1;
+    }
+    
+    a = 1;
+    b = 1;
+    c = 1;
+    d = 0;
+    ma = 1;
+    mb = 1;
+    mc = 1;
+    md = 0;
+    exp = n;
+    
+    while (exp > 0) {
+        if ((exp % 2) == 1) {
+            na = (a * ma + b * mc) % mod_val;
+            nb = (a * mb + b * md) % mod_val;
+            nc = (c * ma + d * mc) % mod_val;
+            nd = (c * mb + d * md) % mod_val;
+            a = na;
+            b = nb;
+            c = nc;
+            d = nd;
+        }
+        
+        sa = (ma * ma + mb * mc) % mod_val;
+        sb = (ma * mb + mb * md) % mod_val;
+        sc = (mc * ma + md * mc) % mod_val;
+        sd = (mc * mb + md * md) % mod_val;
+        ma = sa;
+        mb = sb;
+        mc = sc;
+        md = sd;
+        
+        exp = exp / 2;
+    }
+    
+    return b;
+}
+
+MOD = 1000000007;
+
+print("Testing fib(1000000) - Large scale test");
+result = fib_mod(1000000, MOD);
+print("Result: ", result);
+print("Expected: Some value mod 1000000007");
+print("");
+
+print("Testing fib(1000000000) - Extreme scale test");
+result2 = fib_mod(1000000000, MOD);
+print("Result: ", result2);
+print("");
+
+print("Testing fib(1000000000000) - 1 Trillion test");
+result3 = fib_mod(1000000000000, MOD);
+print("Result: ", result3);
+print("");
+
+print("SUCCESS - All large-scale Fibonacci computations complete!");
+print("Killer language successfully handles O(log n) algorithms");
+
+

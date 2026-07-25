@@ -1,0 +1,17 @@
+// Phase 10: Test validate_not_null specifically
+print "=== Test validate_not_null ==="
+print ""
+
+quality data = "hello"
+quality result = data.validate_not_null()
+print "After validate_not_null:"
+print "Status: " + result.get_status()
+print "Is valid: " + result.is_valid()
+let m = result.get_all_metrics()
+print "Completeness: " + m.completeness
+print "Accuracy: " + m.accuracy
+print ""
+
+print "Done"
+
+

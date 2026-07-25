@@ -1,0 +1,23 @@
+// Example: trinary logic in pure Killer syntax (kfn + println).
+// killer_super transpiles this .killer to a native binary; the trinary rules live here.
+
+kfn main() {
+    println("=== trinary_awake.killer ===");
+    let yes = int_to_trit(1);
+    let no = int_to_trit(-1);
+    let unk = int_to_trit(0);
+    println("yes & unknown -> " + trit_word(trit_and(yes, unk)));
+    println("yes | unknown -> " + trit_word(trit_or(yes, unk)));
+    println("no | unknown -> " + trit_word(trit_or(no, unk)));
+    println("not(yes) -> " + trit_word(trit_not(yes)));
+    let clamped = int_to_trit(999);
+    println("int_to_trit(999) word -> " + trit_word(clamped));
+    let sum_tr = trit_add(yes, unk);
+    let sum_int = trit_to_int(sum_tr);
+    println("trit_add(yes, unk) int -> " + sum_int.to_string());
+    let prod_tr = trit_mul(no, yes);
+    let prod_int = trit_to_int(prod_tr);
+    println("trit_mul(no, yes) int -> " + prod_int.to_string());
+    println("--- done ---");
+}
+

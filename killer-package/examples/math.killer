@@ -1,0 +1,31 @@
+kfn add(a, b) {
+  a + b
+}
+
+kfn multiply(a, b) {
+  a * b
+}
+
+kfn factorial(n: Int) -> Int {
+  if n <= 1 {
+    1
+  } else {
+    n * factorial(n - 1)
+  }
+}
+
+kfn main() {
+  println("Math Operations Demo")
+  println("──────────────────")
+  
+  print("add(10, 5) = ")
+  println(add(10, 5).to_string())
+  
+  print("multiply(6, 7) = ")
+  println(multiply(6, 7).to_string())
+  
+  print("factorial(5) = ")
+  println(factorial(5).to_string())
+}
+
+main()

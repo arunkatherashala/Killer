@@ -1,0 +1,23 @@
+#!/usr/bin/env killer
+
+kfn add(a, b) {
+  a + b
+}
+
+kfn multiply(x, y) {
+  x * y
+}
+
+kfn greet(name) {
+  "Hello, " + name
+}
+
+kfn main() {
+  let r1 = add(5, 3)
+  let r2 = multiply(4, 7)
+  let r3 = greet("Killer")
+  
+  println(r1)
+  println(r2)
+  println(r3)
+}

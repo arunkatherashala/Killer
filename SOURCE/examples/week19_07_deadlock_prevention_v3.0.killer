@@ -1,0 +1,93 @@
+// Week 19: Deadlock Detection & Prevention (Concurrency Gap #2)
+// Demonstrates deadlock scenarios and prevention strategies
+// Curriculum: Deadlock, circular wait, resource ordering
+// Status: Week 19 completion (+5%)
+
+kfn deadlockScenario() {
+    print("=== Deadlock Scenario (Circular Wait) ===");
+    print("");
+    
+    // Simulate resources and locks
+    var resource_a = { "locked_by": "none", "name": "Resource A" };
+    var resource_b = { "locked_by": "none", "name": "Resource B" };
+    
+    var thread1_fn = fn() {
+        print("Thread 1: Acquiring Resource A");
+        resource_a["locked_by"] = "Thread1";
+        thread_sleep_ms(100);  // Simulate work
+        
+        print("Thread 1: Waiting for Resource B");
+        // In real system, Thread 2 might have Resource B and be waiting for Resource A
+        // This would cause deadlock
+        print("Thread 1: DEADLOCK if Thread 2 has Resource B");
+    };
+    
+    var thread2_fn = fn() {
+        print("Thread 2: Acquiring Resource B");
+        resource_b["locked_by"] = "Thread2";
+        thread_sleep_ms(100);  // Simulate work
+        
+        print("Thread 2: Waiting for Resource A");
+        print("Thread 2: DEADLOCK if Thread 1 has Resource A");
+    };
+    
+    var t1 = spawn_thread(thread1_fn);
+    var t2 = spawn_thread(thread2_fn);
+    
+    join_thread(t1);
+    join_thread(t2);
+}
+
+kfn deadlockPrevention() {
+    print("");
+    print("=== Deadlock Prevention (Resource Ordering) ===");
+    print("");
+    
+    // Strategy: Always acquire locks in the same order
+    var resources = {
+        "A": { "name": "Resource A", "locked_by": "none" },
+        "B": { "name": "Resource B", "locked_by": "none" }
+    };
+    
+    var acquireInOrder = fn(thread_name, first_res, second_res) {
+        print(`${thread_name}: Acquiring ${first_res.name}`);
+        first_res["locked_by"] = thread_name;
+        thread_sleep_ms(50);
+        
+        print(`${thread_name}: Acquiring ${second_res.name}`);
+        second_res["locked_by"] = thread_name;
+        thread_sleep_ms(50);
+        
+        print(`${thread_name}: Both locks acquired (no deadlock!)`);
+        
+        first_res["locked_by"] = "none";
+        second_res["locked_by"] = "none";
+    };
+    
+    // Both threads acquire A before B (consistent ordering)
+    var t1 = spawn_thread(fn() {
+        acquireInOrder("Thread1", resources["A"], resources["B"]);
+    });
+    
+    var t2 = spawn_thread(fn() {
+        acquireInOrder("Thread2", resources["A"], resources["B"]);
+    });
+    
+    join_thread(t1);
+    join_thread(t2);
+    
+    print("Prevention successful: No deadlock!");
+}
+
+kfn main() {
+    print("Week 19: Deadlock Detection & Prevention");
+    print("========================================");
+    print("");
+    
+    deadlockScenario();
+    deadlockPrevention();
+}
+
+main();
+
+

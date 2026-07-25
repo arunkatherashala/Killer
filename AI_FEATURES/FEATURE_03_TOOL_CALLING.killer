@@ -1,0 +1,371 @@
+// ============================================================================
+// KILLER v2.0 - FEATURE #3: TOOL CALLING
+// Agents autonomously call external functions/tools
+// ============================================================================
+
+// Tool Definition
+record Tool {
+  name: String,
+  description: String,
+  params: Map<String, String>,      // param_name -> description
+  handler: fn(Map<String, Any>) -> String,
+  enabled: Bool
+}
+
+// Tool Call Request (from LLM)
+record ToolCall {
+  tool_name: String,
+  params: Map<String, Any>,
+  reasoning: String
+}
+
+// Tool Result
+record ToolResult {
+  tool_name: String,
+  success: Bool,
+  result: String,
+  error: String,
+  execution_time_ms: Int
+}
+
+// ============================================================================
+// TOOL REGISTRY - Manages available tools
+// ============================================================================
+
+actor ToolRegistry {
+  tools: Map<String, Tool> = {}
+  call_history: List<(String, ToolCall, ToolResult)> = []
+  max_history: Int = 100
+  
+  handle register_tool(name: String, description: String,
+                      params: Map<String, String>,
+                      handler: fn(Map<String, Any>) -> String) {
+    this.tools[name] = Tool {
+      name: name,
+      description: description,
+      params: params,
+      handler: handler,
+      enabled: true
+    }
+  }
+  
+  handle disable_tool(name: String) {
+    tool = this.tools[name]
+    if tool != nil {
+      this.tools[name] = Tool {
+        name: tool.name,
+        description: tool.description,
+        params: tool.params,
+        handler: tool.handler,
+        enabled: false
+      }
+    }
+  }
+  
+  handle enable_tool(name: String) {
+    tool = this.tools[name]
+    if tool != nil {
+      this.tools[name] = Tool {
+        name: tool.name,
+        description: tool.description,
+        params: tool.params,
+        handler: tool.handler,
+        enabled: true
+      }
+    }
+  }
+  
+  handle get_tool(name: String) -> Tool {
+    this.tools[name]
+  }
+  
+  handle list_tools() -> String {
+    descriptions = []
+    for name, tool in this.tools {
+      if tool.enabled {
+        desc = K"Tool: {name}\nDescription: {tool.description}\nParameters: {tool.params.to_string()}"
+        descriptions.push(desc)
+      }
+    }
+    descriptions.join("\n\n")
+  }
+  
+  handle execute_tool(call: ToolCall) -> ToolResult {
+    start_time = time_ms()
+    
+    tool = this.tools[call.tool_name]
+    if tool == nil {
+      return ToolResult {
+        tool_name: call.tool_name,
+        success: false,
+        result: "",
+        error: K"Tool {call.tool_name} not found",
+        execution_time_ms: (time_ms() - start_time) as Int
+      }
+    }
+    
+    if !tool.enabled {
+      return ToolResult {
+        tool_name: call.tool_name,
+        success: false,
+        result: "",
+        error: K"Tool {call.tool_name} is disabled",
+        execution_time_ms: (time_ms() - start_time) as Int
+      }
+    }
+    
+    try {
+      result = tool.handler(call.params)
+      
+      tool_result = ToolResult {
+        tool_name: call.tool_name,
+        success: true,
+        result: result,
+        error: "",
+        execution_time_ms: (time_ms() - start_time) as Int
+      }
+      
+      // Track in history
+      if this.call_history.len() >= this.max_history {
+        this.call_history.remove(0)
+      }
+      this.call_history.push((time_ms().to_string(), call, tool_result))
+      
+      tool_result
+    } catch error {
+      ToolResult {
+        tool_name: call.tool_name,
+        success: false,
+        result: "",
+        error: error.to_string(),
+        execution_time_ms: (time_ms() - start_time) as Int
+      }
+    }
+  }
+  
+  handle get_call_history(limit: Int) -> List<String> {
+    history_items = []
+    for i in (this.call_history.len() - limit)..(this.call_history.len()) {
+      if i >= 0 && i < this.call_history.len() {
+        timestamp, call, result = this.call_history[i]
+        entry = K"{timestamp}: {call.tool_name} -> {result.result.substring(0, 50)}..."
+        history_items.push(entry)
+      }
+    }
+    history_items
+  }
+}
+
+// ============================================================================
+// TOOL CALLING AGENT - Autonomous tool orchestration
+// ============================================================================
+
+actor ToolCallingAgent {
+  registry: ToolRegistry
+  llm_config: any  // Would be OpenAIConfig, Claude, etc.
+  tool_timeout_ms: Int = 30000
+  max_tool_calls_per_query: Int = 5
+  
+  handle initialize(llm_config: any) {
+    this.llm_config = llm_config
+    this.registry = ToolRegistry::spawn()
+  }
+  
+  handle register_tool(name: String, description: String,
+                      params: Map<String, String>,
+                      handler: fn(Map<String, Any>) -> String) {
+    this.registry.register_tool(name, description, params, handler).await
+  }
+  
+  handle disable_tool(name: String) {
+    this.registry.disable_tool(name).await
+  }
+  
+  handle execute_with_tools(query: String) -> String {
+    // Build tool descriptions for LLM
+    tool_descriptions = await this.registry.list_tools()
+    
+    if tool_descriptions.len() == 0 {
+      return K"No tools registered"
+    }
+    
+    // Format system prompt with available tools
+    system_prompt = K"You are a helpful assistant with access to the following tools:\n\n{tool_descriptions}\n\nWhen you need to use a tool, respond with: TOOL_CALL: [tool_name] -> [json_params]"
+    
+    // Would call LLM here - for demo purposes, we simulate
+    llm_response = this.simulate_llm_response(query)
+    
+    // Parse tool calls from LLM response
+    tool_calls = this.parse_tool_calls(llm_response)
+    
+    // Execute each tool call
+    results = []
+    for i in 0..tool_calls.len() {
+      if i >= this.max_tool_calls_per_query {
+        break
+      }
+      
+      call = tool_calls[i]
+      tool_result = await this.registry.execute_tool(call)
+      results.push(tool_result)
+    }
+    
+    // Format results as response
+    response = K"Executed {results.len()} tools:\n"
+    for result in results {
+      if result.success {
+        response = response + K"  ✓ {result.tool_name}: {result.result}\n"
+      } else {
+        response = response + K"  ✗ {result.tool_name}: {result.error}\n"
+      }
+    }
+    
+    response
+  }
+  
+  handle get_tool_history(limit: Int) -> List<String> {
+    await this.registry.get_call_history(limit)
+  }
+  
+  kfn simulate_llm_response(query: String) -> String {
+    K"The user asked: {query}. I will use the search tool. TOOL_CALL: web_search -> {\"query\": \"Killer language AI features\"}"
+  }
+  
+  kfn parse_tool_calls(response: String) -> List<ToolCall> {
+    // Simple parser for TOOL_CALL: [name] -> [json]
+    calls = []
+    
+    // This is simplified - real implementation would use proper JSON parsing
+    if response.contains("TOOL_CALL:") {
+      parts = response.split("TOOL_CALL:")
+      for i in 1..parts.len() {
+        part = parts[i]
+        call_str = part.split("->")[0].trim()
+        
+        params_str = part.split("->")[1]
+        if params_str != nil {
+          call = ToolCall {
+            tool_name: call_str,
+            params: {},  // Would parse JSON here
+            reasoning: "Autonomous tool calling"
+          }
+          calls.push(call)
+        }
+      }
+    }
+    
+    calls
+  }
+}
+
+// ============================================================================
+// EXAMPLE: Multi-Tool Agent System
+// ============================================================================
+
+kfn main() {
+  println("=== KILLER v2.0 Feature #3: Tool Calling ===")
+  
+  // Create agent
+  agent = ToolCallingAgent::spawn()
+  agent.initialize(nil).await
+  
+  // Register tools
+  println("\n🔧 Registering tools...")
+  
+  // Tool 1: Web Search
+  agent.register_tool(
+    "web_search",
+    "Search the web for information",
+    {
+      "query": "What to search for?",
+      "max_results": "How many results (1-10)?"
+    },
+    |params| {
+      query = params["query"].to_string()
+      K"Search results for '{query}': 15 pages found, top result from wikipedia.org"
+    }
+  ).await
+  
+  // Tool 2: Read File
+  agent.register_tool(
+    "read_file",
+    "Read content from a file",
+    {
+      "path": "File path to read",
+      "max_lines": "Maximum lines to read (optional)"
+    },
+    |params| {
+      path = params["path"].to_string()
+      K"File '{path}' contents (first 100 lines): [AI features implementation...]\nTotal: 1,234 lines"
+    }
+  ).await
+  
+  // Tool 3: Execute Query
+  agent.register_tool(
+    "execute_query",
+    "Execute a database query",
+    {
+      "query": "SQL query to execute",
+      "database": "Which database?"
+    },
+    |params| {
+      query = params["query"].to_string()
+      K"Query executed successfully: 42 rows returned, response time: 145ms"
+    }
+  ).await
+  
+  println("✓ 3 tools registered")
+  
+  // Execute with tools
+  println("\n🤖 Agent thinking with tools...")
+  result = agent.execute_with_tools("Find me info about P vs NP and read details").await
+  println(result)
+  
+  // Show tool history
+  println("\n📜 Tool Call History:")
+  history = agent.get_tool_history(5).await
+  for entry in history {
+    println(K"  {entry}")
+  }
+  
+  println("\n✅ Feature #3 (Tool Calling) Complete!")
+}
+
+// ============================================================================
+// ADVANCED PATTERNS
+// ============================================================================
+
+// Multi-step tool orchestration
+kfn advanced_tool_workflow(agent: ToolCallingAgent, task: String) -> String {
+  // Step 1: Search for information
+  step1 = agent.execute_with_tools(K"Search for: {task}").await
+  
+  // Step 2: Could store in database
+  // step2 = agent.execute_with_tools("Store results in database").await
+  
+  // Step 3: Could get history
+  // step3 = agent.execute_with_tools("Get query history").await
+  
+  step1
+}
+
+// Tool safety wrapper
+kfn safe_tool_call(
+  agent: ToolCallingAgent,
+  query: String,
+  max_retries: Int
+) -> String {
+  retry_count = 0
+  
+  loop {
+    try {
+      result = agent.execute_with_tools(query).await
+      return result
+    } catch error {
+      retry_count = retry_count + 1
+      if retry_count >= max_retries {
+        return K"Failed after {max_retries} retries: {error.to_string()}"
+      }
+    }
+  }
+}

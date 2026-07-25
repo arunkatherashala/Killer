@@ -1,0 +1,83 @@
+// ACTIVE Q&A AGENT - SIMPLE VERSION
+// Interactive question-answering agent
+// Date: March 19, 2026
+
+kfn main() {
+  println("╔═══════════════════════════════════════════╗")
+  println("║  KILLER ACTIVE Q&A AGENT                 ║")
+  println("║  Ask me anything! Type 'exit' to quit     ║")
+  println("╚═══════════════════════════════════════════╝")
+  println("")
+  
+  let mut conversation_count = 0
+  
+  loop {
+    print("You: ")
+    let user_input = read_line()
+    
+    if user_input == "exit" || user_input == "quit" {
+      println("")
+      println("Agent: Goodbye! Thank you for chatting.")
+      break
+    }
+    
+    if user_input == "" {
+      continue
+    }
+    
+    conversation_count = conversation_count + 1
+    let answer = answer_question(user_input)
+    println("Agent: " + answer)
+    println("")
+  }
+  
+  println("")
+  println("═══════════════════════════════════════")
+  println("Chat ended. Questions answered: " + conversation_count.to_string())
+  println("═══════════════════════════════════════")
+}
+
+kfn answer_question(question: String) -> String {
+  let lower = question.to_lower()
+  
+  if lower.contains("killer") && lower.contains("language") {
+    return "Killer is a high-performance programming language with: actors for concurrency, pattern matching, type system, and JIT compilation. Designed for distributed systems, real-time applications, and systems programming."
+  }
+  
+  if lower.contains("agent") {
+    return "An agent is an autonomous entity that can reason, remember facts, take actions, and observe results. Killer agents use chain-of-thought reasoning and can be organized in swarms for collaborative problem-solving."
+  }
+  
+  if lower.contains("performance") {
+    return "Killer achieves ~1-2M operations/sec on single-threaded workloads, and 1000+ req/sec through its actor-based concurrency model."
+  }
+  
+  if lower.contains("how") && lower.contains("actor") {
+    return "Actors are created with spawn(), messages are sent with send(), and responses are awaited with await. Killer's actor model automatically manages concurrency without explicit threading."
+  }
+  
+  if lower.contains("deploy") || lower.contains("production") {
+    return "Killer supports cloud deployment via Docker, Kubernetes, and serverless platforms. Use blue-green, canary, or rolling deployments for safe updates."
+  }
+  
+  if lower.contains("why") {
+    return "The reason is: Through the combination of core principles, architectural design, and system implementation, this demonstrates important concepts in distributed systems."
+  }
+  
+  if lower.contains("how") {
+    return "The steps are: 1) prepare, 2) initialize, 3) execute, 4) monitor, 5) complete. Each step builds on the previous one."
+  }
+  
+  if lower.contains("what") {
+    return "This is a fundamental concept characterized by distinct properties and behaviors in the system."
+  }
+  
+  return "That's an interesting question! Based on available information and reasoning patterns, I'd say: This demonstrates important principles of system design and demonstrates knowledge sharing."
+}
+
+kfn read_line() -> String {
+  // Reading from stdin
+  return input()
+}
+
+

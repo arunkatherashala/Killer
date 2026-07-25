@@ -1,0 +1,136 @@
+// TEST SUITE: Stress - High-load, memory, performance
+kfn assert(condition, message) {
+    if(condition == false) {
+        print("[ERROR] " + message);
+        throw message;
+    }
+}
+
+// Large array (1000 elements)
+arr = [];
+i = 0;
+while(i < 1000) {
+    arr.push(i);
+    i = i + 1;
+}
+assert(arr.length == 1000, "large array failed");
+assert(arr[0] == 0, "array[0] failed");
+assert(arr[999] == 999, "array[999] failed");
+print("TEST 1: Large array - PASS");
+
+// Large object (100 keys)
+obj = {};
+i = 0;
+while(i < 100) {
+    obj["key" + i] = i;
+    i = i + 1;
+}
+assert(obj["key0"] == 0, "obj key0 failed");
+assert(obj["key99"] == 99, "obj key99 failed");
+print("TEST 2: Large object - PASS");
+
+// Deep recursion
+kfn recSum(n) {
+    if(n <= 0) return 0;
+    return n + recSum(n - 1);
+}
+result = recSum(100);
+assert(result == 5050, "recursion failed");
+print("TEST 3: Deep recursion - PASS");
+
+// Nested loops
+count = 0;
+i = 0;
+while(i < 100) {
+    j = 0;
+    while(j < 100) {
+        count = count + 1;
+        j = j + 1;
+    }
+    i = i + 1;
+}
+assert(count == 10000, "nested loops failed");
+print("TEST 4: Nested loops - PASS");
+
+// Large string concat
+str = "";
+i = 0;
+while(i < 1000) {
+    str = str + "x";
+    i = i + 1;
+}
+assert(str.length == 1000, "string concat failed");
+print("TEST 5: String concat - PASS");
+
+// Array map (1000 elements)
+arr = [];
+i = 0;
+while(i < 1000) {
+    arr.push(i);
+    i = i + 1;
+}
+double = fn(x) { return x * 2; };
+doubled = arr.map(double);
+assert(doubled.length == 1000, "map len failed");
+assert(doubled[500] == 1000, "map[500] failed");
+print("TEST 6: Array map stress - PASS");
+
+// Array filter (1000 elements)
+arr = [];
+i = 0;
+while(i < 1000) {
+    arr.push(i);
+    i = i + 1;
+}
+isEven = fn(x) { return x % 2 == 0; };
+evens = arr.filter(isEven);
+assert(evens.length == 500, "filter len failed");
+print("TEST 7: Array filter stress - PASS");
+
+// Array reduce (1000 elements)
+arr = [];
+i = 0;
+while(i < 1000) {
+    arr.push(i);
+    i = i + 1;
+}
+add = fn(acc, x) { return acc + x; };
+sum = arr.reduce(add);
+assert(sum == 499500, "reduce sum failed");
+print("TEST 8: Array reduce stress - PASS");
+
+// Generator (1000 yields)
+kfn manyYields(n) {
+    i = 0;
+    while(i < n) {
+        yield i;
+        i = i + 1;
+    }
+}
+gen = manyYields(1000);
+count = 0;
+while(true) {
+    v = next(gen);
+    if(v == null) break;
+    count = count + 1;
+}
+assert(count == 1000, "gen count failed");
+print("TEST 9: Generator stress - PASS");
+
+// Many function calls
+kfn addOne(x) {
+    return x + 1;
+}
+count = 0;
+i = 0;
+while(i < 1000) {
+    result = addOne(i);
+    count = count + 1;
+    i = i + 1;
+}
+assert(count == 1000, "calls failed");
+print("TEST 10: Function calls - PASS");
+
+print("STRESS TESTING: COMPLETE");
+
+

@@ -1,0 +1,7 @@
+kfn multiply(x, y)
+  m = x * y
+
+kfn main()
+  num1 = 5
+  num2 = 7
+  multiply(num1, num2)

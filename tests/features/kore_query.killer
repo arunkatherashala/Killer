@@ -1,0 +1,3 @@
+﻿question = "What is KORE format"
+result = khlm_classify(question)
+print(result)

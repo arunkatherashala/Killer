@@ -1,0 +1,359 @@
+## =============================================================================
+## KILLER LANGUAGE - COMPREHENSIVE SYNTAX SHOWCASE
+## =============================================================================
+## This program demonstrates all major Killer language features
+## Version: 4.2 | Date: March 20, 2026
+## =============================================================================
+
+# ===========================================================================
+# 1. TYPES & CONSTANTS
+# ===========================================================================
+
+MAX_USERS = 1000          # Global constant - Int inferred
+PI = 3.14159              # Float inferred
+APP_NAME = "KillerApp"    # String inferred
+
+# ===========================================================================
+# 2. CUSTOM TYPES & STRUCTS
+# ===========================================================================
+
+type User
+  name
+  age
+  email: String               # Mixed: explicit where it matters
+
+type Point
+  x: Int
+  y: Int
+
+# ===========================================================================
+# 3. ENUMS & PATTERN MATCHING
+# ===========================================================================
+
+enum Status
+  Active
+  Inactive
+  Pending
+
+enum Result<T, E>
+  Ok(value: T)
+  Err(error: E)
+
+enum Message
+  Text(content)               # String inferred
+  Number(value)               # Int inferred
+  Empty
+
+# ===========================================================================
+# 4. SIMPLE FUNCTIONS (TYPE INFERENCE)
+# ===========================================================================
+
+## Add two numbers - types inferred from usage
+kfn add(a, b)
+  a + b
+
+## Greet a user
+kfn greet(name)
+  print("Hello, " + name)
+
+## Calculate area of rectangle - Killer philosophy: no types needed, only when explicit is required
+kfn rectangle_area(width, height)
+  width * height
+
+# ===========================================================================
+# 5. FUNCTIONS WITH RETURN VALUES
+# ===========================================================================
+
+## Multiple return values using tuples
+kfn divide(dividend, divisor)
+  (dividend / divisor, dividend % divisor)
+
+## Return Option type - Simplest syntax
+## Killer: Clean and safe - compiler enforces handling both cases
+kfn find_user(users, user_id)
+  if users user_id
+    users[user_id]
+  else
+    None
+
+## Using it - automatic destructuring in match:
+match find_user(users, "alice")
+  print("Found: " + user)
+  print("Not found")
+
+## Return Result type
+kfn safe_divide(a: Int, b: Int)
+  if b == 0
+    Result::Err("Division by zero")
+  else
+    Result::Ok(a / b)
+
+# ===========================================================================
+# 6. CLOSURES & HIGHER-ORDER FUNCTIONS
+# ===========================================================================
+
+## Closure - simple inline function
+increment = |x| x + 1
+
+## Closure with multiple parameters
+multiply = |x, y| x * y
+
+## Function that takes a function
+kfn apply_operation(a, b, op)
+  op(a, b)
+
+## Function that returns a function
+kfn create_adder(factor)
+  |x| x + factor
+
+# ===========================================================================
+# 7. CONTROL FLOW
+# ===========================================================================
+
+kfn process_score(score)
+  if score >= 90
+    print("Grade: A")
+  else if score >= 80
+    print("Grade: B")
+  else if score >= 70
+    print("Grade: C")
+  else
+    print("Grade: F")
+
+kfn demo_loops
+  ## For loop with range
+  for i in 0..5
+    print(i.to_string())
+  
+  ## For loop with collection
+  items = ["apple", "banana", "cherry"]
+  for item in items
+    print(item)
+  
+  ## While loop
+  count = 0
+  while count < 3
+    print(count.to_string())
+    count = count + 1
+  
+  ## Loop control
+  for i in 0..10
+    if i == 5
+      break
+    print(i.to_string())
+
+# ===========================================================================
+# 8. COLLECTIONS
+# ===========================================================================
+
+kfn demo_collections
+  ## Lists - types inferred
+  numbers = [1, 2, 3, 4, 5]
+  names = ["Alice", "Bob", "Charlie"]
+  
+  ## List operations
+  numbers.append(6)
+  first = numbers[0]
+  length = numbers.len()
+  has_3 = numbers.contains(3)
+  
+  ## Maps - types inferred
+  person = {
+    "name": "Alice",
+    "age": "30",
+    "city": "Portland"
+  }
+  
+  ## Map access
+  name = person["name"]
+  has_email = person.contains("email")
+  
+  ## Tuples
+  point = (10, 20)
+  x = point[0]
+  y = point[1]
+  
+  ## Destructuring
+  (a, b) = (1, 2)
+  (user_name, user_age, user_city) = ("Bob", 25, "NYC")
+
+# ===========================================================================
+# 9. PATTERN MATCHING
+# ===========================================================================
+
+kfn describe_status(status)
+  match status
+    Status::Active -> print("User is active")
+    Status::Inactive -> print("User is inactive")
+    Status::Pending -> print("User is pending")
+
+kfn process_message(msg)
+  match msg
+    Message::Text(content) -> print("Text: " + content)
+    Message::Number(value) -> print("Number: " + value.to_string())
+    Message::Empty -> print("Empty message")
+
+kfn handle_result(result)
+  match result
+    Result::Ok(value) -> print("Success: " + value.to_string())
+    Result::Err(error) -> print("Error: " + error)
+
+## Pattern matching with guards
+kfn categorize_age(age)
+  match age
+    _ if age < 18 -> print("Minor")
+    _ if age < 65 -> print("Adult")
+    _ -> print("Senior")
+
+# ===========================================================================
+# 10. ACTORS & CONCURRENCY
+# ===========================================================================
+
+actor Counter
+  count = 0
+  
+  handle increment(value)
+    count = count + value
+  
+  handle decrement(value)
+    count = count - value
+  
+  handle get_count()
+    count
+
+actor UserService
+  users = {}
+  
+  handle register(user_id, name, email)
+    user = User(name: name, age: 0, email: email)
+    users[user_id] = user
+    "User registered: " + user_id
+  
+  handle get_user(user_id)
+    if users.contains(user_id)
+      Result::Ok(users[user_id])
+    else
+      Result::Err("User not found")
+
+# ===========================================================================
+# 11. REAL DEMO FUNCTION
+# ===========================================================================
+
+kfn main
+  print("=== KILLER LANGUAGE SYNTAX SHOWCASE ===")
+  print("")
+  
+  ## 1. Basic function calls
+  print("1. BASIC FUNCTIONS:")
+  sum = add(5, 3)
+  print("add(5, 3) = " + sum.to_string())
+  print("")
+  
+  ## 2. Collections
+  print("2. COLLECTIONS:")
+  numbers = [1, 2, 3, 4, 5]
+  print("List: " + numbers.to_string())
+  point = (10, 20)
+  print("Tuple: " + point.to_string())
+  print("")
+  
+  ## 3. Functions with tuples
+  print("3. TUPLE RETURNS:")
+  (quotient, remainder) = divide(17, 5)
+  print("17 / 5 = " + quotient.to_string() + " R" + remainder.to_string())
+  print("")
+  
+  ## 4. Closures
+  print("4. CLOSURES:")
+  add_ten = |x| x + 10
+  print("add_ten(5) = " + add_ten(5).to_string())
+  print("")
+  
+  ## 5. Higher-order functions
+  print("5. HIGHER-ORDER FUNCTIONS:")
+  result = apply_operation(10, 5, add)
+  print("apply_operation(10, 5, add) = " + result.to_string())
+  print("")
+  
+  ## 6. Pattern matching
+  print("6. PATTERN MATCHING:")
+  describe_status(Status::Active)
+  process_message(Message::Text("Hello"))
+  process_message(Message::Number(42))
+  print("")
+  
+  ## 7. Actors
+  print("7. ACTORS:")
+  counter = Counter::spawn()
+  counter.increment(5).await
+  counter.increment(3).await
+  count = counter.get_count().await
+  print("Counter: " + count.to_string())
+  print("")
+  
+  ## 8. Enums with data
+  my_message = Message::Text("This is Killer!")
+  process_message(my_message)
+  print("")
+  
+  ## 9. Result type
+  print("8. ERROR HANDLING:")
+  match safe_divide(20, 4)
+    Result::Ok(value) -> print("20 / 4 = " + value.to_string())
+    Result::Err(error) -> print("Error: " + error)
+  
+  match safe_divide(20, 0)
+    Result::Ok(value) -> print("20 / 0 = " + value.to_string())
+    Result::Err(error) -> print("Error: " + error)
+  print("")
+  
+  ## 10. Type creation
+  print("9. TYPES:")
+  user = User(name: "Alice", age: 30, email: "alice@example.com")
+  print("User: " + user.name + ", Age: " + user.age.to_string())
+  print("")
+  
+  print("=== END OF SHOWCASE ===")
+
+# ===========================================================================
+# OPTIONAL: MORE ADVANCED PATTERNS
+# ===========================================================================
+
+## Nested types
+kfn demo_nested_types
+  matrix = [
+    [1, 2, 3],
+    [4, 5, 6],
+    [7, 8, 9]
+  ]
+  print(matrix[0][0])  ## 1
+
+## Function composition
+kfn compose(f, g)
+  |x| f(g(x))
+
+## Filtering and transformations
+kfn demo_transformations
+  numbers = [1, 2, 3, 4, 5]
+  
+  ## Filter even numbers
+  evens = []
+  for n in numbers
+    if n % 2 == 0
+      evens.append(n)
+  
+  ## Transform (double each)
+  doubled = []
+  for n in numbers
+    doubled.append(n * 2)
+  
+  ## Sum
+  total = 0
+  for n in numbers
+    total = total + n
+  
+  print("Sum: " + total.to_string())
+
+# ===========================================================================
+# END OF SHOWCASE
+# ===========================================================================

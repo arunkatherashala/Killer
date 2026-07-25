@@ -1,0 +1,14 @@
+model = "C:/Users/skathera/.killer/models/qwen2.5-0.5b-instruct-q4_k_m.gguf"
+
+print("=== LLM-as-RLM Test ===")
+print("Model: qwen2.5-0.5b (standard LLM, no reasoning training needed)")
+print("")
+
+print("Test 1: llm_reason — full trace + answer")
+result = llm_reason(model, "What is 17 * 23? Show your work.", 400)
+print(result)
+print("")
+
+print("Test 2: llm_reason_answer — clean answer only")
+ans = llm_reason_answer(model, "What is the capital of France?", 300)
+print(ans)

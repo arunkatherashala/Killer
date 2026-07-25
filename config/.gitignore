@@ -1,0 +1,68 @@
+# Build & Compilation
+target/
+Cargo.lock
+_TEMP/
+
+# Python Environment
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# IDE & Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary Files
+*.tmp
+*.log
+compile_check.log
+build_output.txt
+
+# Cache
+.cache*/
+.cargo/
+jetbrains_plugin/
+
+# Test Artifacts
+test_output.txt
+test_results.txt
+fib_output.txt
+*.bc
+*.ll
+*.out
+
+# Archived Work (keep locally, don't commit)
+_ARCHIVE/**
+_TEMP/**
+backup/
+
+# Build Artifacts
+*.exe
+*.pdb
+*.o
+*.rcgu.o
+
+# Old Releases (keep in _ARCHIVE/OLD_RELEASES)
+RELEASE_*
+release_v*
+
+# Deployment
+deployment.toml
+docker-compose.yml
+Dockerfile
+
+# Python Test Scripts (keep in SOURCE)
+fix_test_*.py
+run_fresh_baseline.py
+
+# Specific Commit Exclusions
+# Phase/Week docs are archived, not needed in git history

@@ -1,0 +1,5 @@
+model = "C:/Users/skathera/.killer/models/qwen2.5-0.5b-instruct-q4_k_m.gguf"
+print("Testing llm_chat basic...")
+result = llm_chat(model, "What is 2 + 2?", 50)
+print(result)
+print("Done.")

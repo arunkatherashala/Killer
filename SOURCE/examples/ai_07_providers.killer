@@ -1,0 +1,264 @@
+// Example: AI Provider Configuration and Management
+// Demonstrates how to switch between different AI providers and manage configurations
+
+kfn main() {
+    print("=== AI Provider Configuration Example ===\n");
+    print("Learn how to configure and switch between AI providers.\n\n");
+    
+    // Example 1: Default OpenAI Configuration
+    print("=== Example 1: OpenAI Provider (Cloud-based) ===\n\n");
+    
+    print("Setting up OpenAI provider...\n");
+    let openai_config = {
+        "api_key": "sk-your-api-key",
+        "model": "gpt-4",
+        "temperature": 0.7,
+        "max_tokens": 500
+    };
+    
+    let openai_set = ai_provider_set("openai", openai_config);
+    print("OpenAI configured: ");
+    print(openai_set);
+    print("\n\n");
+    
+    // Get provider info
+    let openai_info = ai_provider_get("openai");
+    print("OpenAI Provider Info:\n");
+    print("  Model: ");
+    print(openai_info["model"]);
+    print("\n");
+    print("  Temperature: ");
+    print(openai_info["temperature"]);
+    print("\n");
+    print("  Max Tokens: ");
+    print(openai_info["max_tokens"]);
+    print("\n\n");
+    
+    // Use OpenAI for generation
+    print("Generating text with OpenAI...\n");
+    let response = ai_generate("Write a haiku about AI");
+    print("Generated: ");
+    print(response);
+    print("\n\n");
+    
+    // Example 2: Local ONNX Provider Configuration
+    print("=== Example 2: Local ONNX Provider (On-Device) ===\n\n");
+    
+    print("Switching to Local ONNX provider...\n");
+    let local_config = {
+        "model_path": "./models/onnx",
+        "runtime": "onnxruntime",
+        "device": "auto",
+        "precision": "float32"
+    };
+    
+    let local_set = ai_provider_set("local", local_config);
+    print("Local provider configured: ");
+    print(local_set);
+    print("\n\n");
+    
+    let local_info = ai_provider_get("local");
+    print("Local Provider Info:\n");
+    print("  Model Path: ");
+    print(local_info["model_path"]);
+    print("\n");
+    print("  Runtime: ");
+    print(local_info["runtime"]);
+    print("\n");
+    print("  Device: ");
+    print(local_info["device"]);
+    print("\n\n");
+    
+    // Use local provider
+    print("Inferring with local model...\n");
+    let local_result = ai_local_infer(
+        "./models/onnx/bert",
+        "Test input text"
+    );
+    print("Local inference completed\n");
+    print("Latency: ");
+    print(local_result["latency_ms"]);
+    print("ms\n\n");
+    
+    // Example 3: Caching Configuration
+    print("=== Example 3: Enabling AI Caching ===\n\n");
+    
+    print("Enabling response caching...\n");
+    let cache_enabled = ai_cache_enable("lru");
+    print("Cache enabled: ");
+    print(cache_enabled);
+    print("\n\n");
+    
+    print("Benefits of caching:\n");
+    print("  ✓ Faster response times for repeated queries\n");
+    print("  ✓ Reduced API costs\n");
+    print("  ✓ Better user experience\n");
+    print("  ✓ Offline capability for cached results\n\n");
+    
+    // Test caching with repeated requests
+    print("Testing cache effectiveness...\n");
+    
+    let queries = [
+        "What is machine learning?",
+        "What is machine learning?",  // Same query - should be cached
+        "What is deep learning?",
+        "What is machine learning?"   // Same again - should be cached
+    ];
+    
+    for i in range(0, len(queries)) {
+        let query = queries[i];
+        print((i + 1));
+        print(". Querying: ");
+        print(query);
+        print("\n");
+        
+        let result = ai_generate(query);
+        print("   Response: ");
+        print(result);
+        print("\n\n");
+    }
+    
+    // Example 4: Provider Comparison
+    print("=== Example 4: Provider Comparison ===\n\n");
+    
+    let providers_config = {
+        "OpenAI": {
+            "type": "cloud",
+            "latency": "500-2000ms",
+            "cost": "Pay per token",
+            "requires_internet": true,
+            "privacy": "Requests sent to OpenAI servers"
+        },
+        "Local": {
+            "type": "on-device",
+            "latency": "50-500ms",
+            "cost": "One-time model download",
+            "requires_internet": false,
+            "privacy": "No data leaves your machine"
+        }
+    };
+    
+    print("Feature Comparison:\n\n");
+    
+    for provider_name in ["OpenAI", "Local"] {
+        let config = providers_config[provider_name];
+        print(provider_name);
+        print(":\n");
+        print("  Type: ");
+        print(config["type"]);
+        print("\n");
+        print("  Typical Latency: ");
+        print(config["latency"]);
+        print("\n");
+        print("  Cost Model: ");
+        print(config["cost"]);
+        print("\n");
+        print("  Internet Required: ");
+        print(config["requires_internet"]);
+        print("\n");
+        print("  Privacy: ");
+        print(config["privacy"]);
+        print("\n\n");
+    }
+    
+    // Example 5: Switching Strategies
+    print("=== Example 5: Switching Providers Based on Context ===\n\n");
+    
+    print("Strategy 1: Use Local for Latency-Sensitive Operations\n");
+    let fast_config = {
+        "model_path": "./models/fast",
+        "priority": "speed"
+    };
+    ai_provider_set("local", fast_config);
+    print("  Switched to local provider for speed\n\n");
+    
+    print("Strategy 2: Use OpenAI for Maximum Accuracy\n");
+    let accuracy_config = {
+        "model": "gpt-4",
+        "temperature": 0.0,
+        "max_tokens": 2000
+    };
+    ai_provider_set("openai", accuracy_config);
+    print("  Switched to OpenAI for accuracy\n\n");
+    
+    print("Strategy 3: Hybrid Approach\n");
+    print("  Launch local model for preliminary results\n");
+    print("  Fall back to OpenAI if needed\n");
+    print("  Cache all results for fast reuse\n\n");
+    
+    // Example 6: Cache Management
+    print("=== Example 6: Cache Management ===\n\n");
+    
+    print("Clearing cache to start fresh...\n");
+    let clear_result = ai_cache_clear();
+    print("Cache cleared: ");
+    print(clear_result);
+    print("\n\n");
+    
+    print("Cache statistics would show:\n");
+    print("  - Total requests cached\n");
+    print("  - Cache hit rate\n");
+    print("  - Memory usage\n");
+    print("  - LRU eviction count\n\n");
+    
+    // Example 7: Configuration Profiles
+    print("=== Example 7: Predefined Configuration Profiles ===\n\n");
+    
+    let profiles = {
+        "development": {
+            "provider": "local",
+            "cache": true,
+            "debug": true
+        },
+        "production": {
+            "provider": "openai",
+            "cache": true,
+            "debug": false,
+            "rate_limit": true
+        },
+        "privacy_first": {
+            "provider": "local",
+            "cache": false,
+            "debug": false
+        }
+    };
+    
+    print("Available Configuration Profiles:\n");
+    for profile_name in ["development", "production", "privacy_first"] {
+        print("\n");
+        print(profile_name);
+        print(":\n");
+        let profile = profiles[profile_name];
+        
+        if profile_name == "development" {
+            print("  Use local models with caching and debug logging\n");
+        }
+        if profile_name == "production" {
+            print("  Use cloud API with caching and rate limiting\n");
+        }
+        if profile_name == "privacy_first" {
+            print("  Use local models without caching for maximum privacy\n");
+        }
+    }
+    
+    print("\n");
+    
+    // Final recommendations
+    print("=== Configuration Recommendations ===\n\n");
+    
+    print("Choose OpenAI when:\n");
+    print("  • Maximum accuracy is needed\n");
+    print("  • You have an internet connection\n");
+    print("  • Cost is not a concern\n");
+    print("  • You want latest models\n\n");
+    
+    print("Choose Local when:\n");
+    print("  • Speed is critical\n");
+    print("  • Privacy is important\n");
+    print("  • No internet connection available\n");
+    print("  • You want predictable costs\n\n");
+    
+    print("=== Configuration Example Complete ===\n");
+}
+
+

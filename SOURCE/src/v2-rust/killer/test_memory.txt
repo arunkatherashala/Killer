@@ -1,0 +1,797 @@
+﻿cargo : warning: unused import: `crate::builtin::BuiltinFunctions`
+At line:1 char:1
++ cargo test --lib memory_optimization 2>&1 | Out-File test_memory.txt  ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (warning: unused...iltinFunctions` 
+   :String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+ --> src\vm.rs:6:5
+  |
+6 | use crate::builtin::BuiltinFunctions;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused imports: `GCStrategy` and `OptimizationLevel`
+  --> src\vm.rs:11:97
+   |
+11 | use crate::runtime_optimization::{HotCodeDetector, BasecodeJITCompiler, 
+ArithmeticLoopFastPath, OptimizationLevel, GCStrategy};
+   |                                                                           
+                      ^^^^^^^^^^^^^^^^^  ^^^^^^^^^^
+
+warning: unused import: `std::mem`
+  --> src\native_codegen.rs:13:5
+   |
+13 | use std::mem;
+   |     ^^^^^^^^
+
+warning: unused import: `crate::lexer`
+ --> src\formatter.rs:7:5
+  |
+7 | use crate::lexer;
+  |     ^^^^^^^^^^^^
+
+warning: unused import: `std::collections::HashMap`
+ --> src\config.rs:8:5
+  |
+8 | use std::collections::HashMap;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `std::collections::HashMap`
+ --> src\types_module.rs:6:5
+  |
+6 | use std::collections::HashMap;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `Duration`
+ --> src\datetime_module.rs:5:41
+  |
+5 | use std::time::{SystemTime, UNIX_EPOCH, Duration};
+  |                                         ^^^^^^^^
+
+warning: unused import: `BTreeMap`
+ --> src\data_engineering.rs:4:33
+  |
+4 | use std::collections::{HashMap, BTreeMap};
+  |                                 ^^^^^^^^
+
+warning: unused import: `std::collections::HashMap`
+ --> src\ml_module.rs:4:5
+  |
+4 | use std::collections::HashMap;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::value::Value`
+ --> src\ml_module.rs:5:5
+  |
+5 | use crate::value::Value;
+  |     ^^^^^^^^^^^^^^^^^^^
+
+warning: unnecessary parentheses around closure body
+   --> src\ml_module.rs:241:55
+    |
+241 |         Ok(a.data.iter().zip(&b.data).filter(|(x, y)| (x != y)).count())
+    |                                                       ^      ^
+    |
+    = note: `#[warn(unused_parens)]` (part of `#[warn(unused)]`) on by default
+help: remove these parentheses
+    |
+241 -         Ok(a.data.iter().zip(&b.data).filter(|(x, y)| (x != y)).count())
+241 +         Ok(a.data.iter().zip(&b.data).filter(|(x, y)| x != y).count())
+    |
+
+warning: unused import: `crate::value::Value`
+ --> src\web_framework.rs:5:5
+  |
+5 | use crate::value::Value;
+  |     ^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::value::Value`
+ --> src\package_manager.rs:5:5
+  |
+5 | use crate::value::Value;
+  |     ^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::value::Value`
+ --> src\plugin_architecture.rs:5:5
+  |
+5 | use crate::value::Value;
+  |     ^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `std::sync::Arc`
+ --> src\spark\dataframe.rs:6:5
+  |
+6 | use std::sync::Arc;
+  |     ^^^^^^^^^^^^^^
+
+warning: unused import: `Field`
+ --> src\spark\dataframe.rs:8:36
+  |
+8 | use crate::spark::schema::{Schema, Field, DataType};
+  |                                    ^^^^^
+
+warning: unused import: `crate::value::Value`
+ --> src\spark\ml.rs:5:5
+  |
+5 | use crate::value::Value;
+  |     ^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `std::collections::HashMap`
+ --> src\spark\ml.rs:6:5
+  |
+6 | use std::collections::HashMap;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `std::collections::VecDeque`
+ --> src\spark\streaming.rs:5:5
+  |
+5 | use std::collections::VecDeque;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `Arc` and `Mutex`
+ --> src\spark\streaming.rs:6:17
+  |
+6 | use std::sync::{Arc, Mutex};
+  |                 ^^^  ^^^^^
+
+warning: unused import: `WebServer`
+ --> src\http_server.rs:9:75
+  |
+9 | use crate::web_framework::{HttpRequest, HttpResponse, HttpMethod, Router, 
+WebServer, StatusCode};
+  |                                                                           
+^^^^^^^^^
+
+warning: unused import: `crate::value::Value`
+ --> src\http_bindings.rs:6:5
+  |
+6 | use crate::value::Value;
+  |     ^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `std::collections::HashMap`
+ --> src\http_bindings.rs:7:5
+  |
+7 | use std::collections::HashMap;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `InsertBuilder` and `UpdateBuilder`
+ --> src\orm_helpers.rs:7:42
+  |
+7 | use crate::query_builder::{QueryBuilder, InsertBuilder, UpdateBuilder};
+  |                                          ^^^^^^^^^^^^^  ^^^^^^^^^^^^^
+
+warning: unused import: `DatabaseError`
+ --> src\async_database.rs:7:40
+  |
+7 | use crate::database::{Connection, Row, DatabaseError};
+  |                                        ^^^^^^^^^^^^^
+
+warning: unused import: `AsyncTask`
+ --> src\async_database.rs:8:36
+  |
+8 | use crate::async_runtime::{Future, AsyncTask, FutureState};
+  |                                    ^^^^^^^^^
+
+warning: unused imports: `AsyncTask`, `FutureState`, and `Promise`
+ --> src\async_http.rs:6:36
+  |
+6 | use crate::async_runtime::{Future, Promise, AsyncTask, FutureState};
+  |                                    ^^^^^^^  ^^^^^^^^^  ^^^^^^^^^^^
+
+warning: unused import: `GlobalAlloc`
+ --> src\memory_optimization.rs:7:18
+  |
+7 | use std::alloc::{GlobalAlloc, Layout};
+  |                  ^^^^^^^^^^^
+
+warning: unused variable: `fn_id`
+    --> src\compiler.rs:1294:17
+     |
+1294 |             let fn_id = state.function_counter;
+     |                 ^^^^^ help: if this is intentional, prefix it with an 
+underscore: `_fn_id`
+     |
+     = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by 
+default
+
+warning: unused variable: `start_pos`
+   --> src\parser.rs:661:21
+    |
+661 |                 let start_pos = self.position;
+    |                     ^^^^^^^^^ help: if this is intentional, prefix it 
+with an underscore: `_start_pos`
+
+warning: unused variable: `remainder`
+    --> src\vm.rs:3102:13
+     |
+3102 |         let remainder = iterations % chunk_size;
+     |             ^^^^^^^^^ help: if this is intentional, prefix it with an 
+underscore: `_remainder`
+
+warning: unused variable: `saved_scopes_len`
+    --> src\vm.rs:3371:20
+     |
+3371 |                let saved_scopes_len = self.scopes.len();
+     |                    ^^^^^^^^^^^^^^^^ help: if this is intentional, 
+prefix it with an underscore: `_saved_scopes_len`
+
+warning: unused variable: `value`
+   --> src\objects.rs:102:37
+    |
+102 |                         if let Some(value) = 
+obj_inst.fields.get(method_name) {
+    |                                     ^^^^^ help: if this is intentional, 
+prefix it with an underscore: `_value`
+
+warning: unused variable: `last_start`
+   --> src\instruction_cache.rs:124:26
+    |
+124 |             if let Some((last_start, last_end)) = merged.last_mut() {
+    |                          ^^^^^^^^^^ help: if this is intentional, prefix 
+it with an underscore: `_last_start`
+
+warning: variable does not need to be mutable
+   --> src\memoization.rs:112:17
+    |
+112 |             let mut removed = 0;
+    |                 ----^^^^^^^
+    |                 |
+    |                 help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `count`
+   --> src\adaptive_compiler.rs:102:34
+    |
+102 |         if let Some((_type_name, count)) = stats.dominant_type() {
+    |                                  ^^^^^ help: if this is intentional, 
+prefix it with an underscore: `_count`
+
+warning: variable does not need to be mutable
+   --> src\vector_optimizer.rs:101:13
+    |
+101 |         let mut optimized = base_code.to_vec();
+    |             ----^^^^^^^^^
+    |             |
+    |             help: remove this `mut`
+
+warning: unused variable: `threats1`
+   --> src\threat_intelligence.rs:371:13
+    |
+371 |         let threats1 = engine.analyze_event("container1", "execve", 
+None, "Blocked syscall");
+    |             ^^^^^^^^ help: if this is intentional, prefix it with an 
+underscore: `_threats1`
+
+warning: unused variable: `threats2`
+   --> src\threat_intelligence.rs:374:13
+    |
+374 |         let threats2 = engine.analyze_event("container1", "execve", 
+None, "Blocked syscall");
+    |             ^^^^^^^^ help: if this is intentional, prefix it with an 
+underscore: `_threats2`
+
+warning: unused variable: `feature`
+  --> src\version.rs:90:26
+   |
+90 | pub fn feature_available(feature: &str, since_version: &str) -> bool {
+   |                          ^^^^^^^ help: if this is intentional, prefix it 
+with an underscore: `_feature`
+
+warning: unused variable: `source`
+   --> src\linter.rs:250:50
+    |
+250 |     fn check_tokens(&mut self, tokens: &[Token], source: &str) {
+    |                                                  ^^^^^^ help: if this is 
+intentional, prefix it with an underscore: `_source`
+
+warning: value assigned to `result` is never read
+   --> src\formatter.rs:135:26
+    |
+135 |         let mut result = String::new();
+    |                          ^^^^^^^^^^^^^
+    |
+    = help: maybe it is overwritten before being read?
+    = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by 
+default
+
+warning: unused variable: `pattern`
+   --> src\formatter.rs:266:21
+    |
+266 |                 let pattern = format!("\\b{}\\b", keyword);
+    |                     ^^^^^^^ help: if this is intentional, prefix it with 
+an underscore: `_pattern`
+
+warning: unused variable: `json_str_clone2`
+   --> src\benchmarking.rs:248:13
+    |
+248 |         let json_str_clone2 = json_str.to_string();
+    |             ^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with 
+an underscore: `_json_str_clone2`
+
+warning: unused variable: `db`
+   --> src\database_module.rs:528:24
+    |
+528 |     pub fn execute_sql(db: &Database, sql: &str) -> Result<Value, 
+String> {
+    |                        ^^ help: if this is intentional, prefix it with 
+an underscore: `_db`
+
+warning: unused variable: `i`
+   --> src\security_module.rs:125:14
+    |
+125 |         for (i, byte) in message.bytes().enumerate() {
+    |              ^ help: if this is intentional, prefix it with an 
+underscore: `_i`
+
+warning: unused variable: `secret`
+   --> src\security_module.rs:158:54
+    |
+158 |     pub fn generate_jwt(header: &str, payload: &str, secret: &str) -> 
+String {
+    |                                                      ^^^^^^ help: if 
+this is intentional, prefix it with an underscore: `_secret`
+
+warning: unused variable: `secret`
+   --> src\security_module.rs:167:36
+    |
+167 |     pub fn verify_jwt(token: &str, secret: &str) -> bool {
+    |                                    ^^^^^^ help: if this is intentional, 
+prefix it with an underscore: `_secret`
+
+warning: unused variable: `result`
+   --> src\testing_framework.rs:215:23
+    |
+215 |             if let Ok(result) = self.run_suite(&name) {
+    |                       ^^^^^^ help: if this is intentional, prefix it 
+with an underscore: `_result`
+
+warning: unused variable: `args`
+   --> src\wasm_support.rs:488:45
+    |
+488 |     pub fn call(&mut self, func_name: &str, args: Vec<JSValue>) -> 
+Result<JSValue, String> {
+    |                                             ^^^^ help: if this is 
+intentional, prefix it with an underscore: `_args`
+
+warning: variable does not need to be mutable
+   --> src\runtime_optimization.rs:469:13
+    |
+469 |         let mut result = self.optimize_runtime();
+    |             ----^^^^^^
+    |             |
+    |             help: remove this `mut`
+
+warning: unused variable: `original`
+   --> src\spark\context.rs:237:13
+    |
+237 |         let original = ctx.parallelism();
+    |             ^^^^^^^^ help: if this is intentional, prefix it with an 
+underscore: `_original`
+
+warning: unused variable: `name`
+   --> src\spark\dataframe.rs:243:36
+    |
+243 |     pub fn create_temp_view(&self, name: &str) -> Result<(), String> {
+    |                                    ^^^^ help: if this is intentional, 
+prefix it with an underscore: `_name`
+
+warning: variable does not need to be mutable
+  --> src\spark\io_parallel.rs:52:25
+   |
+52 |                     let mut recv = receiver.lock().unwrap();
+   |                         ----^^^^
+   |                         |
+   |                         help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src\spark\io_parallel.rs:340:25
+    |
+340 |                     let mut reader = BufReader::new(file);
+    |                         ----^^^^^^
+    |                         |
+    |                         help: remove this `mut`
+
+warning: unused variable: `reader`
+   --> src\spark\io_parallel.rs:340:25
+    |
+340 |                     let mut reader = BufReader::new(file);
+    |                         ^^^^^^^^^^ help: if this is intentional, prefix 
+it with an underscore: `_reader`
+
+warning: variable does not need to be mutable
+   --> src\spark\memory.rs:508:13
+    |
+508 |         let mut stats = MemoryStats {
+    |             ----^^^^^
+    |             |
+    |             help: remove this `mut`
+
+warning: unused variable: `expr`
+   --> src\python\mod.rs:136:5
+    |
+136 |     expr: String,
+    |     ^^^^ help: if this is intentional, prefix it with an underscore: 
+`_expr`
+
+warning: unused variable: `for_clause`
+   --> src\python\mod.rs:137:5
+    |
+137 |     for_clause: &ForClause,
+    |     ^^^^^^^^^^ help: if this is intentional, prefix it with an 
+underscore: `_for_clause`
+
+warning: unused variable: `key_expr`
+   --> src\python\mod.rs:162:5
+    |
+162 |     key_expr: String,
+    |     ^^^^^^^^ help: if this is intentional, prefix it with an underscore: 
+`_key_expr`
+
+warning: unused variable: `value_expr`
+   --> src\python\mod.rs:163:5
+    |
+163 |     value_expr: String,
+    |     ^^^^^^^^^^ help: if this is intentional, prefix it with an 
+underscore: `_value_expr`
+
+warning: unused variable: `for_clause`
+   --> src\python\mod.rs:164:5
+    |
+164 |     for_clause: &ForClause,
+    |     ^^^^^^^^^^ help: if this is intentional, prefix it with an 
+underscore: `_for_clause`
+
+warning: unused variable: `expr`
+   --> src\python\mod.rs:186:5
+    |
+186 |     expr: String,
+    |     ^^^^ help: if this is intentional, prefix it with an underscore: 
+`_expr`
+
+warning: unused variable: `for_clause`
+   --> src\python\mod.rs:187:5
+    |
+187 |     for_clause: &ForClause,
+    |     ^^^^^^^^^^ help: if this is intentional, prefix it with an 
+underscore: `_for_clause`
+
+warning: unused variable: `conditions`
+   --> src\python\mod.rs:211:5
+    |
+211 |     conditions: &[String],
+    |     ^^^^^^^^^^ help: if this is intentional, prefix it with an 
+underscore: `_conditions`
+
+warning: unused variable: `items`
+   --> src\python\mod.rs:212:5
+    |
+212 |     items: Vec<Value>,
+    |     ^^^^^ help: if this is intentional, prefix it with an underscore: 
+`_items`
+
+warning: variable `body_start` is assigned to, but never used
+  --> src\http_server.rs:70:9
+   |
+70 |     let mut body_start = 0;
+   |         ^^^^^^^^^^^^^^
+   |
+   = note: consider using `_body_start` instead
+
+warning: variable `header_count` is assigned to, but never used
+  --> src\http_server.rs:71:9
+   |
+71 |     let mut header_count = 0;
+   |         ^^^^^^^^^^^^^^^^
+   |
+   = note: consider using `_header_count` instead
+
+warning: value assigned to `body_start` is never read
+  --> src\http_server.rs:74:13
+   |
+74 |             body_start = idx;
+   |             ^^^^^^^^^^^^^^^^
+   |
+   = help: maybe it is overwritten before being read?
+
+warning: value assigned to `header_count` is never read
+  --> src\http_server.rs:77:9
+   |
+77 |         header_count += 1;
+   |         ^^^^^^^^^^^^^^^^^
+   |
+   = help: maybe it is overwritten before being read?
+
+warning: unused variable: `filters`
+   --> src\database.rs:313:9
+    |
+313 |         filters: Option<HashMap<String, Value>>,
+    |         ^^^^^^^ help: if this is intentional, prefix it with an 
+underscore: `_filters`
+
+warning: unused variable: `filters`
+   --> src\database.rs:327:9
+    |
+327 |         filters: Option<HashMap<String, Value>>,
+    |         ^^^^^^^ help: if this is intentional, prefix it with an 
+underscore: `_filters`
+
+warning: unused variable: `query`
+  --> src\orm_helpers.rs:63:13
+   |
+63 |         let query = QueryBuilder::select(&self.table_name)
+   |             ^^^^^ help: if this is intentional, prefix it with an 
+underscore: `_query`
+
+warning: unused variable: `table_name`
+  --> src\async_database.rs:30:32
+   |
+30 |     pub fn insert_async(&self, table_name: &str, _row: &Row) -> 
+crate::async_runtime::Future {
+   |                                ^^^^^^^^^^ help: if this is intentional, 
+prefix it with an underscore: `_table_name`
+
+warning: unused variable: `table_name`
+  --> src\async_database.rs:39:32
+   |
+39 |     pub fn select_async(&self, table_name: &str) -> 
+crate::async_runtime::Future {
+   |                                ^^^^^^^^^^ help: if this is intentional, 
+prefix it with an underscore: `_table_name`
+
+warning: unused variable: `table_name`
+  --> src\async_database.rs:48:32
+   |
+48 |     pub fn update_async(&self, table_name: &str, _updates: 
+&HashMap<String, Value>) -> crate::async_runtime::Future {
+   |                                ^^^^^^^^^^ help: if this is intentional, 
+prefix it with an underscore: `_table_name`
+
+warning: unused variable: `table_name`
+  --> src\async_database.rs:57:32
+   |
+57 |     pub fn delete_async(&self, table_name: &str) -> 
+crate::async_runtime::Future {
+   |                                ^^^^^^^^^^ help: if this is intentional, 
+prefix it with an underscore: `_table_name`
+
+warning: unused variable: `conn`
+   --> src\async_database.rs:263:13
+    |
+263 |         let conn = AsyncConnection::new(":memory:".to_string(), 
+scheduler);
+    |             ^^^^ help: if this is intentional, prefix it with an 
+underscore: `_conn`
+
+warning: useless assignment of variable of type `bool` to itself
+   --> src\python\mod.rs:149:13
+    |
+149 |             all_true = all_true; // Placeholder
+    |             ^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: useless assignment of variable of type `bool` to itself
+   --> src\python\mod.rs:174:13
+    |
+174 |             all_true = all_true;
+    |             ^^^^^^^^^^^^^^^^^^^
+
+warning: useless assignment of variable of type `bool` to itself
+   --> src\python\mod.rs:197:13
+    |
+197 |             all_true = all_true;
+    |             ^^^^^^^^^^^^^^^^^^^
+
+warning: method `parse_for_init` is never used
+   --> src\parser.rs:754:8
+    |
+  9 | impl Parser {
+    | ----------- method in this implementation
+...
+754 |     fn parse_for_init(&mut self) -> Result<Stmt, String> {
+    |        ^^^^^^^^^^^^^^
+
+warning: field `collecting_yields` is never read
+  --> src\vm.rs:33:5
+   |
+23 | pub struct VirtualMachine {
+   |            -------------- field in this struct
+...
+33 |     collecting_yields: bool,  // Flag to track if we're inside a 
+generator function
+   |     ^^^^^^^^^^^^^^^^^
+
+warning: methods `execute_compiled_loop` and `execute_hot_arithmetic_loop` are 
+never used
+    --> src\vm.rs:3082:8
+     |
+  44 | impl VirtualMachine {
+     | ------------------- methods in this implementation
+...
+3082 |     fn execute_compiled_loop(&mut self, _compiled_code: &[u8]) -> 
+Result<(), VmError> {
+     |        ^^^^^^^^^^^^^^^^^^^^^
+...
+3093 |     fn execute_hot_arithmetic_loop(&mut self, iterations: u64) -> i64 {
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: methods `generate_array_code`, `expr_to_specialized_code`, 
+`expr_to_numeric`, `expr_to_string`, and `expr_to_boolean` are never used
+   --> src\rust_generator.rs:176:8
+    |
+ 32 | impl RustGenerator {
+    | ------------------ methods in this implementation
+...
+176 |     fn generate_array_code(&self, elements: &[Expr]) -> (String, 
+InferredType) {
+    |        ^^^^^^^^^^^^^^^^^^^
+...
+500 |     fn expr_to_specialized_code(&self, var_name: &str, expr: &Expr) -> 
+String {
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^
+...
+541 |     fn expr_to_numeric(&self, expr: &Expr) -> String {
+    |        ^^^^^^^^^^^^^^^
+...
+565 |     fn expr_to_string(&self, expr: &Expr) -> String {
+    |        ^^^^^^^^^^^^^^
+...
+583 |     fn expr_to_boolean(&self, expr: &Expr) -> String {
+    |        ^^^^^^^^^^^^^^^
+
+warning: fields `cycles_per_instruction` and `hot_instruction_threshold` are 
+never read
+  --> src\hot_path_detector.rs:74:5
+   |
+66 | pub struct HotPathDetector {
+   |            --------------- fields in this struct
+...
+74 |     cycles_per_instruction: f64,
+   |     ^^^^^^^^^^^^^^^^^^^^^^
+...
+77 |     hot_instruction_threshold: usize,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: fields `total_memory_saved` and `ttl_seconds` are never read
+  --> src\memoization.rs:24:5
+   |
+17 | pub struct MemoizationCache {
+   |            ---------------- fields in this struct
+...
+24 |     total_memory_saved: u64,  // Cycles saved by avoiding recomputation
+   |     ^^^^^^^^^^^^^^^^^^
+...
+28 |     ttl_seconds: u64,         // Time-to-live for entries
+   |     ^^^^^^^^^^^
+
+warning: function `str` is never used
+   --> src\array_utils.rs:338:8
+    |
+338 |     fn str(s: &str) -> Value { Value::Str(s.to_string()) }
+    |        ^^^
+
+warning: associated function `unescape_string` is never used
+   --> src\json_module.rs:172:8
+    |
+ 42 | impl JsonModule {
+    | --------------- associated function in this implementation
+...
+172 |     fn unescape_string(s: &str) -> String {
+    |        ^^^^^^^^^^^^^^^
+
+warning: field `json_options` is never read
+   --> src\spark\io.rs:258:5
+    |
+254 | pub struct FileBuilder {
+    |            ----------- field in this struct
+...
+258 |     json_options: JSONOptions,
+    |     ^^^^^^^^^^^^
+
+warning: field `id` is never read
+  --> src\spark\io_parallel.rs:25:5
+   |
+24 | pub struct Worker {
+   |            ------ field in this struct
+25 |     id: usize,
+   |     ^^
+
+warning: field `partition_count` is never read
+   --> src\spark\io_parallel.rs:149:5
+    |
+147 | pub struct PartitionManager {
+    |            ---------------- field in this struct
+148 |     partitions: Vec<Partition>,
+149 |     partition_count: usize,
+    |     ^^^^^^^^^^^^^^^
+
+warning: field `max_depth` is never read
+   --> src\spark\ml.rs:145:5
+    |
+143 | pub struct DecisionTreeModel {
+    |            ----------------- field in this struct
+144 |     root: TreeNode,
+145 |     max_depth: usize,
+    |     ^^^^^^^^^
+    |
+    = note: `DecisionTreeModel` has derived impls for the traits `Debug` and 
+`Clone`, but these are intentionally ignored during dead code analysis
+
+warning: field `max_connections` is never read
+   --> src\http_server.rs:103:5
+    |
+ 97 | pub struct HttpServer {
+    |            ---------- field in this struct
+...
+103 |     max_connections: usize,
+    |     ^^^^^^^^^^^^^^^
+
+warning: fields `db_path` and `scheduler` are never read
+  --> src\async_database.rs:12:5
+   |
+11 | pub struct AsyncConnection {
+   |            --------------- fields in this struct
+12 |     db_path: String,
+   |     ^^^^^^^
+13 |     scheduler: Arc<crate::async_runtime::TaskScheduler>,
+   |     ^^^^^^^^^
+
+warning: field `threads` is never read
+   --> src\scheduler_optimization.rs:382:5
+    |
+380 | pub struct CoreAwareThreadPool {
+    |            ------------------- field in this struct
+381 |     scheduler: WorkStealingScheduler,
+382 |     threads: Vec<thread::JoinHandle<()>>,
+    |     ^^^^^^^
+
+warning: field `false_sharing_threshold` is never read
+   --> src\memory_optimization.rs:120:5
+    |
+118 | pub struct CacheLayout {
+    |            ----------- field in this struct
+119 |     cache_line_size: usize,
+120 |     false_sharing_threshold: usize,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: field `last_adjustment` is never read
+   --> src\thermal_management.rs:204:5
+    |
+200 | pub struct ThermalAwareScheduler {
+    |            --------------------- field in this struct
+...
+204 |     last_adjustment: Instant,
+    |     ^^^^^^^^^^^^^^^
+
+warning: creating a mutable reference to mutable static
+   --> src\version.rs:232:9
+    |
+232 |         DEPRECATION_REGISTRY.as_mut().expect("Deprecation registry 
+uninitialized")
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ mutable reference to mutable static
+    |
+    = note: for more information, see 
+<https://doc.rust-lang.org/edition-guide/rust-2024/static-mut-references.html>
+    = note: mutable references to mutable statics are dangerous; it's 
+undefined behavior if any other pointer to the static is used or if any other 
+reference is created for the static while the mutable reference lives
+    = note: `#[warn(static_mut_refs)]` (part of 
+`#[warn(rust_2024_compatibility)]`) on by default
+
+warning: `killer-native` (lib test) generated 99 warnings (run `cargo fix 
+--lib -p killer-native --tests` to apply 73 suggestions)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.29s
+     Running unittests src\lib.rs 
+(target\debug\deps\killer_native-ef163f500a9a3cab.exe)
+
+running 4 tests
+test memory_optimization::tests::test_cache_layout ... ok
+test memory_optimization::tests::test_ddr4_optimizer ... ok
+test memory_optimization::tests::test_adaptive_memory_sizer ... ok
+test memory_optimization::tests::test_memory_pool ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 888 filtered out; finished in 0.01s
+

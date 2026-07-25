@@ -1,0 +1,146 @@
+# Nova Galaxy Engine — Feature Test Suite
+# Tests: E (HTTP), D (C/C++), A (Streaming), B (Vector Memory), C (Tool Calling)
+
+# ══════════════════════════════════════════════════════
+# E: HTTP Client Builtins
+# ══════════════════════════════════════════════════════
+
+# E.1 — HTTPS status check (should return 200)
+code = http_status("https://httpbin.org/status/200")
+print(K"E.1 http_status: {code}")
+
+# E.2 — GET JSON endpoint
+body = http_get("https://httpbin.org/json")
+print(K"E.2 http_get (first 80 chars): {body}")
+
+# E.3 — HEAD request (headers)
+headers = http_head("https://httpbin.org/get")
+print(K"E.3 http_head: {headers}")
+
+# E.4 — Security: block plaintext HTTP (should return error, not hang)
+bad = http_get("http://example.com")
+print(K"E.4 http security block: {bad}")
+
+# ══════════════════════════════════════════════════════
+# D: New Runtimes — C and C++
+# ══════════════════════════════════════════════════════
+
+# D.1 — Check if C compiler available
+c_avail = polyglot_check("c")
+print(K"D.1 C compiler available: {c_avail}")
+
+# D.2 — Check if C++ compiler available
+cpp_avail = polyglot_check("cpp")
+print(K"D.2 C++ compiler available: {cpp_avail}")
+
+# D.3 — Zig (new runtime)
+zig_avail = polyglot_check("zig")
+print(K"D.3 Zig available: {zig_avail}")
+
+# D.4 — Run C code (bare statements — auto-wrapped in main())
+if c_avail {
+  @c {
+printf("Hello from C! Sum = %d\n", 10 + 20);
+  }
+  print("D.4 @c: ran successfully")
+} else {
+  print("D.4 @c: skipped (no C compiler on this machine)")
+}
+
+# D.5 — Run C++ code (auto-wrapped in main() with STL includes)
+if cpp_avail {
+  @cpp {
+std::cout << "Hello from C++! Pi = " << 3.14159 << std::endl;
+  }
+  print("D.5 @cpp: ran successfully")
+} else {
+  print("D.5 @cpp: skipped (no C++ compiler on this machine)")
+}
+
+# D.6 — polyglot_list shows new runtimes
+runtimes = polyglot_list()
+print("D.6 Runtime list:")
+print(runtimes)
+
+# ══════════════════════════════════════════════════════
+# A: Streaming Polyglot Output
+# ══════════════════════════════════════════════════════
+
+# A.1 — Stream Python output line-by-line
+stream_out = polyglot_stream("python", "for i in range(1, 5):\n    print(f'Stream line {i}')")
+print("A.1 polyglot_stream total output:")
+print(stream_out)
+
+# A.2 — Stream PowerShell output
+ps_stream = polyglot_stream("ps", "1..3 | ForEach-Object { Write-Output \"PS line $_\" }")
+print(K"A.2 PowerShell stream: {ps_stream}")
+
+# ══════════════════════════════════════════════════════
+# B: Vector Memory
+# ══════════════════════════════════════════════════════
+
+# B.1 — Initial stats
+s = vmem_stats()
+print(K"B.1 vmem_stats (empty): {s}")
+
+# B.2 — Store entries
+r1 = vmem_store("go_unused_var", "Go unused variable error: declared and not used. Fix: remove variable or use _ = varName")
+print(K"B.2 store result: {r1}")
+
+r2 = vmem_store("python_nameerror", "Python NameError: variable used before assignment. Check spelling and scope.")
+print(K"B.3 store result: {r2}")
+
+r3 = vmem_store("rust_borrow", "Rust borrow checker: cannot borrow as mutable because immutable borrow exists. Clone or restructure.")
+print(K"B.4 store result: {r3}")
+
+# B.3 — Semantic search
+top = vmem_search("go variable not declared", 2)
+print(K"B.5 vmem_search (go variable): {top}")
+
+# B.4 — Exact recall
+r_exact = vmem_recall("python_nameerror")
+print(K"B.6 vmem_recall (python_nameerror): {r_exact}")
+
+# B.5 — Stats after stores
+s2 = vmem_stats()
+print(K"B.7 vmem_stats (3 entries): {s2}")
+
+# B.6 — List keys
+keys = vmem_list()
+print(K"B.8 vmem_list: {keys}")
+
+# B.7 — Forget
+forgot = vmem_forget("rust_borrow")
+print(K"B.9 vmem_forget: {forgot}")
+
+# B.8 — Set threshold
+thresh = vmem_set_threshold(0.5)
+print(K"B.10 vmem_set_threshold: {thresh}")
+
+# ══════════════════════════════════════════════════════
+# C: KhLM Tool Calling
+# ══════════════════════════════════════════════════════
+
+# C.1 — List auto-registered tools
+t = tool_list()
+print("C.1 tool_list:")
+print(t)
+
+# C.2 — Manually call a tool: vmem_search via tool_call
+manual = tool_call("vmem_search", "python error", "2")
+print(K"C.2 tool_call(vmem_search): {manual}")
+
+# C.3 — Register custom tool
+reg_msg = tool_register("my_tool", "A custom test tool")
+print(K"C.3 tool_register: {reg_msg}")
+
+# C.4 — khlm_tool_status
+ts = khlm_tool_status()
+print("C.4 khlm_tool_status:")
+print(ts)
+
+# C.5 — khlm_tool_clear and re-check
+cleared = khlm_tool_clear()
+print(K"C.5 khlm_tool_clear: {cleared}")
+
+print("All Nova Galaxy Engine E-D-A-B-C tests complete!")

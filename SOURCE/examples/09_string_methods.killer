@@ -1,0 +1,35 @@
+// Test string methods
+name = "Hello World";
+print(name.length);
+print(name.upper());
+print(name.lower());
+print(name.charAt(0));
+print(name.charAt(6));
+print(name.substring(0, 5));
+print(name.replace("World", "Killer"));
+
+// Test split
+text = "apple,banana,cherry";
+fruits = text.split(",");
+for fruit in fruits { print(fruit); }
+
+print("---");
+
+// Test array methods
+arr = [1, 2, 3];
+print(arr.length);
+arr.push(4);
+print(arr.length);
+popped = arr.pop();
+print(popped);
+print(arr.length);
+
+print("---");
+
+// Test dictionary methods
+dict = {name: "Alice", age: 30, city: "NYC"};
+print(dict.length);
+keys = dict.keys();
+for k in keys { print(k); }
+
+

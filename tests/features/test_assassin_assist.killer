@@ -1,0 +1,73 @@
+# Nova Galaxy Engine v1 — AI Assassin Assist Layer Test Suite
+# Tests: logging, stats, auto-debug on errors, optimize, token budget, enable/disable
+
+# ── 1. Check initial status (empty log) ──────────────────────────────────────
+status = nova_assist_status()
+print(status)
+
+# ── 2. Run a successful @powershell exec (captured + logged by Assassin) ─────
+r1 = @powershell { Write-Output "Hello from Assassin layer!" }
+print(K"Result: {r1}")
+
+# ── 3. Run a @go exec (logged) ───────────────────────────────────────────────
+r2 = @go {
+package main
+import "fmt"
+func main() { fmt.Printf("Go says %d\n", 6 * 7) }
+}
+print(K"Go: {r2}")
+
+# ── 4. Run another exec (to populate log) ────────────────────────────────────
+r3 = @powershell { Write-Output (100 + 200 + 300) }
+print(K"Sum: {r3}")
+
+# ── 5. Show execution log (last 5 entries) ────────────────────────────────────
+log = nova_assist_log(5)
+print(log)
+
+# ── 6. Show status with aggregated stats ─────────────────────────────────────
+status2 = nova_assist_status()
+print(status2)
+
+# ── 7. On-demand AI debug of a code snippet ──────────────────────────────────
+sample_code = "x = int(input())\nprint(x / 0)"
+debug_result = nova_assist_debug(sample_code, "python")
+print(K"AI Debug: {debug_result}")
+
+# ── 8. On-demand optimization suggestions ────────────────────────────────────
+opt_code = "for i in range(len(arr)):\n    total += arr[i]"
+opt_result = nova_assist_optimize(opt_code, "python")
+print(K"Optimization hints: {opt_result}")
+
+# ── 9. Set token budget ───────────────────────────────────────────────────────
+budget_msg = nova_assist_set_budget(50000)
+print(budget_msg)
+
+# ── 10. Disable AI layer → exec still logged, no AI calls ────────────────────
+disable_msg = nova_assist_disable()
+print(disable_msg)
+
+r4 = @powershell { Write-Output "logged-but-no-AI" }
+print(K"No-AI exec: {r4}")
+
+# ── 11. Re-enable ─────────────────────────────────────────────────────────────
+enable_msg = nova_assist_enable()
+print(enable_msg)
+
+# ── 12. Enable disk log ───────────────────────────────────────────────────────
+log_path_msg = nova_assist_set_log("assassin_assist.log")
+print(log_path_msg)
+
+r5 = @powershell { Write-Output "this goes to disk log too" }
+print(K"Disk-logged: {r5}")
+
+# ── 13. Final status ──────────────────────────────────────────────────────────
+final_status = nova_assist_status()
+print(final_status)
+
+# ── 14. Clear log ─────────────────────────────────────────────────────────────
+cleared = nova_assist_clear()
+print(cleared)
+
+empty_log = nova_assist_log()
+print(empty_log)

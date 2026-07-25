@@ -1,0 +1,7 @@
+// Test calling unknown method
+print "=== Test Unknown Method ==="
+quality x = 42
+quality y = x.unknown_method()
+print "Done"
+
+

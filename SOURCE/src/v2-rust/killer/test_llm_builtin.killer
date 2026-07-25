@@ -1,0 +1,11 @@
+model = "C:/Users/skathera/.killer/models/qwen2.5-0.5b-instruct-q4_k_m.gguf"
+tl = "C:/Users/skathera/.killer/models/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
+
+a1 = llm_chat(model, "What is 2+2?", 128)
+print(K"Qwen2.5> {a1}")
+
+a2 = llm_chat(tl, "What is 2+2?", 128)
+print(K"TinyLlama> {a2}")
+
+a3 = llm_chat(model, "What is the capital of France?", 128)
+print(K"Qwen2.5> {a3}")

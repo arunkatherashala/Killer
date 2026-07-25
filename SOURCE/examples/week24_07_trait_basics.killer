@@ -1,0 +1,72 @@
+// Trait System Basics - Polymorphism & Type Classes
+// Week 24C: Trait System Support
+// Demonstrates: trait definition, implementation, type checking
+
+// Define the Display trait
+let DisplayTrait = trait_new("Display", ["to_string"])
+println("✓ Display trait created")
+println("  Methods: to_string()")
+println("")
+
+// Define the Comparable trait
+let ComparableTrait = trait_new("Comparable", ["compare_to", "equals"])
+println("✓ Comparable trait created")
+println("  Methods: compare_to(), equals()")
+println("")
+
+// Check which types implement traits
+println("=== Standard Type Trait Checks ===")
+println("")
+
+// String implements Display
+let string_has_display = trait_check("String", "Display")
+println("String implements Display: " + str(string_has_display))
+
+// String is Cloneable
+let string_is_cloneable = trait_check("String", "Cloneable")
+println("String implements Cloneable: " + str(string_is_cloneable))
+
+// Number implements Comparable
+let number_is_comparable = trait_check("Number", "Comparable")
+println("Number implements Comparable: " + str(number_is_comparable))
+
+// Array implements Iterable
+let array_is_iterable = trait_check("Array", "Iterable")
+println("Array implements Iterable: " + str(array_is_iterable))
+
+// Dict is Cloneable
+let dict_is_cloneable = trait_check("Dict", "Cloneable")
+println("Dict implements Cloneable: " + str(dict_is_cloneable))
+
+println("")
+println("=== Method Resolution Through Traits ===")
+println("")
+
+// Resolve methods through polymorphism
+let string_to_string = trait_resolve("String", "to_string")
+if string_to_string != null {
+    println("String.to_string() resolved:")
+    println("  Trait: " + string_to_string["trait"])
+    println("  Method: " + string_to_string["method"])
+}
+
+let number_compare = trait_resolve("Number", "compare_to")
+if number_compare != null {
+    println("")
+    println("Number.compare_to() resolved:")
+    println("  Trait: " + number_compare["trait"])
+    println("  Method: " + number_compare["method"])
+}
+
+let array_iterator = trait_resolve("Array", "iterator")
+if array_iterator != null {
+    println("")
+    println("Array.iterator() resolved:")
+    println("  Trait: " + array_iterator["trait"])
+    println("  Method: " + array_iterator["method"])
+}
+
+println("")
+println("✓ Trait system basics demo complete")
+
+

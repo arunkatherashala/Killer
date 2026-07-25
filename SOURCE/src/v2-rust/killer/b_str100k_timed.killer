@@ -1,0 +1,10 @@
+t0 = system_time_ms()
+i = 0
+while i < 100000 {
+  s = K"v={i}"
+  i = i + 1
+}
+t1 = system_time_ms()
+elapsed = t1 - t0
+ns = elapsed * 10
+print(K"K-string interp 100k: {elapsed} ms  ({ns} ns/iter)")

@@ -1,0 +1,44 @@
+kfn bench_prefix_1m() {
+  i = 0
+  while i < 1000000 {
+    s = K"v={i}"
+    i = i + 1
+  }
+  return s
+}
+
+kfn bench_suffix_1m() {
+  i = 0
+  while i < 1000000 {
+    s = K"{i} done"
+    i = i + 1
+  }
+  return s
+}
+
+kfn bench_both_1m() {
+  i = 0
+  while i < 1000000 {
+    s = K"item={i}/end"
+    i = i + 1
+  }
+  return s
+}
+
+t0 = system_time_ms()
+r = bench_prefix_1m()
+t1 = system_time_ms()
+e1 = t1 - t0
+print(K"K prefix+slot  1M: {e1} ms = {e1} ns/iter  last={r}")
+
+t2 = system_time_ms()
+r = bench_suffix_1m()
+t3 = system_time_ms()
+e2 = t3 - t2
+print(K"K slot+suffix  1M: {e2} ms = {e2} ns/iter  last={r}")
+
+t4 = system_time_ms()
+r = bench_both_1m()
+t5 = system_time_ms()
+e3 = t5 - t4
+print(K"K pre+slot+suf 1M: {e3} ms = {e3} ns/iter  last={r}")

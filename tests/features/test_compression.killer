@@ -1,0 +1,55 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// Nova Compression Demo — Killer Language
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── 1. Nova LZ77+Huffman (strongest ~13% of original on repeated text) ──────
+data = "hello world hello world hello world hello world hello world"
+
+compressed = compress(data, "nova")
+restored   = decompress(compressed, "nova")
+
+print(K"Original  : {data}")
+print(K"Compressed: {compressed}")
+print(K"Restored  : {restored}")
+print(K"Match     : {data == restored}")
+
+// ── 2. RLE — best for runs of repeated characters ───────────────────────────
+runs = "aaabbbcccdddeee"
+
+rle_data = compress(runs, "rle")
+rle_back = decompress(rle_data, "rle")
+
+print(K"RLE input   : {runs}")
+print(K"RLE encoded : {rle_data}")
+print(K"RLE decoded : {rle_back}")
+
+// ── 3. Base64 encoding/decoding ─────────────────────────────────────────────
+secret = "killer language v2.1"
+encoded = b64_encode(secret)
+decoded = b64_decode(encoded)
+
+print(K"Base64 in : {secret}")
+print(K"Base64 out: {encoded}")
+print(K"Decoded   : {decoded}")
+
+// ── 4. Hex encoding/decoding ─────────────────────────────────────────────────
+word = "Killer"
+hex  = hex_encode(word)
+back = hex_decode(hex)
+
+print(K"Hex input : {word}")
+print(K"Hex out   : {hex}")
+print(K"Hex back  : {back}")
+
+// ── 5. Analyse which algorithm works best for YOUR data ──────────────────────
+log_line = "2025-01-01 ERROR [main] NullPointerException at line 42 in MyApp.java"
+
+info = compress_info(log_line)
+
+print(K"--- Compression report ---")
+print(K"Original len : {info.original_len} bytes")
+print(K"Nova         : {info.nova_len} bytes ({info.nova_pct})  ratio={info.nova_ratio}")
+print(K"RLE          : {info.rle_len} bytes  ({info.rle_pct})  ratio={info.rle_ratio}")
+print(K"Base64       : {info.b64_len} bytes ({info.b64_pct})  (encoding, not compression)")
+print(K"Hex          : {info.hex_len} bytes ({info.hex_pct})  (encoding, not compression)")
+print(K"Best algo    : {info.best_algo}")

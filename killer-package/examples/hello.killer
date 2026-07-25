@@ -1,0 +1,5 @@
+kfn main() {
+  println("Hello from Killer! 🔥")
+}
+
+main()

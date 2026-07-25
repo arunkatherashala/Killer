@@ -1,0 +1,74 @@
+// Complete feature set for Killer language
+// Tests: typeof, **, Math functions, type conversion, new string/array methods
+
+// Test 1: typeof operator
+print("=== Test 1: typeof operator ===");
+x = 42;
+print(typeof x);
+y = "hello";
+print(typeof y);
+z = true;
+print(typeof z);
+arr = [1, 2, 3];
+print(typeof arr);
+
+// Test 2: Exponentiation operator (**)
+print("=== Test 2: Exponentiation ===");
+result1 = 2 ** 3;
+print(result1);
+result2 = 5 ** 2;
+print(result2);
+
+// Test 3: Math object functions
+print("=== Test 3: Math object ===");
+print(Math.sqrt(16));
+print(Math.abs(-10));
+print(Math.pow(2, 8));
+print(Math.floor(3.7));
+print(Math.ceil(3.2));
+print(Math.round(3.5));
+print(Math.min(5, 2, 8, 1));
+print(Math.max(5, 2, 8, 1));
+
+// Test 4: Type conversion functions
+print("=== Test 4: Type conversion ===");
+print(parseInt("42"));
+print(parseFloat("3.14"));
+print(String(42));
+print(String(true));
+print(Number("99"));
+print(Number(false));
+print(Boolean(1));
+print(Boolean(0));
+print(Boolean(""));
+print(Boolean("hello"));
+
+// Test 5: New string methods
+print("=== Test 5: String methods ===");
+text = "hello world";
+print(text.startsWith("hello"));
+print(text.endsWith("world"));
+print(text.repeat(2));
+str = "5";
+print(str.padStart(3, "0"));
+print(str.padEnd(3, "0"));
+print(text.slice(0, 5));
+
+// Test 6: New array methods
+print("=== Test 6: Array methods ===");
+numbers = [1, 2, 3, 4, 5];
+print(numbers.includes(3));
+result = numbers.concat([6, 7]);
+print(result);
+
+// Test 7: Array indexOf
+print("=== Test 7: Array indexOf ===");
+nums = [10, 20, 30, 40, 50];
+idx = nums.indexOf(30);
+print(idx);
+
+print("=== All tests completed ===");
+
+
+
+

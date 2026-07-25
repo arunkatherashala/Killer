@@ -1,0 +1,86 @@
+// Advanced Generics System - Test Demo
+print("=== Advanced Generics System Test ===\n");
+
+// Test 1: Generic class - Box<T>
+class Box<T> {
+    init(value: T) {
+        this.value = value;
+    }
+    
+    getValue(): T {
+        return this.value;
+    }
+    
+    setValue(newValue: T) {
+        this.value = newValue;
+    }
+}
+
+print("Test 1 - Generic Class Box<T>:");
+numberBox = new Box(42);
+print("numberBox.getValue() = " + numberBox.getValue());
+
+stringBox = new Box("Hello");
+print("stringBox.getValue() = " + stringBox.getValue());
+
+print("\n");
+
+// Test 2: Generic function - first<T>
+kfn first<T>(arr: T[]): T {
+    if (len(arr) > 0) {
+        return arr[0];
+    }
+    return null;
+}
+
+print("Test 2 - Generic Function first<T>:");
+numbers = [10, 20, 30];
+firstNum = first(numbers);
+print("first([10, 20, 30]) = " + firstNum);
+
+names = ["Alice", "Bob", "Charlie"];
+firstName = first(names);
+print("first(['Alice', 'Bob', 'Charlie']) = " + firstName);
+
+print("\n");
+
+// Test 3: Generic function - swap<T>
+kfn swap<T>(a: T, b: T): T[] {
+    return [b, a];
+}
+
+print("Test 3 - Generic Function swap<T>:");
+pair = swap(1, 2);
+print("swap(1, 2) = [" + pair[0] + ", " + pair[1] + "]");
+
+strPair = swap("x", "y");
+print("swap('x', 'y') = ['" + strPair[0] + "', '" + strPair[1] + "']");
+
+print("\n");
+
+// Test 4: Multiple generic parameters
+class Pair<T, U> {
+    init(first: T, second: U) {
+        this.first = first;
+        this.second = second;
+    }
+    
+    getFirst(): T {
+        return this.first;
+    }
+    
+    getSecond(): U {
+        return this.second;
+    }
+}
+
+print("Test 4 - Multiple Generics Pair<T, U>:");
+pair = new Pair(42, "answer");
+print("Pair(42, 'answer').getFirst() = " + pair.getFirst());
+print("Pair(42, 'answer').getSecond() = " + pair.getSecond());
+
+print("\n");
+
+print("=== All Advanced Generics Tests Completed ===");
+
+

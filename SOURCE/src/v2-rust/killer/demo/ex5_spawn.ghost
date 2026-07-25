@@ -1,0 +1,79 @@
+# Example 5: Spawn Child — Parent creates a baby ghost, runs it, gets result
+.fuel 10000
+
+.data 200 "Parent: I will create a child ghost...\n"
+.data 250 "Parent: Child returned: "
+.data 280 "\nParent: My child computed 7 * 6 = 42!\n"
+
+# Print intro
+push 200
+push 38
+syscall 4
+
+# Write child bytecode into RAM[0..]:
+# Child program: push 7, push 6, mul, halt
+# Bytecode: [01, 07,00,00,00, 01, 06,00,00,00, 12, FF]
+#            PUSH  7           PUSH  6           MUL  HALT
+
+# push 7 = opcode 0x01 + i32 LE bytes
+push 1          # OP_PUSH
+push 0
+store 0         # RAM[0] = 1 (but we need raw bytes)
+
+# Actually, let's write the raw bytes using store tricks
+# RAM[0..4] = 0x00000001 (OP_PUSH as i32)... no that's wrong.
+
+# Simpler: use .data to pre-load the child code in RAM!
+# Child: push 7; push 6; mul; halt
+# push 7 = [0x01, 0x07, 0x00, 0x00, 0x00]
+# push 6 = [0x01, 0x06, 0x00, 0x00, 0x00]
+# mul    = [0x12]
+# halt   = [0xFF]
+# Total: 12 bytes
+
+# We can't use .data for raw bytes easily, but we CAN use push+store
+# to write 4 bytes at a time into RAM.
+
+# RAM[0..4]  = 0x00000701 = OP_PUSH(01) + 7 as first byte of i32 LE
+# Wait... let me think in little-endian i32:
+
+# Byte[0]=0x01 Byte[1]=0x07 Byte[2]=0x00 Byte[3]=0x00
+# As i32 LE: 0x00000701 = 1793
+
+push 1793       # RAM[0..4]: 01 07 00 00 = "push 7.."
+store 0
+
+# RAM[4..8] = 0x01000000 = Byte[4]=0x00 Byte[5]=0x01 Byte[6]=0x06 Byte[7]=0x00
+# Byte[4]=0x00 (rest of push 7's i32), Byte[5]=0x01 (OP_PUSH), Byte[6]=0x06, Byte[7]=0x00
+# As i32 LE: 0x00060100 = 393472
+push 393472
+store 4
+
+# RAM[8..12] = Byte[8]=0x00 Byte[9]=0x00 Byte[10]=0x12 Byte[11]=0xFF
+# As i32 LE: 0xFF120000 = -15466496
+push -15466496
+store 8
+
+# Now RAM[0..12] = child bytecode: push 7; push 6; mul; halt
+
+# Spawn child: push code_len(12), push ram_addr(0)
+push 12         # code_len
+push 0          # ram_addr
+syscall 16      # SYS_SPAWN_INIT → child_index on stack
+
+# Run child: push fuel(100)
+push 100        # fuel
+syscall 17      # SYS_SPAWN_RUN → child's TOS (42) on stack
+
+# Print result
+push 250
+push 24
+syscall 4       # "Parent: Child returned: "
+
+syscall 3       # SYS_PRINT_NUM: prints 42!
+
+push 280
+push 38
+syscall 4       # celebration message
+
+halt

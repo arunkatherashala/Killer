@@ -1,0 +1,47 @@
+// DEPENDENT TYPES - TEST SUITE 1: Basic Parsing
+// Tests that dependent type syntax is recognized and parsed correctly
+
+// Test 1.1: Vector with single parameter
+type Vector[n: nat] {
+    data: i32[],
+    len: n,
+}
+
+// Test 1.2: Matrix with two parameters
+type Matrix[m: nat, n: nat] {
+    data: f64[],
+    rows: m,
+    cols: n,
+}
+
+// Test 1.3: Index type (Idx) parameterized by bounds
+type Idx[n: nat] = i32 with (value >= 0 && value < n)
+
+// Test 1.4: Rectangle with width and height
+type Rectangle[width: nat, height: nat] {
+    pixels: u8[],
+}
+
+// Test 1.5: List with non-empty constraint
+type NonEmpty[T, n: nat] = [T] with (n > 0)
+
+// Test 1.6: Tensor with three dimensions
+type Tensor3D[d1: nat, d2: nat, d3: nat] {
+    data: f32[],
+}
+
+// Test 1.7: Function declaration with dependent type
+kfn get_element[n: nat](v: Vector[n], i: Idx[n]) -> i32 {
+    v.data[i]
+}
+
+// Test 1.8: Function returning dependent type
+kfn create_vector[n: nat](size: nat) -> Vector[n] {
+    Vector { data: [], len: n }
+}
+
+kfn main() {
+    println("✓ Dependent Types Parsing Tests Loaded");
+}
+
+

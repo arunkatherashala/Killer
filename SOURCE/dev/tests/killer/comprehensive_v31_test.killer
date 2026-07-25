@@ -1,0 +1,125 @@
+// Comprehensive v3.1 Feature Demonstration
+// Demonstrates modules, OOP, type annotations, and decorators
+
+// ===== Module Usage =====
+import { square, cube } from "./legacy-modules/math_utils";
+
+print("=== KILLER v3.1 COMPREHENSIVE FEATURES TEST ===\n");
+
+print("Feature 1: Module System");
+print("Math Utils - square(5) = " + square(5));
+print("Math Utils - cube(3) = " + cube(3) + "\n");
+
+// ===== Type Annotations =====
+print("Feature 2: Type Annotations");
+kfn calculateDiscount(price: number, discount: number): number {
+    return price - (price * discount / 100);
+}
+
+final_price = calculateDiscount(100, 20);
+print("Original Price: 100, Discount: 20%");
+print("Final Price: " + final_price + "\n");
+
+// ===== Return Type Validation =====
+kfn getProductName(id: number): string {
+    if (id == 1) {
+        return "Laptop";
+    }
+    return "Unknown";
+}
+
+product = getProductName(1);
+print("Feature 3: Return Type Validation");
+print("Product ID 1: " + product + "\n");
+
+// ===== Decorators =====
+print("Feature 4: Decorators");
+
+@deprecated("Use logout_v2() instead")
+kfn logout() {
+    return "User logged out";
+}
+
+result = logout();
+print("logout() result: " + result + "\n");
+
+// ===== Abstract Classes =====
+print("Feature 5: Abstract Classes");
+
+class DataProcessor {
+    processInput(data: string): string {
+        return "Processed: " + data;
+    }
+}
+
+@deprecated("Use newProcessor instead")
+kfn transformData(input: string): string {
+    processor = new DataProcessor();
+    return processor.processInput(input);
+}
+
+transformed = transformData("raw data");
+print("Data transformation: " + transformed + "\n");
+
+// ===== Type Validation with Functions =====
+print("Feature 6: Type Validation");
+
+kfn validateUser(name: string, age: number): boolean {
+    return age >= 18 && name.length > 0;
+}
+
+user1_valid = validateUser("Alice", 25);
+user2_valid = validateUser("Bob", 16);
+
+print("User 'Alice' age 25: " + user1_valid);
+print("User 'Bob' age 16: " + user2_valid + "\n");
+
+// ===== Complex Type Usage =====
+print("Feature 7: Complex Type Operations");
+
+kfn calculateTax(amount: number, rate: number): number {
+    return amount * (rate / 100);
+}
+
+kfn formatPrice(price: number): string {
+    return "$" + price;
+}
+
+price_before_tax = 100;
+tax = calculateTax(price_before_tax, 8);
+final_amount = price_before_tax + tax;
+
+print("Price: " + formatPrice(price_before_tax));
+print("Tax (8%): " + formatPrice(tax));
+print("Total: " + formatPrice(final_amount) + "\n");
+
+// ===== Combining All Features =====
+print("Feature 8: All Features Combined");
+
+class Calculator {
+    add(x: number, y: number): number {
+        return x + y;
+    }
+    
+    multiply(x: number, y: number): number {
+        return x * y;
+    }
+}
+
+@readonly
+kfn performCalculations(): void {
+    calc = new Calculator();
+    sum = calc.add(10, 20);
+    product = calc.multiply(5, 6);
+    
+    print("Calculation Results:");
+    print("10 + 20 = " + sum);
+    print("5 * 6 = " + product);
+}
+
+performCalculations();
+
+print("\n=== v3.1 COMPREHENSIVE TEST COMPLETE ===");
+print("All features working: Modules, OOP, Types, Decorators");
+
+

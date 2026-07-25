@@ -1,0 +1,21 @@
+# Simple test program
+x = 10
+y = 20
+print(x + y)
+
+# Test variables
+a = 5
+b = 3
+print(a * b)
+
+# Test boolean
+result = true
+if (result) {
+    print("Condition works")
+}
+
+# Test array
+arr = [1, 2, 3]
+print(array_length(arr))
+
+

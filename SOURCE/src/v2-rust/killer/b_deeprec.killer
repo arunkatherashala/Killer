@@ -1,0 +1,9 @@
+kfn countdown(n){
+  if n < 1{
+    return 0
+  }
+  result=countdown(n-1)
+  return result
+}
+result=countdown(5000000)
+print(K"r={result}")

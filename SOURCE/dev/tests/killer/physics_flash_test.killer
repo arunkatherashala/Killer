@@ -1,0 +1,13 @@
+print("=== Physics Flash Test ===")
+print(Physics.force(10, 2))
+print(Physics.acceleration(20, 0, 4))
+print(Physics.velocity(5, 3, 4))
+print(Physics.kineticEnergy(2, 3))
+print(Physics.potentialEnergy(2, 10))
+print(Physics.ohmsLawCurrent(12, 6))
+print(Physics.ohmsLawVoltage(2, 6))
+print(Physics.ohmsLawResistance(12, 2))
+print(Physics.g)
+print("Physics Flash Test complete")
+
+

@@ -1,0 +1,203 @@
+# ============================================================
+# LOGIC ENGINE TEST — All 4 Phases
+# Phase 1: Balanced Ternary (Trit)
+# Phase 2: Fuzzy Logic
+# Phase 3: Cognitive Signal
+# Phase 4: Qubit Simulation
+# ============================================================
+
+print("=== Phase 1: Balanced Ternary (Trit) ===")
+
+# trit_to_int
+assert_eq(trit_to_int(T_POS()), 1)
+assert_eq(trit_to_int(T_ZERO()), 0)
+assert_eq(trit_to_int(T_NEG()), -1)
+print("trit_to_int: OK")
+
+# trit_to_str
+assert_eq(trit_to_str(T_POS()), "T_POS")
+assert_eq(trit_to_str(T_ZERO()), "T_ZERO")
+assert_eq(trit_to_str(T_NEG()), "T_NEG")
+print("trit_to_str: OK")
+
+# trit_not
+assert_eq(trit_to_str(trit_not(T_POS())), "T_NEG")
+assert_eq(trit_to_str(trit_not(T_NEG())), "T_POS")
+assert_eq(trit_to_str(trit_not(T_ZERO())), "T_ZERO")
+print("trit_not: OK")
+
+# trit_and (min)
+assert_eq(trit_to_str(trit_and(T_POS(), T_NEG())), "T_NEG")
+assert_eq(trit_to_str(trit_and(T_POS(), T_ZERO())), "T_ZERO")
+assert_eq(trit_to_str(trit_and(T_POS(), T_POS())), "T_POS")
+print("trit_and: OK")
+
+# trit_or (max)
+assert_eq(trit_to_str(trit_or(T_POS(), T_NEG())), "T_POS")
+assert_eq(trit_to_str(trit_or(T_NEG(), T_ZERO())), "T_ZERO")
+assert_eq(trit_to_str(trit_or(T_NEG(), T_NEG())), "T_NEG")
+print("trit_or: OK")
+
+# trit_add (clamped)
+assert_eq(trit_to_int(trit_add(T_POS(), T_POS())), 1)
+assert_eq(trit_to_int(trit_add(T_POS(), T_ZERO())), 1)
+assert_eq(trit_to_int(trit_add(T_NEG(), T_POS())), 0)
+print("trit_add: OK")
+
+# trit_from_int
+assert_eq(trit_to_str(trit_from_int(5)), "T_POS")
+assert_eq(trit_to_str(trit_from_int(-3)), "T_NEG")
+assert_eq(trit_to_str(trit_from_int(0)), "T_ZERO")
+print("trit_from_int: OK")
+
+# trit_word
+assert_eq(trit_word(T_POS()), "yes")
+assert_eq(trit_word(T_ZERO()), "maybe")
+assert_eq(trit_word(T_NEG()), "no")
+print("trit_word: OK")
+
+# trit_word_to_int
+assert_eq(trit_word_to_int("yes"), 1)
+assert_eq(trit_word_to_int("maybe"), 0)
+assert_eq(trit_word_to_int("no"), -1)
+print("trit_word_to_int: OK")
+
+# type check
+assert_eq(type(T_POS()), "trit")
+print("type(T_POS()) == trit: OK")
+
+print("Phase 1 PASSED")
+
+print("")
+print("=== Phase 2: Fuzzy Logic ===")
+
+# fuzzy_and (min)
+assert_eq(fuzzy_and(0.8, 0.6), 0.6)
+assert_eq(fuzzy_and(0.3, 0.9), 0.3)
+assert_eq(fuzzy_and(1.0, 1.0), 1.0)
+print("fuzzy_and: OK")
+
+# fuzzy_or (max)
+assert_eq(fuzzy_or(0.8, 0.6), 0.8)
+assert_eq(fuzzy_or(0.3, 0.9), 0.9)
+assert_eq(fuzzy_or(0.0, 0.0), 0.0)
+print("fuzzy_or: OK")
+
+# fuzzy_not (1 - x)
+assert_true(fuzzy_not(0.8) > 0.19)
+assert_true(fuzzy_not(0.8) < 0.21)
+assert_eq(fuzzy_not(0.0), 1.0)
+assert_eq(fuzzy_not(1.0), 0.0)
+print("fuzzy_not: OK")
+
+# fuzzy_threshold (mid +/- 0.15 -> T_ZERO, above -> T_POS, below -> T_NEG)
+assert_eq(trit_to_str(fuzzy_threshold(0.9, 0.5)), "T_POS")
+assert_eq(trit_to_str(fuzzy_threshold(0.1, 0.5)), "T_NEG")
+assert_eq(trit_to_str(fuzzy_threshold(0.5, 0.5)), "T_ZERO")
+print("fuzzy_threshold: OK")
+
+# fuzzy_combine (weighted average)
+combined = fuzzy_combine(0.8, 0.6, 0.5)
+assert_true(combined > 0.6)
+assert_true(combined < 0.8)
+print("fuzzy_combine: OK")
+
+print("Phase 2 PASSED")
+
+print("")
+print("=== Phase 3: Cognitive Signal ===")
+
+# Create signal
+s = signal_create(T_POS(), 0.94, "JWT valid")
+assert_eq(trit_to_str(signal_value(s)), "T_POS")
+assert_eq(signal_confidence(s), 0.94)
+assert_eq(signal_reason(s), "JWT valid")
+print("signal_create / accessors: OK")
+
+# signal_confident / signal_uncertain
+assert_true(signal_confident(s, 0.90))
+assert_false(signal_confident(s, 0.99))
+assert_false(signal_uncertain(s, 0.90))
+assert_true(signal_uncertain(s, 0.99))
+print("signal_confident / signal_uncertain: OK")
+
+# signal_and
+s2 = signal_create(T_POS(), 0.80, "user active")
+sa = signal_and(s, s2)
+assert_eq(trit_to_str(signal_value(sa)), "T_POS")
+assert_eq(signal_confidence(sa), 0.80)
+print("signal_and: OK")
+
+# signal_or
+s3 = signal_create(T_NEG(), 0.70, "rate limited")
+so = signal_or(s, s3)
+assert_eq(trit_to_str(signal_value(so)), "T_POS")
+assert_eq(signal_confidence(so), 0.94)
+print("signal_or: OK")
+
+# type check
+assert_eq(type(s), "signal")
+print("type(signal) == signal: OK")
+
+print("Phase 3 PASSED")
+
+print("")
+print("=== Phase 4: Qubit Simulation ===")
+
+# |0> state
+q0 = qubit_create(1.0, 0.0)
+assert_eq(qubit_prob0(q0), 1.0)
+assert_eq(qubit_prob1(q0), 0.0)
+print("qubit_create |0>: OK")
+
+# |1> state
+q1 = qubit_create(0.0, 1.0)
+assert_eq(qubit_prob0(q1), 0.0)
+assert_eq(qubit_prob1(q1), 1.0)
+print("qubit_create |1>: OK")
+
+# Hadamard gate -> superposition
+qh = qubit_hadamard(q0)
+p0 = qubit_prob0(qh)
+p1 = qubit_prob1(qh)
+assert_true(p0 > 0.4)
+assert_true(p0 < 0.6)
+assert_true(p1 > 0.4)
+assert_true(p1 < 0.6)
+print("qubit_hadamard superposition: OK")
+
+# Pauli-X gate (bit flip)
+qx = qubit_pauli_x(q0)
+assert_eq(qubit_prob0(qx), 0.0)
+assert_eq(qubit_prob1(qx), 1.0)
+print("qubit_pauli_x (bit flip): OK")
+
+# Pauli-Z gate (phase flip -- |0> unchanged in probability)
+qz = qubit_pauli_z(q0)
+assert_eq(qubit_prob0(qz), 1.0)
+assert_eq(qubit_prob1(qz), 0.0)
+print("qubit_pauli_z (phase flip): OK")
+
+# measure |0> -> always 0
+m0 = qubit_measure(q0)
+assert_eq(m0, 0)
+print("qubit_measure |0>: OK")
+
+# measure |1> -> always 1
+m1 = qubit_measure(q1)
+assert_eq(m1, 1)
+print("qubit_measure |1>: OK")
+
+# qubit_to_str
+s0 = qubit_to_str(q0)
+assert_true(len(s0) > 5)
+print("qubit_to_str: OK")
+
+# type check
+assert_eq(type(q0), "qubit")
+print("type(qubit) == qubit: OK")
+
+print("Phase 4 PASSED")
+
+print("")
+print("=== ALL PHASES PASSED ===")

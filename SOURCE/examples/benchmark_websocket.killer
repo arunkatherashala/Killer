@@ -1,0 +1,221 @@
+// Killer v3.0 Performance Benchmark Suite
+// WebSocket Framework Performance Tests
+// Measures: connection performance, message throughput, multi-client scenarios, broadcast latency
+
+println("=== WebSocket Framework Benchmarking ===")
+println("")
+
+// Benchmark 1: websocket_new() creation
+println("Benchmark 1: websocket_new() - Client Socket Creation")
+let ws_new_iterations = 2000
+let ws_new_start = now()
+let i = 0
+while i < ws_new_iterations {
+    let url = "ws://localhost:" + str(8000 + (i % 100)) + "/ws"
+    let ws = websocket_new(url)
+    let i = i + 1
+}
+let ws_new_end = now()
+let ws_new_elapsed = ws_new_end - ws_new_start
+println("Total time: " + str(ws_new_elapsed) + " seconds")
+println("Sockets created: " + str(ws_new_iterations))
+println("Average per socket: " + str(ws_new_elapsed / ws_new_iterations) + "s")
+println("Throughput: " + str(ws_new_iterations / ws_new_elapsed) + " sockets/sec")
+println("")
+
+// Benchmark 2: websocket_server_new() server creation
+println("Benchmark 2: websocket_server_new() - Server Socket Creation")
+let wss_new_iterations = 1000
+let wss_new_start = now()
+let j = 0
+while j < wss_new_iterations {
+    let addr = "127.0.0.1:" + str(8000 + (j % 100))
+    let wss = websocket_server_new(addr)
+    let j = j + 1
+}
+let wss_new_end = now()
+let wss_new_elapsed = wss_new_end - wss_new_start
+println("Total time: " + str(wss_new_elapsed) + " seconds")
+println("Server sockets: " + str(wss_new_iterations))
+println("Average per server: " + str(wss_new_elapsed / wss_new_iterations) + "s")
+println("Throughput: " + str(wss_new_iterations / wss_new_elapsed) + " servers/sec")
+println("")
+
+// Benchmark 3: ws_connect() performance
+println("Benchmark 3: ws_connect() - Connection Establishment")
+let connect_iterations = 1500
+let connect_start = now()
+let k = 0
+while k < connect_iterations {
+    let ws = websocket_new("ws://localhost:8080/ws")
+    let result = ws_connect(ws)
+    let k = k + 1
+}
+let connect_end = now()
+let connect_elapsed = connect_end - connect_start
+println("Total time: " + str(connect_elapsed) + " seconds")
+println("Connections: " + str(connect_iterations))
+println("Average per connection: " + str(connect_elapsed / connect_iterations) + "s")
+println("Throughput: " + str(connect_iterations / connect_elapsed) + " connections/sec")
+println("")
+
+// Benchmark 4: ws_send() message throughput
+println("Benchmark 4: ws_send() - Message Send Throughput")
+let send_iterations = 10000
+let messages = [
+    "Hello, WebSocket!",
+    "{\"type\":\"message\",\"data\":\"test\"}",
+    "Binary data simulation",
+    "Short",
+    "[1,2,3,4,5,6,7,8,9,10]"
+]
+let send_start = now()
+let l = 0
+while l < send_iterations {
+    let ws = websocket_new("ws://localhost:8080/ws")
+    let msg_idx = l % len(messages)
+    let sent = ws_send(ws, messages[msg_idx])
+    let l = l + 1
+}
+let send_end = now()
+let send_elapsed = send_end - send_start
+println("Total time: " + str(send_elapsed) + " seconds")
+println("Messages sent: " + str(send_iterations))
+println("Average per send: " + str(send_elapsed / send_iterations) + "s")
+println("Throughput: " + str(send_iterations / send_elapsed) + " messages/sec")
+println("")
+
+// Benchmark 5: ws_receive() latency
+println("Benchmark 5: ws_receive() - Message Receive Latency")
+let receive_iterations = 5000
+let receive_start = now()
+let m = 0
+while m < receive_iterations {
+    let ws = websocket_new("ws://localhost:8080/ws")
+    let received = ws_receive(ws)
+    // In real scenario, would process received message
+    let m = m + 1
+}
+let receive_end = now()
+let receive_elapsed = receive_end - receive_start
+println("Total time: " + str(receive_elapsed) + " seconds")
+println("Messages received: " + str(receive_iterations))
+println("Average per receive: " + str(receive_elapsed / receive_iterations) + "s")
+println("Throughput: " + str(receive_iterations / receive_elapsed) + " messages/sec")
+println("")
+
+// Benchmark 6: Multi-client scenario (echo pattern)
+println("Benchmark 6: Multi-Client Echo (Send + Receive)")
+let multiclient_iterations = 1000
+let num_clients = 5
+let multiclient_start = now()
+let n = 0
+while n < multiclient_iterations {
+    let client_idx = 0
+    while client_idx < num_clients {
+        let ws = websocket_new("ws://localhost:8080/client_" + str(client_idx))
+        let send_result = ws_send(ws, "echo_" + str(n))
+        let receive_result = ws_receive(ws)
+        let client_idx = client_idx + 1
+    }
+    let n = n + 1
+}
+let multiclient_end = now()
+let multiclient_elapsed = multiclient_end - multiclient_start
+let total_operations = multiclient_iterations * num_clients * 2  // send + receive
+println("Total time: " + str(multiclient_elapsed) + " seconds")
+println("Echo cycles: " + str(multiclient_iterations))
+println("Clients: " + str(num_clients))
+println("Total operations: " + str(total_operations))
+println("Average per operation: " + str(multiclient_elapsed / total_operations) + "s")
+println("Throughput: " + str(total_operations / multiclient_elapsed) + " ops/sec")
+println("")
+
+// Benchmark 7: Broadcast simulation (server → many clients)
+println("Benchmark 7: Broadcast Simulation (1 server → N clients)")
+let broadcast_iterations = 500
+let broadcast_clients = 10
+let broadcast_msg = "{\"type\":\"broadcast\",\"signal\":\"update\",\"timestamp\":1000000}"
+let broadcast_start = now()
+let o = 0
+while o < broadcast_iterations {
+    // Simulate server
+    let server = websocket_server_new("127.0.0.1:9000")
+    
+    // Simulate N clients receiving broadcast
+    let client_idx = 0
+    while client_idx < broadcast_clients {
+        let client_ws = websocket_new("ws://localhost:9000/broadcast")
+        let recv = ws_receive(client_ws)
+        let client_idx = client_idx + 1
+    }
+    let o = o + 1
+}
+let broadcast_end = now()
+let broadcast_elapsed = broadcast_end - broadcast_start
+let total_broadcast_ops = broadcast_iterations * broadcast_clients
+println("Total time: " + str(broadcast_elapsed) + " seconds")
+println("Broadcast cycles: " + str(broadcast_iterations))
+println("Clients per broadcast: " + str(broadcast_clients))
+println("Total messages: " + str(total_broadcast_ops))
+println("Average per client: " + str(broadcast_elapsed / total_broadcast_ops) + "s")
+println("Throughput: " + str(total_broadcast_ops / broadcast_elapsed) + " receives/sec")
+println("")
+
+// Benchmark 8: Connection teardown (ws_disconnect)
+println("Benchmark 8: ws_disconnect() - Connection Teardown")
+let disconnect_iterations = 2000
+let disconnect_start = now()
+let p = 0
+while p < disconnect_iterations {
+    let ws = websocket_new("ws://localhost:8080/ws")
+    let conn = ws_connect(ws)
+    let disc = ws_disconnect(ws)
+    let p = p + 1
+}
+let disconnect_end = now()
+let disconnect_elapsed = disconnect_end - disconnect_start
+println("Total time: " + str(disconnect_elapsed) + " seconds")
+println("Disconnections: " + str(disconnect_iterations))
+println("Average per disconnect: " + str(disconnect_elapsed / disconnect_iterations) + "s")
+println("Throughput: " + str(disconnect_iterations / disconnect_elapsed) + " disconnects/sec")
+println("")
+
+// Benchmark 9: Round-trip WebSocket communication cycle
+println("Benchmark 9: Round-Trip Message Cycle")
+let roundtrip_iterations = 2000
+let roundtrip_start = now()
+let q = 0
+while q < roundtrip_iterations {
+    // Client: Connect → Send → Receive → Disconnect
+    let ws = websocket_new("ws://localhost:8080/roundtrip")
+    let connect_result = ws_connect(ws)
+    let send_result = ws_send(ws, "request_" + str(q))
+    let receive_result = ws_receive(ws)
+    let disconnect_result = ws_disconnect(ws)
+    let q = q + 1
+}
+let roundtrip_end = now()
+let roundtrip_elapsed = roundtrip_end - roundtrip_start
+println("Total time: " + str(roundtrip_elapsed) + " seconds")
+println("Round-trips: " + str(roundtrip_iterations))
+println("Average per round-trip: " + str(roundtrip_elapsed / roundtrip_iterations) + "s")
+println("Throughput: " + str(roundtrip_iterations / roundtrip_elapsed) + " cycles/sec")
+println("[Includes: connect + send + receive + disconnect]")
+println("")
+
+// Summary
+println("=== WebSocket Framework Performance Summary ===")
+println("websocket_new(): " + str(ws_new_iterations / ws_new_elapsed) + " ops/sec")
+println("websocket_server_new(): " + str(wss_new_iterations / wss_new_elapsed) + " ops/sec")
+println("ws_connect(): " + str(connect_iterations / connect_elapsed) + " ops/sec")
+println("ws_send(): " + str(send_iterations / send_elapsed) + " ops/sec")
+println("ws_receive(): " + str(receive_iterations / receive_elapsed) + " ops/sec")
+println("Multi-client: " + str(total_operations / multiclient_elapsed) + " ops/sec")
+println("Broadcast: " + str(total_broadcast_ops / broadcast_elapsed) + " ops/sec")
+println("ws_disconnect(): " + str(disconnect_iterations / disconnect_elapsed) + " ops/sec")
+println("Round-trip: " + str(roundtrip_iterations / roundtrip_elapsed) + " cycles/sec")
+println("")
+println("✓ WebSocket framework benchmarking complete")
+
+

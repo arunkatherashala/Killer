@@ -1,0 +1,49 @@
+kfn bench_kstr_1m() {
+  i = 0
+  while i < 1000000 {
+    s = K"v={i}"
+    i = i + 1
+  }
+  return s
+}
+
+kfn bench_concat_1m() {
+  i = 0
+  while i < 1000000 {
+    s = "v=" + str(i)
+    i = i + 1
+  }
+  return s
+}
+
+kfn bench_loop_only_1m() {
+  i = 0
+  while i < 1000000 {
+    i = i + 1
+  }
+  return i
+}
+
+t0 = system_time_ms()
+r = bench_loop_only_1m()
+t1 = system_time_ms()
+e0 = t1 - t0
+print(K"loop baseline (1M):       {e0} ms = {e0} ns/iter")
+
+t2 = system_time_ms()
+r = bench_kstr_1m()
+t3 = system_time_ms()
+e1 = t3 - t2
+print(K"K-string fused  (1M):   {e1} ms = {e1} ns/iter  last={r}")
+
+t4 = system_time_ms()
+r = bench_concat_1m()
+t5 = system_time_ms()
+e2 = t5 - t4
+print(K"plain concat 'v='+str(i): {e2} ms = {e2} ns/iter  last={r}")
+
+speedup_vs_loop = e1
+if e0 > 0 {
+  speedup_vs_loop = e1 - e0
+}
+print(K"K-string alloc overhead: ~{speedup_vs_loop} ns above loop baseline")

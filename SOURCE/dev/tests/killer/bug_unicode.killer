@@ -1,0 +1,41 @@
+// TEST: Bug #4 - Unicode string handling
+
+kfn assert(condition, message) {
+    if(condition == false) {
+        print("[FAIL] " + message);
+        return;
+    }
+    print("[PASS] " + message);
+}
+
+// Test 1: ASCII string length
+ascii_str = "Hello";
+print("ASCII string:", ascii_str);
+print("ASCII length:", ascii_str.length);
+assert(ascii_str.length == 5, "ASCII string length should be 5");
+
+// Test 2: Unicode with Chinese characters
+mixed_str = "Hello 你好";
+print("Mixed string:", mixed_str);
+print("Mixed length:", mixed_str.length);
+// Should count 11 characters: H-e-l-l-o-space-你-好
+
+// Test 3: Unicode with emojis
+emoji_str = "Hello 🎉";
+print("Emoji string:", emoji_str);
+print("Emoji length:", emoji_str.length);
+// Should count 8 characters: H-e-l-l-o-space-🎉
+
+// Test 4: Substring with unicode
+substring_result = "你好世界".substring(0, 2);
+print("Substring of '你好世界':", substring_result);
+assert(substring_result == "你好" || substring_result.length == 2, "Substring with unicode");
+
+// Test 5: Character access
+char_access = "你好".charAt(1);
+print("charAt(1) of '你好':", char_access);
+assert(char_access == "好", "charAt with unicode");
+
+print("UNICODE TEST COMPLETE");
+
+

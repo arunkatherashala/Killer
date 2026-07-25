@@ -1,0 +1,59 @@
+# Counter Bot — Ghost VM persistent counter example
+# RAM[0..4] stores the conversation counter (survives cold-resume).
+#
+# Assemble: ghost_vm assemble examples/counter.ghost counter.ghst
+# Run:      ghost_vm live counter.ghst
+
+.fuel 100000
+.data 100 "Session #"
+.data 120 "\n"
+.data 130 "You said: "
+
+# Load counter from RAM[0..4], increment, store back
+load 0          # push i32 from RAM[0..4]
+push 1
+add
+dup
+store 0         # save incremented counter back
+
+# Print "Session #"
+push 100
+push 9
+syscall 4       # SYS_PRINT_STR
+
+# Print counter value (on stack from dup above)
+syscall 3       # SYS_PRINT_NUM (pops and prints with newline)
+
+loop:
+    # Prompt user
+    push 256
+    syscall 7   # SYS_PROMPT
+
+    # If empty input, halt
+    dup
+    push 0
+    eq
+    jmpif done
+
+    # Print "You said: "
+    push 130
+    push 10
+    syscall 4   # SYS_PRINT_STR
+
+    # Echo user input
+    push 256
+    swap
+    syscall 4   # SYS_PRINT_STR
+
+    # Newline
+    push 10
+    syscall 6   # SYS_PRINT_CHAR
+
+    # Yield
+    syscall 8   # SYS_YIELD
+
+    jmp loop
+
+done:
+    pop
+    halt

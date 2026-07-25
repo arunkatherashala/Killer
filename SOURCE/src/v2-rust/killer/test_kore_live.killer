@@ -1,0 +1,29 @@
+print("=== KORE Format Test ===")
+print("")
+
+print("[ Writing employees.kore ]")
+result = kore_write("employees.kore", "name:str,age:int,salary:float,dept:str", "[[Alice,25,90000.0,Engineering],[Bob,30,120000.0,Management],[Charlie,25,90000.0,Engineering],[Diana,35,150000.0,Management],[Eve,25,90000.0,Engineering]]")
+print(result)
+print("")
+
+print("[ File metadata ]")
+info = kore_info("employees.kore")
+print(info)
+print("")
+
+print("[ Read all rows ]")
+rows = kore_read("employees.kore")
+print(rows)
+print("")
+
+print("[ Column pruning: read only salary ]")
+salaries = kore_read_col("employees.kore", "salary")
+print(salaries)
+print("")
+
+print("[ Column pruning: read only dept ]")
+depts = kore_read_col("employees.kore", "dept")
+print(depts)
+print("")
+
+print("=== KORE Test Complete ===")

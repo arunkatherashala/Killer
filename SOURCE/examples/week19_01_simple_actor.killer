@@ -1,0 +1,31 @@
+// Week 19: Actor Pools & Concurrency - Example 1
+// Simple Message Handler (Actor-like pattern)
+
+kfn create_mailbox() {
+    return [];
+}
+
+kfn send_message(mailbox, message) {
+    mailbox.push(message);
+    return mailbox;
+}
+
+kfn process_mailbox(mailbox) {
+    for i in 0..length(mailbox) {
+        let msg = mailbox[i];
+        print("Processing message: " + str(msg));
+    }
+    return [];
+}
+
+// Main program
+let actor_mailbox = create_mailbox();
+actor_mailbox = send_message(actor_mailbox, {type: "init", data: 42});
+actor_mailbox = send_message(actor_mailbox, {type: "compute", data: 100});
+actor_mailbox = send_message(actor_mailbox, {type: "shutdown", data: null});
+
+print("Mailbox size: " + str(length(actor_mailbox)));
+actor_mailbox = process_mailbox(actor_mailbox);
+print("Processing complete");
+
+

@@ -1,0 +1,15 @@
+kfn add(a, b) {
+    a + b
+}
+
+kfn multiply(x, y) {
+    x * y
+}
+
+result = add(5, 3)
+print(result)
+
+product = multiply(2, 4)
+print(product)
+
+

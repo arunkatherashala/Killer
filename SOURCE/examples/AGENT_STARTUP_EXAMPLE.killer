@@ -1,0 +1,180 @@
+// KILLER AGENT STARTUP EXAMPLE
+// How to start and run an agent
+// Date: March 19, 2026
+
+kfn main() {
+  println("=== KILLER AGENT STARTUP ===\n")
+  
+  // Step 1: Create an agent
+  println("Step 1: Creating agent...")
+  let agent = create_agent(
+    name: "ResearchBot",
+    role: "researcher",
+    description: "Autonomous research agent"
+  )
+  println("✅ Agent created: " + agent.name)
+  println("   Role: " + agent.role)
+  println("   State: " + agent.state)
+  println("")
+  
+  // Step 2: Add memory/facts to agent
+  println("Step 2: Recording memories...")
+  agent.remember("Task: Analyze code performance", importance: 0.95)
+  agent.remember("Goal: Find optimization opportunities", importance: 0.90)
+  agent.remember("Constraint: Must maintain accuracy", importance: 0.85)
+  println("✅ 3 memories recorded")
+  println("")
+  
+  // Step 3: Trigger reasoning
+  println("Step 3: Starting reasoning cycle...")
+  let thoughts = agent.think()
+  println("✅ Generated " + thoughts.len().to_string() + " thoughts")
+  for thought in thoughts {
+    println("   • " + thought)
+  }
+  println("")
+  
+  // Step 4: Execute action
+  println("Step 4: Executing action...")
+  let action = agent.action_optimize_code()
+  println("✅ Action executed: " + action.action_type)
+  println("   Details: " + action.description)
+  println("")
+  
+  // Step 5: Observe results
+  println("Step 5: Observing results...")
+  agent.observe_result(
+    action: "optimize_code",
+    result: "Performance improved by 15%"
+  )
+  println("✅ Result observed and recorded")
+  println("")
+  
+  // Step 6: Agent state after cycle
+  println("Step 6: Agent status after cycle")
+  println("   Name: " + agent.name)
+  println("   Role: " + agent.role)
+  println("   Total memories: " + agent.memory_count().to_string())
+  println("   State: " + agent.state)
+  println("   Can reason: " + agent.can_reason().to_string())
+  println("")
+  
+  // Step 7: Create agent pool
+  println("Step 7: Creating agent pool...")
+  let pool = create_agent_pool(capacity: 3)
+  pool.add_agent(agent)
+  pool.add_agent(create_agent(name: "AnalysisBot", role: "analyst", description: "Analysis"))
+  pool.add_agent(create_agent(name: "ReportBot", role: "reporter", description: "Reporting"))
+  println("✅ Agent pool created with " + pool.active_agents().to_string() + " agents")
+  println("")
+  
+  // Step 8: Run agent pool
+  println("Step 8: Running distributed pool tasks...")
+  for agent_ref in pool.get_agents() {
+    let result = pool.execute_agent_task(agent_ref)
+    println("✅ " + agent_ref.name + " completed task")
+  }
+  println("")
+  
+  println("═══════════════════════════════════════")
+  println("Agent startup complete! All systems operational.")
+  println("═══════════════════════════════════════")
+}
+
+// Helper: Create a single agent
+kfn create_agent(name: String, role: String, description: String) -> Agent {
+  let agent = Agent {
+    id: generate_id(),
+    name: name,
+    role: role,
+    description: description,
+    state: "Idle",
+    memory: List::new(),
+    thoughts: List::new(),
+    actions: List::new()
+  }
+  return agent
+}
+
+// Helper: Create agent pool
+kfn create_agent_pool(capacity: Int) -> AgentPool {
+  return AgentPool {
+    agents: List::new(),
+    capacity: capacity,
+    last_task_time: time::now(),
+    coordination_enabled: true
+  }
+}
+
+// Helper: Generate unique ID
+kfn generate_id() -> String {
+  return "agent_" + time::now().to_string()
+}
+
+// Data structures
+type Agent = {
+  id: String,
+  name: String,
+  role: String,
+  description: String,
+  state: String,
+  memory: List<String>,
+  thoughts: List<String>,
+  actions: List<String>
+}
+
+type AgentPool = {
+  agents: List<Agent>,
+  capacity: Int,
+  last_task_time: Int,
+  coordination_enabled: Bool
+}
+
+// Agent methods (would be implemented in agent_framework module)
+kfn Agent::remember(self, fact: String, importance: Float) -> Unit {
+  self.memory.push(fact)
+}
+
+kfn Agent::think(self) -> List<String> {
+  return List::from(["Analyzing patterns", "Generating strategy", "Planning actions"])
+}
+
+kfn Agent::action_optimize_code(self) -> {action_type: String, description: String} {
+  return {
+    action_type: "optimize",
+    description: "Applied algorithmic optimization + parallelization"
+  }
+}
+
+kfn Agent::observe_result(self, action: String, result: String) -> Unit {
+  self.actions.push(action + " → " + result)
+}
+
+kfn Agent::memory_count(self) -> Int {
+  return self.memory.len()
+}
+
+kfn Agent::can_reason(self) -> Bool {
+  return self.state == "Idle" || self.state == "Reasoning"
+}
+
+kfn AgentPool::add_agent(self, agent: Agent) -> Unit {
+  if self.agents.len() < self.capacity {
+    self.agents.push(agent)
+  }
+}
+
+kfn AgentPool::active_agents(self) -> Int {
+  return self.agents.len()
+}
+
+kfn AgentPool::get_agents(self) -> List<Agent> {
+  return self.agents
+}
+
+kfn AgentPool::execute_agent_task(self, agent: Agent) -> Bool {
+  // Simulate task execution
+  return true
+}
+
+

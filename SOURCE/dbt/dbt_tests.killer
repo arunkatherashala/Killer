@@ -1,0 +1,559 @@
+// dbt_tests.killer
+// DBT Test System - Data Quality Validation
+// Generalizable pattern: proof validation, agent consensus, artifact quality
+
+// ============================================================================
+// TEST CORE TYPES
+// ============================================================================
+
+enum TestType {
+  Unique,
+  NotNull,
+  Relationship,
+  Accepted,
+  Custom,
+  Aggregate
+}
+
+enum TestSeverity {
+  Error,
+  Warning
+}
+
+record TestDefinition {
+  test_id: String,
+  test_type: TestType,
+  model_name: String,
+  column_name: String,
+  severity: TestSeverity,
+  config: Map<String, String>
+}
+
+record TestResult {
+  test_id: String,
+  model_name: String,
+  passed: Bool,
+  row_count: Int,
+  failed_count: Int,
+  failure_rate: Float,
+  error_message: String,
+  timestamp: Int
+}
+
+record TestSuite {
+  suite_name: String,
+  tests: List<TestDefinition>,
+  results: List<TestResult>
+}
+
+// ============================================================================
+// BUILT-IN TEST VALIDATORS
+// ============================================================================
+
+actor UniqueValidator {
+  handle validate(data: List<Map<String, String>>, column: String) -> TestResult {
+    seen: Set<String> = {}
+    duplicates: Int = 0
+    
+    for row in data {
+      val = row.get(column)
+      if val != nil {
+        if seen.contains(val) {
+          duplicates = duplicates + 1
+        }
+        seen.add(val)
+      }
+    }
+    
+    passed = duplicates == 0
+    
+    TestResult {
+      test_id: "unique_" + column,
+      model_name: "",
+      passed: passed,
+      row_count: data.len(),
+      failed_count: duplicates,
+      failure_rate: if data.len() > 0 { 
+        (duplicates * 100) / data.len() 
+      } else { 
+        0.0 
+      },
+      error_message: if passed { "" } else { 
+        "Found " + duplicates.to_string() + " duplicate values in " + column 
+      },
+      timestamp: 0
+    }
+  }
+}
+
+actor NotNullValidator {
+  handle validate(data: List<Map<String, String>>, column: String) -> TestResult {
+    nulls: Int = 0
+    
+    for row in data {
+      val = row.get(column)
+      if val == nil || val == "" {
+        nulls = nulls + 1
+      }
+    }
+    
+    passed = nulls == 0
+    
+    TestResult {
+      test_id: "not_null_" + column,
+      model_name: "",
+      passed: passed,
+      row_count: data.len(),
+      failed_count: nulls,
+      failure_rate: if data.len() > 0 { 
+        (nulls * 100) / data.len() 
+      } else { 
+        0.0 
+      },
+      error_message: if passed { "" } else { 
+        "Found " + nulls.to_string() + " null values in " + column 
+      },
+      timestamp: 0
+    }
+  }
+}
+
+actor RelationshipValidator {
+  handle validate(
+    parent_data: List<Map<String, String>>,
+    child_data: List<Map<String, String>>,
+    parent_col: String,
+    child_col: String
+  ) -> TestResult {
+    // Build set of valid parent IDs
+    parent_ids: Set<String> = {}
+    for row in parent_data {
+      val = row.get(parent_col)
+      if val != nil {
+        parent_ids.add(val)
+      }
+    }
+    
+    // Check child references
+    orphans: Int = 0
+    for row in child_data {
+      val = row.get(child_col)
+      if val != nil {
+        if !parent_ids.contains(val) {
+          orphans = orphans + 1
+        }
+      }
+    }
+    
+    passed = orphans == 0
+    
+    TestResult {
+      test_id: "relationship_" + child_col + "_to_" + parent_col,
+      model_name: "",
+      passed: passed,
+      row_count: child_data.len(),
+      failed_count: orphans,
+      failure_rate: if child_data.len() > 0 { 
+        (orphans * 100) / child_data.len() 
+      } else { 
+        0.0 
+      },
+      error_message: if passed { "" } else { 
+        "Found " + orphans.to_string() + " orphaned references in " + child_col 
+      },
+      timestamp: 0
+    }
+  }
+}
+
+actor AcceptedValuesValidator {
+  handle validate(
+    data: List<Map<String, String>>,
+    column: String,
+    allowed_values: List<String>
+  ) -> TestResult {
+    invalid_count: Int = 0
+    
+    allowed_set: Set<String> = {}
+    for val in allowed_values {
+      allowed_set.add(val)
+    }
+    
+    for row in data {
+      val = row.get(column)
+      if val != nil {
+        if !allowed_set.contains(val) {
+          invalid_count = invalid_count + 1
+        }
+      }
+    }
+    
+    passed = invalid_count == 0
+    
+    TestResult {
+      test_id: "accepted_" + column,
+      model_name: "",
+      passed: passed,
+      row_count: data.len(),
+      failed_count: invalid_count,
+      failure_rate: if data.len() > 0 { 
+        (invalid_count * 100) / data.len() 
+      } else { 
+        0.0 
+      },
+      error_message: if passed { "" } else { 
+        "Found " + invalid_count.to_string() + " values not in accepted set for " + column 
+      },
+      timestamp: 0
+    }
+  }
+}
+
+// ============================================================================
+// CUSTOM TEST HANDLER
+// ============================================================================
+
+actor CustomTestHandler {
+  handle run_custom_test(
+    test_name: String,
+    data: List<Map<String, String>>,
+    test_fn: |List<Map<String, String>>| -> Bool,
+    error_msg: String
+  ) -> TestResult {
+    passed = test_fn(data)
+    
+    TestResult {
+      test_id: "custom_" + test_name,
+      model_name: "",
+      passed: passed,
+      row_count: data.len(),
+      failed_count: if passed { 0 } else { data.len() },
+      failure_rate: if passed { 0.0 } else { 100.0 },
+      error_message: if passed { "" } else { error_msg },
+      timestamp: 0
+    }
+  }
+}
+
+// ============================================================================
+// TEST RUNNER - EXECUTES TESTS
+// ============================================================================
+
+actor TestRunner {
+  results: List<TestResult> = []
+  failed_tests: Int = 0
+  passed_tests: Int = 0
+  
+  handle run_test(test: TestResult) {
+    this.results.push(test)
+    
+    if test.passed {
+      this.passed_tests = this.passed_tests + 1
+      print("  ✓ " + test.test_id + " PASSED")
+    } else {
+      this.failed_tests = this.failed_tests + 1
+      print("  ✗ " + test.test_id + " FAILED: " + test.error_message)
+    }
+  }
+  
+  handle run_test_batch(tests: List<TestResult>) {
+    for test in tests {
+      this.run_test(test).await
+    }
+  }
+  
+  handle get_results() -> List<TestResult> {
+    this.results
+  }
+  
+  handle all_passed() -> Bool {
+    this.failed_tests == 0
+  }
+  
+  handle stats() -> String {
+    total = this.passed_tests + this.failed_tests
+    pass_rate = if total > 0 { (this.passed_tests * 100) / total } else { 0 }
+    
+    "tests=" + total.to_string() + 
+    " passed=" + this.passed_tests.to_string() + 
+    " failed=" + this.failed_tests.to_string() + 
+    " pass_rate=" + pass_rate.to_string() + "%"
+  }
+}
+
+// ============================================================================
+// TEST CIRCUIT BREAKER - FAIL FAST PATTERN
+// ============================================================================
+
+actor TestCircuitBreaker {
+  max_failures: Int = 5
+  failure_count: Int = 0
+  is_open: Bool = false
+  
+  handle initialize(max_failures: Int) {
+    this.max_failures = max_failures
+  }
+  
+  handle check_can_continue() -> Bool {
+    !this.is_open
+  }
+  
+  handle record_failure() -> Bool {
+    this.failure_count = this.failure_count + 1
+    
+    if this.failure_count >= this.max_failures {
+      this.is_open = true
+      print("🔴 Circuit breaker OPEN - too many test failures")
+      RETURN false
+    }
+    
+    true
+  }
+  
+  handle reset() {
+    this.failure_count = 0
+    this.is_open = false
+  }
+  
+  handle status() -> String {
+    if this.is_open { "OPEN" } else { "CLOSED" }
+  }
+}
+
+// ============================================================================
+// TEST SUITE MANAGER - ORCHESTRATE COLLECTIONS OF TESTS
+// ============================================================================
+
+actor TestSuiteManager {
+  suites: Map<String, TestSuite> = {}
+  runner: TestRunner = nil
+  breaker: TestCircuitBreaker = nil
+  
+  handle initialize(runner: TestRunner, breaker: TestCircuitBreaker) {
+    this.runner = runner
+    this.breaker = breaker
+  }
+  
+  handle create_suite(suite_name: String) -> String {
+    suite = TestSuite {
+      suite_name: suite_name,
+      tests: [],
+      results: []
+    }
+    
+    this.suites[suite_name] = suite
+    print("✓ Created test suite: " + suite_name)
+    suite_name
+  }
+  
+  handle add_test_to_suite(suite_name: String, test: TestDefinition) {
+    suite = this.suites[suite_name]
+    if suite != nil {
+      suite.tests.push(test)
+    }
+  }
+  
+  handle run_suite(suite_name: String, data_map: Map<String, List<Map<String, String>>>) -> TestResult {
+    suite = this.suites[suite_name]
+    if suite == nil {
+      // Return dummy result
+      RETURN TestResult {
+        test_id: "error",
+        model_name: "",
+        passed: false,
+        row_count: 0,
+        failed_count: 0,
+        failure_rate: 0.0,
+        error_message: "Suite not found",
+        timestamp: 0
+      }
+    }
+    
+    print("")
+    print("Running test suite: " + suite_name)
+    
+    results: List<TestResult> = []
+    
+    for test in suite.tests {
+      if !this.breaker.check_can_continue().await {
+        print("⚠️  Skipping (circuit breaker open)")
+        break
+      }
+      
+      // Get data for this model
+      model_data = data_map.get(test.model_name, default=[])
+      
+      // Run appropriate test
+      match test.test_type {
+        TestType::Unique -> {
+          validator = UniqueValidator::spawn()
+          result = validator.validate(model_data, test.column_name).await
+          this.runner.run_test(result).await
+          if !result.passed {
+            this.breaker.record_failure().await
+          }
+          results.push(result)
+        }
+        
+        TestType::NotNull -> {
+          validator = NotNullValidator::spawn()
+          result = validator.validate(model_data, test.column_name).await
+          this.runner.run_test(result).await
+          if !result.passed {
+            this.breaker.record_failure().await
+          }
+          results.push(result)
+        }
+        
+        _ -> {
+          print("  (test type not yet implemented)")
+        }
+      }
+    }
+    
+    // Return aggregate result
+    aggregate = TestResult {
+      test_id: suite_name + "_aggregate",
+      model_name: "",
+      passed: results.len() > 0,
+      row_count: results.len(),
+      failed_count: 0,
+      failure_rate: 0.0,
+      error_message: "",
+      timestamp: 0
+    }
+    
+    aggregate
+  }
+}
+
+// ============================================================================
+// MAIN: DEMONSTRATION
+// ============================================================================
+
+kfn main() {
+  print("🚀 Killer DBT Test System")
+  print("")
+  
+  // Initialize
+  runner = TestRunner::spawn()
+  breaker = TestCircuitBreaker::spawn()
+  manager = TestSuiteManager::spawn()
+  
+  breaker.initialize(3).await
+  manager.initialize(runner, breaker).await
+  
+  // ========================================================================
+  // SAMPLE DATA: Orders Model
+  // ========================================================================
+  
+  orders_data: List<Map<String, String>> = []
+  
+  orders_data.push({
+    "order_id": "1",
+    "customer_id": "cust_1",
+    "amount": "100.00",
+    "status": "completed"
+  })
+  
+  orders_data.push({
+    "order_id": "2",
+    "customer_id": "cust_2",
+    "amount": "200.00",
+    "status": "pending"
+  })
+  
+  orders_data.push({
+    "order_id": "3",
+    "customer_id": "cust_1",
+    "amount": "150.00",
+    "status": "completed"
+  })
+  
+  // 1 bad row: duplicate order_id
+  orders_data.push({
+    "order_id": "1",
+    "customer_id": "cust_3",
+    "amount": "300.00",
+    "status": "pending"
+  })
+  
+  // ========================================================================
+  // CREATE TEST SUITE
+  // ========================================================================
+  
+  print("📋 Creating order model tests")
+  
+  manager.create_suite("orders_tests").await
+  
+  // Test 1: order_id must be unique
+  test1 = TestDefinition {
+    test_id: "order_unique",
+    test_type: TestType::Unique,
+    model_name: "orders",
+    column_name: "order_id",
+    severity: TestSeverity::Error,
+    config: {}
+  }
+  manager.add_test_to_suite("orders_tests", test1).await
+  
+  // Test 2: customer_id cannot be null
+  test2 = TestDefinition {
+    test_id: "customer_notnull",
+    test_type: TestType::NotNull,
+    model_name: "orders",
+    column_name: "customer_id",
+    severity: TestSeverity::Error,
+    config: {}
+  }
+  manager.add_test_to_suite("orders_tests", test2).await
+  
+  // Test 3: status must be accepted values
+  test3 = TestDefinition {
+    test_id: "status_accepted",
+    test_type: TestType::Accepted,
+    model_name: "orders",
+    column_name: "status",
+    severity: TestSeverity::Error,
+    config: { "values": "pending,completed,cancelled" }
+  }
+  manager.add_test_to_suite("orders_tests", test3).await
+  
+  print("✓ Created 3 tests")
+  print("")
+  
+  // ========================================================================
+  // RUN TESTS
+  // ========================================================================
+  
+  data_map: Map<String, List<Map<String, String>>> = {}
+  data_map["orders"] = orders_data
+  
+  manager.run_suite("orders_tests", data_map).await
+  
+  // ========================================================================
+  // REPORT
+  // ========================================================================
+  
+  print("")
+  print("📊 Test Results Summary:")
+  test_stats = runner.stats().await
+  print("  " + test_stats)
+  
+  all_pass = runner.all_passed().await
+  if all_pass {
+    print("  ✅ All tests passed!")
+  } else {
+    print("  ⚠️  Some tests failed")
+  }
+  
+  print("")
+  print("🔌 Circuit Breaker Status: " + breaker.status().await)
+  print("")
+  
+  print("💡 Generalization: This pattern works for:")
+  print("   - Proof validation (all steps must be logically valid)")
+  print("   - Multi-agent consensus (all agents must agree above confidence)")
+  print("   - Data quality gates (fail fast on bad data)")
+  print("   - Artifact verification (code review gates)")
+}

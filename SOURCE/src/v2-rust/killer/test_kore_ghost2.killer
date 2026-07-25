@@ -1,0 +1,34 @@
+print("=== Round 2: Ghost-108 Targeted KORE Research ===")
+print("")
+
+print("[ Q1: PAX layout internals ]")
+r1 = ghost_108("PAX format partition attributes across columnar layout cache efficiency SIMD vectorized")
+print(r1)
+print("")
+
+print("[ Q2: Bloom filter file format ]")
+r2 = ghost_108("bloom filter in parquet file format column chunk skip predicate pushdown")
+print(r2)
+print("")
+
+print("[ Q3: Delta encoding integers ]")
+r3 = ghost_108("delta encoding integers columnar compression bitpacking difference store sequential data")
+print(r3)
+print("")
+
+print("[ Q4: Per column encryption ]")
+r4 = ghost_108("per column encryption file format AES columnar selective decrypt")
+print(r4)
+print("")
+
+print("[ Q5: Chunk parallel decompression ]")
+r5 = ghost_108("parallel chunk decompression multithreaded file format read speed benchmark")
+print(r5)
+print("")
+
+print("[ Q6: Memory mapped columnar ]")
+r6 = ghost_108("memory mapped file columnar format zero copy read mmap Apache Arrow")
+print(r6)
+print("")
+
+print("=== Ghost-108 KORE Research Complete ===")

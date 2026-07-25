@@ -1,0 +1,19 @@
+# Future sketch: Killer UI from .killer (Phase A API — not wired to VM yet).
+#
+# Web-stack concepts (see SOURCE/docs/KILLER_UI_ENGINE.md + killer_ui::web_stack):
+#   React-like:  one state tree → declarative ui.* widgets; effects on tick/events.
+#   Angular-like: ui.module "tools" { panels; inject builtins as services }
+#   Three.js-like: ui.scene { camera; mesh; material } → host WebGL via kala_ui or wgpu later
+#   Node-like:    kala_serve / HTTP routes as panel host; IPC to VM — not embedded Node
+#
+# ui.window "main" {
+#   ui.label "killer_ui"
+#   ui.button "btn_cook" { ui.on_click { graph.cook() } }
+#   ui.slider "gain" 0.0 2.0 1.0
+# }
+#
+# graph.node "sum" op:add { wire "a" "b" }
+#
+# Run Rust scaffold: cargo run --release --bin killer_ui_demo
+
+println("ui_parallel_sketch: see comments for ui.* / graph.* + web_stack mapping")

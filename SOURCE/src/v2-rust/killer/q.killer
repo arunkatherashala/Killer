@@ -1,0 +1,2 @@
+result = 6 * 9 + 12 / 76
+print(K"6*9+12/76 = {result}")

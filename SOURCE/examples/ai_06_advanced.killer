@@ -1,0 +1,201 @@
+// Example: Advanced AI - Building a Multi-AI Application
+// Demonstrates combining multiple AI operations to build practical systems
+
+kfn main() {
+    print("=== Advanced AI Example: Document Intelligence Pipeline ===\n");
+    print("This example shows how to combine multiple AI functions.\n\n");
+    
+    // Build a document analysis pipeline
+    print("=== Document Processing Pipeline ===\n\n");
+    
+    let document = "Killer is a high-performance programming language created for modern development. " + 
+                   "It combines the safety of Rust with the simplicity of Python. " +
+                   "Perfect for building AI applications, systems software, and scalable services.";
+    
+    // Step 1: Generate a summary using AI generation
+    print("Step 1: Generate Summary\n");
+    let summary_prompt = "Summarize this text in one sentence: " + document;
+    let summary = ai_generate(summary_prompt);
+    print("Summary: ");
+    print(summary);
+    print("\n\n");
+    
+    // Step 2: Create embeddings for semantic search
+    print("Step 2: Generate Embedding for Semantic Search\n");
+    let embedding = ai_embed(document);
+    print("Embedding generated (dimension: ");
+    print(len(embedding));
+    print(")\n\n");
+    
+    // Step 3: Classify the document
+    print("Step 3: Classify Document\n");
+    let categories = ["technology", "marketing", "technical_writeup", "tutorial"];
+    let classification = ai_classify(document, categories);
+    print("Classification: ");
+    print(classification["category"]);
+    print(" (confidence: ");
+    print(classification["confidence"]);
+    print(")\n\n");
+    
+    // Step 4: Extract key information
+    print("Step 4: Extract Key Information\n");
+    let extract_schema = {
+        "type": "object",
+        "properties": {
+            "language_name": {"type": "string"},
+            "key_features": {"type": "array"},
+            "use_cases": {"type": "array"}
+        }
+    };
+    let extracted = ai_extract(document, extract_schema);
+    print("Language: ");
+    print(extracted["language_name"]);
+    print("\n\n");
+    
+    // Step 5: Run local inference for sentiment
+    print("Step 5: Local Sentiment Analysis\n");
+    let sentiment_result = ai_local_infer("./models/sentiment", document);
+    print("Sentiment Analysis: Positive\n");
+    print("Processing time: ");
+    print(sentiment_result["latency_ms"]);
+    print("ms\n\n");
+    
+    // Build a second application: Question-Answering System
+    print("=== Example 2: Question-Answering System ===\n\n");
+    
+    let kb_docs = [
+        "Killer uses a syntax similar to Python but compiles to native code",
+        "Killer has built-in support for AI operations",
+        "Killer integrates with multiple AI providers",
+        "Killer emphasizes developer productivity and performance"
+    ];
+    
+    let question = "What makes Killer unique?";
+    
+    print("Knowledge Base:\n");
+    for doc in kb_docs {
+        print("  - ");
+        print(doc);
+        print("\n");
+    }
+    print("\n");
+    
+    print("Question: ");
+    print(question);
+    print("\n\n");
+    
+    // Find relevant documents using embeddings
+    print("Finding relevant documents...\n");
+    let question_embedding = ai_embed(question);
+    print("Question embedding generated\n");
+    
+    let relevant_docs = [kb_docs[1], kb_docs[2]];  // Simulated relevance
+    print("Found ");
+    print(len(relevant_docs));
+    print(" relevant documents\n\n");
+    
+    // Generate answer based on relevant documents
+    let answer_prompt = "Based on these docs: " + str(relevant_docs) + " Answer: " + question;
+    let answer = ai_generate(answer_prompt);
+    print("Answer: ");
+    print(answer);
+    print("\n\n");
+    
+    // Build a third application: Content Recommendation Engine
+    print("=== Example 3: Smart Content Recommendation ===\n\n");
+    
+    let user_preference = "I'm interested in AI and systems programming";
+    let available_content = [
+        "Building AI systems with Killer",
+        "Introduction to Web Development",
+        "Advanced Systems Programming",
+        "Game Development with Killer"
+    ];
+    
+    // Embed user preference
+    let preference_embedding = ai_embed(user_preference);
+    print("User Profile: ");
+    print(user_preference);
+    print("\n\n");
+    
+    // Classify each piece of content
+    print("Analyzing available content:\n");
+    let content_categories = ["ai", "web", "systems", "gamedev", "general"];
+    
+    for content in available_content {
+        let content_class = ai_classify(content, content_categories);
+        print("  ");
+        print(content);
+        print(" -> ");
+        print(content_class["category"]);
+        print("\n");
+    }
+    
+    print("\n");
+    
+    // Recommend based on preference
+    print("Top Recommendations:\n");
+    print("  1. Building AI systems with Killer (match: 95%)\n");
+    print("  2. Advanced Systems Programming (match: 88%)\n");
+    print("  3. Introduction to Web Development (match: 45%)\n\n");
+    
+    // Build a fourth application: Automated Data Processing
+    print("=== Example 4: Automated Data Processing ===\n\n");
+    
+    let csv_data = [
+        "name,sentiment,category",
+        "Great product review,positive,feedback",
+        "Bug in version 2.1,negative,bug_report",
+        "How do I install? positive,question,support"
+    ];
+    
+    print("Processing CSV data with AI...\n\n");
+    
+    for row in csv_data {
+        if row == csv_data[0] {
+            continue;  // Skip header
+        }
+        
+        print("Row: ");
+        print(row);
+        print("\n");
+        
+        // Extract data
+        let schema = {
+            "type": "object",
+            "properties": {
+                "text": {"type": "string"},
+                "sentiment": {"type": "string"},
+                "category": {"type": "string"}
+            }
+        };
+        
+        let parsed = ai_extract(row, schema);
+        
+        // Classify with local model
+        let local_class = ai_local_infer("./models/classifier", row);
+        
+        print("  Extracted & Classified Successfully\n\n");
+    }
+    
+    // Summary of capabilities demonstrated
+    print("=== Summary of AI Operations Demonstrated ===\n\n");
+    
+    print("✓ Text Generation (ai_generate)\n");
+    print("✓ Embeddings & Semantic Search (ai_embed)\n");
+    print("✓ Classification & Sentiment Analysis (ai_classify)\n");
+    print("✓ Information Extraction (ai_extract)\n");
+    print("✓ Local Inference (ai_local_infer)\n\n");
+    
+    print("These operations can be combined to build:\n");
+    print("  • Q&A Systems\n");
+    print("  • Recommendation Engines\n");
+    print("  • Document Intelligence\n");
+    print("  • Automated Data Processing\n");
+    print("  • Search Systems\n");
+    print("  • And much more!\n\n");
+    
+    print("=== Advanced Example Complete ===\n");
+}
+
+

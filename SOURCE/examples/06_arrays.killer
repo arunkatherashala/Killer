@@ -1,0 +1,32 @@
+# Test arrays
+
+# Create arrays
+numbers = [1, 2, 3, 4, 5];
+names = ["Alice", "Bob", "Charlie"];
+
+# Access elements
+print("First number:", numbers[0]);
+print("Last name:", names[2]);
+
+# Modify elements
+numbers[0] = 10;
+names[1] = "Robert";
+
+print("Modified array:", numbers);
+print("Modified names:", names);
+
+# Array in loops
+print("Loop through numbers:");
+i = 0;
+while (i < 5) {
+    print("  ", numbers[i]);
+    i = i + 1;
+}
+
+# Mixed types
+mixed = [1, "hello", true, 3.14];
+print("Mixed array:", mixed);
+
+print("--- Arrays work! ---");
+
+

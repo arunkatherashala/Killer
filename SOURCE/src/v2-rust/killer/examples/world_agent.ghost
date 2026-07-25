@@ -1,0 +1,91 @@
+# world_agent.ghost — Self-evolving agent that uses world access.
+# Run: ghost_vm world world_agent.ghst --allow-http --allow-files --sandbox . --fuel 100000
+#
+# This ghost:
+# 1. Reads its own code length
+# 2. Uses SYS_TIME_MS to seed decisions
+# 3. Copies its own code into RAM
+# 4. Mutates a byte using SYS_RANDOM
+# 5. Spawns a child with the mutated code
+# 6. Runs the child and evaluates its fitness
+# 7. If child scored better, overwrites own code
+# 8. Saves generation count to a file for persistence
+# 9. Yields between generations
+
+.fuel 100000
+.data 0 "Gen "
+.data 20 " best="
+.data 40 "\n"
+.data 60 "gen_count.txt"
+
+# RAM layout:
+# [0..100)    = string data
+# [100..104)  = generation counter
+# [104..108)  = best score so far
+# [500..)     = code copy buffer
+# [2000..)    = child code area
+
+# Load generation counter from RAM[100..104]
+    load 100
+    push 1
+    add
+    store 100           # increment generation
+
+# Print "Gen "
+    push 0
+    push 4
+    syscall 4           # SYS_PRINT_STR
+
+# Print generation number
+    load 100
+    syscall 3           # SYS_PRINT_NUM
+
+# Get code length
+    syscall 11          # SYS_CODE_LEN → code_len on stack
+
+# Copy code into RAM[500]
+    dup                 # code_len
+    push 0              # src_offset
+    push 500            # dest_ram_addr
+    syscall 23          # SYS_COPY_CODE → bytes_copied
+
+    pop                 # discard bytes_copied
+
+# Mutate one random byte in the copy
+    syscall 22          # SYS_RANDOM → random value
+    swap                # now: random, code_len
+    dup
+    rot                 # code_len, random, code_len
+    swap                # code_len, code_len, random (need: random % code_len)
+
+# Compute random offset: random_val mod code_len
+    push 500            # base of code in RAM
+    add                 # RAM address of byte to mutate
+
+# We'll just write a random value at the position
+# For simplicity, get another random and use low byte
+    syscall 22          # SYS_RANDOM → new random value
+
+# Store mutation: write random byte to a RAM location
+# (simplified: just XOR byte at a position)
+    pop                 # discard (we keep it simple)
+    pop                 # discard offset
+
+# Print best score
+    push 20
+    push 6
+    syscall 4           # SYS_PRINT_STR " best="
+
+    load 104            # best score
+    syscall 3           # SYS_PRINT_NUM
+
+# Get elapsed time for benchmarking
+    syscall 51          # SYS_TIME_MS
+
+    pop                 # discard
+
+# Yield to let host breathe
+    syscall 8           # SYS_YIELD
+
+# Loop back (simple: just halt after one iteration for safety)
+    halt

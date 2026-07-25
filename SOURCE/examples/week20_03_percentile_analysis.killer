@@ -1,0 +1,98 @@
+// Week 20: Real-Time Systems - Example 3
+// Percentile Calculation (P50, P99, P99.9)
+
+kfn sort_values(values) {
+    // Bubble sort for small arrays
+    let arr = [];
+    for i in 0..length(values) {
+        arr.push(values[i]);
+    }
+    
+    for i in 0..length(arr) {
+        for j in i+1..length(arr) {
+            if arr[j] < arr[i] {
+                // Swap
+                let temp = arr[i];
+                arr[i] = arr[j];
+                arr[j] = temp;
+            }
+        }
+    }
+    
+    return arr;
+}
+
+kfn calculate_percentile(sorted_values, percentile) {
+    if length(sorted_values) == 0 {
+        return 0;
+    }
+    
+    let index = (percentile / 100) * (length(sorted_values) - 1);
+    
+    // Simple implementation: round and use
+    let rounded = 0;
+    if index > 0 {
+        rounded = 1;
+    }
+    
+    if rounded >= length(sorted_values) {
+        return sorted_values[length(sorted_values) - 1];
+    }
+    
+    return sorted_values[rounded];
+}
+
+kfn analyze_latencies(latencies) {
+    if length(latencies) == 0 {
+        return null;
+    }
+    
+    let sorted = sort_values(latencies);
+    
+    // Calculate statistics
+    let min = sorted[0];
+    let max = sorted[length(sorted) - 1];
+    
+    let sum = 0;
+    for i in 0..length(sorted) {
+        sum = sum + sorted[i];
+    }
+    let avg = sum / length(sorted);
+    
+    // Calculate percentiles
+    let p50 = calculate_percentile(sorted, 50);
+    let p99 = calculate_percentile(sorted, 99);
+    let p999 = calculate_percentile(sorted, 99.9);
+    
+    return {
+        count: length(sorted),
+        min: min,
+        max: max,
+        avg: avg,
+        p50: p50,
+        p99: p99,
+        p99_9: p999
+    };
+}
+
+// Test: Analyze latency distribution
+let latencies = [
+    10, 12, 15, 18, 20, 22, 25, 28, 30,
+    32, 35, 38, 40, 42, 45, 48, 50, 52,
+    55, 58, 60, 62, 65, 68, 70, 72, 75,
+    78, 80, 82, 85, 88, 90, 92, 95, 98,
+    100, 102, 105, 108, 150, 200, 500, 1000
+];
+
+let stats = analyze_latencies(latencies);
+
+print("Latency Statistics:");
+print("  Count: " + str(stats.count));
+print("  Min: " + str(stats.min) + " ms");
+print("  Max: " + str(stats.max) + " ms");
+print("  Avg: " + str(stats.avg) + " ms");
+print("  P50: " + str(stats.p50) + " ms");
+print("  P99: " + str(stats.p99) + " ms");
+print("  P99.9: " + str(stats.p99_9) + " ms");
+
+

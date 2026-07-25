@@ -1,0 +1,21 @@
+print("=== Ghost-108 Parallel Agent Test ===")
+print("")
+
+print("Test 1: Math (instant, no network)")
+r1 = ghost_108("what is 247 * 13")
+print(r1)
+print("")
+
+print("Test 2: Unit conversion (instant)")
+r2 = ghost_108("convert 100 miles to km")
+print(r2)
+print("")
+
+print("Test 3: Capital city (Wikipedia race)")
+r3 = ghost_108("What is the capital of Japan?")
+print(r3)
+print("")
+
+print("Test 4: Person search (DDG web race)")
+r4 = ghost_108("Who is Sai Arun Kumar Katherashala?")
+print(r4)

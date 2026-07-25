@@ -1,0 +1,53 @@
+// week23_05_http_post_api.killer
+// HTTP POST requests and data submission
+
+println("=== HTTP POST Examples ===\n")
+
+// Create user with POST
+user_data = "{\"name\": \"Bob\", \"email\": \"bob@example.com\", \"role\": \"Manager\"}"
+response = http_post("https://api.example.com/users", user_data)
+
+println("POST request status: " + str(response.status))
+if response.status == 201 {
+    println("✓ User created successfully")
+    result = parse_json(response.body)
+    println("Created ID: " + result.id)
+}
+
+// Submit form data
+println("\n=== Submitting Form Data ===")
+form_data = "{\"username\": \"alice_smith\", \"password\": \"secret123\"}"
+login_response = http_post("https://api.example.com/login", form_data)
+
+if login_response.status == 200 {
+    println("✓ Login successful")
+    auth = parse_json(login_response.body)
+    println("Auth token: " + auth.token)
+}
+else {
+    println("✗ Login failed")
+}
+
+// Batch operations
+println("\n=== Batch Create ===")
+items = [
+    "{\"title\": \"Task 1\", \"priority\": \"high\"}",
+    "{\"title\": \"Task 2\", \"priority\": \"medium\"}",
+    "{\"title\": \"Task 3\", \"priority\": \"low\"}",
+]
+
+for item_json in items {
+    response = http_post("https://api.example.com/tasks", item_json)
+    if response.status == 201 {
+        result = parse_json(response.body)
+        println("✓ Created task with id: " + result.id)
+    }
+}
+
+// Update operation
+println("\n=== Update with POST ===")
+update_data = "{\"id\": 42, \"status\": \"completed\", \"completed_at\": \"2026-03-14\"}"
+update_response = http_post("https://api.example.com/tasks/42", update_data)
+println("Update status: " + str(update_response.status))
+
+

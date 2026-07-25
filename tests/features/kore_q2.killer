@@ -1,0 +1,5 @@
+print("Ghost KORE query")
+a = ghost_108("PAX columnar format DuckDB Arrow memory mapped parallel reads explained")
+print(a)
+b = ghost_108("zstd vs snappy vs lz4 compression speed ratio comparison columnar data")
+print(b)

@@ -1,0 +1,131 @@
+// TEST SUITE: Error Handling - Exception paths, try/catch/finally
+kfn assert(condition, message) {
+    if(condition == false) {
+        print("[ERROR] " + message);
+        throw message;
+    }
+}
+
+// Basic try/catch
+caught = false;
+try {
+    throw "test";
+} catch(e) {
+    caught = true;
+}
+assert(caught == true, "try/catch failed");
+print("TEST 1: Try/Catch - PASS");
+
+// Finally always executes
+final_ran = false;
+try {
+    x = 10;
+} catch(e) {
+} finally {
+    final_ran = true;
+}
+assert(final_ran == true, "finally failed");
+print("TEST 2: Finally - PASS");
+
+// Finally after catch
+final_after = false;
+caught2 = false;
+try {
+    throw "test";
+} catch(e) {
+    caught2 = true;
+} finally {
+    final_after = true;
+}
+assert(caught2 == true && final_after == true, "catch finally failed");
+print("TEST 3: Finally after catch - PASS");
+
+// Nested try/catch
+inner = false;
+outer = false;
+try {
+    try {
+        throw "inner";
+    } catch(e) {
+        inner = true;
+    }
+    outer = true;
+} catch(e) {
+}
+assert(inner == true && outer == true, "nested failed");
+print("TEST 4: Nested try/catch - PASS");
+
+// Exception in function
+kfn throwError() {
+    throw "func error";
+}
+caught_func = false;
+try {
+    throwError();
+} catch(e) {
+    caught_func = true;
+}
+assert(caught_func == true, "func error failed");
+print("TEST 5: Function error - PASS");
+
+// Exception in loop
+caught_loop = false;
+try {
+    for(i = 0; i < 10; i = i + 1) {
+        if(i == 5) throw "loop error";
+    }
+} catch(e) {
+    caught_loop = true;
+}
+assert(caught_loop == true, "loop error failed");
+print("TEST 6: Loop error - PASS");
+
+// Exception in method
+class Thrower {
+    init() {
+    }
+    throwMe() {
+        throw "method error";
+    }
+}
+caught_method = false;
+try {
+    t = new Thrower();
+    t.throwMe();
+} catch(e) {
+    caught_method = true;
+}
+assert(caught_method == true, "method error failed");
+print("TEST 7: Method error - PASS");
+
+// Null access (safe because returns null)
+x = null;
+y = x.property;
+assert(y == null, "null property should be null");
+print("TEST 8: Null property - PASS");
+
+// Continue after catch
+results = [];
+for(i = 0; i < 3; i = i + 1) {
+    try {
+        if(i == 1) throw "skip";
+        results.push(i);
+    } catch(e) {
+    }
+}
+assert(results.length == 2, "continue after catch failed");
+print("TEST 9: Continue after catch - PASS");
+
+// Error message
+msg = "";
+try {
+    throw "specific msg";
+} catch(e) {
+    msg = e;
+}
+assert(msg == "specific msg", "error msg failed");
+print("TEST 10: Error message - PASS");
+
+print("ERROR HANDLING: COMPLETE");
+
+

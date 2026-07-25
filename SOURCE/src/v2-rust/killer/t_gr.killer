@@ -1,0 +1,6 @@
+kfn greet(name)
+  msg = "Hello, " + name
+
+kfn main()
+  greet("Killer")
+  greet("World")

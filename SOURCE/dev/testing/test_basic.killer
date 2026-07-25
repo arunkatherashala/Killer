@@ -1,0 +1,41 @@
+# Test 1: Basic Features
+print("=== KILLER TEST SUITE ===")
+print("")
+
+# Test Variables
+print("Test 1: Variables & Basic Operations")
+x = 42
+name = "Killer"
+print("x =", x)
+print("name =", name)
+print("x * 2 =", x * 2)
+print("")
+
+# Test Strings
+print("Test 2: String Operations")
+greeting = "Hello, "
+full_greeting = greeting + name + "!"
+print(full_greeting)
+print("Length:", full_greeting.length)
+print("")
+
+# Test Arrays
+print("Test 3: Arrays")
+numbers = [10, 20, 30, 40, 50]
+print("Array:", numbers)
+print("First:", numbers[0])
+print("Last:", numbers[4])
+print("Length:", numbers.length)
+print("")
+
+# Test Conditionals
+print("Test 4: Conditionals")
+age = 25
+if (age >= 18) {
+    print("Adult (age =", age, ")")
+} else {
+    print("Minor")
+}
+print("")
+
+

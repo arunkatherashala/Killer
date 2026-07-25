@@ -1,0 +1,7 @@
+print("=== Flash Functions Test ===")
+print(sum(10))
+print(sum([1, 2, 3, 4]))
+print(parseInt("42"))
+print("Flash Functions Test complete")
+
+

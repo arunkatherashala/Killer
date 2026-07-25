@@ -1,0 +1,14 @@
+# x = 10
+CONST_NUM 10
+STORE x
+
+# y = 32
+CONST_NUM 32
+STORE y
+
+# print(x + y) => 42
+LOAD x
+LOAD y
+ADD
+PRINT
+HALT

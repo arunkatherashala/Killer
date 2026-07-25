@@ -1,0 +1,87 @@
+print("========================================")
+print("  HOW TRIT CHANGES PROGRAMMING")
+print("  Live Demo in Killer Language")
+print("========================================")
+print("")
+
+print("--- 1. Eliminates null hell ---")
+print("")
+
+result = T_ZERO()
+print(K"result = {trit_to_str(result)}")
+print("No None, no undefined, no -1 sentinel.")
+print("Unknown is a first-class value.")
+print("")
+
+print("--- 2. Better Decision Logic ---")
+print("")
+
+jwt_valid      = T_POS()
+session_active = T_ZERO()
+
+verdict = trit_and(jwt_valid, session_active)
+v_str = trit_to_str(verdict)
+
+print(K"jwt_valid      = {trit_to_str(jwt_valid)}")
+print(K"session_active = {trit_to_str(session_active)}")
+print(K"verdict        = {v_str}")
+
+if v_str == "T_POS" {
+  print("Decision: ALLOW")
+}
+if v_str == "T_ZERO" {
+  print("Decision: ASK FOR MFA (not enough info)")
+}
+if v_str == "T_NEG" {
+  print("Decision: DENY")
+}
+print("")
+
+print("--- 3. Replaces Error Codes with Logic ---")
+print("")
+
+result2 = T_POS()
+r_str = trit_to_str(result2)
+if r_str == "T_NEG"  { print("Status: ERROR") }
+if r_str == "T_ZERO" { print("Status: PENDING") }
+if r_str == "T_POS"  { print("Status: SUCCESS") }
+print("Semantic meaning — no magic numbers needed.")
+print("")
+
+print("--- 4. AI/ML Decisions Stay Nuanced ---")
+print("")
+
+fraud_signal = signal_create(T_POS(), 0.67, "unusual location")
+print(K"fraud detected : {trit_to_str(signal_value(fraud_signal))}")
+print(K"confidence     : {signal_confidence(fraud_signal)}")
+print(K"reason         : {signal_reason(fraud_signal)}")
+
+if signal_uncertain(fraud_signal, 0.70) {
+  print("Confidence too low -> escalate to human review")
+}
+print("")
+
+print("--- 5. Real-World State Machines ---")
+print("")
+
+auth_state  = T_ZERO()
+order_state = T_POS()
+test_state  = T_NEG()
+net_state   = T_ZERO()
+
+kfn state_label(domain, neg_word, zero_word, pos_word, val) {
+  s = trit_to_str(val)
+  if s == "T_NEG"  { print(K"{domain}: {neg_word}")  }
+  if s == "T_ZERO" { print(K"{domain}: {zero_word}") }
+  if s == "T_POS"  { print(K"{domain}: {pos_word}")  }
+}
+
+state_label("Auth",    "denied",    "pending",    "granted",    auth_state)
+state_label("Order",   "cancelled", "processing", "shipped",    order_state)
+state_label("Test",    "failed",    "skipped",    "passed",     test_state)
+state_label("Network", "down",      "degraded",   "up",         net_state)
+
+print("")
+print("========================================")
+print("  DEMO COMPLETE")
+print("========================================")

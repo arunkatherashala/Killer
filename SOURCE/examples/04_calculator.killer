@@ -1,0 +1,61 @@
+# Example 4: Complete Calculator Program
+
+print("=== Killer Calculator ===")
+
+# Get first number
+a = 10
+b = 3
+
+print("Numbers:", a, b)
+
+# Addition
+result = a + b
+print("Addition:", a, "+", b, "=", result)
+
+# Subtraction
+result = a - b
+print("Subtraction:", a, "-", b, "=", result)
+
+# Multiplication
+result = a * b
+print("Multiplication:", a, "*", b, "=", result)
+
+# Division
+result = a / b
+print("Division:", a, "/", b, "=", result)
+
+# Modulo
+result = a % b
+print("Modulo:", a, "%", b, "=", result)
+
+# Conditional logic
+print("---");
+print("Comparing numbers:");
+
+if (a > b) {
+    print(a, "is greater than", b);
+}
+
+if (a == b) {
+    print(a, "equals", b);
+} else {
+    print(a, "does not equal", b);
+}
+
+# Sum using loop
+print("---");
+print("Sum from 1 to 5:");
+
+sum_result = 0;
+num = 1;
+
+while (num <= 5) {
+    sum_result = sum_result + num;
+    num = num + 1;
+}
+
+print("Sum:", sum_result)
+
+print("--- End of Example 4 ---")
+
+

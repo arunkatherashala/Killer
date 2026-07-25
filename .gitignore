@@ -1,0 +1,32 @@
+# Logs
+*.log
+_LOGS/
+assassin_assist.log
+kala_chat_log.csv
+killer_kala_full_log.csv
+
+# Temporary Files
+_tmp*
+_test*
+last_run_output.txt
+
+# Output files
+*out.txt
+*err.txt
+e18_results.txt
+novz_bench_results.txt
+test_results_mercury.txt
+cc_multik_out.txt
+
+# Directories
+.cache/
+**/target/
+test_reports/
+TEST_RUNS/
+_CURRENT_WORK/
+_AGENT/
+_TOOLS/
+
+# OS Files
+.DS_Store
+Thumbs.db

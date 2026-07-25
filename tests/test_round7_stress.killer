@@ -1,0 +1,132 @@
+-- ROUND 7: EXTREME STRESS TEST
+
+kfn test_maximum_computation()
+  println("TEST 1: Maximum Computation (50K arithmetic ops)")
+  result = 0
+  i = 0
+  while i < 50000
+    result = result + i
+    result = result - (i / 3)
+    result = result + (i % 7)
+    i = i + 1
+  println("Max computation result: " + result.to_string())
+  println("✓ PASSED - Completed 50K operations")
+
+kfn test_extreme_list()
+  println("TEST 2: Extreme List (10K items)")
+  lst = []
+  i = 0
+  while i < 10000
+    lst = push(lst, i * i * i)
+    i = i + 1
+  len = length(lst)
+  println("Created extreme list: " + len.to_string() + " items")
+  assert_eq(len, 10000)
+  println("✓ PASSED")
+
+kfn test_nested_loops_extreme()
+  println("TEST 3: Nested Loops Extreme (100x100x10)")
+  count = 0
+  sum = 0
+  i = 0
+  while i < 100
+    j = 0
+    while j < 100
+      k = 0
+      while k < 10
+        count = count + 1
+        sum = sum + k
+        k = k + 1
+      j = j + 1
+    i = i + 1
+  println("Extreme nesting: " + count.to_string() + " iterations, sum=" + sum.to_string())
+  assert_eq(count, 100000)
+  println("✓ PASSED - Completed 100K iterations")
+
+kfn test_memory_intense()
+  println("TEST 4: Memory Intense (Multiple large lists)")
+  lst1 = []
+  lst2 = []
+  lst3 = []
+  i = 0
+  while i < 2000
+    lst1 = push(lst1, i)
+    lst2 = push(lst2, i * 2)
+    lst3 = push(lst3, i * 3)
+    i = i + 1
+  total = length(lst1) + length(lst2) + length(lst3)
+  println("Total items in all lists: " + total.to_string())
+  assert_eq(total, 6000)
+  println("✓ PASSED - Handled 6K items across 3 lists")
+
+kfn test_algorithmic_stress()
+  println("TEST 5: Algorithmic Stress (Fibonacci large)")
+  
+  kfn fib_stress(n: Int) -> Int
+    if n <= 1
+      return n
+    a = 0
+    b = 1
+    i = 2
+    while i <= n
+      temp = a + b
+      a = b
+      b = temp
+      i = i + 1
+    return b
+  
+  result = fib_stress(60)
+  println("fib(60) = " + result.to_string())
+  println("✓ PASSED - Completed large fibonacci")
+
+kfn test_combined_stress()
+  println("TEST 6: Combined Stress (All features at max)")
+  
+  -- Create large list
+  lst = []
+  i = 0
+  while i < 5000
+    lst = push(lst, i)
+    i = i + 1
+  
+  -- Perform heavy computation
+  sum = 0
+  i = 0
+  while i < length(lst)
+    sum = sum + i
+    i = i + 1
+  
+  -- String operations
+  str = ""
+  i = 0
+  while i < 500
+    str = str + "K"
+    i = i + 1
+  
+  -- Final calculations
+  final = sum + length(lst) + length(str)
+  println("List length: " + length(lst).to_string())
+  println("Sum computed: " + sum.to_string())
+  println("String length: " + length(str).to_string())
+  println("Final total: " + final.to_string())
+  println("✓ PASSED - Combined stress test complete")
+
+kfn main()
+  println("=" * 60)
+  println("ROUND 7: EXTREME STRESS TEST")
+  println("=" * 60)
+  test_maximum_computation()
+  println("")
+  test_extreme_list()
+  println("")
+  test_nested_loops_extreme()
+  println("")
+  test_memory_intense()
+  println("")
+  test_algorithmic_stress()
+  println("")
+  test_combined_stress()
+  println("")
+  println("=" * 60)
+  println("ROUND 7: ALL STRESS TESTS PASSED ✓✓✓")
+  println("=" * 60)

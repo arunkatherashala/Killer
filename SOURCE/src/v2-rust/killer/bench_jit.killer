@@ -1,0 +1,70 @@
+print("============================================================")
+print("  KILLER JIT BENCHMARK  (hot-loop, local vars)")
+print("  JIT fires when loop bound is a constant literal")
+print("============================================================")
+
+# JIT-eligible: bound is LITERAL CONSTANT -> fuses to LtSlotConst
+kfn counter_jit() {
+  i = 0
+  while i < 1000000 {
+    i = i + 1
+  }
+  return i
+}
+
+kfn accum_jit() {
+  i = 0
+  s = 0
+  while i < 1000000 {
+    s = s + i
+    i = i + 1
+  }
+  return s
+}
+
+# NOT JIT-eligible: bound is a parameter -> interpreted loop
+kfn counter_param(limit) {
+  i = 0
+  while i < limit {
+    i = i + 1
+  }
+  return i
+}
+
+ITERS = 1000000
+
+# Warm-up (lets JIT compile on first run, threshold=500)
+r_w = counter_jit()
+r_w2 = accum_jit()
+r_w3 = counter_param(ITERS)
+
+# --- JIT runs (already compiled after warm-up) ---
+t0 = system_time_ms()
+r1 = counter_jit()
+t1 = system_time_ms()
+ms1 = t1 - t0
+print(K"[JIT-1] counter_jit (1M):    {ms1} ms   result={r1}")
+
+t0 = system_time_ms()
+r2 = accum_jit()
+t1 = system_time_ms()
+ms2 = t1 - t0
+print(K"[JIT-2] accum_jit (1M):      {ms2} ms   result={r2}")
+
+# --- Baseline: interpreted with parameter bound (no JIT) ---
+t0 = system_time_ms()
+r3 = counter_param(ITERS)
+t1 = system_time_ms()
+ms3 = t1 - t0
+print(K"[BASE] counter_param (1M):   {ms3} ms   (interpreted, param bound)")
+
+# --- Baseline: global loop (no function overhead) ---
+t0 = system_time_ms()
+ig = 0
+while ig < ITERS {
+  ig = ig + 1
+}
+t1 = system_time_ms()
+ms4 = t1 - t0
+print(K"[BASE] global counter (1M):  {ms4} ms   (no fn, no JIT)")
+print("------------------------------------------------------------")

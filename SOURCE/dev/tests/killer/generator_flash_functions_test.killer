@@ -1,0 +1,19 @@
+print("=== Generator Flash Functions ===")
+
+g = rangeGenerator(0, 5)
+print("g #1:", next(g))
+print("g #2:", next(g))
+print("g #3:", next(g))
+print("g #4:", next(g))
+print("g #5:", next(g))
+print("g exhausted:", next(g, "done"))
+
+g2 = rangeGenerator(10, 4, -2)
+print("g2 #1:", next(g2))
+print("g2 #2:", next(g2))
+print("g2 #3:", next(g2))
+print("g2 exhausted:", next(g2, "end"))
+
+print("=== Generator Flash Functions Done ===")
+
+

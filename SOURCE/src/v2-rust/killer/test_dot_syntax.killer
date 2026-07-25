@@ -1,0 +1,21 @@
+print("=== dot-to-dot conversion syntax ===")
+sample.csv.to.d1.kore
+print("1. sample.csv.to.d1.kore  OK")
+d1.kore.to.d1.json
+print("2. d1.kore.to.d1.json  OK")
+d1.kore.to.d1.xml
+print("3. d1.kore.to.d1.xml  OK")
+d1.kore.to.d1.tsv
+print("4. d1.kore.to.d1.tsv  OK")
+d1.kore.to.d1.ndjson
+print("5. d1.kore.to.d1.ndjson  OK")
+d1.kore.to.d1.avro
+print("6. d1.kore.to.d1.avro  OK")
+d1.kore.to.d1.parquet
+print("7. d1.kore.to.d1.parquet  OK")
+d1.json.to.d1_rt.kore
+print("8. d1.json.to.d1_rt.kore  OK")
+d1_rt.kore.to.d1_rt.csv
+print("9. round-trip csv:")
+nova_info("d1_rt.kore")
+print("=== all OK ===")

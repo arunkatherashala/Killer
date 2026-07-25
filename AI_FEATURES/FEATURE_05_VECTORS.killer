@@ -1,0 +1,343 @@
+// ============================================================================
+// KILLER v2.0 - FEATURE #5: VECTORS
+// Native vector type with embeddings and similarity search
+// ============================================================================
+
+// Vector type (generic over numeric types)
+record Vector {
+  data: List<Float>,
+  dimension: Int,
+  magnitude: Float
+}
+
+// ============================================================================
+// VECTOR OPERATIONS
+// ============================================================================
+
+kfn create_vector(data: List<Float>) -> Vector {
+  mag = 0.0
+  for val in data {
+    mag = mag + (val * val)
+  }
+  mag = (mag as Float).sqrt()
+  
+  Vector { data: data, dimension: data.len(), magnitude: mag }
+}
+
+kfn vector_magnitude(v: Vector) -> Float {
+  mag = 0.0
+  for val in v.data {
+    mag = mag + (val * val)
+  }
+  (mag as Float).sqrt()
+}
+
+kfn dot_product(v1: Vector, v2: Vector) -> Float {
+  if v1.dimension != v2.dimension {
+    return 0.0
+  }
+  
+  result = 0.0
+  for i in 0..v1.data.len() {
+    result = result + (v1.data[i] * v2.data[i])
+  }
+  result
+}
+
+kfn cosine_similarity(v1: Vector, v2: Vector) -> Float {
+  if v1.dimension != v2.dimension {
+    return 0.0
+  }
+  
+  dot = dot_product(v1, v2)
+  mag1 = vector_magnitude(v1)
+  mag2 = vector_magnitude(v2)
+  
+  if mag1 == 0.0 || mag2 == 0.0 {
+    return 0.0
+  }
+  
+  dot / (mag1 * mag2)
+}
+
+kfn euclidean_distance(v1: Vector, v2: Vector) -> Float {
+  if v1.dimension != v2.dimension {
+    return 999999.0
+  }
+  
+  sum_sq = 0.0
+  for i in 0..v1.data.len() {
+    diff = v1.data[i] - v2.data[i]
+    sum_sq = sum_sq + (diff * diff)
+  }
+  (sum_sq as Float).sqrt()
+}
+
+kfn normalize_vector(v: Vector) -> Vector {
+  mag = vector_magnitude(v)
+  if mag == 0.0 {
+    return v
+  }
+  
+  normalized_data = []
+  for val in v.data {
+    normalized_data.push(val / mag)
+  }
+  
+  create_vector(normalized_data)
+}
+
+// ============================================================================
+// VECTOR DATABASE
+// ============================================================================
+
+record VectorIndex {
+  id: String,
+  vector: Vector,
+  metadata: Map<String, String>
+}
+
+actor VectorDatabase {
+  vectors: List<VectorIndex> = []
+  namespace: String = "default"
+  
+  handle upsert(id: String, vector: Vector, metadata: Map<String, String>) {
+    // Find existing
+    found = false
+    for i in 0..this.vectors.len() {
+      if this.vectors[i].id == id {
+        this.vectors[i] = VectorIndex { id: id, vector: vector, metadata: metadata }
+        found = true
+        break
+      }
+    }
+    
+    // Or add new
+    if !found {
+      this.vectors.push(VectorIndex { id: id, vector: vector, metadata: metadata })
+    }
+  }
+  
+  handle search_similar(query_vector: Vector, top_k: Int) -> List<(String, Float)> {
+    // Calculate similarities
+    similarities = []
+    for idx in this.vectors {
+      sim = cosine_similarity(query_vector, idx.vector)
+      similarities.push((idx.id, sim))
+    }
+    
+    // Sort by similarity descending
+    similarities.sort_by(|a, b| { 
+      if a.1 > b.1 { -1 } else { 1 }
+    })
+    
+    // Return top K
+    result = []
+    for i in 0..(if top_k < similarities.len() {top_k} else {similarities.len()}) {
+      result.push(similarities[i])
+    }
+    result
+  }
+  
+  handle get_vector(id: String) -> Vector {
+    for idx in this.vectors {
+      if idx.id == id {
+        return idx.vector
+      }
+    }
+    nil
+  }
+  
+  handle vector_count() -> Int {
+    this.vectors.len()
+  }
+}
+
+// ============================================================================
+// EMBEDDING SYSTEM
+// ============================================================================
+
+actor EmbeddingService {
+  db: VectorDatabase
+  dimension: Int = 384  // Small embedding dimension
+  
+  handle initialize() {
+    this.db = VectorDatabase::spawn()
+  }
+  
+  handle embed_text(text: String) -> Vector {
+    // Simple deterministic embedding for demo
+    // Real implementation would use ML model
+    embedding_data = []
+    
+    hash_val = 0
+    for char in text.to_list() {
+      hash_val = hash_val + char.ord()
+    }
+    
+    for i in 0..this.dimension {
+      val = ((hash_val + i) % 256) as Float / 256.0
+      embedding_data.push(val)
+    }
+    
+    create_vector(embedding_data)
+  }
+  
+  handle index_text(id: String, text: String, metadata: Map<String, String>) {
+    vector = await this.embed_text(text)
+    await this.db.upsert(id, vector, metadata)
+  }
+  
+  handle search_texts(query: String, top_k: Int) -> List<(String, Float)> {
+    query_vector = await this.embed_text(query)
+    results = await this.db.search_similar(query_vector, top_k)
+    results
+  }
+}
+
+// ============================================================================
+// RAG SYSTEM (Retrieval Augmented Generation)
+// ============================================================================
+
+actor RAGSystem {
+  documents: Map<String, String> = {}
+  embeddings_index: VectorDatabase = nil
+  embedding_service: EmbeddingService = nil
+  
+  handle initialize() {
+    this.embedding_service = EmbeddingService::spawn()
+    await this.embedding_service.initialize()
+  }
+  
+  handle add_document(doc_id: String, content: String) {
+    this.documents[doc_id] = content
+    await this.embedding_service.index_text(doc_id, content, {
+      "source": "document",
+      "length": content.len().to_string()
+    })
+  }
+  
+  handle retrieve_context(query: String, top_k: Int) -> String {
+    // Search for similar documents
+    results = await this.embedding_service.search_texts(query, top_k)
+    
+    context = ""
+    for doc_id, similarity in results {
+      doc_content = this.documents[doc_id]
+      if doc_content != nil {
+        context = context + K"[Score: {(similarity * 100.0) as Int}%] {doc_content}\n\n"
+      }
+    }
+    
+    context
+  }
+  
+  handle rag_query(question: String) -> String {
+    // Retrieve relevant context
+    context = await this.retrieve_context(question, 3)
+    
+    if context.len() == 0 {
+      return "No relevant documents found"
+    }
+    
+    K"Context for '{question}':\n{context}\n[LLM would generate answer based on context]"
+  }
+}
+
+// ============================================================================
+// SEMANTIC SEARCH
+// ============================================================================
+
+actor SemanticSearch {
+  embedding_service: EmbeddingService
+  documents: List<(String, String)> = []  // (id, content) pairs
+  
+  handle initialize() {
+    this.embedding_service = EmbeddingService::spawn()
+    await this.embedding_service.initialize()
+  }
+  
+  handle add_document(id: String, content: String) {
+    vector = await this.embedding_service.embed_text(content)
+    await this.embedding_service.db.upsert(id, vector, {
+      "type": "document"
+    })
+    
+    this.documents.push((id, content))
+  }
+  
+  handle search(query: String, limit: Int) -> List<String> {
+    results = await this.embedding_service.search_texts(query, limit)
+    
+    documents = []
+    for doc_id, similarity in results {
+      for id, content in this.documents {
+        if id == doc_id {
+          preview = if content.len() > 100 {
+            content.substring(0, 100) + "..."
+          } else {
+            content
+          }
+          documents.push(K"{id} (sim: {(similarity * 100.0) as Int}%): {preview}")
+          break
+        }
+      }
+    }
+    
+    documents
+  }
+}
+
+// ============================================================================
+// MAIN EXAMPLE
+// ============================================================================
+
+kfn main() {
+  println("=== KILLER v2.0 Feature #5: Vectors ===")
+  
+  // Example 1: Basic vector operations
+  println("\n📊 Vector Operations:")
+  v1 = create_vector([1.0, 0.0, 0.0])
+  v2 = create_vector([1.0, 1.0, 0.0])
+  
+  dot = dot_product(v1, v2)
+  println(K"Dot product: {dot}")
+  
+  sim = cosine_similarity(v1, v2)
+  println(K"Cosine similarity: {(sim * 100.0) as Int}%")
+  
+  dist = euclidean_distance(v1, v2)
+  println(K"Euclidean distance: {(dist * 100.0) as Int}")
+  
+  // Example 2: Vector Database
+  println("\n💾 Vector Database:")
+  search_service = SemanticSearch::spawn()
+  await search_service.initialize()
+  
+  await search_service.add_document("doc1", "Killer is an AI-first programming language")
+  await search_service.add_document("doc2", "Python is a popular data science language")
+  await search_service.add_document("doc3", "Rust is a systems programming language")
+  
+  println("✓ 3 documents indexed")
+  
+  // Example 3: Semantic search
+  println("\n🔍 Semantic Search:")
+  results = await search_service.search("AI programming language", 2)
+  for result in results {
+    println(K"  {result}")
+  }
+  
+  // Example 4: RAG System
+  println("\n📚 RAG System:")
+  rag = RAGSystem::spawn()
+  await rag.initialize()
+  
+  await rag.add_document("feature1", "Tool Calling enables agents to call functions")
+  await rag.add_document("feature2", "Vectors enable semantic search and RAG")
+  await rag.add_document("feature3", "Memory systems allow agents to learn")
+  
+  answer = rag.rag_query("How do agents use functions?").await
+  println(answer)
+  
+  println("\n✅ Feature #5 (Vectors) Complete!")
+}

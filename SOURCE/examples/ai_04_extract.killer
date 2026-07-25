@@ -1,0 +1,152 @@
+// Example: AI Information Extraction
+// Demonstrates how to use ai_extract() to pull structured data from unstructured text
+
+kfn main() {
+    print("=== Killer AI Information Extraction Example ===\n");
+    
+    // Define extraction schema for contact information
+    let contact_schema = {
+        "type": "object",
+        "properties": {
+            "name": {"type": "string"},
+            "email": {"type": "string"},
+            "phone": {"type": "string"},
+            "company": {"type": "string"}
+        }
+    };
+    
+    // Sample text containing contact information
+    let text1 = "Hi, my name is John Smith. You can reach me at john@example.com or call 555-123-4567. I work at TechCorp.";
+    
+    print("=== Contact Information Extraction ===\n");
+    print("Text: ");
+    print(text1);
+    print("\n\n");
+    
+    let contact_result = ai_extract(text1, contact_schema);
+    
+    print("Extracted Information:\n");
+    print("  Name: ");
+    print(contact_result["name"]);
+    print("\n");
+    print("  Email: ");
+    print(contact_result["email"]);
+    print("\n");
+    print("  Phone: ");
+    print(contact_result["phone"]);
+    print("\n");
+    print("  Company: ");
+    print(contact_result["company"]);
+    print("\n\n");
+    
+    // Product information extraction
+    print("=== Product Information Extraction ===\n");
+    
+    let product_schema = {
+        "type": "object",
+        "properties": {
+            "product_name": {"type": "string"},
+            "price": {"type": "number"},
+            "color": {"type": "string"},
+            "size": {"type": "string"},
+            "availability": {"type": "string"}
+        }
+    };
+    
+    let product_text = "The Blue Killer T-Shirt (Size M) is available now for $29.99 in vibrant blue color.";
+    
+    print("Text: ");
+    print(product_text);
+    print("\n\n");
+    
+    let product_result = ai_extract(product_text, product_schema);
+    
+    print("Extracted Product Info:\n");
+    print("  Product: ");
+    print(product_result["product_name"]);
+    print("\n");
+    print("  Price: $");
+    print(product_result["price"]);
+    print("\n");
+    print("  Color: ");
+    print(product_result["color"]);
+    print("\n");
+    print("  Size: ");
+    print(product_result["size"]);
+    print("\n");
+    print("  Availability: ");
+    print(product_result["availability"]);
+    print("\n\n");
+    
+    // Named Entity Recognition style extraction
+    print("=== Event Information Extraction ===\n");
+    
+    let event_schema = {
+        "type": "object",
+        "properties": {
+            "event_name": {"type": "string"},
+            "date": {"type": "string"},
+            "location": {"type": "string"},
+            "time": {"type": "string"},
+            "organizer": {"type": "string"}
+        }
+    };
+    
+    let event_text = "The Killer Conference 2024 will be held on March 15, 2024 at the San Francisco Convention Center, starting at 9:00 AM. It's organized by the Killer Foundation.";
+    
+    print("Text: ");
+    print(event_text);
+    print("\n\n");
+    
+    let event_result = ai_extract(event_text, event_schema);
+    
+    print("Extracted Event Info:\n");
+    print("  Event: ");
+    print(event_result["event_name"]);
+    print("\n");
+    print("  Date: ");
+    print(event_result["date"]);
+    print("\n");
+    print("  Location: ");
+    print(event_result["location"]);
+    print("\n");
+    print("  Time: ");
+    print(event_result["time"]);
+    print("\n");
+    print("  Organizer: ");
+    print(event_result["organizer"]);
+    print("\n\n");
+    
+    // Batch extraction
+    print("=== Batch Extraction ===\n");
+    
+    let texts = [
+        "Invoice #12345 from Acme Corp for $500",
+        "Invoice #12346 from TechCorp for $1200",
+        "Invoice #12347 from DataSystems for $750"
+    ];
+    
+    let invoice_schema = {
+        "type": "object",
+        "properties": {
+            "invoice_number": {"type": "string"},
+            "company": {"type": "string"},
+            "amount": {"type": "number"}
+        }
+    };
+    
+    for text in texts {
+        let result = ai_extract(text, invoice_schema);
+        print("Invoice ");
+        print(result["invoice_number"]);
+        print(" from ");
+        print(result["company"]);
+        print(" for $");
+        print(result["amount"]);
+        print("\n");
+    }
+    
+    print("\n=== Information Extraction Example Complete ===\n");
+}
+
+

@@ -1,0 +1,4 @@
+# Killer Native VM bootstrap bytecode example
+CONST_STR "Hello from Killer Native VM"
+PRINT
+HALT

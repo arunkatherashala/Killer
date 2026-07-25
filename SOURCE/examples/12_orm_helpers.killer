@@ -1,0 +1,364 @@
+// Week 12 ORM Helpers Examples
+// Demonstrates using the ORM layer with Mappable trait, Repository, and helper classes
+
+// ====== Example 1: Define Mappable Model ======
+example user_model_definition {
+    // Define a strongly-typed User model
+    class User {
+        id
+        name
+        email
+        status
+    }
+    
+    // Implement Mappable trait (this would be in Rust)
+    // impl Mappable for User {
+    //     fn to_row(&self) -> Row { ... }
+    //     fn from_row(row: &Row) -> User { ... }
+    //     fn table_name() -> &'static str { "users" }
+    //     fn schema() -> Table { ... }
+    // }
+}
+
+// ====== Example 2: Repository Pattern - CRUD Operations ======
+example repository_basic_operations {
+    // Create repository
+    let repo = Repository::new(User);  // Type: Repository<User>
+    
+    // Get all users
+    let all_users_query = repo.find_all();
+    let sql = all_users_query.build_sql();
+    println("All users: " + sql);
+    // Output: SELECT * FROM users
+    
+    // Find specific user by ID
+    let user_query = repo.find_by_id(42.0);
+    println("Find user: " + user_query.build_sql());
+    // Output: SELECT * FROM users WHERE id = :id
+    
+    // Find by condition
+    let active_users = repo.find_by("status", "user_status", "active");
+    println("Active: " + active_users.build_sql());
+    // Output: SELECT * FROM users WHERE status = :user_status
+    
+    // Count operations
+    let count = repo.count_all();
+    println("Count SQL: " + count);
+    
+    let active_count = repo.count_where("status", "st", "active");
+    println("Active count: " + active_count);
+}
+
+// ====== Example 3: Entity Wrapper - Distinguish New vs Persisted ======
+example entity_lifecycle {
+    // Create new user entity (not yet in database)
+    let new_user = User {
+        id: 0,
+        name: "Alice",
+        email: "alice@example.com",
+        status: "active"
+    };
+    let entity = Entity::new(new_user);
+    
+    println("Is new: " + entity.is_new);  // true
+    
+    // After insert, wrap as loaded
+    let loaded_user = User {
+        id: 1,
+        name: "Alice",
+        email: "alice@example.com",
+        status: "active"
+    };
+    let loaded_entity = Entity::loaded(loaded_user);
+    
+    println("Is new: " + loaded_entity.is_new);  // false
+    
+    // Convert to Row for database operations
+    let row = loaded_entity.to_row();
+    println("Row fields: " + row.keys());
+}
+
+// ====== Example 4: Change Tracking - Track Modifications ======
+example change_tracking {
+    // Original row from database
+    let original_row = {
+        "id": 1,
+        "name": "Alice",
+        "email": "alice@example.com",
+        "status": "active"
+    };
+    
+    // Create tracker
+    let tracker = ChangeTracker::new(original_row);
+    println("Is dirty initially: " + tracker.is_dirty());  // false
+    
+    // Modify some fields
+    tracker.mark_dirty("name", "Alice Johnson");
+    tracker.mark_dirty("status", "inactive");
+    
+    println("Is dirty after changes: " + tracker.is_dirty());  // true
+    
+    // Get only changed fields
+    let changes = tracker.get_changes();
+    println("Changes: " + changes);  // {name: Alice Johnson, status: inactive}
+    
+    // Use for UPDATE - only update changed fields
+    // UPDATE users SET name = ?, status = ? WHERE id = 1
+    
+    // Reset to original state
+    tracker.reset();
+    println("Is dirty after reset: " + tracker.is_dirty());  // false
+}
+
+// ====== Example 5: Query Helper - Complex WHERE Clauses ======
+example query_helper_example {
+    // Build complex WHERE clauses cleanly
+    let helper = QueryHelper::new()
+        .eq("status", "status", "active")
+        .eq("role", "user_role", "admin")
+        .gt("age", "min_age", 21)
+        .lt("created_at", "before", timestamp());
+    
+    let (where_clause, params) = helper.build();
+    println("WHERE clause: " + where_clause);
+    println("Parameters: " + params);
+    
+    // Use in query
+    let query = QueryBuilder::select("users");
+    // Apply where clause from helper
+}
+
+// ====== Example 6: Pagination - Page-Based Results ======
+example pagination_example {
+    // Paginate results (page 2, 20 items per page)
+    let pagination = Pagination::new(2, 20);
+    
+    let offset = pagination.offset();  // 20 (skip first page)
+    let limit = pagination.limit();    // 20
+    
+    println("Page 2 offset: " + offset);
+    println("Page 2 limit: " + limit);
+    
+    // Apply to query
+    let base_query = QueryBuilder::select("posts")
+        .order_by("created_at", "DESC");
+    
+    let paginated = pagination.apply(base_query);
+    
+    println("SQL: " + paginated.build_sql());
+    // Output: SELECT * FROM posts ORDER BY created_at DESC LIMIT 20 OFFSET 20
+}
+
+// ====== Example 7: Sorting - Add ORDER BY ======
+example sorting_example {
+    // Sort by creation date, descending
+    let sort = Sort::new("created_at", SortOrder::Descending);
+    
+    let query = QueryBuilder::select("posts");
+    let sorted = sort.apply(query);
+    
+    println("Sorted: " + sorted.build_sql());
+    // Output: SELECT * FROM posts ORDER BY created_at DESC
+    
+    // Ascending sort
+    let asc_sort = Sort::new("name", SortOrder::Ascending);
+    let query2 = QueryBuilder::select("users");
+    let sorted2 = asc_sort.apply(query2);
+    
+    println("Sorted ASC: " + sorted2.build_sql());
+    // Output: SELECT * FROM users ORDER BY name ASC
+}
+
+// ====== Example 8: Result Mapper - Convert Rows to Entities ======
+example result_mapping {
+    // Assuming you got rows from database
+    let rows = [
+        {id: 1, name: "Alice", email: "alice@example.com", status: "active"},
+        {id: 2, name: "Bob", email: "bob@example.com", status: "active"},
+        {id: 3, name: "Charlie", email: "charlie@example.com", status: "inactive"}
+    ];
+    
+    // Create mapper (Type: ResultMapper<User>)
+    let mapper = ResultMapper::new(rows);
+    
+    // Convert all rows to User entities
+    let users = mapper.to_entities();  // Vec<User>
+    println("Total users: " + users.length);  // 3
+    
+    // Get first result (like .first())
+    if let Some(first_user) = mapper.to_entity() {
+        println("First user: " + first_user.name);  // Alice
+    }
+    
+    // Access raw rows if needed
+    let raw_rows = mapper.to_rows();
+    println("Raw rows: " + raw_rows);
+}
+
+// ====== Example 9: Complete REST API Example ======
+example rest_api_with_orm {
+    // Model definition
+    class User {
+        id
+        name
+        email
+        status
+        created_at
+    }
+    
+    // Repository for CRUD
+    let user_repo = Repository::new(User);
+    
+    // GET /users?status=active&page=1&limit=20
+    example list_users(status = "active", page = 1, limit = 20) {
+        let pagination = Pagination::new(page, limit);
+        let sort = Sort::new("created_at", SortOrder::Descending);
+        
+        // Build query
+        let query = user_repo.find_by("status", "user_status", status);
+        let final_query = pagination.apply(sort.apply(query));
+        
+        println("Query: " + final_query.build_sql());
+        // Execute and map results
+        // let rows = database.select(...)?;
+        // let mapper = ResultMapper::new(rows);
+        // return mapper.to_entities();
+    }
+    
+    // GET /users/:id
+    example get_user(id) {
+        let query = user_repo.find_by_id(id);
+        
+        println("Query: " + query.build_sql());
+        // Execute
+        // let row = database.select(...)?;
+        // let mapper = ResultMapper::new([row]);
+        // return mapper.to_entity();
+    }
+    
+    // POST /users
+    example create_user(name = "", email = "") {
+        let new_user = User {
+            id: 0,  // Will be assigned by database
+            name: name,
+            email: email,
+            status: "active",
+            created_at: timestamp()
+        };
+        
+        let entity = Entity::new(new_user);
+        
+        // Validate before save
+        // if entity.data.validate().is_err() { ... }
+        
+        let row = entity.to_row();
+        println("Insert row: " + row);
+        // database.insert(&user_repo.schema(), &row)?;
+    }
+    
+    // PUT /users/:id
+    example update_user(id, name = null, email = null, status = null) {
+        // Get current user
+        let query = user_repo.find_by_id(id);
+        // let current_row = database.select(...)?;
+        
+        let mut tracker = ChangeTracker::new(current_row);
+        
+        // Track changes
+        if name != null {
+            tracker.mark_dirty("name", name);
+        }
+        if email != null {
+            tracker.mark_dirty("email", email);
+        }
+        if status != null {
+            tracker.mark_dirty("status", status);
+        }
+        
+        if tracker.is_dirty() {
+            let changes = tracker.get_changes();
+            println("Changes: " + changes);
+            // database.update(...)?;
+        }
+    }
+    
+    // DELETE /users/:id
+    example delete_user(id) {
+        // Build delete query
+        let delete_query = DeleteBuilder::from("users")
+            .where_eq("id", "user_id", id);
+        
+        println("Delete: " + delete_query.build_sql());
+        // database.delete(...)?;
+    }
+}
+
+// ====== Example 10: Query with Multiple Conditions ======
+example complex_search {
+    let repo = Repository::new(User);
+    
+    // Build complex search
+    let helper = QueryHelper::new()
+        .eq("status", "status", "active")
+        .eq("role", "role", "admin");
+    
+    let (where_clause, params) = helper.build();
+    
+    // Pagination
+    let pagination = Pagination::new(1, 50);
+    
+    // Sorting
+    let sort = Sort::new("created_at", SortOrder::Descending);
+    
+    // Buildquery
+    let query = repo.find_all();
+    let final_query = pagination.apply(sort.apply(query));
+    
+    println("Final SQL: " + final_query.build_sql());
+    println("Parameters: " + params);
+}
+
+// ====== Example 11: Batch Operations ======
+example batch_operations {
+    let repo = Repository::new(User);
+    
+    // Get all active users
+    let query = repo.find_by("status", "status", "active");
+    // let rows = database.select(...)?;
+    
+    // Map to entities
+    // let mapper = ResultMapper::new(rows);
+    // let users = mapper.to_entities();
+    
+    // Process each user
+    for user in users {
+        println("User: " + user.name);
+        
+        // Could update each one
+        let tracker = ChangeTracker::new(user.to_row());
+        // tracker.mark_dirty("last_processed", timestamp());
+        // database.update(...)?;
+    }
+}
+
+// ====== Example 12: Schema Operations with ORM ======
+example schema_from_orm {
+    let repo = Repository::new(User);
+    
+    // Get schema from model
+    let schema = repo.schema();
+    
+    println("Table name: " + schema.name);
+    println("Columns: " + schema.columns);
+    
+    // Create table from schema
+    // database.create_table(&schema)?;
+    
+    // Get validation schema
+    let validation = schema.to_validation_schema();
+    
+    // Validate input before mapping to entity
+    // validation.validate(&input_json)?;
+}
+
+

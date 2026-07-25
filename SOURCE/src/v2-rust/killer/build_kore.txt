@@ -1,0 +1,928 @@
+﻿cargo : warning: unused import: 
+`PoisonError`
+At line:1 char:1
++ cargo build --release --bin 
+killer-native 2>&1 | Out-File "build_kore 
+...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~
+    + CategoryInfo          : NotSpecifie 
+   d: (warning: unused import: `PoisonEr  
+  ror`:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeComma 
+   ndError
+ 
+ --> src\safe_mutex.rs:5:41
+  |
+5 | use std::sync::{Arc, Mutex, 
+MutexGuard, PoisonError};
+  |                                       
+  ^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part 
+of `#[warn(unused)]`) on by default
+
+warning: unused import: `std::mem`
+  --> src\native_codegen.rs:13:5
+   |
+13 | use std::mem;
+   |     ^^^^^^^^
+
+warning: unused import: 
+`crate::value::Value`
+  --> src\call_site_cache.rs:14:5
+   |
+14 | use crate::value::Value;
+   |     ^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `Instruction`
+  --> src\optimization_engine.rs:36:23
+   |
+36 | use crate::bytecode::{Instruction, 
+Program};
+   |                       ^^^^^^^^^^^
+
+warning: unused import: 
+`crate::error::VmError`
+  --> src\optimization_engine.rs:37:5
+   |
+37 | use crate::error::VmError;
+   |     ^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: 
+`crate::value::Value`
+  --> src\optimization_engine.rs:38:5
+   |
+38 | use crate::value::Value;
+   |     ^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: 
+`std::collections::HashMap`
+ --> src\telemetry.rs:5:5
+  |
+5 | use std::collections::HashMap;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `std::fmt`
+ --> src\killer_super\llvm_ir.rs:4:5
+  |
+4 | use std::fmt;
+  |     ^^^^^^^^
+
+warning: unused import: `std::fmt`
+ --> src\killer_super\gpu_backend.rs:4:5
+  |
+4 | use std::fmt;
+  |     ^^^^^^^^
+
+warning: unused import: 
+`std::cmp::Reverse`
+  --> src\llm.rs:17:5
+   |
+17 | use std::cmp::Reverse;
+   |     ^^^^^^^^^^^^^^^^^
+
+warning: variant `IQ4_NL_4_4` should have 
+an upper camel case name
+  --> src\inference\gguf.rs:82:5
+   |
+82 |     IQ4_NL_4_4 = 44,
+   |     ^^^^^^^^^^ help: convert the 
+identifier to upper camel case: `Iq4Nl4_4`
+   |
+   = note: 
+`#[warn(non_camel_case_types)]` (part of 
+`#[warn(nonstandard_style)]`) on by 
+default
+
+warning: variant `IQ4_NL_4_8` should have 
+an upper camel case name
+  --> src\inference\gguf.rs:83:5
+   |
+83 |     IQ4_NL_4_8 = 45,
+   |     ^^^^^^^^^^ help: convert the 
+identifier to upper camel case: `Iq4Nl4_8`
+
+warning: unused import: `SamplingStrategy`
+  --> src\inference\engine.rs:13:38
+   |
+13 | use super::sampler::{GenerateConfig, 
+SamplingStrategy, sample as sample_token};
+   |                                      
+^^^^^^^^^^^^^^^^
+
+warning: unused import: `SamplingStrategy`
+  --> src\inference\rlm.rs:22:38
+   |
+22 | use super::sampler::{GenerateConfig, 
+SamplingStrategy};
+   |                                      
+^^^^^^^^^^^^^^^^
+
+warning: unused import: `Duration`
+ --> src\ai\batching.rs:7:26
+  |
+7 | use std::time::{Instant, Duration};
+  |                          ^^^^^^^^
+
+warning: unused import: 
+`std::collections::HashMap`
+ --> src\ai\optimizer.rs:5:5
+  |
+5 | use std::collections::HashMap;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: 
+`std::collections::HashMap`
+  --> src\ai_analyzer.rs:18:5
+   |
+18 | use std::collections::HashMap;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `Expr`
+  --> src\ai_code_analyzer.rs:13:24
+   |
+13 | use crate::ast::{Stmt, Expr};
+   |                        ^^^^
+
+warning: unused import: `std::sync::Arc`
+    --> src\builtin.rs:1362:13
+     |
+1362 |         use std::sync::Arc;
+     |             ^^^^^^^^^^^^^^
+
+warning: unused import: `KillerDateTime`
+    --> src\builtin.rs:1491:31
+     |
+1491 |         use 
+crate::datetime::{KillerDateTime, 
+parse_datetime};
+     |                               
+^^^^^^^^^^^^^^
+
+warning: unnecessary parentheses around 
+block return value
+   --> src\datetime.rs:288:5
+    |
+288 |     ((dt2.seconds - dt1.seconds) * 
+1000 + (dt2.nanos as i64 - dt1.nanos as 
+i64) / 1_000_000)
+    |     ^                               
+                                          
+             ^
+    |
+    = note: `#[warn(unused_parens)]` 
+(part of `#[warn(unused)]`) on by default
+help: remove these parentheses
+    |
+288 -     ((dt2.seconds - dt1.seconds) * 
+1000 + (dt2.nanos as i64 - dt1.nanos as 
+i64) / 1_000_000)
+288 +     (dt2.seconds - dt1.seconds) * 
+1000 + (dt2.nanos as i64 - dt1.nanos as 
+i64) / 1_000_000
+    |
+
+warning: unused imports: `GCStrategy` and 
+`OptimizationLevel`
+  --> src\vm.rs:11:97
+   |
+11 | use crate::runtime_optimization::{Hot
+CodeDetector, BasecodeJITCompiler, 
+ArithmeticLoopFastPath, 
+OptimizationLevel, GCStrategy};
+   |                                      
+                                          
+                 ^^^^^^^^^^^^^^^^^  
+^^^^^^^^^^
+
+warning: unused imports: `BufReader`, 
+`BufWriter`, and `Cursor`
+  --> src\kore.rs:48:28
+   |
+48 | use std::io::{Write, Read, Cursor, 
+BufWriter, BufReader};
+   |                            ^^^^^^  
+^^^^^^^^^  ^^^^^^^^^
+
+warning: unused variable: `last_start`
+   --> src\instruction_cache.rs:124:26
+    |
+124 |             if let 
+Some((last_start, last_end)) = 
+merged.last_mut() {
+    |                          ^^^^^^^^^^ 
+help: if this is intentional, prefix it 
+with an underscore: `_last_start`
+    |
+    = note: `#[warn(unused_variables)]` 
+(part of `#[warn(unused)]`) on by default
+
+warning: variable does not need to be 
+mutable
+   --> src\runtime_optimization.rs:469:13
+    |
+469 |         let mut result = 
+self.optimize_runtime();
+    |             ----^^^^^^
+    |             |
+    |             help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` (part 
+of `#[warn(unused)]`) on by default
+
+warning: unused variable: `e`
+  --> src\retry.rs:73:21
+   |
+73 |                 Err(e) if attempt < 
+self.max_attempts => {
+   |                     ^ help: if this 
+is intentional, prefix it with an 
+underscore: `_e`
+
+warning: unused variable: `e`
+   --> src\retry.rs:179:17
+    |
+179 |             Err(e) if attempt < 
+policy.max_attempts => {
+    |                 ^ help: if this is 
+intentional, prefix it with an 
+underscore: `_e`
+
+warning: unused variable: `bytecode`
+   --> src\killer_super\llvm_ir.rs:243:25
+    |
+243 | pub fn bytecode_to_llvm(bytecode: 
+&str, target: &str) -> LLVMModule {
+    |                         ^^^^^^^^ 
+help: if this is intentional, prefix it 
+with an underscore: `_bytecode`
+
+warning: unused variable: `cuda_path`
+  --> 
+src\killer_super\gpu_backend.rs:64:19
+   |
+64 |         if let Ok(cuda_path) = 
+std::env::var("CUDA_PATH") {
+   |                   ^^^^^^^^^ help: if 
+this is intentional, prefix it with an 
+underscore: `_cuda_path`
+
+warning: unused variable: `matched`
+    --> src\llm.rs:3081:21
+     |
+3081 |                 let matched = 
+query_words.iter()
+     |                     ^^^^^^^ help: 
+if this is intentional, prefix it with an 
+underscore: `_matched`
+
+warning: unused variable: `api_key`
+  --> src\ai\providers\openai.rs:37:13
+   |
+37 |         let api_key = 
+self.api_key.as_ref()
+   |             ^^^^^^^ help: if this is 
+intentional, prefix it with an 
+underscore: `_api_key`
+
+warning: unused variable: `response`
+   --> src\ai\providers\openai.rs:147:13
+    |
+147 |         let response = 
+self.request("/embeddings", &body)?;
+    |             ^^^^^^^^ help: if this 
+is intentional, prefix it with an 
+underscore: `_response`
+
+warning: unused variable: `idx`
+   --> src\ai\providers\openai.rs:175:21
+    |
+175 |         if let Some(idx) = 
+categories.iter().position(|c| c == 
+&category) {
+    |                     ^^^ help: if 
+this is intentional, prefix it with an 
+underscore: `_idx`
+
+warning: unused variable: `response`
+   --> src\ai\providers\openai.rs:200:13
+    |
+200 |         let response = 
+self.generate(&prompt, "gpt-4", 0.0, 
+500)?;
+    |             ^^^^^^^^ help: if this 
+is intentional, prefix it with an 
+underscore: `_response`
+
+warning: unused variable: `api_key`
+   --> src\ai\providers\mod.rs:164:36
+    |
+164 |             if let 
+Some(Value::Str(api_key)) = 
+config.get("api_key") {
+    |                                    
+^^^^^^^ help: if this is intentional, 
+prefix it with an underscore: `_api_key`
+
+warning: unused variable: `params`
+  --> src\ai_analyzer.rs:83:9
+   |
+83 |         params: &[String],
+   |         ^^^^^^ help: if this is 
+intentional, prefix it with an 
+underscore: `_params`
+
+warning: unused variable: 
+`operation_count`
+   --> src\ai_analyzer.rs:357:54
+    |
+357 |             
+OptimizationPattern::ComplexArithmetic { 
+operation_count, .. } => {
+    |                                     
+                 ^^^^^^^^^^^^^^^ help: 
+try ignoring the field: `operation_count: 
+_`
+
+warning: variable does not need to be 
+mutable
+   --> src\ai_workflow_engine.rs:145:13
+    |
+145 |         let mut sorted_steps = 
+self.topological_sort()?;
+    |             ----^^^^^^^^^^^^
+    |             |
+    |             help: remove this `mut`
+
+warning: unused variable: `url`
+    --> src\builtin.rs:2062:40
+     |
+2062 |                 if let 
+Some(Value::Str(url)) = 
+ws_dict.get("url") {
+     |                                    
+    ^^^ help: if this is intentional, 
+prefix it with an underscore: `_url`
+
+warning: unused variable: `value`
+   --> src\objects.rs:102:37
+    |
+102 |                         if let 
+Some(value) = 
+obj_inst.fields.get(method_name) {
+    |                                     
+^^^^^ help: if this is intentional, 
+prefix it with an underscore: `_value`
+
+warning: unused variable: `url`
+   --> src\http.rs:345:26
+    |
+345 | pub fn http_post_request(url: &str, 
+body: &str) -> Result<HttpClientResponse, 
+String> {
+    |                          ^^^ help: 
+if this is intentional, prefix it with an 
+underscore: `_url`
+
+warning: unused variable: `headers`
+   --> src\websocket.rs:283:9
+    |
+283 |     let headers = 
+parse_websocket_handshake(request)?;
+    |         ^^^^^^^ help: if this is 
+intentional, prefix it with an 
+underscore: `_headers`
+
+warning: unused variable: `fn_id`
+    --> src\compiler.rs:1299:17
+     |
+1299 |             let fn_id = 
+state.function_counter;
+     |                 ^^^^^ help: if 
+this is intentional, prefix it with an 
+underscore: `_fn_id`
+
+warning: unused variable: `remainder`
+    --> src\vm.rs:3266:13
+     |
+3266 |         let remainder = iterations 
+% chunk_size;
+     |             ^^^^^^^^^ help: if 
+this is intentional, prefix it with an 
+underscore: `_remainder`
+
+warning: unused variable: 
+`saved_scopes_len`
+    --> src\vm.rs:3535:20
+     |
+3535 |                let 
+saved_scopes_len = self.scopes.len();
+     |                    
+^^^^^^^^^^^^^^^^ help: if this is 
+intentional, prefix it with an 
+underscore: `_saved_scopes_len`
+
+warning: unused variable: `feature`
+  --> src\version.rs:90:26
+   |
+90 | pub fn feature_available(feature: 
+&str, since_version: &str) -> bool {
+   |                          ^^^^^^^ 
+help: if this is intentional, prefix it 
+with an underscore: `_feature`
+
+warning: unused variable: `dim`
+   --> src\kore.rs:507:29
+    |
+507 |         KoreType::Embedding(dim) => 
+{
+    |                             ^^^ 
+help: if this is intentional, prefix it 
+with an underscore: `_dim`
+
+warning: unused variable: `j`
+   --> src\kore.rs:941:17
+    |
+941 |             for j in 0..ci {
+    |                 ^ help: if this is 
+intentional, prefix it with an 
+underscore: `_j`
+
+warning: fields `integrations`, 
+`monitors`, and `calibrators` are never 
+read
+  --> src\optimization\deployment.rs:83:5
+   |
+78 | pub struct PilotDeployment {
+   |            --------------- fields in 
+this struct
+...
+83 |     integrations: HashMap<String, 
+ProductionIntegration>,
+   |     ^^^^^^^^^^^^
+...
+86 |     monitors: HashMap<String, 
+PerformanceMonitor>,
+   |     ^^^^^^^^
+...
+89 |     calibrators: HashMap<String, 
+AccuracyCalibrator>,
+   |     ^^^^^^^^^^^
+   |
+   = note: `PilotDeployment` has a 
+derived impl for the trait `Debug`, but 
+this is intentionally ignored during dead 
+code analysis
+   = note: `#[warn(dead_code)]` (part of 
+`#[warn(unused)]`) on by default
+
+warning: field `baseline_jit` is never 
+read
+  --> src\optimization_engine.rs:56:5
+   |
+49 | pub struct OptimizationEngine {
+   |            ------------------ field 
+in this struct
+...
+56 |     baseline_jit: 
+BasecodeJITCompiler,   // Tier 2: 
+Baseline JIT
+   |     ^^^^^^^^^^^^
+
+warning: method `should_attempt_recovery` 
+is never used
+   --> src\circuit_breaker.rs:126:8
+    |
+100 | impl CircuitBreaker {
+    | ------------------- method in this 
+implementation
+...
+126 |     fn 
+should_attempt_recovery(&self) -> bool {
+    |        ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: field `registry` is never read
+  --> src\advanced_features.rs:64:9
+   |
+62 |     pub struct PackageManager {
+   |                -------------- field 
+in this struct
+63 |         manifests: HashMap<String, 
+PackageManifest>,
+64 |         registry: Vec<Package>,
+   |         ^^^^^^^^
+
+warning: fields `current_file` and 
+`current_line` are never read
+   --> src\advanced_features.rs:365:9
+    |
+362 |     pub struct Debugger {
+    |                -------- fields in 
+this struct
+...
+365 |         current_file: String,
+    |         ^^^^^^^^^^^^
+366 |         current_line: usize,
+    |         ^^^^^^^^^^^^
+
+warning: fields `id`, `result`, and 
+`completed` are never read
+  --> src\async_await.rs:23:5
+   |
+22 | pub struct AsyncTask<T> {
+   |            --------- fields in this 
+struct
+23 |     id: usize,
+   |     ^^
+24 |     result: Option<T>,
+   |     ^^^^^^
+25 |     completed: bool,
+   |     ^^^^^^^^^
+
+warning: field `wake_queue` is never read
+  --> src\async_await.rs:42:5
+   |
+39 | pub struct AsyncRuntime {
+   |            ------------ field in 
+this struct
+...
+42 |     wake_queue: Vec<usize>,
+   |     ^^^^^^^^^^
+
+warning: field `task_id` is never read
+  --> src\async_await.rs:80:5
+   |
+79 | pub struct TaskHandle<T> {
+   |            ---------- field in this 
+struct
+80 |     task_id: usize,
+   |     ^^^^^^^
+
+warning: field `max_errors` is never read
+  --> src\killer_super\diagnostics.rs:88:5
+   |
+86 | pub struct DiagnosticsCollector {
+   |            -------------------- 
+field in this struct
+87 |     diagnostics: Vec<Diagnostic>,
+88 |     max_errors: usize,
+   |     ^^^^^^^^^^
+
+warning: function 
+`extract_meta_description` is never used
+    --> src\llm.rs:1424:4
+     |
+1424 | fn extract_meta_description(html: 
+&str) -> Option<String> {
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function 
+`extract_first_paragraph` is never used
+    --> src\llm.rs:1443:4
+     |
+1443 | fn extract_first_paragraph(html: 
+&str, min_len: usize) -> Result<String, 
+String> {
+     |    ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `iq3_grid_to_val` is 
+never used
+   --> src\inference\quant.rs:616:4
+    |
+616 | fn iq3_grid_to_val(byte: u8, sign: 
+bool, d: f32) -> f32 {
+    |    ^^^^^^^^^^^^^^^
+
+warning: method `dot_row` is never used
+   --> src\inference\engine.rs:138:8
+    |
+111 | impl QuantTensor {
+    | ---------------- method in this 
+implementation
+...
+138 |     fn dot_row(&self, row_bytes: 
+&[u8], x: &[f32], in_dim: usize) -> f32 {
+    |        ^^^^^^^
+
+warning: function `matmul_t` is never used
+   --> src\inference\engine.rs:849:4
+    |
+849 | fn matmul_t(x: &[f32], w: &[f32], 
+out_dim: usize, in_dim: usize) -> 
+Vec<f32> {
+    |    ^^^^^^^^
+
+warning: field `cache` is never read
+  --> src\ai\providers\local.rs:14:5
+   |
+13 | pub struct LocalProvider {
+   |            ------------- field in 
+this struct
+14 |     cache: HashMap<String, Vec<f32>>,
+   |     ^^^^^
+
+warning: fields `base_url` and 
+`default_model` are never read
+  --> src\ai\providers\openai.rs:15:5
+   |
+13 | pub struct OpenAIProvider {
+   |            -------------- fields in 
+this struct
+14 |     api_key: Option<String>,
+15 |     base_url: String,
+   |     ^^^^^^^^
+16 |     default_model: String,
+   |     ^^^^^^^^^^^^^
+
+warning: field `completed_batches` is 
+never read
+  --> src\ai\batching.rs:83:5
+   |
+80 | pub struct BatchProcessor {
+   |            -------------- field in 
+this struct
+...
+83 |     completed_batches: 
+Vec<RequestBatch>,
+   |     ^^^^^^^^^^^^^^^^^
+
+warning: fields `quantization_cache` and 
+`batch_processor` are never read
+  --> src\ai\optimizer.rs:48:5
+   |
+46 | pub struct AIOptimizer {
+   |            ----------- fields in 
+this struct
+47 |     config: OptimizerConfig,
+48 |     quantization_cache: 
+Option<crate::ai::QuantizationCache>,
+   |     ^^^^^^^^^^^^^^^^^^
+49 |     batch_processor: 
+Option<crate::ai::BatchProcessor>,
+   |     ^^^^^^^^^^^^^^^
+
+warning: field `suspicious_patterns` is 
+never read
+   --> src\ai_workflow_engine.rs:434:5
+    |
+433 | struct ThreatDetector {
+    |        -------------- field in this 
+struct
+434 |     suspicious_patterns: 
+Vec<String>,
+    |     ^^^^^^^^^^^^^^^^^^^
+
+warning: field `addr` is never read
+  --> src\net.rs:14:5
+   |
+12 | pub struct KillerTcpListener {
+   |            ----------------- field 
+in this struct
+13 |     inner: Arc<Mutex<TcpListener>>,
+14 |     addr: String,
+   |     ^^^^
+   |
+   = note: `KillerTcpListener` has a 
+derived impl for the trait `Clone`, but 
+this is intentionally ignored during dead 
+code analysis
+
+warning: fields `collecting_yields` and 
+`recursion_guard` are never read
+  --> src\vm.rs:33:5
+   |
+23 | pub struct VirtualMachine {
+   |            -------------- fields in 
+this struct
+...
+33 |     collecting_yields: bool,  // 
+Flag to track if we're inside a generator 
+function
+   |     ^^^^^^^^^^^^^^^^^
+...
+50 |     recursion_guard: RecursionGuard, 
+ // Prevents stack overflow from infinite 
+recursion
+   |     ^^^^^^^^^^^^^^^
+
+warning: methods `execute_compiled_loop` 
+and `execute_hot_arithmetic_loop` are 
+never used
+    --> src\vm.rs:3246:8
+     |
+  83 | impl VirtualMachine {
+     | ------------------- methods in 
+this implementation
+...
+3246 |     fn execute_compiled_loop(&mut 
+self, _compiled_code: &[u8]) -> 
+Result<(), VmError> {
+     |        ^^^^^^^^^^^^^^^^^^^^^
+...
+3257 |     fn 
+execute_hot_arithmetic_loop(&mut self, 
+iterations: u64) -> i64 {
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: associated items `may_contain` 
+and `from_bytes` are never used
+   --> src\kore.rs:197:8
+    |
+173 | impl BloomFilter {
+    | ---------------- associated items 
+in this implementation
+...
+197 |     fn may_contain(&self, s: &str) 
+-> bool {
+    |        ^^^^^^^^^^^
+...
+209 |     fn from_bytes(data: &[u8]) -> 
+Self {
+    |        ^^^^^^^^^^
+
+warning: field `chunks_start` is never 
+read
+   --> src\kore.rs:828:5
+    |
+817 | pub struct KoreFile {
+    |            -------- field in this 
+struct
+...
+828 |     chunks_start: usize,
+    |     ^^^^^^^^^^^^
+
+warning: hiding a lifetime that's elided 
+elsewhere is confusing
+  --> src\safe_mutex.rs:56:22
+   |
+56 |     pub fn lock_safe(&self) -> 
+MutexResult<MutexGuard<T>> {
+   |                      ^^^^^           
+      ^^^^^^^^^^^^^ the same lifetime is 
+hidden here
+   |                      |
+   |                      the lifetime is 
+elided here
+   |
+   = help: the same lifetime is referred 
+to in inconsistent ways, making the 
+signature confusing
+   = note: 
+`#[warn(mismatched_lifetime_syntaxes)]` 
+on by default
+help: use `'_` for type paths
+   |
+56 |     pub fn lock_safe(&self) -> 
+MutexResult<MutexGuard<'_, T>> {
+   |                                      
+                 +++
+
+warning: hiding a lifetime that's elided 
+elsewhere is confusing
+   --> src\security.rs:186:18
+    |
+186 |     pub fn enter(&mut self) -> 
+Result<RecursionGuardToken, VmError> {
+    |                  ^^^^^^^^^          
+  ^^^^^^^^^^^^^^^^^^^ the same lifetime 
+is hidden here
+    |                  |
+    |                  the lifetime is 
+elided here
+    |
+    = help: the same lifetime is referred 
+to in inconsistent ways, making the 
+signature confusing
+help: use `'_` for type paths
+    |
+186 |     pub fn enter(&mut self) -> 
+Result<RecursionGuardToken<'_>, VmError> {
+    |                                     
+                     ++++
+
+warning: hiding a lifetime that's elided 
+elsewhere is confusing
+  --> src\concurrency.rs:81:17
+   |
+81 |     pub fn lock(&self) -> 
+Result<std::sync::MutexGuard<T>> {
+   |                 ^^^^^            
+^^^^^^^^^^^^^^^^^^^^^^^^ the same 
+lifetime is hidden here
+   |                 |
+   |                 the lifetime is 
+elided here
+   |
+   = help: the same lifetime is referred 
+to in inconsistent ways, making the 
+signature confusing
+help: use `'_` for type paths
+   |
+81 |     pub fn lock(&self) -> 
+Result<std::sync::MutexGuard<'_, T>> {
+   |                                      
+                  +++
+
+warning: hiding a lifetime that's elided 
+elsewhere is confusing
+  --> src\concurrency.rs:86:21
+   |
+86 |     pub fn try_lock(&self) -> 
+Result<Option<std::sync::MutexGuard<T>>> {
+   |                     ^^^^^            
+       ^^^^^^^^^^^^^^^^^^^^^^^^ the same 
+lifetime is hidden here
+   |                     |
+   |                     the lifetime is 
+elided here
+   |
+   = help: the same lifetime is referred 
+to in inconsistent ways, making the 
+signature confusing
+help: use `'_` for type paths
+   |
+86 |     pub fn try_lock(&self) -> 
+Result<Option<std::sync::MutexGuard<'_, 
+T>>> {
+   |                                      
+                             +++
+
+warning: hiding a lifetime that's elided 
+elsewhere is confusing
+   --> src\concurrency.rs:116:17
+    |
+116 |     pub fn read(&self) -> 
+Result<std::sync::RwLockReadGuard<T>> {
+    |                 ^^^^^            
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the same 
+lifetime is hidden here
+    |                 |
+    |                 the lifetime is 
+elided here
+    |
+    = help: the same lifetime is referred 
+to in inconsistent ways, making the 
+signature confusing
+help: use `'_` for type paths
+    |
+116 |     pub fn read(&self) -> 
+Result<std::sync::RwLockReadGuard<'_, T>> 
+{
+    |                                     
+                        +++
+
+warning: hiding a lifetime that's elided 
+elsewhere is confusing
+   --> src\concurrency.rs:121:18
+    |
+121 |     pub fn write(&self) -> 
+Result<std::sync::RwLockWriteGuard<T>> {
+    |                  ^^^^^            
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the same 
+lifetime is hidden here
+    |                  |
+    |                  the lifetime is 
+elided here
+    |
+    = help: the same lifetime is referred 
+to in inconsistent ways, making the 
+signature confusing
+help: use `'_` for type paths
+    |
+121 |     pub fn write(&self) -> 
+Result<std::sync::RwLockWriteGuard<'_, 
+T>> {
+    |                                     
+                          +++
+
+warning: creating a mutable reference to 
+mutable static
+   --> src\version.rs:232:9
+    |
+232 |         DEPRECATION_REGISTRY.as_mut(
+).expect("Deprecation registry 
+uninitialized")
+    |         
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ mutable 
+reference to mutable static
+    |
+    = note: for more information, see <htt
+ps://doc.rust-lang.org/edition-guide/rust-
+2024/static-mut-references.html>
+    = note: mutable references to mutable 
+statics are dangerous; it's undefined 
+behavior if any other pointer to the 
+static is used or if any other reference 
+is created for the static while the 
+mutable reference lives
+    = note: `#[warn(static_mut_refs)]` 
+(part of 
+`#[warn(rust_2024_compatibility)]`) on by 
+default
+
+warning: `killer-native` (lib) generated 
+79 warnings (run `cargo fix --lib -p 
+killer-native` to apply 52 suggestions)
+    Finished `release` profile 
+[optimized] target(s) in 0.09s

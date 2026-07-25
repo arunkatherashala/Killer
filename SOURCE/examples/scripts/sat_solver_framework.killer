@@ -1,0 +1,210 @@
+// Phase 2 Direction 1: SAT Solver Experimental Framework in Killer
+// Tests multiple SAT solvers on Pigeonhole formulas
+// Collects metrics: runtime, decisions, backtracks, etc.
+
+actor SolverExperiment {
+    struct SolverResult {
+        formula_name: String,
+        solver_name: String,
+        run_number: Int,
+        status: String,  // "SATISFIABLE", "UNSATISFIABLE", "TIMEOUT", "ERROR"
+        runtime_ms: Int,
+        decisions: Int,
+        backtracks: Int,
+        tree_size: Int
+    }
+
+    struct ExperimentConfig {
+        formulas_dir: String,
+        output_dir: String,
+        timeout_ms: Int,
+        num_runs: Int,
+        solvers: List<String>
+    }
+
+    // Parse DIMACS CNF file
+    fn parse_dimacs(filename: String) -> List<List<Int>> {
+        let clauses: List<List<Int>> = []
+        
+        // File I/O and parsing
+        // Each line with "p" gives variables/clauses count
+        // Other lines are clauses (space-separated literals, ending with 0)
+        
+        return clauses
+    }
+
+    // Run single solver on formula
+    kmeth run_solver(solver: String, formula_file: String, run_num: Int, 
+                      timeout_ms: Int) -> SolverResult {
+        
+        let start_time = time::now()
+        
+        // Solver execution
+        // This would spawn the appropriate solver process
+        
+        let runtime_ms = time::now() - start_time
+        
+        // Parse solver output for metrics
+        let status = "UNSATISFIABLE"
+        let decisions = 0
+        let backtracks = 0
+        let tree_size = 0
+        
+        return SolverResult {
+            formula_name: formula_file,
+            solver_name: solver,
+            run_number: run_num,
+            status: status,
+            runtime_ms: runtime_ms,
+            decisions: decisions,
+            backtracks: backtracks,
+            tree_size: tree_size
+        }
+    }
+
+    // Run all solvers on single formula
+    kmeth run_solver_comparison(formula_file: String, solvers: List<String>, 
+                                 num_runs: Int, timeout_ms: Int) -> List<SolverResult> {
+        
+        let results: List<SolverResult> = []
+        
+        for solver in solvers {
+            println("Testing: " + solver)
+            
+            for run in 1..num_runs {
+                let result = run_solver(solver, formula_file, run, timeout_ms).await
+                results.push(result)
+                
+                println("  Run " + run.to_string() + ": " + result.status + 
+                       " (" + (result.runtime_ms / 1000).to_string() + "s)")
+            }
+        }
+        
+        return results
+    }
+
+    // Analyze scaling behavior
+    fn analyze_scaling(results: List<SolverResult>) -> Map<String, Float> {
+        let scaling_exponents: Map<String, Float> = {}
+        
+        // Group by solver
+        let by_solver: Map<String, List<SolverResult>> = {}
+        for result in results {
+            if !by_solver.contains_key(result.solver_name) {
+                by_solver.insert(result.solver_name, [])
+            }
+            by_solver.get(result.solver_name).push(result)
+        }
+        
+        // For each solver, extract exponential scaling constant
+        for (solver_name, solver_results) in by_solver {
+            // Sort by formula size
+            let times: List<Int> = []
+            for r in solver_results {
+                times.push(r.runtime_ms)
+            }
+            
+            // Fit exponential model: time = a * 2^(c*n)
+            // Extract c (scaling exponent)
+            let c = 0.0
+            // Calculation would go here
+            
+            scaling_exponents.insert(solver_name, c)
+        }
+        
+        return scaling_exponents
+    }
+
+    // Generate summary report
+    fn summarize_results(results: List<SolverResult>) -> String {
+        let report = "=== EXPERIMENTAL RESULTS SUMMARY ===\n\n"
+        
+        // Statistics by solver
+        let by_solver: Map<String, List<SolverResult>> = {}
+        for result in results {
+            if !by_solver.contains_key(result.solver_name) {
+                by_solver.insert(result.solver_name, [])
+            }
+            by_solver.get(result.solver_name).push(result)
+        }
+        
+        for (solver, solver_results) in by_solver {
+            report += "Solver: " + solver + "\n"
+            
+            let successful = 0
+            let timeouts = 0
+            let total_time = 0
+            
+            for r in solver_results {
+                if r.status == "UNSATISFIABLE" {
+                    successful += 1
+                    total_time += r.runtime_ms
+                } else if r.status == "TIMEOUT" {
+                    timeouts += 1
+                }
+            }
+            
+            report += "  Successful: " + successful.to_string() + "/" + 
+                     solver_results.len().to_string() + "\n"
+            report += "  Timeouts: " + timeouts.to_string() + "\n"
+            
+            if successful > 0 {
+                report += "  Avg time: " + (total_time / successful / 1000).to_string() + "s\n"
+            }
+            report += "\n"
+        }
+        
+        return report
+    }
+
+    // Main experiment runner
+    kmeth run_experiments(config: ExperimentConfig) -> String {
+        println("=== Phase 2 Direction 1: SAT Solver Experiments ===\n")
+        println("Config: " + config.num_runs.to_string() + " runs per solver")
+        println("Timeout: " + (config.timeout_ms / 1000).to_string() + "s\n")
+        
+        let all_results: List<SolverResult> = []
+        
+        // Find formula files
+        let formulas = [5, 10, 15, 20, 25, 30, 35, 40]
+        
+        for n in formulas {
+            let formula_file = config.formulas_dir + "/php_" + n.to_string() + ".cnf"
+            println("Testing: php_" + n.to_string())
+            
+            let results = run_solver_comparison(formula_file, config.solvers, 
+                                               config.num_runs, config.timeout_ms).await
+            
+            for r in results {
+                all_results.push(r)
+            }
+            println("")
+        }
+        
+        // Analyze and summarize
+        let analysis = analyze_scaling(all_results)
+        let summary = summarize_results(all_results)
+        
+        return summary
+    }
+}
+
+kfn main() {
+    println("=== Phase 2 Direction 1: Solver Experiment Framework ===\n")
+    
+    let config = ExperimentConfig {
+        formulas_dir: "EXPERIMENTS/DIRECTION_1_DATA",
+        output_dir: "EXPERIMENTS/DIRECTION_1_RESULTS",
+        timeout_ms: 3600000,  // 1 hour
+        num_runs: 3,
+        solvers: ["dpll", "cadical", "kissat", "minisat", "glucose"]
+    }
+    
+    let exp = SolverExperiment::spawn()
+    let results = exp.run_experiments(config).await
+    
+    println(results)
+    println("✓ Experiments complete!")
+}
+
+

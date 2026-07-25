@@ -1,0 +1,13 @@
+# main
+CONST_STR "before named call"
+PRINT
+CALL greet
+CONST_STR "after named call"
+PRINT
+HALT
+
+# function definition
+FUNC greet
+CONST_STR "hello from greet()"
+PRINT
+RET

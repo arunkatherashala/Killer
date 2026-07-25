@@ -1,0 +1,473 @@
+﻿cargo :    Compiling killer-native v3.0.0 (C:\Users\skathera\Downloads\killer_M29\killer\SOURCE\src\v2-rust\killer)
+At C:\Users\skathera\AppData\Local\Temp\ps-script-d3268528-01c9-445a-b210-d5123897b6b9.ps1:87 char:1
++ cargo build 2>&1 | Out-File -Encoding utf8 build_log.txt
++ ~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (   Compiling ki...v2-rust\killer):String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+error: unknown start of token: \u{2500}
+    --> src\kore_v2.rs:2481:141
+     |
+2481 | ...t, &mut all_meta, &mut nchunks, &float_scales)?; 
+ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+     |                                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: character appears 27 more times
+help: Unicode character 'ΓöÇ' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+     |
+2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ----------------------------
+     |
+
+error: unknown start of token: \u{2500}
+    --> src\kore_v2.rs:2481:142
+     |
+2481 | ...t, &mut all_meta, &mut nchunks, &float_scales)?; 
+ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+     |                                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: character appears 26 more times
+help: Unicode character 'ΓöÇ' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+     |
+2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇ---------------------------
+     |
+
+error: unknown start of token: \u{2500}
+    --> src\kore_v2.rs:2481:143
+     |
+2481 | ..., &mut all_meta, &mut nchunks, &float_scales)?; 
+ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+     |                                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: character appears 25 more times
+help: Unicode character 'ΓöÇ' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+     |
+2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇΓöÇ--------------------------
+     |
+
+error: unknown start of token: \u{2500}
+    --> src\kore_v2.rs:2481:144
+     |
+2481 | ..., &mut all_meta, &mut nchunks, &float_scales)?; 
+ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+     |                                                       ^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: character appears 24 more times
+help: Unicode character 'ΓöÇ' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+     |
+2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇΓöÇΓöÇ-------------------------
+     |
+
+error: unknown start of token: \u{2500}
+    --> src\kore_v2.rs:2481:145
+     |
+2481 | ... &mut all_meta, &mut nchunks, &float_scales)?; 
+ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+     |                                                       ^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: character appears 23 more times
+help: Unicode character 'ΓöÇ' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+     |
+2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇΓöÇΓöÇΓöÇ------------------------
+     |
+
+error: unknown start of token: \u{2500}
+    --> src\kore_v2.rs:2481:146
+     |
+2481 | ... &mut all_meta, &mut nchunks, &float_scales)?; 
+ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+     |                                                        ^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: character appears 22 more times
+help: Unicode character 'ΓöÇ' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+     |
+2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇΓöÇΓöÇΓöÇΓöÇ-----------------------
+     |
+
+error: unknown start of token: \u{2500}
+    --> src\kore_v2.rs:2481:147
+     |
+2481 | ...&mut all_meta, &mut nchunks, &float_scales)?; 
+ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+     |                                                        ^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: character appears 21 more times
+help: Unicode character 'ΓöÇ' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+     |
+2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ----------------------
+     |
+
+error: unknown start of token: \u{2500}
+    --> src\kore_v2.rs:2481:148
+     |
+2481 | ...&mut all_meta, &mut nchunks, &float_scales)?; 
+ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+     |                                                         ^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: character appears 20 more times
+help: Unicode character 'ΓöÇ' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+     |
+2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ---------------------
+     |
+
+error: unknown start of token: \u{2500}
+    --> src\kore_v2.rs:2481:149
+     |
+2481 | ...mut all_meta, &mut nchunks, &float_scales)?; 
+ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+     |                                                         ^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: character appears 19 more times
+help: Unicode character 'ΓöÇ' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+     |
+2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ--------------------
+     |
+
+error: unknown start of token: \u{2500}
+    --> src\kore_v2.rs:2481:150
+     |
+2481 | ...mut all_meta, &mut nchunks, &float_scales)?; 
+ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+     |                                                          ^^^^^^^^^^^^^^^^^^^
+     |
+     = note: character appears 18 more times
+help: Unicode character 'ΓöÇ' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+     |
+2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ-------------------
+     |
+
+error: unknown start of token: \u{2500}
+    --> src\kore_v2.rs:2481:151
+     |
+2481 | ...ut all_meta, &mut nchunks, &float_scales)?; 
+ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+     |                                                          ^^^^^^^^^^^^^^^^^^
+     |
+     = note: character appears 17 more times
+help: Unicode character 'ΓöÇ' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+     |
+2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ------------------
+     |
+
+error: unknown start of token: \u{2500}
+    --> src\kore_v2.rs:2481:152
+     |
+2481 | ...ut all_meta, &mut nchunks, &float_scales)?; 
+ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+     |                                                           ^^^^^^^^^^^^^^^^^
+     |
+     = note: character appears 16 more times
+help: Unicode character 'ΓöÇ' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+     |
+2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ-----------------
+     |
+
+error: unknown start of token: \u{2500}
+    --> src\kore_v2.rs:2481:153
+     |
+2481 | ...t all_meta, &mut nchunks, &float_scales)?; 
+ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+     |                                                           ^^^^^^^^^^^^^^^^
+     |
+     = note: character appears 15 more times
+help: Unicode character 'ΓöÇ' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+     |
+2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ----------------
+     |
+
+error: unknown start of token: \u{2500}
+    --> src\kore_v2.rs:2481:154
+     |
+2481 | ...t all_meta, &mut nchunks, &float_scales)?; 
+ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+     |                                                            ^^^^^^^^^^^^^^^
+     |
+     = note: character appears 14 more times
+help: Unicode character 'ΓöÇ' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+     |
+2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ---------------
+     |
+
+error: unknown start of token: \u{2500}
+    --> src\kore_v2.rs:2481:155
+     |
+2481 | ... all_meta, &mut nchunks, &float_scales)?; 
+ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+     |                                                            ^^^^^^^^^^^^^^
+     |
+     = note: character appears 13 more times
+help: Unicode character 'ΓöÇ' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+     |
+2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ--------------
+     |
+
+error: unknown start of token: \u{2500}
+    --> src\kore_v2.rs:2481:156
+     |
+2481 | ... all_meta, &mut nchunks, &float_scales)?; 
+ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+     |                                                             ^^^^^^^^^^^^^
+     |
+     = note: character appears 12 more times
+help: Unicode character 'ΓöÇ' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+     |
+2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ-------------
+     |
+
+error: unknown start of token: \u{2500}
+    --> src\kore_v2.rs:2481:157
+     |
+2481 | ...all_meta, &mut nchunks, &float_scales)?; 
+ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+     |                                                             ^^^^^^^^^^^^
+     |
+     = note: character appears 11 more times
+help: Unicode character 'ΓöÇ' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+     |
+2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ------------
+     |
+
+error: unknown start of token: \u{2500}
+    --> src\kore_v2.rs:2481:158
+     |
+2481 | ...all_meta, &mut nchunks, &float_scales)?; 
+ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+     |                                                              ^^^^^^^^^^^
+     |
+     = note: character appears 10 more times
+help: Unicode character 'ΓöÇ' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+     |
+2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ-----------
+     |
+
+error: unknown start of token: \u{2500}
+    --> src\kore_v2.rs:2481:159
+     |
+2481 | ...ll_meta, &mut nchunks, &float_scales)?; 
+ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+     |                                                              ^^^^^^^^^^
+     |
+     = note: character appears 9 more times
+help: Unicode character 'ΓöÇ' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+     |
+2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ----------
+     |
+
+error: unknown start of token: \u{2500}
+    --> src\kore_v2.rs:2481:160
+     |
+2481 | ...ll_meta, &mut nchunks, &float_scales)?; 
+ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+     |                                                               ^^^^^^^^^
+     |
+     = note: character appears 8 more times
+help: Unicode character 'ΓöÇ' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+     |
+2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ---------
+     |
+
+error: unknown start of token: \u{2500}
+    --> src\kore_v2.rs:2481:161
+     |
+2481 | ...l_meta, &mut nchunks, &float_scales)?; 
+ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+     |                                                               ^^^^^^^^
+     |
+     = note: character appears 7 more times
+help: Unicode character 'ΓöÇ' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+     |
+2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ--------
+     |
+
+error: unknown start of token: \u{2500}
+    --> src\kore_v2.rs:2481:162
+     |
+2481 | ...l_meta, &mut nchunks, &float_scales)?; 
+ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+     |                                                                ^^^^^^^
+     |
+     = note: character appears 6 more times
+help: Unicode character 'ΓöÇ' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+     |
+2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ-------
+     |
+
+error: unknown start of token: \u{2500}
+    --> src\kore_v2.rs:2481:163
+     |
+2481 | ..._meta, &mut nchunks, &float_scales)?; 
+ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+     |                                                                ^^^^^^
+     |
+     = note: character appears 5 more times
+help: Unicode character 'ΓöÇ' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+     |
+2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ------
+     |
+
+error: unknown start of token: \u{2500}
+    --> src\kore_v2.rs:2481:164
+     |
+2481 | ..._meta, &mut nchunks, &float_scales)?; 
+ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+     |                                                                 ^^^^^
+     |
+     = note: character appears 4 more times
+help: Unicode character 'ΓöÇ' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+     |
+2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ-----
+     |
+
+error: unknown start of token: \u{2500}
+    --> src\kore_v2.rs:2481:165
+     |
+2481 | ...meta, &mut nchunks, &float_scales)?; 
+ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+     |                                                                 ^^^^
+     |
+     = note: character appears 3 more times
+help: Unicode character 'ΓöÇ' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+     |
+2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ----
+     |
+
+error: unknown start of token: \u{2500}
+    --> src\kore_v2.rs:2481:166
+     |
+2481 | ...meta, &mut nchunks, &float_scales)?; 
+ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+     |                                                                  ^^^
+     |
+     = note: character appears 2 more times
+help: Unicode character 'ΓöÇ' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+     |
+2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ---
+     |
+
+error: unknown start of token: \u{2500}
+    --> src\kore_v2.rs:2481:167
+     |
+2481 | ...eta, &mut nchunks, &float_scales)?; 
+ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+     |                                                                  ^^
+     |
+     = note: character appears once more
+help: Unicode character 'ΓöÇ' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+     |
+2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ--
+     |
+
+error: unknown start of token: \u{2500}
+    --> src\kore_v2.rs:2481:168
+     |
+2481 | ...eta, &mut nchunks, &float_scales)?; 
+ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+     |                                                                   ^
+     |
+help: Unicode character 'ΓöÇ' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+     |
+2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
+&mut nchunks, &float_scales)?; ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ-
+     |
+
+error: this file contains an unclosed delimiter
+    --> src\kore_v2.rs:2870:3
+     |
+2283 | pub fn csv_to_kore(csv_path: &str, kore_path: &str) -> Result<String, String> {
+     |                                                                               - unclosed delimiter
+...
+2410 |     loop {
+     |          - unclosed delimiter
+...
+2428 |             if rows_in_chunk == chunk_size {
+     |                                            - this delimiter might not be properly closed...
+...
+2495 |     }
+     |     - ...as it matches this but it has different indentation
+...
+2870 | }
+     |  ^
+
+error: could not compile `killer-native` (lib) due to 29 previous errors

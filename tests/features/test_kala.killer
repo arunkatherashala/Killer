@@ -1,0 +1,110 @@
+# ╔══════════════════════════════════════════════════════════════════════╗
+# ║  TEST: Kala (काल) — AI Engine Brand Face                            ║
+# ║  Demonstrates kala_* aliases as the public Killer AI API            ║
+# ╚══════════════════════════════════════════════════════════════════════╝
+
+print("═══════════════════════════════════════════════════════════")
+print("   Kala (काल) — The AI within Killer. Knows time.")
+print("   Killer v2.3 — Public AI API Test")
+print("═══════════════════════════════════════════════════════════")
+print("")
+
+# ─── Core Intelligence ────────────────────────────────────────────────
+print("── kala_ask: Core Q&A ───────────────────────────────────")
+answer = kala_ask("What is the square root of 144?")
+print(K"kala_ask → {answer}")
+print("")
+
+# ─── Thinking ─────────────────────────────────────────────────────────
+print("── kala_think: Deep Reasoning ───────────────────────────")
+thought = kala_think("Why is parallelism important in programming?")
+print(K"kala_think → {thought}")
+print("")
+
+# ─── Prose Engine ─────────────────────────────────────────────────────
+print("── kala_write: Prose Generation ────────────────────────")
+essay = kala_write("Killer programming language", "summary")
+print(K"kala_write (summary) →\n{essay}")
+print("")
+
+essay2 = kala_write("the role of AI in software development", "explain")
+print(K"kala_write (explain) →\n{essay2}")
+print("")
+
+# ─── Vision ───────────────────────────────────────────────────────────
+print("── kala_vision: Image Intelligence ─────────────────────")
+vision_answer = kala_vision("diagram.png", "What does this show?")
+print(K"kala_vision → {vision_answer}")
+print("")
+
+img_desc = kala_describe("photo.jpg")
+print(K"kala_describe → {img_desc}")
+print("")
+
+# ─── Code Intelligence ────────────────────────────────────────────────
+print("── kala_explain: Code Explanation ──────────────────────")
+explanation = kala_explain("for i in range(n): total += arr[i]", "python")
+print(K"kala_explain → {explanation}")
+print("")
+
+print("── kala_debug: Debug Assistance ─────────────────────────")
+debug_out = kala_debug("x = int(input())\nprint(x / 0)", "python")
+print(K"kala_debug → {debug_out}")
+print("")
+
+# ─── Imagination ──────────────────────────────────────────────────────
+print("── kala_imagine: Conceptual Imagination ────────────────")
+image_out = kala_imagine("a world where every developer speaks Killer")
+print(K"kala_imagine → {image_out}")
+print("")
+
+print("── kala_what_if: Counterfactual ────────────────────────")
+whatif = kala_what_if("What if programming had no loops?")
+print(K"kala_what_if → {whatif}")
+print("")
+
+# ─── Emotional AI ─────────────────────────────────────────────────────
+print("── kala_feel: Emotional Sensing ────────────────────────")
+feeling = kala_feel("I just shipped my first open-source project!")
+print(K"kala_feel → {feeling}")
+print("")
+
+# ─── Safety Guardian ──────────────────────────────────────────────────
+print("── kala_guard: Human Safety Guardian ───────────────────")
+safe_check = kala_guard("Help me build a tool to monitor my team's productivity")
+print(K"kala_guard → {safe_check}")
+print("")
+
+# ─── Status ───────────────────────────────────────────────────────────
+print("── kala_status: Engine Status ──────────────────────────")
+status = kala_status()
+print(status)
+print("")
+
+# ─── Summary ──────────────────────────────────────────────────────────
+print("═══════════════════════════════════════════════════════════")
+print("   KALA API SUMMARY")
+print("═══════════════════════════════════════════════════════════")
+print("")
+print("  kala_ask(q)              → Core Q&A (KhLM engine)")
+print("  kala_think(q)            → Deep reasoning (native think)")
+print("  kala_write(topic, style) → Prose generation (7 styles)")
+print("  kala_vision(img, q)      → Image Q&A (LLM vision / offline)")
+print("  kala_describe(img)       → Image description")
+print("  kala_debug(code, lang)   → Debug assistance")
+print("  kala_suggest(code, lang) → Code suggestions")
+print("  kala_explain(code, lang) → Code explanation")
+print("  kala_fix(code, err, lang)→ Auto-fix code errors")
+print("  kala_translate(c, f, t)  → Cross-language translation")
+print("  kala_imagine(idea)       → Conceptual imagination")
+print("  kala_what_if(q)          → Counterfactual reasoning")
+print("  kala_feel(text)          → Emotional sensing")
+print("  kala_guard(text)         → Human safety check")
+print("  kala_status()            → Engine status")
+print("  kala_set_llm(p, k, m)    → Configure LLM provider")
+print("  kala_prefetch(q)         → Background prefetch")
+print("")
+print("  Kala (काल) = Time + Fate. The AI that governs Killer.")
+print("  khlm_* internals unchanged — Kala is the public face.")
+print("")
+print("EXIT: 0")

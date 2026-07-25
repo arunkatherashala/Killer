@@ -1,0 +1,77 @@
+// Week 19: Actor Pools & Concurrency - Example 4
+// Backpressure Handling
+
+kfn create_bounded_queue(max_size) {
+    return {
+        items: [],
+        max_size: max_size,
+        dropped: 0,
+        total_submitted: 0
+    };
+}
+
+kfn submit_item(queue, item) {
+    queue.total_submitted = queue.total_submitted + 1;
+    
+    if length(queue.items) >= queue.max_size {
+        // Backpressure: queue is full
+        queue.dropped = queue.dropped + 1;
+        return {
+            success: false,
+            reason: "queue_full",
+            queue_size: length(queue.items),
+            dropped_count: queue.dropped
+        };
+    }
+    
+    queue.items.push(item);
+    return {
+        success: true,
+        queue_size: length(queue.items),
+        available_space: queue.max_size - length(queue.items)
+    };
+}
+
+kfn drain_queue(queue, batch_size) {
+    let processed = 0;
+    let remaining = length(queue.items);
+    
+    for i in 0..batch_size {
+        if length(queue.items) > 0 {
+            // Remove first item
+            let new_items = [];
+            for j in 1..length(queue.items) {
+                new_items.push(queue.items[j]);
+            }
+            queue.items = new_items;
+            processed = processed + 1;
+        }
+    }
+    
+    return {
+        processed: processed,
+        remaining: length(queue.items),
+        queue_utilization: (length(queue.items) * 100) / queue.max_size
+    };
+}
+
+// Test: Backpressure scenario
+let queue = create_bounded_queue(5);
+
+// Submit 8 items to a 5-item queue
+for i in 0..8 {
+    let result = submit_item(queue, {id: i, data: "message"});
+    if !result.success {
+        print("Item " + str(i) + " dropped: " + result.reason);
+    }
+}
+
+print("Queue size: " + str(length(queue.items)));
+print("Dropped items: " + str(queue.dropped));
+
+// Drain queue
+let drain = drain_queue(queue, 3);
+print("Drained " + str(drain.processed) + " items");
+print("Queue utilization: " + str(drain.queue_utilization) + "%");
+
+

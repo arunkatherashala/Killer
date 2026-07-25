@@ -1,0 +1,16 @@
+# ╔══════════════════════════════════════════════════════════════════════╗
+# ║  Kala Chat UI — Launch                                              ║
+# ║  Opens a world-class AI chat interface in your browser              ║
+# ║                                                                     ║
+# ║  Usage:                                                             ║
+# ║    killer-native.exe test_kala_ui.killer                            ║
+# ║                                                                     ║
+# ║  Then open: http://127.0.0.1:8080                                   ║
+# ║  Press Ctrl+C to stop.                                              ║
+# ╚══════════════════════════════════════════════════════════════════════╝
+
+print("Starting Kala (काल) Chat UI...")
+print("Browser will open automatically at http://127.0.0.1:8080")
+print("")
+
+kala_serve(8080)

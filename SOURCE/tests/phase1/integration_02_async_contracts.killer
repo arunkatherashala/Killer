@@ -1,0 +1,45 @@
+// INTEGRATION TESTS - ASYNC + CONTRACTS
+// Tests combining async functions with contract requirements
+
+// Async function with precondition
+async fn fetch_safe(url: String) -> String uses io
+    requires url.starts_with("https://");
+{
+    fetch(url).await
+}
+
+// Async function with postcondition
+async fn get_json(url: String) -> String uses io
+    ensures result.len() > 0;
+{
+    fetch(url).await
+}
+
+// Batch fetch with contracts
+async fn fetch_batch(urls: [String]) -> [String] uses io
+    requires urls.len() > 0;
+    ensures result.len() == urls.len();
+{
+    join_all(urls.map(fn(url) { fetch(url) })).await
+}
+
+// Concurrent with effect tracking
+async fn parallel_compute() -> i32 uses (io, random, allocate) {
+    let handle1 = spawn(async {
+        read_config("file").await  // uses io
+    });
+    
+    let handle2 = spawn(async {
+        roll_dice()  // uses random
+    });
+    
+    let r1 = handle1.await;
+    let r2 = handle2.await;
+    r2  // Result is i32
+}
+
+kfn main() {
+    println("✓ Async Contracts Integration Tests Loaded");
+}
+
+

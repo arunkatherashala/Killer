@@ -1,0 +1,7 @@
+﻿async kfn greet<T>(name) {
+  result = "Hello " + name
+  return result
+}
+handle = spawn greet("Killer")
+msg = await handle
+print(msg)

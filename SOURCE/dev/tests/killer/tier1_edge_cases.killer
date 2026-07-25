@@ -1,0 +1,74 @@
+// TEST SUITE: Edge Cases - Boundary conditions, corner cases
+kfn assert(condition, message) {
+    if(condition == false) {
+        print("[ERROR] " + message);
+        throw message;
+    }
+}
+
+// Empty arrays
+empty = [];
+assert(empty.length == 0, "empty array failed");
+empty.push(1);
+assert(empty.length == 1, "push to empty failed");
+print("TEST 1: Empty array - PASS");
+
+// Empty strings
+empty_str = "";
+assert(empty_str.length == 0, "empty str failed");
+assert((empty_str + "test") == "test", "concat empty failed");
+print("TEST 2: Empty string - PASS");
+
+// Zero values
+zero = 0;
+assert(zero == 0, "zero failed");
+assert((zero + 5) == 5, "zero add failed");
+print("TEST 3: Zero - PASS");
+
+// Null handling
+x = null;
+assert(x == null, "null failed");
+assert((x != 5), "null neq failed");
+print("TEST 4: Null - PASS");
+
+// Negative numbers
+neg = -42;
+assert(neg < 0, "neg failed");
+assert((-5 + 3) == -2, "neg add failed");
+print("TEST 5: Negative - PASS");
+
+// Array out of bounds
+arr = [1, 2, 3];
+result = arr[10];
+assert(result == null, "out of bounds failed");
+print("TEST 6: Out of bounds - PASS");
+
+// Nested objects
+deep = {"a": {"b": {"c": 42}}};
+assert(deep["a"]["b"]["c"] == 42, "deep nesting failed");
+print("TEST 7: Deep nesting - PASS");
+
+// Single element
+single = [99];
+assert(single.length == 1, "single len failed");
+assert(single[0] == 99, "single val failed");
+print("TEST 8: Single element - PASS");
+
+// Recursion
+kfn factorial(n) {
+    if(n <= 1) return 1;
+    return n * factorial(n - 1);
+}
+assert(factorial(5) == 120, "factorial failed");
+print("TEST 9: Recursion - PASS");
+
+// Array filter with no results
+arr = [1, 2, 3, 4];
+gt100 = fn(x) { return x > 100; };
+result = arr.filter(gt100);
+assert(result.length == 0, "filter empty failed");
+print("TEST 10: Filter empty - PASS");
+
+print("EDGE CASES: COMPLETE");
+
+

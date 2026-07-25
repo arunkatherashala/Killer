@@ -1,0 +1,86 @@
+# Example 15: Phase 1 Features - Arrow Functions, Template Literals, Default Parameters
+
+print("=== ARROW FUNCTIONS ===");
+
+# Multi-parameter arrow function
+add = (x, y) => x + y;
+print(add(10, 5));
+
+# Single parameter arrow function
+square = x => x * x;
+print(square(7));
+
+# No parameter arrow function
+greet = () => "Hello Arrow Function!";
+print(greet());
+
+# Arrow function with block body
+process = (name) => {
+    msg = name + " processed!";
+    return msg;
+};
+print(process("Data"));
+
+# Arrow function returns array
+makeArray = () => [1, 2, 3];
+print(makeArray());
+
+# ===== TEMPLATE LITERALS =====
+print("=== TEMPLATE LITERALS ===");
+
+# Simple template literal
+greeting = "World";
+msg1 = `Hello, ${greeting}!`;
+print(msg1);
+
+# Template with expressions
+x = 5;
+y = 3;
+msg2 = `${x} + ${y} = ${x + y}`;
+print(msg2);
+
+# Template with function calls
+kfn getName() {
+    return "Killer";
+}
+
+msg3 = `Welcome to ${getName()} language!`;
+print(msg3);
+
+# ===== DEFAULT PARAMETERS =====
+print("=== DEFAULT PARAMETERS ===");
+
+# Function with default parameter
+kfn greetUser(name = "Guest") {
+    return "Hello, " + name;
+}
+
+print(greetUser());
+print(greetUser("Alice"));
+
+# Multiple default parameters
+kfn area(width = 5, height = 3) {
+    return width * height;
+}
+
+print(area());
+print(area(4));
+print(area(10, 8));
+
+# ===== COMBINATIONS =====
+print("=== COMBINATIONS ===");
+
+# Template literal with arrow functions
+formatter = (val) => `Value: ${val}`;
+print(formatter(42));
+
+# Store arrow functions in variables and call them
+adder = (a, b) => a + b;
+subtractor = (a, b) => a - b;
+multiplier = (a, b) => a * b;
+
+print(adder(10, 5));
+print(subtractor(10, 5));
+print(multiplier(10, 5));
+
+

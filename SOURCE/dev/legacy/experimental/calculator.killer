@@ -1,0 +1,44 @@
+# Simple Calculator in Killer
+
+print("=== Killer Calculator ===");
+print("");
+
+kfn calculator(a, op, b) {
+    if (op == "+") {
+        return a + b;
+    }
+    if (op == "-") {
+        return a - b;
+    }
+    if (op == "*") {
+        return a * b;
+    }
+    if (op == "/") {
+        if (b == 0) {
+            return "Error: Division by zero";
+        }
+        return a / b;
+    }
+    return "Unknown operator";
+}
+
+# Test the calculator
+print("10 + 5 = ");
+print(calculator(10, "+", 5));
+
+print("20 - 7 = ");
+print(calculator(20, "-", 7));
+
+print("6 * 8 = ");
+print(calculator(6, "*", 8));
+
+print("25 / 5 = ");
+print(calculator(25, "/", 5));
+
+print("100 / 0 = ");
+print(calculator(100, "/", 0));
+
+print("");
+print("Calculator ready!");
+
+

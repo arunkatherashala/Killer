@@ -1,0 +1,24 @@
+print("=== Membership & Identity Operators ===")
+
+arr = [1, 2, 3]
+print("2 in [1,2,3]:", 2 in arr)
+print("9 in [1,2,3]:", 9 in arr)
+
+text = "killer"
+print("'ill' in 'killer':", "ill" in text)
+print("'xyz' in 'killer':", "xyz" in text)
+
+d = {name: "Killer", version: 3}
+print("'name' in dict:", "name" in d)
+print("'missing' in dict:", "missing" in d)
+
+x = 10
+y = x
+z = 10
+
+print("x is y:", x is y)
+print("x is z:", x is z)
+
+print("=== Done ===")
+
+

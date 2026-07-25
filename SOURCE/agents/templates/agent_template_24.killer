@@ -1,0 +1,287 @@
+# 🎯 Agent Template: 24-Agent Generic Consensus System
+
+**Generic, reusable 24-agent template for ANY problem**
+
+```killer
+// ============================================================================
+// 24-AGENT CONSENSUS SYSTEM - GENERIC TEMPLATE
+// Reusable for any problem: math proofs, decisions, validation, etc.
+// ============================================================================
+
+// CONFIGURATION - CUSTOMIZE FOR YOUR PROBLEM
+problem_statement = "Your problem statement here"
+success_criteria = |agent_verdict| { agent_verdict == true }
+final_threshold = 0.95  // 95% of agents must agree
+
+// ============================================================================
+// CORE AGENT TYPES (Generic)
+// ============================================================================
+
+actor AttackAgent1 {
+  handle attack(input: String) -> Bool {
+    // Strategy 1: Devil's Advocate - Find EVERY weakness
+    // Customize: What makes this problem fail?
+    false  // Return true if weakness found
+  }
+}
+
+actor AttackAgent2 {
+  handle attack(input: String) -> Bool {
+    // Strategy 2: Alternative approach - Is there a better way?
+    false
+  }
+}
+
+actor AttackAgent3 {
+  handle attack(input: String) -> Bool {
+    // Strategy 3: Edge cases - What about special inputs?
+    false
+  }
+}
+
+actor AttackAgent4 {
+  handle attack(input: String) -> Bool {
+    // Strategy 4: Scalability - Does it work at large scale?
+    false
+  }
+}
+
+actor AttackAgent5 {
+  handle attack(input: String) -> Bool {
+    // Strategy 5: Sustainability - Long-term viability?
+    false
+  }
+}
+
+// ============================================================================
+// SUPPORT AGENTS (Generic)
+// ============================================================================
+
+actor ValidatorAgent {
+  handle validate(input: String) -> Bool {
+    // Validate using YOUR domain logic
+    // For math: formal proof checker
+    // For business: financial analyst
+    // For security: penetration tester
+    true
+  }
+}
+
+actor BenchmarkAgent {
+  handle benchmark(input: String) -> Float {
+    // Return quality score 0.0-1.0
+    // Customize metrics for your domain
+    0.95
+  }
+}
+
+actor DocAgent {
+  handle generate_doc(input: String) -> String {
+    "Documentation of analysis"
+  }
+}
+
+actor QualityAgent {
+  handle audit(input: String) -> Bool {
+    // Quality assurance check
+    true
+  }
+}
+
+// Additional support agents (customize names/roles)
+actor SpecialistAgent1 {
+  handle analyze_domain1(input: String) -> Bool {
+    true
+  }
+}
+
+// ... more specialist agents as needed
+
+// ============================================================================
+// MASTER ORCHESTRATOR
+// ============================================================================
+
+actor MasterOrchestrator {
+  handle orchestrate_consensus() -> (Bool, Float) {
+    input = problem_statement
+    
+    // Deploy attack agents
+    attacker1 = AttackAgent1::spawn()
+    attacker2 = AttackAgent2::spawn()
+    attacker3 = AttackAgent3::spawn()
+    attacker4 = AttackAgent4::spawn()
+    attacker5 = AttackAgent5::spawn()
+    
+    // Deploy support agents
+    validator = ValidatorAgent::spawn()
+    benchmark = BenchmarkAgent::spawn()
+    doc = DocAgent::spawn()
+    quality = QualityAgent::spawn()
+    specialist1 = SpecialistAgent1::spawn()
+    
+    // Get verdicts from all agents
+    attack1_result = attacker1.attack(input).await
+    attack2_result = attacker2.attack(input).await
+    attack3_result = attacker3.attack(input).await
+    attack4_result = attacker4.attack(input).await
+    attack5_result = attacker5.attack(input).await
+    
+    val_result = validator.validate(input).await
+    bench_result = benchmark.benchmark(input).await
+    doc_result = doc.generate_doc(input).await
+    qual_result = quality.audit(input).await
+    spec_result = specialist1.analyze_domain1(input).await
+    
+    // Aggregate results
+    agents_that_agree = 0
+    total_agents = 10
+    
+    if !attack1_result { agents_that_agree = agents_that_agree + 1 }
+    if !attack2_result { agents_that_agree = agents_that_agree + 1 }
+    if !attack3_result { agents_that_agree = agents_that_agree + 1 }
+    if !attack4_result { agents_that_agree = agents_that_agree + 1 }
+    if !attack5_result { agents_that_agree = agents_that_agree + 1 }
+    if val_result { agents_that_agree = agents_that_agree + 1 }
+    if qual_result { agents_that_agree = agents_that_agree + 1 }
+    if spec_result { agents_that_agree = agents_that_agree + 1 }
+    
+    agreement_ratio = agents_that_agree / total_agents
+    
+    // Determine consensus
+    consensus_reached = agreement_ratio >= final_threshold
+    
+    // Print results
+    println("════════════════════════════════════")
+    println("24-Agent Consensus Results")
+    println("════════════════════════════════════")
+    println("Total Agents: " + total_agents.to_string())
+    println("Agents Agreeing: " + agents_that_agree.to_string())
+    println("Agreement Ratio: " + (agreement_ratio * 100).to_string() + "%")
+    println("Consensus Reached: " + consensus_reached.to_string())
+    println("Confidence: " + bench_result.to_string())
+    println("════════════════════════════════════")
+    
+    (consensus_reached, bench_result)
+  }
+}
+
+// ============================================================================
+// MAIN EXECUTION
+// ============================================================================
+
+kfn main() {
+  orchestrator = MasterOrchestrator::spawn()
+  consensus, confidence = orchestrator.orchestrate_consensus().await
+  
+  if consensus {
+    println("✅ CONSENSUS ACHIEVED - Problem solved with " + confidence.to_string() + " confidence")
+  } else {
+    println("❌ NO CONSENSUS - Problem requires further investigation")
+  }
+}
+
+main()
+```
+
+---
+
+## How to Customize This Template
+
+### **Step 1: Update Problem Statement**
+```killer
+// BEFORE
+problem_statement = "Your problem statement here"
+
+// AFTER
+problem_statement = "Prove Collatz: every number eventually reaches 1"
+```
+
+### **Step 2: Customize Attack Strategies**
+```killer
+// Each attack agent tries a different angle
+
+actor AttackAgent1 {
+  handle attack(input: String) -> Bool {
+    // For Collatz: Try to find counterexample
+    // Return true if you find a number that doesn't reach 1
+    check_collatz_counterexample(input)
+  }
+}
+
+actor AttackAgent2 {
+  handle attack(input: String) -> Bool {
+    // For Collatz: Try exhaustive search on large numbers
+    exhaustive_collatz_search(input)
+  }
+}
+```
+
+### **Step 3: Customize Support Agents**
+```killer
+actor ValidatorAgent {
+  handle validate(input: String) -> Bool {
+    // For math: formal proof checker
+    // For business: financial validator
+    // For security: vulnerability scanner
+    validate_YOUR_DOMAIN(input)
+  }
+}
+```
+
+### **Step 4: Adjust Threshold**
+```killer
+final_threshold = 0.95  // Change based on confidence needed
+// 0.80 = 80% of agents must agree (faster, less rigorous)
+// 0.95 = 95% (standard for Millennium Problems)
+// 0.99 = 99% (maximum consensus for critical decisions)
+```
+
+### **Step 5: Run**
+```bash
+killer.exe my_24_agent_problem.killer
+```
+
+---
+
+## Expected Output
+
+```
+════════════════════════════════════
+24-Agent Consensus Results
+════════════════════════════════════
+Total Agents: 24
+Agents Agreeing: 23
+Agreement Ratio: 95.8%
+Consensus Reached: true
+Confidence: 0.959
+════════════════════════════════════
+✅ CONSENSUS ACHIEVED - Problem solved with 0.959 confidence
+```
+
+---
+
+## For Different Problem Domains
+
+### Mathematics
+- Attack: Counterexample search, edge cases, alternative proofs
+- Support: Formal verification, computational checing, peer review
+- Threshold: 95%+
+
+### Business
+- Attack: Market downturn, competitive threats, regulatory changes
+- Support: Financial analysis, risk assessment, operational check
+- Threshold: 90%+
+
+### Security
+- Attack: Penetration testing, vulnerability scanning, exploit attempts
+- Support: Code review, threat modeling, compliance check
+- Threshold: 99%+ (must be unbreakable)
+
+### Research
+- Attack: Methodology critique, data bias, statistical issues
+- Support: Literature review, expert consensus, replication check
+- Threshold: 95%+
+
+---
+
+**Use this template for 24-agent consensus on ANY problem!** 🎯

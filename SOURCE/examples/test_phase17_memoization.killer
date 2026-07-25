@@ -1,0 +1,49 @@
+// Phase 17: Recursive Fibonacci - Perfect for Memoization
+// Without memoization: exponential time
+// With memoization: linear time (100-1000x speedup)
+
+kfn fib(n) {
+    if (n <= 1) {
+        return n;
+    }
+    return fib(n - 1) + fib(n - 2);
+}
+
+kfn count_to(n) {
+    let i = 0;
+    let sum = 0;
+    while (i < n) {
+        sum = sum + i;
+        i = i + 1;
+    }
+    return sum;
+}
+
+print("=== Phase 17: Memoization Testing ===");
+print("");
+
+print("Test 1: Recursive Fibonacci");
+print("fib(10) = ");
+print(fib(10));
+print("");
+
+print("Test 2: Same Fibonacci call again (cacheable)");
+print("fib(10) = ");
+print(fib(10));
+print("");
+
+print("Test 3: Sum pattern (memoizable)");
+print("count_to(100) = ");
+print(count_to(100));
+print("");
+
+print("Test 4: Repeated sum (cached)");
+print("count_to(100) = ");
+print(count_to(100));
+print("");
+
+print("=== Phase 17 Tests Complete ===");
+print("Note: With memoization enabled, repeated calls with");
+print("identical arguments would show 100-1000x speedup!");
+
+

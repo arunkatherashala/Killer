@@ -1,0 +1,56 @@
+// KILLER FIBONACCI - QUICK TEST
+kfn fib_mod(n, mod) {
+    if (n == 0) {
+        0
+    } else if (n == 1) {
+        1
+    } else {
+        var a = 1
+        var b = 1
+        var c = 1
+        var d = 0
+        var ma = 1
+        var mb = 1
+        var mc = 1
+        var md = 0
+        var exp = n
+        while (exp > 0) {
+            if (exp % 2 == 1) {
+                let na = (a * ma + b * mc) % mod
+                let nb = (a * mb + b * md) % mod
+                let nc = (c * ma + d * mc) % mod
+                let nd = (c * mb + d * md) % mod
+                a = na
+                b = nb
+                c = nc
+                d = nd
+            }
+            let sa = (ma * ma + mb * mc) % mod
+            let sb = (ma * mb + mb * md) % mod
+            let sc = (mc * ma + md * mc) % mod
+            let sd = (mc * mb + md * md) % mod
+            ma = sa
+            mb = sb
+            mc = sc
+            md = sd
+            exp = exp / 2
+        }
+        b
+    }
+}
+
+kfn main() {
+    println("KILLER FIBONACCI TEST")
+    println("")
+    println("fib(10) mod 1000 = ")
+    let r1 = fib_mod(10, 1000)
+    println(r1)
+    println("")
+    println("fib(100) mod 1000000007 = ")
+    let r2 = fib_mod(100, 1000000007)
+    println(r2)
+    println("")
+    println("SUCCESS - KILLER WORKS")
+}
+
+

@@ -1,0 +1,158 @@
+// Example 2: Full REST API Server with User Management
+// A complete HTTP API demonstrating Week 9 capabilities
+
+// In-memory user database
+let users = {
+    "1": { "id": 1, "name": "Alice", "email": "alice@example.com", "role": "admin" },
+    "2": { "id": 2, "name": "Bob", "email": "bob@example.com", "role": "user" },
+    "3": { "id": 3, "name": "Charlie", "email": "charlie@example.com", "role": "user" }
+};
+
+let user_counter = 4;
+
+// Create HTTP server on port 8080
+let server = http::Server::new("127.0.0.1", 8080);
+
+// GET / - Health check endpoint
+server::on("GET", "/", fn(request) {
+    http::Response::ok("Killer REST API Server - Week 9 Example").with_json({
+        "status": "running",
+        "version": "1.0",
+        "endpoints": ["/api/users", "/api/users/:id", "/api/health"]
+    })
+});
+
+// GET /api/health - Health check
+server::on("GET", "/api/health", fn(request) {
+    http::Response::ok("Health check passed").with_json({
+        "healthy": true,
+        "uptime": "running",
+        "timestamp": "2026-03-13"
+    })
+});
+
+// GET /api/users - List all users
+server::on("GET", "/api/users", fn(request) {
+    // Convert users map to array
+    let user_list = [];
+    for key, user in users {
+        user_list.push(user);
+    }
+    
+    http::Response::ok("Users retrieved").with_json({
+        "count": user_list.len(),
+        "users": user_list
+    });
+});
+
+// GET /api/users/:id - Get specific user
+server::on("GET", "/api/users/:id", fn(request) {
+    let user_id = request.params["id"];
+    
+    if users.has_key(user_id) {
+        http::Response::ok("User found").with_json(users[user_id]);
+    } else {
+        http::Response::not_found("User not found").with_json({
+            "error": "User ID " + user_id + " not found"
+        })
+    }
+});
+
+// POST /api/users - Create new user
+server::on("POST", "/api/users", fn(request) {
+    try {
+        let body = json::parse(request.body);
+        let new_user = {
+            "id": user_counter,
+            "name": body.name,
+            "email": body.email,
+            "role": body.role || "user"
+        };
+        
+        users[str(user_counter)] = new_user;
+        user_counter = user_counter + 1;
+        
+        http::Response::created("User created").with_json(new_user);
+    } catch e {
+        http::Response::bad_request("Invalid request body").with_json({
+            "error": str(e)
+        })
+    }
+});
+
+// PUT /api/users/:id - Update user
+server::on("PUT", "/api/users/:id", fn(request) {
+    let user_id = request.params["id"];
+    
+    if !users.has_key(user_id) {
+        return http::Response::not_found("User not found");
+    }
+    
+    try {
+        let body = json::parse(request.body);
+        let existing = users[user_id];
+        
+        let updated = {
+            "id": existing.id,
+            "name": body.name || existing.name,
+            "email": body.email || existing.email,
+            "role": body.role || existing.role
+        };
+        
+        users[user_id] = updated;
+        
+        http::Response::ok("User updated").with_json(updated);
+    } catch e {
+        http::Response::bad_request("Invalid request body").with_json({
+            "error": str(e)
+        })
+    }
+});
+
+// DELETE /api/users/:id - Delete user
+server::on("DELETE", "/api/users/:id", fn(request) {
+    let user_id = request.params["id"];
+    
+    if !users.has_key(user_id) {
+        return http::Response::not_found("User not found");
+    }
+    
+    let deleted = users[user_id];
+    users.delete(user_id);
+    
+    http::Response::ok("User deleted").with_json({
+        "message": "User " + user_id + " deleted",
+        "deleted_user": deleted
+    });
+});
+
+// Start the server
+print("========================================");
+print("Killer REST API Server - Week 9 Demo");
+print("========================================");
+print("");
+print("Server starting on http://127.0.0.1:8080");
+print("");
+print("Available endpoints:");
+print("  GET    /                  - Health check");
+print("  GET    /api/health        - Detailed health");
+print("  GET    /api/users         - List all users");
+print("  GET    /api/users/:id     - Get user by ID");
+print("  POST   /api/users         - Create new user");
+print("  PUT    /api/users/:id     - Update user");
+print("  DELETE /api/users/:id     - Delete user");
+print("");
+print("Example curl commands:");
+print("  curl http://localhost:8080/");
+print("  curl http://localhost:8080/api/users");
+print("  curl http://localhost:8080/api/users/1");
+print("  curl -X POST -H \"Content-Type: application/json\" \\");
+print("       -d '{\"name\":\"David\",\"email\":\"david@example.com\"}' \\");
+print("       http://localhost:8080/api/users");
+print("");
+print("Press Ctrl+C to stop");
+print("");
+
+server::listen(server);
+
+

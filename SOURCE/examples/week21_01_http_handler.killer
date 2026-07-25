@@ -1,0 +1,58 @@
+// Week 21: Network Services - Example 1
+// Simple HTTP Request/Response Handler
+
+kfn parse_http_request(raw_request) {
+    // Split by newlines
+    let lines = [];
+    let current = "";
+    for i in 0..length(raw_request) {
+        let char = raw_request[i];
+        if char == "\n" {
+            lines.push(current);
+            current = "";
+        } else if char != "\r" {
+            current = current + char;
+        }
+    }
+    if current != "" {
+        lines.push(current);
+    }
+    
+    // Parse request line
+    let request_line = lines[0];
+    
+    return {
+        raw: raw_request,
+        lines: lines,
+        request_line: request_line,
+        headers: [],
+        body: ""
+    };
+}
+
+kfn build_http_response(status, body) {
+    let response = "HTTP/1.1 " + str(status) + " OK\r\n";
+    response = response + "Content-Type: application/json\r\n";
+    response = response + "Content-Length: " + str(length(body)) + "\r\n";
+    response = response + "\r\n";
+    response = response + body;
+    
+    return response;
+}
+
+kfn create_json_response(status, data) {
+    let json = "{\"status\":" + str(status) + ",\"data\":" + str(data) + "}";
+    return build_http_response(status, json);
+}
+
+// Test
+let request = "GET /api/users HTTP/1.1\r\nHost: localhost:8080\r\nContent-Length: 0\r\n\r\n";
+let parsed = parse_http_request(request);
+
+print("Request line: " + parsed.request_line);
+print("Total lines: " + str(length(parsed.lines)));
+
+let response = create_json_response(200, "ok");
+print("Response headers created");
+
+

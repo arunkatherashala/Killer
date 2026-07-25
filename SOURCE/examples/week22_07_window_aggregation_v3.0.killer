@@ -1,0 +1,137 @@
+// Week 22: Time-Window Aggregation (Data Processing Gap #2)
+// Demonstrates streaming data in time windows
+// Curriculum: Windowing, time-based aggregation, streaming
+// Status: Week 22 completion (+15%)
+
+kfn tumblingWindow(events, windowSizeMs, processFunc) {
+    // Aggregate events into non-overlapping windows
+    print(`Tumbling Window: ${windowSizeMs}ms windows`);
+    
+    var windows = [];
+    var currentWindow = {
+        "start_time": 0,
+        "end_time": windowSizeMs,
+        "events": []
+    };
+    
+    for (var i = 0; i < events.length; i = i + 1) {
+        var event = events[i];
+        var event_time = event["timestamp"];
+        
+        // Check if event belongs in current window
+        if (event_time >= currentWindow["start_time"] && event_time < currentWindow["end_time"]) {
+            currentWindow["events"].push(event);
+        } else {
+            // Start new window
+            if (currentWindow["events"].length > 0) {
+                windows.push(currentWindow);
+            }
+            
+            currentWindow = {
+                "start_time": event_time,
+                "end_time": event_time + windowSizeMs,
+                "events": [event]
+            };
+        }
+    }
+    
+    // Add last window
+    if (currentWindow["events"].length > 0) {
+        windows.push(currentWindow);
+    }
+    
+    return windows;
+}
+
+kfn slideWindow(events, windowSizeMs, slideMs, aggregateFunc) {
+    // Aggregate events in overlapping windows
+    print(`Sliding Window: ${windowSizeMs}ms window, ${slideMs}ms slide`);
+    
+    if (events.length == 0) return [];
+    
+    var windows = [];
+    var minTime = events[0]["timestamp"];
+    var maxTime = events[events.length - 1]["timestamp"];
+    
+    var windowStart = minTime;
+    while (windowStart + windowSizeMs <= maxTime) {
+        var windowEnd = windowStart + windowSizeMs;
+        var windowEvents = [];
+        
+        for (var i = 0; i < events.length; i = i + 1) {
+            var event = events[i];
+            if (event["timestamp"] >= windowStart && event["timestamp"] < windowEnd) {
+                windowEvents.push(event);
+            }
+        }
+        
+        windows.push({
+            "start": windowStart,
+            "end": windowEnd,
+            "count": windowEvents.length,
+            "sum": aggregateFunc(windowEvents)
+        });
+        
+        windowStart = windowStart + slideMs;
+    }
+    
+    return windows;
+}
+
+kfn main() {
+    print("Week 22: Time-Window Aggregation");
+    print("================================");
+    print("");
+    
+    // Generate sample stream events
+    var events = [];
+    for (var i = 0; i < 20; i = i + 1) {
+        events.push({
+            "id": i,
+            "timestamp": i * 100,
+            "value": (i % 5) + 1
+        });
+    }
+    
+    print("Event stream (20 events):");
+    for (var i = 0; i < events.length; i = i + 1) {
+        var e = events[i];
+        print(`  ${i}: ts=${e["timestamp"]}ms, value=${e["value"]}`);
+    }
+    print("");
+    
+    // Tumbling windows
+    print("TUMBLING WINDOWS (500ms):");
+    var tumblingWindows = tumblingWindow(events, 500, fn() {});
+    for (var i = 0; i < tumblingWindows.length; i = i + 1) {
+        var w = tumblingWindows[i];
+        print(`  Window ${i}: [${w["start_time"]}-${w["end_time"]}ms] = ${w["events"].length} events`);
+    }
+    print("");
+    
+    // Sliding windows
+    print("SLIDING WINDOWS (500ms window, 250ms slide):");
+    var slidingWindows = slideWindow(events, 500, 250, fn(events_list) {
+        var sum = 0;
+        for (var i = 0; i < events_list.length; i = i + 1) {
+            sum = sum + events_list[i]["value"];
+        }
+        return sum;
+    });
+    
+    for (var i = 0; i < slidingWindows.length; i = i + 1) {
+        var w = slidingWindows[i];
+        print(`  Window ${i}: [${w["start"]}-${w["end"]}ms] count=${w["count"]} sum=${w["sum"]}`);
+    }
+    print("");
+    
+    print("Key Concepts:");
+    print("- Tumbling: Non-overlapping windows");
+    print("- Sliding: Overlapping windows");
+    print("- Enables time-series analysis");
+    print("- Foundation for stream processing");
+}
+
+main();
+
+

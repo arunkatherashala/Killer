@@ -1,0 +1,125 @@
+// Week 21: Connection Pooling & Resource Management (Networking Gap)
+// Demonstrates managing TCP connections efficiently
+// Curriculum: Connection pooling, resource limits, lifecycle
+// Status: Week 21 completion (+5%)
+
+kfn connectionPool(maxConnections) {
+    var pool = {
+        "available": [],
+        "in_use": [],
+        "max": maxConnections,
+        "total_created": 0,
+        "total_reused": 0
+    };
+    
+    return pool;
+}
+
+kfn createConnection(addr) {
+    // Simulated connection
+    return {
+        "remote_addr": addr,
+        "created_at": system_time_ms(),
+        "requests_served": 0,
+        "state": "open"
+    };
+}
+
+kfn acquireConnection(pool, addr) {
+    // Try to reuse from pool
+    if (pool["available"].length > 0) {
+        var conn = pool["available"].pop();
+        pool["in_use"].push(conn);
+        pool["total_reused"] = pool["total_reused"] + 1;
+        conn["requests_served"] = conn["requests_served"] + 1;
+        return conn;
+    }
+    
+    // Create new if under limit
+    if (pool["total_created"] < pool["max"]) {
+        var conn = createConnection(addr);
+        pool["total_created"] = pool["total_created"] + 1;
+        pool["in_use"].push(conn);
+        conn["requests_served"] = 1;
+        return conn;
+    }
+    
+    // Pool exhausted
+    print("ERROR: Connection pool exhausted!");
+    return null;
+}
+
+kfn releaseConnection(pool, conn) {
+    if (conn == null) return;
+    
+    // Remove from in_use
+    var in_use_new = [];
+    for (var i = 0; i < pool["in_use"].length; i = i + 1) {
+        if (pool["in_use"][i] != conn) {
+            in_use_new.push(pool["in_use"][i]);
+        }
+    }
+    pool["in_use"] = in_use_new;
+    
+    // Add to available
+    pool["available"].push(conn);
+}
+
+kfn main() {
+    print("Week 21: Connection Pooling & Resource Management");
+    print("================================================");
+    print("");
+    
+    // Create connection pool
+    var pool = connectionPool(5);
+    print(`Created connection pool (max ${pool["max"]} connections)`);
+    print("");
+    
+    print("Scenario: HTTP clients sharing connections");
+    print("");
+    
+    // Simulate multiple requests using pooled connections
+    print("Request batch 1:");
+    var conn1 = acquireConnection(pool, "server:8080");
+    var conn2 = acquireConnection(pool, "server:8080");
+    var conn3 = acquireConnection(pool, "server:8080");
+    
+    print(`  Acquired 3 connections (created: ${pool["total_created"]}, reused: ${pool["total_reused"]})`);
+    print(`  Pool state: ${pool["in_use"].length} in use, ${pool["available"].length} available`);
+    print("");
+    
+    print("Processing requests on connections...");
+    conn1["requests_served"] = conn1["requests_served"] + 2;
+    conn2["requests_served"] = conn2["requests_served"] + 1;
+    conn3["requests_served"] = conn3["requests_served"] + 3;
+    print("  Requests processed");
+    print("");
+    
+    print("Releasing connections back to pool");
+    releaseConnection(pool, conn1);
+    releaseConnection(pool, conn2);
+    releaseConnection(pool, conn3);
+    print(`  Pool state: ${pool["in_use"].length} in use, ${pool["available"].length} available`);
+    print("");
+    
+    print("Request batch 2 (reusing connections):");
+    var conn4 = acquireConnection(pool, "server:8080");
+    print(`  Connection reused from pool (created: ${pool["total_created"]}, reused: ${pool["total_reused"]})`);
+    print(`  This connection had ${conn4["requests_served"] - 1} previous requests`);
+    print("");
+    
+    print("Statistics:");
+    print(`  Total connections created: ${pool["total_created"]}`);
+    print(`  Total connections reused: ${pool["total_reused"]}`);
+    print(`  Reuse efficiency: ${pool["total_reused"] * 100 / (pool["total_created"] + pool["total_reused"])}%`);
+    print("");
+    print("Benefits:");
+    print("- Reduced connection overhead");
+    print("- Better resource utilization");
+    print("- Faster response times (connection reuse)");
+    print("- Bounded resource usage");
+}
+
+main();
+
+

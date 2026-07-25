@@ -1,0 +1,297 @@
+// Week 12 Query Builder Examples
+// Demonstrates using QueryBuilder, InsertBuilder, UpdateBuilder, DeleteBuilder
+// with the database module and Week 11 named parameters
+
+// ====== Example 1: Simple SELECT with WHERE ======
+example select_users {
+    // Create a simple SELECT query
+    let query = QueryBuilder::select("users")
+        .where_eq("status", "user_status", Value::Str("active"))
+        .order_by("name", "ASC")
+        .limit(10);
+    
+    let sql = query.build_sql();
+    println("Generated SQL: " + sql);
+    // Output: SELECT * FROM users WHERE status = :user_status ORDER BY name ASC LIMIT 10
+    
+    let params = query.get_params();
+    println("Parameters: " + params);
+}
+
+// ====== Example 2: SELECT with Multiple Columns ======
+example select_user_data {
+    let query = QueryBuilder::select("users")
+        .columns(["id", "name", "email", "created_at"])
+        .where_eq("user_id", "uid", Value::Number(42.0))
+        .build_sql();
+    
+    println(query);
+    // Output: SELECT id, name, email, created_at FROM users WHERE user_id = :uid
+}
+
+// ====== Example 3: Complex SELECT with Multiple WHERE Clauses ======
+example find_active_users {
+    let query = QueryBuilder::select("users")
+        .columns(["id", "name", "email"])
+        .where_eq("status", "status_val", Value::Str("active"))
+        .where_cond("age", ">", "min_age", Value::Number(21.0))
+        .where_cond("last_login", ">", "since", Value::Number(1640000000.0))
+        .order_by("last_login", "DESC")
+        .limit(50);
+    
+    println("Query: " + query.build_sql());
+    println("Params: " + query.get_params());
+}
+
+// ====== Example 4: Pagination Pattern ======
+example paginate_results {
+    let page = 3;
+    let per_page = 20;
+    let offset = (page - 1) * per_page;
+    
+    let query = QueryBuilder::select("posts")
+        .columns(["id", "title", "author", "created_at"])
+        .where_eq("published", "is_published", Value::Bool(true))
+        .limit(per_page)
+        .offset(offset)
+        .order_by("created_at", "DESC");
+    
+    println("Page " + page + ": " + query.build_sql());
+    // Result: Page 3: SELECT id, title, author, created_at FROM posts 
+    //         WHERE published = :is_published ORDER BY created_at DESC LIMIT 20 OFFSET 40
+}
+
+// ====== Example 5: INSERT Single Record ======
+example insert_user {
+    let insert = InsertBuilder::into("users")
+        .value("name", Value::Str("Alice"))
+        .value("email", Value::Str("alice@example.com"))
+        .value("age", Value::Number(28.0))
+        .value("status", Value::Str("active"));
+    
+    let sql = insert.build_sql();
+    println("INSERT SQL: " + sql);
+    // Output: INSERT INTO users (name, email, age, status) VALUES ($1, $2, $3, $4)
+    
+    let values = insert.get_values();
+    println("Values: " + values);
+}
+
+// ====== Example 6: INSERT with HashMap ======
+example insert_multiple_fields {
+    let user_data = {
+        "username": Value::Str("bob_smith"),
+        "email": Value::Str("bob@example.com"),
+        "created_at": Value::Number(1640000000.0),
+        "role": Value::Str("user")
+    };
+    
+    let insert = InsertBuilder::into("users")
+        .values(user_data);
+    
+    println(insert.build_sql());
+}
+
+// ====== Example 7: UPDATE Single Column ======
+example update_user_status {
+    let update = UpdateBuilder::table("users")
+        .set("status", "new_status", Value::Str("inactive"))
+        .where_eq("id", "user_id", Value::Number(42.0));
+    
+    let sql = update.build_sql();
+    println("UPDATE SQL: " + sql);
+    // Output: UPDATE users SET status = ? WHERE id = :user_id
+    
+    let params = update.get_params();
+    println("Parameters: " + params);
+}
+
+// ====== Example 8: UPDATE Multiple Columns ======
+example update_user_profile {
+    let update = UpdateBuilder::table("users")
+        .set("name", "new_name", Value::Str("Alice Johnson"))
+        .set("email", "new_email", Value::Str("alice.johnson@example.com"))
+        .set("updated_at", "ts", Value::Number(1640000000.0))
+        .where_eq("id", "uid", Value::Number(42.0));
+    
+    println(update.build_sql());
+    // Output: UPDATE users SET name = ?, email = ?, updated_at = ? WHERE id = :uid
+}
+
+// ====== Example 9: Conditional UPDATE ======
+example increment_login_count {
+    let update = UpdateBuilder::table("users")
+        .set("login_count", "new_count", Value::Number(10.0))
+        .set("last_login", "login_time", Value::Number(1640000000.0))
+        .where_eq("id", "user_id", Value::Number(42.0));
+    
+    println(update.build_sql());
+}
+
+// ====== Example 10: DELETE Single Record ======
+example delete_inactive_user {
+    let delete = DeleteBuilder::from("users")
+        .where_eq("id", "user_id", Value::Number(42.0));
+    
+    let sql = delete.build_sql();
+    println("DELETE SQL: " + sql);
+    // Output: DELETE FROM users WHERE id = :user_id
+}
+
+// ====== Example 11: DELETE with Multiple Conditions ======
+example delete_old_sessions {
+    let delete = DeleteBuilder::from("sessions")
+        .where_cond("created_at", "<", "cutoff", Value::Number(1630000000.0))
+        .where_eq("user_id", "uid", Value::Number(42.0));
+    
+    println(delete.build_sql());
+    // Output: DELETE FROM sessions WHERE created_at < :cutoff AND user_id = :uid
+}
+
+// ====== Example 12: Integration with Database Module ======
+example database_crud_operations {
+    // Create connection (Week 12)
+    let db = Connection::new(":memory:");
+    
+    // Define table schema (Week 12)
+    let users_table = Table::new("users", [
+        Column::new("id", ColumnType::Integer),
+        Column::new("name", ColumnType::Text),
+        Column::new("email", ColumnType::Text),
+        Column::new("status", ColumnType::Text)
+    ]);
+    
+    // Build INSERT using QueryBuilder
+    let insert = InsertBuilder::into("users")
+        .value("name", Value::Str("Alice"))
+        .value("email", Value::Str("alice@example.com"))
+        .value("status", Value::Str("active"));
+    
+    // Execute (would integrate with db.insert())
+    println("Insert: " + insert.build_sql());
+    
+    // Build SELECT using QueryBuilder
+    let select = QueryBuilder::select("users")
+        .where_eq("status", "status_val", Value::Str("active"))
+        .order_by("name", "ASC");
+    
+    // Execute (would integrate with db.select())
+    println("Select: " + select.build_sql());
+    
+    // Build UPDATE
+    let update = UpdateBuilder::table("users")
+        .set("status", "new_status", Value::Str("inactive"))
+        .where_eq("id", "uid", Value::Number(1.0));
+    
+    println("Update: " + update.build_sql());
+    
+    // Build DELETE
+    let delete = DeleteBuilder::from("users")
+        .where_eq("id", "uid", Value::Number(1.0));
+    
+    println("Delete: " + delete.build_sql());
+}
+
+// ====== Example 13: Real-World REST API Pattern ======
+example rest_api_user_service {
+    // GET /users?status=active&limit=10&page=1
+    example get_users(status = "active", limit = 10, page = 1) {
+        let offset = (page - 1) * limit;
+        
+        let query = QueryBuilder::select("users")
+            .columns(["id", "name", "email", "created_at"])
+            .where_eq("status", "user_status", Value::Str(status))
+            .order_by("created_at", "DESC")
+            .limit(limit)
+            .offset(offset);
+        
+        println("API Query: " + query.build_sql());
+        return {
+            sql: query.build_sql(),
+            params: query.get_params()
+        };
+    }
+    
+    // POST /users
+    example create_user(name = "", email = "", status = "active") {
+        let insert = InsertBuilder::into("users")
+            .value("name", Value::Str(name))
+            .value("email", Value::Str(email))
+            .value("status", Value::Str(status))
+            .value("created_at", Value::Number(timestamp()));
+        
+        println("Create: " + insert.build_sql());
+        return insert;
+    }
+    
+    // PUT /users/{id}
+    example update_user(id, name = null, email = null) {
+        let mut update = UpdateBuilder::table("users")
+            .where_eq("id", "user_id", Value::Number(id));
+        
+        if name != null {
+            update = update.set("name", "new_name", Value::Str(name));
+        }
+        
+        if email != null {
+            update = update.set("email", "new_email", Value::Str(email));
+        }
+        
+        update = update.set("updated_at", "ts", Value::Number(timestamp()));
+        
+        println("Update: " + update.build_sql());
+        return update;
+    }
+    
+    // DELETE /users/{id}
+    example delete_user(id) {
+        let delete = DeleteBuilder::from("users")
+            .where_eq("id", "user_id", Value::Number(id));
+        
+        println("Delete: " + delete.build_sql());
+        return delete;
+    }
+}
+
+// ====== Example 14: Query Building with Type Safety ======
+example type_safe_queries {
+    // Week 11 named parameters + Week 12 query builder
+    // All values are type-checked at compile time
+    
+    let age_filter = Value::Number(21.0);  // Type: Number
+    let status_filter = Value::Str("active");  // Type: Str
+    let is_verified = Value::Bool(true);  // Type: Bool
+    
+    let query = QueryBuilder::select("users")
+        .where_cond("age", ">=", "min_age", age_filter)
+        .where_eq("status", "user_status", status_filter)
+        .where_eq("verified", "is_verified", is_verified);
+    
+    println("Type-safe Query: " + query.build_sql());
+    // All parameter types are validated at construction time
+}
+
+// ====== Example 15: Reusing Query Builders ======
+example query_reuse {
+    // Base query for "active users"
+    let active_users = QueryBuilder::select("users")
+        .where_eq("status", "status_val", Value::Str("active"));
+    
+    // Variation 1: Get count of active users
+    let count_query = active_users
+        .columns(["COUNT(*) as count"])
+        .build_sql();
+    
+    println("Count: " + count_query);
+    
+    // Variation 2: Get paginated active users
+    let paginated = QueryBuilder::select("users")
+        .where_eq("status", "status_val", Value::Str("active"))
+        .limit(10)
+        .offset(0)
+        .order_by("name", "ASC");
+    
+    println("Paginated: " + paginated.build_sql());
+}
+
+

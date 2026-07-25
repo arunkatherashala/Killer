@@ -1,0 +1,318 @@
+# Killer C Code Generator
+# Converts Killer AST to C code for compilation
+# Phase 2: Bootstrap Compiler
+
+class CodeGenerator {
+    fn constructor() {
+        self.code = ""
+        self.indent_level = 0
+        self.temp_counter = 0
+        self.var_counter = 0
+        self.locals = {}
+        self.output = ""
+    }
+
+    # Helper: Add indented line
+    fn add_line(text) {
+        indent = ""
+        for (i = 0; i < self.indent_level; i = i + 1) {
+            indent = indent + "    "
+        }
+        self.code = self.code + indent + text + "\n"
+    }
+
+    # Helper: Get next temporary variable
+    fn get_temp() {
+        self.temp_counter = self.temp_counter + 1
+        return "_tmp" + self.temp_counter
+    }
+
+    # Helper: Declare local variable
+    fn declare_local(name) {
+        if (!self.locals[name]) {
+            self.add_line("Value* " + name + " = value_null();")
+            self.locals[name] = true
+        }
+    }
+
+    # Generate C file header
+    fn generate_header() {
+        self.add_line("#include <stdio.h>")
+        self.add_line("#include <stdlib.h>")
+        self.add_line("#include <string.h>")
+        self.add_line("#include <math.h>")
+        self.add_line("")
+        self.add_line("/* Forward declarations */")
+        self.add_line("typedef struct Value Value;")
+        self.add_line("")
+        self.add_line("/* Include runtime library */")
+        self.add_line("#include \"runtime.c\"")
+        self.add_line("")
+    }
+
+    # Generate main function start
+    fn generate_main_start() {
+        self.add_line("int main(int argc, char* argv[]) {")
+        self.indent_level = self.indent_level + 1
+        self.add_line("/* Variable declarations */")
+    }
+
+    # Generate main function end
+    fn generate_main_end() {
+        self.indent_level = self.indent_level - 1
+        self.add_line("    return 0;")
+        self.add_line("}")
+    }
+
+    # Generate expression
+    fn generate_expr(node) {
+        if (!node) {
+            return "value_null()"
+        }
+
+        if (node.type == "NumberLiteral") {
+            return "value_number(" + node.value + ")"
+        }
+
+        if (node.type == "StringLiteral") {
+            # Escape quotes
+            escaped = ""
+            for (i = 0; i < node.value.length; i = i + 1) {
+                char = node.value[i]
+                if (char == "\"") {
+                    escaped = escaped + "\\\""
+                } else {
+                    if (char == "\\") {
+                        escaped = escaped + "\\\\"
+                    } else {
+                        escaped = escaped + char
+                    }
+                }
+            }
+            return "value_string(\"" + escaped + "\")"
+        }
+
+        if (node.type == "BooleanLiteral") {
+            return "value_boolean(" + (node.value ? "1" : "0") + ")"
+        }
+
+        if (node.type == "Identifier") {
+            return node.name
+        }
+
+        if (node.type == "BinaryExpression") {
+            left = self.generate_expr(node.left)
+            right = self.generate_expr(node.right)
+            op = node.operator
+
+            if (op == "+") {
+                return "op_add(" + left + ", " + right + ")"
+            } else {
+                if (op == "-") {
+                    return "op_subtract(" + left + ", " + right + ")"
+                } else {
+                    if (op == "*") {
+                        return "op_multiply(" + left + ", " + right + ")"
+                    } else {
+                        if (op == "/") {
+                            return "op_divide(" + left + ", " + right + ")"
+                        } else {
+                            if (op == "%") {
+                                return "op_modulo(" + left + ", " + right + ")"
+                            } else {
+                                if (op == "**") {
+                                    return "op_power(" + left + ", " + right + ")"
+                                } else {
+                                    if (op == "==") {
+                                        return "value_boolean(value_equals(" + left + ", " + right + "))"
+                                    } else {
+                                        if (op == "!=") {
+                                            return "value_boolean(!value_equals(" + left + ", " + right + "))"
+                                        } else {
+                                            if (op == "<") {
+                                                return "value_boolean(value_less_than(" + left + ", " + right + "))"
+                                            } else {
+                                                if (op == "<=") {
+                                                    return "value_boolean(value_less_than(" + left + ", " + right + ") || value_equals(" + left + ", " + right + "))"
+                                                } else {
+                                                    if (op == ">") {
+                                                        return "value_boolean(value_less_than(" + right + ", " + left + "))"
+                                                    } else {
+                                                        if (op == ">=") {
+                                                            return "value_boolean(value_less_than(" + right + ", " + left + ") || value_equals(" + left + ", " + right + "))"
+                                                        } else {
+                                                            if (op == "&&") {
+                                                                return "value_boolean(value_is_truthy(" + left + ") && value_is_truthy(" + right + "))"
+                                                            } else {
+                                                                if (op == "||") {
+                                                                    return "value_boolean(value_is_truthy(" + left + ") || value_is_truthy(" + right + "))"
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            return "value_null()"
+        }
+
+        if (node.type == "UnaryExpression") {
+            operand = self.generate_expr(node.argument)
+            op = node.operator
+
+            if (op == "!") {
+                return "value_boolean(!value_is_truthy(" + operand + "))"
+            } else {
+                if (op == "-") {
+                    return "value_number(-value_to_number(" + operand + "))"
+                } else {
+                    if (op == "+") {
+                        return "value_number(value_to_number(" + operand + "))"
+                    } else {
+                        if (op == "typeof") {
+                            return "get_typeof(" + operand + ")"
+                        }
+                    }
+                }
+            }
+            return operand
+        }
+
+        if (node.type == "ArrayLiteral") {
+            arr = "value_array(" + node.elements.length + ")"
+            for (i = 0; i < node.elements.length; i = i + 1) {
+                elem = self.generate_expr(node.elements[i])
+                self.add_line("array_push(" + arr + ", " + elem + ");")
+            }
+            return arr
+        }
+
+        if (node.type == "ConditionalExpression") {
+            test = self.generate_expr(node.test)
+            tmp = self.get_temp()
+            self.declare_local(tmp)
+            self.add_line("if (value_is_truthy(" + test + ")) {")
+            self.indent_level = self.indent_level + 1
+            cons = self.generate_expr(node.consequent)
+            self.add_line(tmp + " = " + cons + ";")
+            self.indent_level = self.indent_level - 1
+            self.add_line("} else {")
+            self.indent_level = self.indent_level + 1
+            alt = self.generate_expr(node.alternate)
+            self.add_line(tmp + " = " + alt + ";")
+            self.indent_level = self.indent_level - 1
+            self.add_line("}")
+            return tmp
+        }
+
+        return "value_null()"
+    }
+
+    # Generate statement
+    fn generate_stmt(node) {
+        if (node.type == "ExpressionStatement") {
+            expr = self.generate_expr(node.expression)
+            self.add_line(expr + ";")
+        }
+
+        if (node.type == "VariableDeclaration") {
+            for (i = 0; i < node.declarations.length; i = i + 1) {
+                decl = node.declarations[i]
+                self.declare_local(decl.id.name)
+                if (decl.init) {
+                    val = self.generate_expr(decl.init)
+                    self.add_line(decl.id.name + " = " + val + ";")
+                }
+            }
+        }
+
+        if (node.type == "IfStatement") {
+            test = self.generate_expr(node.test)
+            self.add_line("if (value_is_truthy(" + test + ")) {")
+            self.indent_level = self.indent_level + 1
+            self.generate_stmt(node.consequent)
+            self.indent_level = self.indent_level - 1
+            
+            if (node.alternate) {
+                self.add_line("} else {")
+                self.indent_level = self.indent_level + 1
+                self.generate_stmt(node.alternate)
+                self.indent_level = self.indent_level - 1
+            }
+            self.add_line("}")
+        }
+
+        if (node.type == "BlockStatement") {
+            for (i = 0; i < node.body.length; i = i + 1) {
+                self.generate_stmt(node.body[i])
+            }
+        }
+
+        if (node.type == "WhileStatement") {
+            test = self.generate_expr(node.test)
+            self.add_line("while (value_is_truthy(" + test + ")) {")
+            self.indent_level = self.indent_level + 1
+            self.generate_stmt(node.body)
+            self.indent_level = self.indent_level - 1
+            self.add_line("}")
+        }
+
+        if (node.type == "ForStatement") {
+            if (node.init) {
+                self.generate_stmt(node.init)
+            }
+            
+            test_expr = ""
+            if (node.test) {
+                test_expr = "value_is_truthy(" + self.generate_expr(node.test) + ")"
+            } else {
+                test_expr = "1"
+            }
+            
+            self.add_line("while (" + test_expr + ") {")
+            self.indent_level = self.indent_level + 1
+            self.generate_stmt(node.body)
+            
+            if (node.update) {
+                self.generate_expr(node.update)
+            }
+            
+            self.indent_level = self.indent_level - 1
+            self.add_line("}")
+        }
+
+        if (node.type == "ReturnStatement") {
+            if (node.argument) {
+                val = self.generate_expr(node.argument)
+                self.add_line("return value_to_number(" + val + ");")
+            } else {
+                self.add_line("return 0;")
+            }
+        }
+    }
+
+    # Generate entire program
+    fn generate_program(ast) {
+        self.generate_header()
+        self.generate_main_start()
+        
+        for (i = 0; i < ast.body.length; i = i + 1) {
+            self.generate_stmt(ast.body[i])
+        }
+        
+        self.generate_main_end()
+        return self.code
+    }
+}
+
+# Export
+export { CodeGenerator }
+
+

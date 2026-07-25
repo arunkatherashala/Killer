@@ -1,0 +1,7 @@
+model = "C:/Users/skathera/.killer/models/qwen2.5-0.5b-instruct-q4_k_m.gguf"
+a1 = ghost_ask(model, "What is 2+2?", 128)
+print(K"Math> {a1}")
+a2 = ghost_ask(model, "What is the capital of France?", 128)
+print(K"Capital> [{a2}]")
+a3 = ghost_ask(model, "Who is Albert Einstein?", 128)
+print(K"Einstein> [{a3}]")

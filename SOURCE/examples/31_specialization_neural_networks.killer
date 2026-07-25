@@ -1,0 +1,109 @@
+// Week 5: Type Specialization - Neural Network Operations
+//
+// Demonstrates:
+// - Linear algebra kernels (GEMM: General Matrix-Matrix Multiply)
+// - Common specialization: small fixed matrices (32×32, 64×64)
+// - 4× speedup from specialization
+// - Used in: inference, tensor operations, graphics
+//
+// Key insight: Most neural networks use standard layer sizes
+// Specializing for these sizes gives huge performance wins
+
+kfn matrix_multiply_generic[m: nat][n: nat][k: nat]() -> nat {
+    // Generic: m×n × n×k = m×k matrix mult
+    // Can't optimize: loop counts unknown
+    
+    let result: nat = 0;
+    
+    for i in range(0, m) {
+        for j in range(0, n) {
+            for p in range(0, k) {
+                // Each access needs bounds check (without specialization + type checking)
+                result = result + 1;
+            }
+        }
+    }
+    
+    return result;
+}
+
+kfn matrix_multiply_specialized_64_64_64() -> nat {
+    // Specialized for 64×64 matrices (very common in neural networks)
+    // Modern GPUs: 64 is the warp size = perfect specialization target
+    
+    // Specialization enables:
+    // 1. Tiling loops for cache optimization
+    // 2. Register allocation optimized for 64×64
+    // 3. Vectorization with known dimensions
+    // 4. Pre-computed stride values
+    // 5. All bounds checks eliminated
+    
+    let result: nat = 0;
+    
+    for i in range(0, 64) {
+        for j in range(0, 64) {
+            for p in range(0, 64) {
+                // Specialized: 0 bounds checks
+                // Constants folded: 64 → literal
+                result = result + 1;
+            }
+        }
+    }
+    
+    return result;
+}
+
+kfn inference_pass() {
+    // Typical inference pattern:
+    // 1. Many 64×64 matrix multiplies
+    // 2. A few 128×256 operations
+    // 3. Repeated use of same sizes
+    
+    // Specialization engine tracks:
+    // - 64×64: called 1000× (hot!) → create specialization
+    // - 128×256: called 5× (cold) → use generic or small cache
+    // - 256×256: called 200× (warm) → might specialize
+    
+    print("Inference loop executing...");
+    
+    // These would all use the 64×64 specialization
+    let layer1 = matrix_multiply_specialized_64_64_64();
+    let layer2 = matrix_multiply_specialized_64_64_64();
+    let layer3 = matrix_multiply_specialized_64_64_64();
+}
+
+kfn main() {
+    print("=== Neural Network Specialization ===");
+    print("Scenario: Inference with batch size 64");
+    
+    print("\nCommon network layer sizes:");
+    print("- Linear: 64×64 (very common)");
+    print("- Conv output: 32×32, 64×64, 128×128");
+    print("- Attention: 512×512, 1024×1024");
+    
+    print("\nGeneric 64×64×64 matrix multiply:");
+    print("- Iterations: 64^3 = 262,144");
+    print("- Per iteration: 1 multiply, 1 add");
+    print("- Plus: 3 loop overhead, 6 bounds checks");
+    print("- Total instructions: 262,144 * ~10 = 2,621,440");
+    print("- Runtime: ~2.6 ms");
+    
+    print("\nSpecialized 64×64×64:");
+    print("- Iterations: still 262,144 (same math)");
+    print("- Per iteration: 1 multiply, 1 add (optimized)");
+    print("- Loop overhead: eliminated by unrolling");
+    print("- Bounds checks: 0 (proven safe)");
+    print("- Total instructions: 262,144 * ~2 = 524,288");
+    print("- Runtime: ~0.5 ms");
+    print("- Speedup: 5.2×");
+    
+    print("\nWhy crucial for neural networks:");
+    print("1. Inference does thousands of 64×64 multiplies");
+    print("2. 5× speedup per operation = huge latency reduction");
+    print("3. Specialization engine automatically detects this pattern");
+    print("4. No manual optimization needed");
+    
+    inference_pass();
+}
+
+

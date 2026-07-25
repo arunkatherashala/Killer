@@ -1,0 +1,56 @@
+// Type Annotation Test
+print("=== Type Annotation System Test ===");
+
+// Test 1: Simple type annotation
+kfn add(x: number, y: number): number {
+    return x + y;
+}
+
+result = add(5, 3);
+print("Test 1 - Type annotation: add(5, 3) = " + result);
+
+// Test 2: String type annotation
+kfn greet(name: string): string {
+    return "Hello, " + name;
+}
+
+msg = greet("World");
+print("Test 2 - String type: greet('World') = " + msg);
+
+// Test 3: Boolean type annotation
+kfn isEven(n: number): boolean {
+    return n % 2 == 0;
+}
+
+print("Test 3 - Boolean type: isEven(4) = " + isEven(4));
+print("Test 3 - Boolean type: isEven(5) = " + isEven(5));
+
+// Test 4: Decorator @deprecated
+@deprecated("Use newFunction instead")
+kfn oldFunction(x: number): number {
+    return x * 2;
+}
+
+print("Test 4 - Deprecated decorator:");
+result = oldFunction(10);
+print("oldFunction(10) = " + result);
+
+// Test 5: Type validation - should work
+kfn multiply(a: number, b: number): number {
+    return a * b;
+}
+
+product = multiply(6, 7);
+print("Test 5 - Type validation: multiply(6, 7) = " + product);
+
+// Test 6: Multiple parameters with different types
+kfn formatData(name: string, age: number, active: boolean): string {
+    status = active ? "active" : "inactive";
+    return name + " is " + age + " and " + status;
+}
+
+print("Test 6 - Mixed types: formatData('John', 30, true) = " + formatData("John", 30, true));
+
+print("\n=== All Type Annotation Tests Completed ===");
+
+

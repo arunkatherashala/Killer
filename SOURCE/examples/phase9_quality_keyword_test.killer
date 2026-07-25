@@ -1,0 +1,44 @@
+// Phase 9: Quality Keyword Test
+// Tests the new quality keyword implementation
+
+print "=== Phase 9: Quality Keyword Integration Test ==="
+print ""
+
+// Test 1: Create  quality variables
+print "Test 1: Creating quality variables..."
+quality email = "alice@example.com"
+quality score = 95.5
+quality msg = "Hello, world!"
+
+print "Email: " email
+print "Score: " score  
+print "Message: " msg
+print ""
+
+// Test 2: Quality type inspection
+print "Test 2: Type inspection..."
+print "type(email) = " type(email)
+print "type(score) = " type(score)
+print "type(msg) = " type(msg)
+print ""
+
+// Test 3: Quality variables in arrays
+print "Test 3: Quality in arrays..."
+let emails = ["user1@test.com", "user2@test.com"]
+quality validated_email = emails[0]
+print "Validated email: " validated_email
+print ""
+
+// Test 4: Quality variables in conditionals
+print "Test 4: Quality in conditionals..."
+quality auth_score = 87.5
+if auth_score > 80:
+    print "Authentication score is good"
+else:
+    print "Authentication score needs improvement"
+print ""
+
+print "=== All Phase 9 Tests Complete ==="
+print "Quality keyword successfully integrated!"
+
+

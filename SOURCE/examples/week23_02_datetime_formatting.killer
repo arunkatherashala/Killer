@@ -1,0 +1,52 @@
+// week23_02_datetime_formatting.killer
+// Advanced DateTime formatting with various patterns
+
+now = now()
+
+println("=== Formatting Examples ===\n")
+
+// Format variations
+formats = [
+    "%Y-%m-%d",                    // ISO date
+    "%H:%M:%S",                    // ISO time
+    "%Y-%m-%d %H:%M:%S",           // ISO datetime
+    "%d/%m/%Y",                    // European date
+    "%m-%d-%Y",                    // US date
+    "%A, %B %d",                   // Long format day
+    "%y%m%d_%H%M%S",               // Compact filename
+    "%B %d, %Y at %H:%M",          // Human readable
+]
+
+for fmt in formats {
+    result = format_datetime(now, fmt)
+    println(fmt + " => " + result)
+}
+
+// Exact times for log files
+println("\n=== For Logging ===")
+log_format = format_datetime(now, "[%Y-%m-%d %H:%M:%S]")
+println("Log entry: " + log_format + " Process started")
+
+// Date arithmetic example
+println("\n=== Timestamps ===")
+date1 = parse_datetime("2026-03-14")
+date2 = parse_datetime("2026-03-15")
+println("Date 1 seconds: " + str(date1.seconds))
+println("Date 2 seconds: " + str(date2.seconds))
+println("Difference: " + str(date2.seconds - date1.seconds) + " seconds = 1 day")
+
+// Multiple dates in sequence
+println("\n=== Date Sequence ===")
+dates = [
+    "2026-01-01",
+    "2026-02-01",
+    "2026-03-01",
+]
+
+for date_str in dates {
+    parsed = parse_datetime(date_str)
+    formatted = format_datetime(parsed, "%B %d, %Y")
+    println("  " + formatted)
+}
+
+

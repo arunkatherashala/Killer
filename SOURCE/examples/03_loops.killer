@@ -1,0 +1,37 @@
+# Example 3: Loops
+
+print("While loop counting from 0 to 4:")
+
+count = 0
+while (count < 5) {
+    print(count);
+    count = count + 1;
+}
+
+print("---");
+
+# Countdown
+print("Countdown from 5:");
+num = 5;
+while (num > 0) {
+    print(num);
+    num = num - 1;
+}
+
+print("---");
+
+# Calculate factorial of 5
+print("Calculating 5 factorial:");
+n = 5;
+result = 1;
+
+while (n > 0) {
+    result = result * n;
+    n = n - 1;
+}
+
+print("5! =", result)
+
+print("--- End of Example 3 ---")
+
+

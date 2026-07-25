@@ -1,0 +1,16 @@
+// Test what getters return immediately after validator
+quality x = "hello"
+quality y = x.validate_not_null()
+
+// Test all getters right after
+let score = y.quality()
+let valid = y.is_valid()
+let status = y.get_status()
+let completeness = y.get_all_metrics().completeness
+
+print "Quality score: " + score
+print "Is valid: " + valid
+print "Status: " + status  
+print "Completeness: " + completeness
+
+

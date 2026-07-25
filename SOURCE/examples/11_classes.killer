@@ -1,0 +1,38 @@
+// Test classes with properties
+class Person
+{
+    init(n, a)
+    {
+        this.name = n;
+        this.age = a;
+    }
+    
+    greet()
+    {
+        print("Hello, I am ");
+        print(this.name);
+    }
+    
+    getAge()
+    {
+        return this.age;
+    }
+}
+
+p = new Person("Alice", 30);
+p.greet();
+
+age = p.getAge();
+print("Age is: ");
+print(age);
+
+print("Direct access:");
+print(p.name);
+print(p.age);
+
+// Test modifying properties
+p.age = 31;
+print("Updated age:");
+print(p.age);
+
+

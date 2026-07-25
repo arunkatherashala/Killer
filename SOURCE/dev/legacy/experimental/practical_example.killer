@@ -1,0 +1,133 @@
+# practical_example.killer
+# Practical example: Building a simple game with modules and abstract classes
+
+print("====================================");
+print("Game Example using v3.1 Features");
+print("====================================");
+print("");
+
+# Import utility modules
+import { square } from "./legacy-modules/math_utils";
+import { capitalize, repeat } from "./legacy-modules/string_utils";
+
+# Define game character base class
+abstract class Character {
+    abstract takeDamage(amount);
+    abstract attack(target);
+    
+    getStatus() {
+        return capitalize(this.name) + " - Health: " + this.health;
+    }
+}
+
+# Player class
+class Player extends Character {
+    init(name, health, attackPower) {
+        this.name = name;
+        this.health = health;
+        this.attackPower = attackPower;
+        this.level = 1;
+    }
+    
+    takeDamage(amount) {
+        this.health = this.health - amount;
+        if (this.health < 0) {
+            this.health = 0;
+        }
+        print(this.name + " took " + amount + " damage!");
+    }
+    
+    attack(target) {
+        damage = square(this.attackPower);
+        print(this.name + " attacks for " + damage + " damage!");
+        target.takeDamage(damage);
+    }
+    
+    heal(amount) {
+        this.health = this.health + amount;
+        print(this.name + " healed " + amount + " health!");
+    }
+    
+    levelUp() {
+        this.level = this.level + 1;
+        this.attackPower = this.attackPower + 2;
+        print(this.name + " leveled up to " + this.level + "!");
+    }
+}
+
+# Enemy class
+class Enemy extends Character {
+    init(name, health, attackPower) {
+        this.name = name;
+        this.health = health;
+        this.attackPower = attackPower;
+    }
+    
+    takeDamage(amount) {
+        this.health = this.health - amount;
+        if (this.health < 0) {
+            this.health = 0;
+        }
+        print(this.name + " took " + amount + " damage!");
+    }
+    
+    attack(target) {
+        damage = this.attackPower;
+        print(this.name + " attacks for " + damage + " damage!");
+        target.takeDamage(damage);
+    }
+}
+
+# Game simulation
+print("Test 1 - Character Creation");
+print("-------------------------");
+
+hero = new Player("hero", 100, 5);
+print(hero.getStatus());
+
+goblin = new Enemy("goblin", 30, 3);
+print(goblin.getStatus());
+
+print("");
+print("Test 2 - Combat");
+print("---------------");
+
+hero.attack(goblin);
+print(goblin.getStatus());
+
+goblin.attack(hero);
+print(hero.getStatus());
+
+print("");
+print("Test 3 - Character Growth");
+print("------------------------");
+
+hero.heal(20);
+print(hero.getStatus());
+
+hero.levelUp();
+hero.attack(goblin);
+print(goblin.getStatus());
+
+print("");
+print("Test 4 - Using Utility Functions");
+print("-------------------------------");
+
+title = capitalize(hero.name) + " versus " + capitalize(goblin.name);
+print(title);
+
+battle_line = repeat("-", 30);
+print(battle_line);
+
+print("Game demonstration complete!");
+print("");
+print("====================================");
+print("This example shows:");
+print("✓ Modules (math_utils, string_utils)");
+print("✓ Abstract classes (Character)");
+print("✓ Inheritance (Player, Enemy extend Character)");
+print("✓ Polymorphism (takeDamage, attack)");
+print("✓ Object composition");
+print("====================================");
+
+

@@ -1,0 +1,17 @@
+kfn loop_test() {
+  for i in 1..5
+    print(i)
+}
+
+kfn conditional_test() {
+  x = 10
+  if x > 5
+    print("greater")
+  else
+    print("lesser")
+}
+
+kfn main() {
+  loop_test()
+  conditional_test()
+}

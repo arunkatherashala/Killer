@@ -1,0 +1,2 @@
+nova_compress("big.csv","big.csv.nvz")
+nova_decompress("big.csv.nvz","big_rt.csv")

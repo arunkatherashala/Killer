@@ -1,0 +1,18 @@
+# native subset function demo aligned with examples/05_functions.killer
+kfn add(a, b) {
+    return a + b;
+}
+
+kfn greet(name) {
+    print("Hello");
+    print(name);
+    return 0;
+}
+
+result = add(5, 3);
+print(result);
+
+greet("World");
+print("done");
+
+

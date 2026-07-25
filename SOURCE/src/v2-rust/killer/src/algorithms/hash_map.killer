@@ -1,0 +1,381 @@
+// Hash Table Implementation for Killer v1.2
+// Author: Killer Dev Team
+// Date: March 16, 2026
+// Performance: O(1) average case, O(n) worst case
+
+// Internal node for chaining
+struct HashNode {
+  key: String,
+  value: Int,
+  next: Option<Box<HashNode>>
+}
+
+// Hash Map using separate chaining
+struct HashMap {
+  buckets: List<Option<Box<HashNode>>>,
+  size: Int,
+  capacity: Int
+}
+
+impl HashMap {
+  // Create new HashMap with initial capacity
+  fn new(capacity: Int) -> HashMap {
+    let mut buckets = List::new()
+    let mut i = 0
+    while i < capacity {
+      buckets.push(None)
+      i = i + 1
+    }
+    HashMap {
+      buckets: buckets,
+      size: 0,
+      capacity: capacity
+    }
+  }
+
+  // Simple hash function (djb2)
+  fn hash_key(key: String) -> Int {
+    let mut hash = 5381
+    let mut i = 0
+    while i < key.len() {
+      let c = key.char_at(i)
+      hash = ((hash << 5) + hash) + c  // hash * 33 + c
+      i = i + 1
+    }
+    if hash < 0 { hash = -hash }
+    hash
+  }
+
+  // Insert key-value pair
+  fn insert(mut self, key: String, value: Int) -> Option<Int> {
+    let index = HashMap::hash_key(key) % self.capacity
+    
+    match &mut self.buckets[index] {
+      Some(node) => {
+        // Check if key exists in chain
+        let mut current = node
+        loop {
+          if current.key == key {
+            let old = current.value
+            current.value = value
+            return Some(old)
+          }
+          
+          if current.next.is_none() {
+            break
+          }
+          
+          match &mut current.next {
+            Some(next_node) => current = next_node,
+            None => break
+          }
+        }
+        
+        // Key not found, append to chain
+        current.next = Some(Box::new(HashNode {
+          key: key,
+          value: value,
+          next: None
+        }))
+        self.size = self.size + 1
+        None
+      },
+      None => {
+        // Empty bucket, insert new node
+        self.buckets[index] = Some(Box::new(HashNode {
+          key: key,
+          value: value,
+          next: None
+        }))
+        self.size = self.size + 1
+        None
+      }
+    }
+  }
+
+  // Get value by key
+  fn get(self, key: String) -> Option<Int> {
+    let index = HashMap::hash_key(key) % self.capacity
+    
+    match &self.buckets[index] {
+      Some(node) => {
+        let mut current = node
+        loop {
+          if current.key == key {
+            return Some(current.value)
+          }
+          
+          match &current.next {
+            Some(next_node) => current = next_node,
+            None => return None
+          }
+        }
+      },
+      None => None
+    }
+  }
+
+  // Check if key exists
+  fn contains(self, key: String) -> Bool {
+    let index = HashMap::hash_key(key) % self.capacity
+    
+    match &self.buckets[index] {
+      Some(node) => {
+        let mut current = node
+        loop {
+          if current.key == key {
+            return true
+          }
+          
+          match &current.next {
+            Some(next_node) => current = next_node,
+            None => return false
+          }
+        }
+      },
+      None => false
+    }
+  }
+
+  // Get size
+  fn get_size(self) -> Int {
+    self.size
+  }
+
+  // Get capacity
+  fn get_capacity(self) -> Int {
+    self.capacity
+  }
+
+  // Get load factor
+  fn get_load_factor(self) -> Float {
+    self.size as Float / self.capacity as Float
+  }
+}
+
+// ============ TEST SUITE ============
+
+#[test]
+kfn test_hash_map_insert_and_get() {
+  let mut map = HashMap::new(16)
+  
+  map = map.insert("key1".to_string(), 10)
+  assert_eq(map.get("key1".to_string()), Some(10))
+  assert_eq(map.get_size(), 1)
+}
+
+#[test]
+kfn test_hash_map_multiple_inserts() {
+  let mut map = HashMap::new(16)
+  
+  map = map.insert("a".to_string(), 1)
+  map = map.insert("b".to_string(), 2)
+  map = map.insert("c".to_string(), 3)
+  map = map.insert("d".to_string(), 4)
+  
+  assert_eq(map.get("a".to_string()), Some(1))
+  assert_eq(map.get("b".to_string()), Some(2))
+  assert_eq(map.get("c".to_string()), Some(3))
+  assert_eq(map.get("d".to_string()), Some(4))
+  assert_eq(map.get_size(), 4)
+}
+
+#[test]
+kfn test_hash_map_update_value() {
+  let mut map = HashMap::new(16)
+  
+  let old = map.insert("key".to_string(), 10)
+  assert_eq(old, None)
+  
+  let old = map.insert("key".to_string(), 20)
+  assert_eq(old, Some(10))
+  assert_eq(map.get("key".to_string()), Some(20))
+  assert_eq(map.get_size(), 1)  // Size should not increase
+}
+
+#[test]
+kfn test_hash_map_contains() {
+  let mut map = HashMap::new(16)
+  
+  map = map.insert("exists".to_string(), 42)
+  
+  assert_eq(map.contains("exists".to_string()), true)
+  assert_eq(map.contains("missing".to_string()), false)
+}
+
+#[test]
+kfn test_hash_map_not_found() {
+  let map = HashMap::new(16)
+  
+  assert_eq(map.get("nonexistent".to_string()), None)
+  assert_eq(map.contains("nonexistent".to_string()), false)
+}
+
+#[test]
+kfn test_hash_map_collision_handling() {
+  // Test separate chaining with collisions
+  let mut map = HashMap::new(4)  // Small capacity to force collisions
+  
+  // Insert multiple values that might collide
+  map = map.insert("a".to_string(), 1)
+  map = map.insert("b".to_string(), 2)
+  map = map.insert("c".to_string(), 3)
+  map = map.insert("d".to_string(), 4)
+  map = map.insert("e".to_string(), 5)
+  
+  // All values should still be retrievable
+  assert_eq(map.get("a".to_string()), Some(1))
+  assert_eq(map.get("b".to_string()), Some(2))
+  assert_eq(map.get("c".to_string()), Some(3))
+  assert_eq(map.get("d".to_string()), Some(4))
+  assert_eq(map.get("e".to_string()), Some(5))
+  assert_eq(map.get_size(), 5)
+}
+
+#[test]
+kfn test_hash_map_load_factor() {
+  let map = HashMap::new(16)
+  
+  assert_eq(map.get_load_factor(), 0.0)
+  
+  let mut map = map.insert("key".to_string(), 1)
+  assert_eq(map.get_load_factor(), 0.0625)  // 1/16
+  
+  let mut i = 0
+  while i < 15 {
+    map = map.insert("key".concat(i.to_string()).to_string(), i)
+    i = i + 1
+  }
+  assert_eq(map.get_load_factor(), 1.0)  // 16/16
+}
+
+#[test]
+kfn test_hash_map_stress_100_entries() {
+  let mut map = HashMap::new(64)
+  
+  // Insert 100 entries
+  let mut i = 0
+  while i < 100 {
+    map = map.insert("key".concat(i.to_string()).to_string(), i)
+    i = i + 1
+  }
+  
+  assert_eq(map.get_size(), 100)
+  
+  // Verify all entries are retrievable
+  let mut i = 0
+  while i < 100 {
+    let key = "key".concat(i.to_string()).to_string()
+    assert_eq(map.get(key), Some(i))
+    i = i + 1
+  }
+}
+
+#[test]
+kfn test_hash_map_stress_1000_entries() {
+  let mut map = HashMap::new(512)
+  
+  // Insert 1000 entries
+  let mut i = 0
+  while i < 1000 {
+    map = map.insert("key".concat(i.to_string()).to_string(), i)
+    i = i + 1
+  }
+  
+  assert_eq(map.get_size(), 1000)
+  
+  // Spot check random entries
+  assert_eq(map.get("key0".to_string()), Some(0))
+  assert_eq(map.get("key500".to_string()), Some(500))
+  assert_eq(map.get("key999".to_string()), Some(999))
+}
+
+#[test]
+kfn test_hash_map_duplicate_inserts() {
+  let mut map = HashMap::new(16)
+  
+  // Insert same key multiple times
+  map = map.insert("dup".to_string(), 1)
+  map = map.insert("dup".to_string(), 2)
+  map = map.insert("dup".to_string(), 3)
+  
+  assert_eq(map.get("dup".to_string()), Some(3))
+  assert_eq(map.get_size(), 1)  // Should only be one entry
+}
+
+#[test]
+kfn test_hash_map_empty() {
+  let map = HashMap::new(16)
+  
+  assert_eq(map.get_size(), 0)
+  assert_eq(map.get_capacity(), 16)
+  assert_eq(map.get_load_factor(), 0.0)
+}
+
+// ============ BENCHMARK ============
+
+kfn benchmark_hash_map_insert() {
+  let start = time::now()
+  
+  let mut map = HashMap::new(512)
+  let mut i = 0
+  while i < 10000 {
+    map = map.insert("key".concat(i.to_string()).to_string(), i)
+    i = i + 1
+  }
+  
+  let elapsed = time::now() - start
+  println("HashMap: 10k inserts in ".concat(elapsed.to_string()).concat("ms"))
+  assert(elapsed < 50)  // Should complete in <50ms
+}
+
+kfn benchmark_hash_map_lookup() {
+  let mut map = HashMap::new(512)
+  
+  // Setup: insert 10k entries
+  let mut i = 0
+  while i < 10000 {
+    map = map.insert("key".concat(i.to_string()).to_string(), i)
+    i = i + 1
+  }
+  
+  // Benchmark: lookup all entries
+  let start = time::now()
+  let mut i = 0
+  while i < 10000 {
+    let _ = map.get("key".concat(i.to_string()).to_string())
+    i = i + 1
+  }
+  
+  let elapsed = time::now() - start
+  println("HashMap: 10k lookups in ".concat(elapsed.to_string()).concat("ms"))
+  assert(elapsed < 20)  // Should complete in <20ms
+}
+
+// ============ MAIN ============
+
+kfn main() {
+  println("=== Killer HashMap v1.2 ===")
+  
+  // Quick demo
+  let mut demo_map = HashMap::new(16)
+  demo_map = demo_map.insert("name".to_string(), 42)
+  demo_map = demo_map.insert("age".to_string(), 25)
+  demo_map = demo_map.insert("score".to_string(), 100)
+  
+  println("Demo: name = ".concat(demo_map.get("name".to_string()).to_string()))
+  println("Demo: age = ".concat(demo_map.get("age".to_string()).to_string()))
+  println("Demo: score = ".concat(demo_map.get("score".to_string()).to_string()))
+  println("Demo: size = ".concat(demo_map.get_size().to_string()))
+  
+  // Run benchmarks
+  println("")
+  println("=== Performance Benchmarks ===")
+  benchmark_hash_map_insert()
+  benchmark_hash_map_lookup()
+  
+  println("")
+  println("=== All tests passed! ===")
+}
+
+

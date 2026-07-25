@@ -1,0 +1,105 @@
+# Welcome to Killer Programming!
+# This is a simple program created by the user
+
+print("=================================");
+print("  My First Killer Program!");
+print("=================================");
+print("");
+
+# Variables
+name = "Killer";
+version = 3.0;
+year = 2026;
+
+print("Language: " + name);
+print("Version: " + version);
+print("Year: " + year);
+print("");
+
+# Arithmetic
+print("Arithmetic Examples:");
+a = 10;
+b = 5;
+print("10 + 5 = ");
+print(a + b);
+print("10 - 5 = ");
+print(a - b);
+print("10 * 5 = ");
+print(a * b);
+print("10 / 5 = ");
+print(a / b);
+print("");
+
+# Arrays
+print("Array Examples:");
+fruits = ["apple", "banana", "orange", "grape"];
+print("My favorite fruits:");
+print(fruits[0]);
+print(fruits[1]);
+print(fruits[2]);
+print(fruits[3]);
+print("");
+
+# Functions
+print("Function Examples:");
+
+kfn greet(person) {
+    return "Hello, " + person + "!";
+}
+
+kfn add(x, y) {
+    return x + y;
+}
+
+kfn multiply(x, y) {
+    return x * y;
+}
+
+print(greet("Alice"));
+print(greet("Bob"));
+print("5 + 10 = ");
+print(add(5, 10));
+print("3 * 4 = ");
+print(multiply(3, 4));
+print("");
+
+# Conditionals
+print("Conditional Examples:");
+score = 85;
+
+if (score >= 90) {
+    print("Grade: A");
+} else {
+    if (score >= 80) {
+        print("Grade: B");
+    } else {
+        if (score >= 70) {
+            print("Grade: C");
+        } else {
+            print("Grade: F");
+        }
+    }
+}
+print("");
+
+# Loops
+print("Loop Examples:");
+print("Counting from 1 to 5:");
+i = 1;
+while (i <= 5) {
+    print(i);
+    i = i + 1;
+}
+print("");
+
+# Objects
+print("Object Examples:");
+person = {name: "John", age: 30, city: "New York"};
+print("Person created with properties");
+print("");
+
+print("=================================");
+print("  Program Complete!");
+print("=================================");
+
+

@@ -1,0 +1,66 @@
+// ASYNC/AWAIT - TEST SUITE 2: Concurrent Execution
+// Tests that multiple async operations can run concurrently
+
+// Test 2.1: Concurrent downloads (fire and forget)
+async fn download_multiple(urls: [String]) {
+    for url in urls {
+        spawn(async {
+            fetch(url).await;
+        });
+    }
+}
+
+// Test 2.2: join_all waits for all tasks
+async fn fetch_all(urls: [String]) -> [String] {
+    let futures = urls.map(fn(url) { fetch(url) });
+    join_all(futures).await
+}
+
+// Test 2.3: Concurrent with different timeout per task
+async fn fetch_with_timeouts(urls: [String]) -> [String] {
+    let futures = urls.map(fn(url) {
+        async {
+            download(url, 5000).await
+        }
+    });
+    join_all(futures).await
+}
+
+// Test 2.4: Structured concurrency with scope
+async fn scoped_concurrency() {
+    scope(async {
+        spawn_in_scope(async {
+            fetch("url1").await;
+        });
+        
+        spawn_in_scope(async {
+            fetch("url2").await;
+        });
+    });
+    // All tasks completed here
+}
+
+// Test 2.5: Task handle for awaiting specific task
+async fn spawn_with_await() {
+    let handle = spawn(async {
+        fetch("url").await
+    });
+    
+    let result = handle.await;
+    println(result);
+}
+
+// Test 2.6: Background task spawning
+async fn main_with_background() {
+    spawn(async {
+        println("Background task");
+    });
+    
+    println("Main continues");
+}
+
+kfn main() {
+    println("✓ Async Concurrency Tests Loaded");
+}
+
+

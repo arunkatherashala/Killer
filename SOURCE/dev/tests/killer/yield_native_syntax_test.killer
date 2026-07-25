@@ -1,0 +1,28 @@
+print("=== Native Yield Syntax ===")
+
+kfn numbers() {
+    yield 1
+    yield 2
+    yield 3
+}
+
+g = numbers()
+print("yield #1:", next(g))
+print("yield #2:", next(g))
+print("yield #3:", next(g))
+print("yield exhausted:", next(g, "done"))
+
+kfn down() {
+    yield 5
+    yield 4
+    return 999
+}
+
+g2 = down()
+print("g2 #1:", next(g2))
+print("g2 #2:", next(g2))
+print("g2 exhausted:", next(g2, "end"))
+
+print("=== Native Yield Syntax Done ===")
+
+

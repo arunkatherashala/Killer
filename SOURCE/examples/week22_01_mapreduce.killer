@@ -1,0 +1,83 @@
+// Week 22: Large-Scale Data Processing - Example 1
+// MapReduce Pattern
+
+kfn partition_data(data, num_partitions) {
+    let partitions = [];
+    for i in 0..num_partitions {
+        partitions.push([]);
+    }
+    
+    for i in 0..length(data) {
+        let item = data[i];
+        let partition_id = item % num_partitions;
+        partitions[partition_id].push(item);
+    }
+    
+    return partitions;
+}
+
+kfn map_phase(partition) {
+    // Map: convert each number to {key: number, value: 1}
+    let mapped = [];
+    for i in 0..length(partition) {
+        let item = partition[i];
+        mapped.push({
+            key: item,
+            value: 1
+        });
+    }
+    return mapped;
+}
+
+kfn reduce_phase(mapped_data) {
+    // Reduce: aggregate counts by key
+    let result = {};
+    
+    for i in 0..length(mapped_data) {
+        let item = mapped_data[i];
+        let key = str(item.key);
+        
+        if result[key] == null {
+            result[key] = 0;
+        }
+        result[key] = result[key] + item.value;
+    }
+    
+    return result;
+}
+
+kfn run_mapreduce(data, num_partitions) {
+    // Partition
+    let partitions = partition_data(data, num_partitions);
+    
+    // Map each partition
+    let mapped_partitions = [];
+    for i in 0..length(partitions) {
+        let mapped = map_phase(partitions[i]);
+        mapped_partitions.push(mapped);
+    }
+    
+    // Combine all mapped data
+    let all_mapped = [];
+    for i in 0..length(mapped_partitions) {
+        for j in 0..length(mapped_partitions[i]) {
+            all_mapped.push(mapped_partitions[i][j]);
+        }
+    }
+    
+    // Reduce
+    let result = reduce_phase(all_mapped);
+    
+    return result;
+}
+
+// Test
+let input_data = [1, 2, 3, 1, 2, 1, 4, 5, 1, 2];
+let result = run_mapreduce(input_data, 3);
+
+print("MapReduce result:");
+for key, count in result {
+    print("  Key " + key + ": " + str(count) + " occurrences");
+}
+
+

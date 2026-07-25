@@ -1,0 +1,424 @@
+// KILLER v1.2 - MASTER TEST RUNNER
+// Pure Killer implementation for all algorithm testing
+// Created: March 16, 2026
+// No external dependencies - everything in Killer
+
+kfn print_header(title) {
+    println("=" * 60)
+    println(title)
+    println("=" * 60)
+}
+
+kfn println(text) {
+    print(text)
+    print("\n")
+}
+
+kfn print_result(test_name, passed, time_ms) {
+    status = if passed { "✓ PASS" } else { "✗ FAIL" }
+    println(status + " [" + time_ms.to_string() + "ms] " + test_name)
+}
+
+// ========== HASH MAP TESTS ==========
+
+kfn hashmap_new(capacity) {
+    return {
+        "buckets": [],
+        "size": 0,
+        "capacity": capacity
+    }
+}
+
+kfn hash_key(key) {
+    hash = 5381
+    i = 0
+    while (i < key.length()) {
+        hash = hash * 33 + key.char_at(i).to_int()
+        i = i + 1
+    }
+    if (hash < 0) { hash = -hash }
+    return hash
+}
+
+kfn hashmap_insert(map, key, value) {
+    index = hash_key(key) % map["capacity"]
+    
+    while (map["buckets"].length() <= index) {
+        map["buckets"].push([])
+    }
+    
+    bucket = map["buckets"][index]
+    
+    i = 0
+    while (i < bucket.length()) {
+        if (bucket[i][0] == key) {
+            old = bucket[i][1]
+            bucket[i][1] = value
+            return old
+        }
+        i = i + 1
+    }
+    
+    bucket.push([key, value])
+    map["size"] = map["size"] + 1
+    return null
+}
+
+kfn hashmap_get(map, key) {
+    index = hash_key(key) % map["capacity"]
+    
+    if (index >= map["buckets"].length()) {
+        return null
+    }
+    
+    bucket = map["buckets"][index]
+    i = 0
+    while (i < bucket.length()) {
+        if (bucket[i][0] == key) {
+            return bucket[i][1]
+        }
+        i = i + 1
+    }
+    
+    return null
+}
+
+kfn hashmap_contains(map, key) {
+    return hashmap_get(map, key) != null
+}
+
+kfn hashmap_size(map) {
+    return map["size"]
+}
+
+// ========== DIJKSTRA TESTS ==========
+
+kfn graph_new(vertices) {
+    edges = []
+    i = 0
+    while (i < vertices) {
+        edges.push([])
+        i = i + 1
+    }
+    return {
+        "vertices": vertices,
+        "edges": edges
+    }
+}
+
+kfn graph_add_edge(graph, from, to, weight) {
+    if (from >= 0 && from < graph["vertices"] && 
+        to >= 0 && to < graph["vertices"] && weight > 0) {
+        graph["edges"][from].push({"to": to, "weight": weight})
+    }
+    return graph
+}
+
+kfn dijkstra(graph, source) {
+    distances = []
+    visited = []
+    
+    i = 0
+    while (i < graph["vertices"]) {
+        if (i == source) {
+            distances.push(0)
+        } else {
+            distances.push(2147483647)
+        }
+        visited.push(false)
+        i = i + 1
+    }
+    
+    i = 0
+    while (i < graph["vertices"]) {
+        min_dist = 2147483647
+        min_vertex = -1
+        j = 0
+        while (j < graph["vertices"]) {
+            if (!visited[j] && distances[j] < min_dist) {
+                min_dist = distances[j]
+                min_vertex = j
+            }
+            j = j + 1
+        }
+        
+        if (min_vertex == -1) {
+            break
+        }
+        
+        visited[min_vertex] = true
+        
+        neighbors = graph["edges"][min_vertex]
+        k = 0
+        while (k < neighbors.length()) {
+            edge = neighbors[k]
+            new_dist = distances[min_vertex] + edge["weight"]
+            
+            if (new_dist < distances[edge["to"]]) {
+                distances[edge["to"]] = new_dist
+            }
+            
+            k = k + 1
+        }
+        
+        i = i + 1
+    }
+    
+    return distances
+}
+
+// ========== TEST EXECUTION ==========
+
+kfn test_hashmap_basic() {
+    start = time::now()
+    
+    map = hashmap_new(16)
+    hashmap_insert(map, "key1", 10)
+    
+    result = hashmap_get(map, "key1")
+    passed = result == 10 && hashmap_size(map) == 1
+    
+    elapsed = time::now() - start
+    return passed
+}
+
+kfn test_hashmap_multiple() {
+    start = time::now()
+    
+    map = hashmap_new(16)
+    hashmap_insert(map, "a", 1)
+    hashmap_insert(map, "b", 2)
+    hashmap_insert(map, "c", 3)
+    hashmap_insert(map, "d", 4)
+    
+    passed = (hashmap_get(map, "a") == 1 &&
+              hashmap_get(map, "b") == 2 &&
+              hashmap_get(map, "c") == 3 &&
+              hashmap_get(map, "d") == 4 &&
+              hashmap_size(map) == 4)
+    
+    elapsed = time::now() - start
+    return passed
+}
+
+kfn test_hashmap_stress() {
+    start = time::now()
+    
+    map = hashmap_new(256)
+    
+    i = 0
+    while (i < 1000) {
+        key = "key" + i.to_string()
+        hashmap_insert(map, key, i)
+        i = i + 1
+    }
+    
+    passed = hashmap_size(map) == 1000
+    
+    // Spot check
+    passed = passed && hashmap_get(map, "key0") == 0
+    passed = passed && hashmap_get(map, "key500") == 500
+    passed = passed && hashmap_get(map, "key999") == 999
+    
+    elapsed = time::now() - start
+    return passed
+}
+
+kfn test_dijkstra_simple() {
+    start = time::now()
+    
+    graph = graph_new(4)
+    graph = graph_add_edge(graph, 0, 1, 1)
+    graph = graph_add_edge(graph, 1, 2, 1)
+    graph = graph_add_edge(graph, 2, 3, 1)
+    
+    distances = dijkstra(graph, 0)
+    
+    passed = (distances[0] == 0 &&
+              distances[1] == 1 &&
+              distances[2] == 2 &&
+              distances[3] == 3)
+    
+    elapsed = time::now() - start
+    return passed
+}
+
+kfn test_dijkstra_complex() {
+    start = time::now()
+    
+    graph = graph_new(6)
+    graph = graph_add_edge(graph, 0, 1, 4)
+    graph = graph_add_edge(graph, 0, 2, 2)
+    graph = graph_add_edge(graph, 1, 2, 1)
+    graph = graph_add_edge(graph, 1, 3, 5)
+    graph = graph_add_edge(graph, 2, 3, 8)
+    graph = graph_add_edge(graph, 3, 4, 2)
+    graph = graph_add_edge(graph, 2, 4, 10)
+    graph = graph_add_edge(graph, 3, 5, 6)
+    graph = graph_add_edge(graph, 4, 5, 3)
+    
+    distances = dijkstra(graph, 0)
+    
+    passed = (distances[0] == 0 &&
+              distances[1] == 3 &&
+              distances[2] == 2 &&
+              distances[3] == 8 &&
+              distances[4] == 10 &&
+              distances[5] == 13)
+    
+    elapsed = time::now() - start
+    return passed
+}
+
+// ========== BENCHMARKS ==========
+
+kfn benchmark_hashmap_insert() {
+    start = time::now()
+    
+    map = hashmap_new(512)
+    i = 0
+    while (i < 10000) {
+        key = "key" + i.to_string()
+        hashmap_insert(map, key, i)
+        i = i + 1
+    }
+    
+    elapsed = time::now() - start
+    passed = elapsed < 50
+    
+    print_result("HashMap: 10k inserts", passed, elapsed)
+    return passed
+}
+
+kfn benchmark_hashmap_lookup() {
+    // Setup
+    map = hashmap_new(512)
+    i = 0
+    while (i < 10000) {
+        key = "key" + i.to_string()
+        hashmap_insert(map, key, i)
+        i = i + 1
+    }
+    
+    // Benchmark
+    start = time::now()
+    i = 0
+    while (i < 10000) {
+        key = "key" + i.to_string()
+        _ = hashmap_get(map, key)
+        i = i + 1
+    }
+    
+    elapsed = time::now() - start
+    passed = elapsed < 20
+    
+    print_result("HashMap: 10k lookups", passed, elapsed)
+    return passed
+}
+
+kfn benchmark_dijkstra_small() {
+    start = time::now()
+    
+    graph = graph_new(100)
+    i = 0
+    while (i < 99) {
+        graph = graph_add_edge(graph, i, i + 1, 1)
+        i = i + 1
+    }
+    
+    distances = dijkstra(graph, 0)
+    
+    elapsed = time::now() - start
+    passed = elapsed < 10
+    
+    print_result("Dijkstra: 100v", passed, elapsed)
+    return passed
+}
+
+kfn benchmark_dijkstra_medium() {
+    start = time::now()
+    
+    graph = graph_new(1000)
+    i = 0
+    while (i < 999) {
+        graph = graph_add_edge(graph, i, i + 1, 1)
+        i = i + 1
+    }
+    
+    distances = dijkstra(graph, 0)
+    
+    elapsed = time::now() - start
+    passed = elapsed < 100
+    
+    print_result("Dijkstra: 1000v", passed, elapsed)
+    return passed
+}
+
+// ========== MAIN TEST RUNNER ==========
+
+kfn main() {
+    print_header("KILLER v1.2 - ALGORITHM TEST SUITE")
+    
+    println("")
+    println("HashMap Tests:")
+    println("-" * 60)
+    
+    pass_count = 0
+    total_count = 0
+    
+    // HashMap tests
+    total_count = total_count + 1
+    if (test_hashmap_basic()) { pass_count = pass_count + 1 }
+    print_result("HashMap: Basic insert/get", test_hashmap_basic(), 0)
+    
+    total_count = total_count + 1
+    if (test_hashmap_multiple()) { pass_count = pass_count + 1 }
+    print_result("HashMap: Multiple inserts", test_hashmap_multiple(), 0)
+    
+    total_count = total_count + 1
+    if (test_hashmap_stress()) { pass_count = pass_count + 1 }
+    print_result("HashMap: Stress 1000 entries", test_hashmap_stress(), 0)
+    
+    println("")
+    println("Dijkstra Tests:")
+    println("-" * 60)
+    
+    total_count = total_count + 1
+    if (test_dijkstra_simple()) { pass_count = pass_count + 1 }
+    print_result("Dijkstra: Simple graph", test_dijkstra_simple(), 0)
+    
+    total_count = total_count + 1
+    if (test_dijkstra_complex()) { pass_count = pass_count + 1 }
+    print_result("Dijkstra: Complex graph", test_dijkstra_complex(), 0)
+    
+    println("")
+    println("Performance Benchmarks:")
+    println("-" * 60)
+    
+    total_count = total_count + 1
+    if (benchmark_hashmap_insert()) { pass_count = pass_count + 1 }
+    
+    total_count = total_count + 1
+    if (benchmark_hashmap_lookup()) { pass_count = pass_count + 1 }
+    
+    total_count = total_count + 1
+    if (benchmark_dijkstra_small()) { pass_count = pass_count + 1 }
+    
+    total_count = total_count + 1
+    if (benchmark_dijkstra_medium()) { pass_count = pass_count + 1 }
+    
+    println("")
+    println("=" * 60)
+    println("TEST SUMMARY: " + pass_count.to_string() + "/" + total_count.to_string() + " passed")
+    
+    if (pass_count == total_count) {
+        println("✓ ALL TESTS PASSED")
+    } else {
+        println("✗ SOME TESTS FAILED")
+    }
+    println("=" * 60)
+}
+
+main()
+
+

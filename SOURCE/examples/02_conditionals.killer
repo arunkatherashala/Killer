@@ -1,0 +1,35 @@
+# Example 2: Conditionals and Comparisons
+
+age = 20
+
+print("Testing conditionals...")
+
+# Simple if
+if (age >= 18) {
+    print("You are an adult!")
+}
+
+# If-else
+age = 10
+if (age >= 18) {
+    print("Adult")
+} else {
+    print("Minor")
+}
+
+# Multiple comparisons
+num = 15
+
+if (num > 20) {
+    print("Number is greater than 20")
+} else {
+    if (num > 10) {
+        print("Number is between 10 and 20")
+    } else {
+        print("Number is 10 or less")
+    }
+}
+
+print("--- End of Example 2 ---")
+
+

@@ -1,0 +1,69 @@
+// Week 19: Actor Pools & Concurrency - Example 3
+// Fair Scheduling with Round-Robin
+
+kfn create_round_robin_scheduler() {
+    return {
+        actors: [],
+        current_index: 0,
+        total_scheduled: 0
+    };
+}
+
+kfn add_actor(scheduler, actor_id) {
+    scheduler.actors.push({
+        id: actor_id,
+        queue: [],
+        executed: 0
+    });
+    return scheduler;
+}
+
+kfn schedule_work(scheduler, actor_id, work) {
+    // Find actor with matching id
+    for i in 0..length(scheduler.actors) {
+        if scheduler.actors[i].id == actor_id {
+            scheduler.actors[i].queue.push(work);
+            return scheduler;
+        }
+    }
+    return scheduler;
+}
+
+kfn execute_round_robin(scheduler, rounds) {
+    for round in 0..rounds {
+        let actors = scheduler.actors;
+        for i in 0..length(actors) {
+            let actor = actors[i];
+            if length(actor.queue) > 0 {
+                let work = actor.queue[0];
+                // Remove first item
+                let new_queue = [];
+                for j in 1..length(actor.queue) {
+                    new_queue.push(actor.queue[j]);
+                }
+                actor.queue = new_queue;
+                actor.executed = actor.executed + 1;
+                scheduler.total_scheduled = scheduler.total_scheduled + 1;
+                print("Actor " + str(actor.id) + " executed round " + str(round + 1));
+            }
+        }
+    }
+    return scheduler;
+}
+
+// Test: 3 actors, 5 rounds
+let sched = create_round_robin_scheduler();
+sched = add_actor(sched, 0);
+sched = add_actor(sched, 1);
+sched = add_actor(sched, 2);
+
+sched = schedule_work(sched, 0, {task: "a"});
+sched = schedule_work(sched, 1, {task: "b"});
+sched = schedule_work(sched, 2, {task: "c"});
+sched = schedule_work(sched, 0, {task: "a2"});
+
+sched = execute_round_robin(sched, 5);
+
+print("Total scheduled: " + str(sched.total_scheduled));
+
+

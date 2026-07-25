@@ -1,0 +1,26 @@
+# Example 1: Hello World and Basic Arithmetic
+
+print("Welcome to Killer!")
+
+# Variables
+x = 10
+y = 5
+
+# Arithmetic operations
+print("x =", x)
+print("y =", y)
+print("x + y =", x + y)
+print("x - y =", x - y)
+print("x * y =", x * y)
+print("x / y =", x / y)
+print("x % y =", x % y)
+
+# String operations
+greeting = "Hello "
+name = "World"
+print(greeting + name)
+
+# Result message
+print("--- End of Example 1 ---")
+
+

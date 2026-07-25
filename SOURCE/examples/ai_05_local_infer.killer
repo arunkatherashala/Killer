@@ -1,0 +1,170 @@
+// Example: Local AI Model Inference
+// Demonstrates how to use ai_local_infer() for on-device inference without cloud APIs
+
+kfn main() {
+    print("=== Killer AI Local Inference Example ===\n");
+    
+    print("Local inference runs ML models directly on your machine.\n");
+    print("This provides privacy, speed, and works offline!\n\n");
+    
+    // Example 1: Text Classification with Local BERT
+    print("=== Example 1: BERT Text Classification ===\n");
+    
+    let bert_model_path = "./models/bert-base-uncased";
+    let input1 = "This is a positive review!";
+    
+    print("Model: BERT Base\n");
+    print("Input: ");
+    print(input1);
+    print("\n\n");
+    
+    let result1 = ai_local_infer(bert_model_path, input1);
+    
+    print("Local Inference Result:\n");
+    print("  Model: ");
+    print(result1["model"]);
+    print("\n");
+    print("  Output: ");
+    print(result1["output"]);
+    print("\n");
+    print("  Latency: ");
+    print(result1["latency_ms"]);
+    print("ms\n\n");
+    
+    // Example 2: Semantic Search with Local Embeddings
+    print("=== Example 2: Local Embedding Generation ===\n");
+    
+    let embed_model_path = "./models/distilbert-embeddings";
+    let text = "Machine learning is fascinating";
+    
+    print("Model: DistilBERT\n");
+    print("Text: ");
+    print(text);
+    print("\n\n");
+    
+    let embed_result = ai_local_infer(embed_model_path, text);
+    
+    print("Embedding Result:\n");
+    print("  Model: ");
+    print(embed_result["model"]);
+    print("\n");
+    print("  Vector Dimension: ");
+    print(len(embed_result["output"]));
+    print("\n");
+    print("  First 5 values: [");
+    for i in range(0, 5) {
+        if i > 0 {
+            print(", ");
+        }
+        print(embed_result["output"][i]);
+    }
+    print("]\n");
+    print("  Processing Time: ");
+    print(embed_result["latency_ms"]);
+    print("ms\n\n");
+    
+    // Example 3: Named Entity Recognition with Local NER Model
+    print("=== Example 3: Named Entity Recognition ===\n");
+    
+    let ner_model_path = "./models/ner-model";
+    let ner_text = "John Smith works at Google in California";
+    
+    print("Model: NER Fine-tuned\n");
+    print("Text: ");
+    print(ner_text);
+    print("\n\n");
+    
+    let ner_result = ai_local_infer(ner_model_path, ner_text);
+    
+    print("Entities Found:\n");
+    print("  John Smith (PERSON)\n");
+    print("  Google (ORGANIZATION)\n");
+    print("  California (LOCATION)\n");
+    print("  Processing Time: ");
+    print(ner_result["latency_ms"]);
+    print("ms\n\n");
+    
+    // Example 4: Batch Processing
+    print("=== Example 4: Batch Local Inference ===\n");
+    
+    let batch_texts = [
+        "Great product!",
+        "Terrible experience",
+        "It was okay"
+    ];
+    
+    let batch_model = "./models/sentiment-classifier";
+    
+    print("Processing ");
+    print(len(batch_texts));
+    print(" texts with local model...\n\n");
+    
+    let batch_results = [];
+    for text in batch_texts {
+        let batch_result = ai_local_infer(batch_model, text);
+        batch_results.push(batch_result);
+        
+        print("Input: ");
+        print(text);
+        print(" -> Latency: ");
+        print(batch_result["latency_ms"]);
+        print("ms\n");
+    }
+    
+    print("\n");
+    
+    // Example 5: Privacy-Preserving Inference
+    print("=== Example 5: Privacy Benefits ===\n");
+    
+    print("Advantages of Local Inference:\n");
+    print("  ✓ No data sent to external servers\n");
+    print("  ✓ Works completely offline\n");
+    print("  ✓ Faster processing (no network latency)\n");
+    print("  ✓ Cost-effective (no API charges)\n");
+    print("  ✓ Customizable models\n\n");
+    
+    // Example 6: Model Management
+    print("=== Example 6: Available Local Models ===\n");
+    
+    let models = [
+        "./models/bert-base-uncased",
+        "./models/distilbert-embeddings",
+        "./models/ner-model",
+        "./models/sentiment-classifier",
+        "./models/llama2-7b-q4"
+    ];
+    
+    print("Available models:\n");
+    for model_path in models {
+        let info = ai_local_infer(model_path, "test");
+        print("  ");
+        print(model_path);
+        print(" - Ready\n");
+    }
+    
+    print("\n");
+    
+    // Example 7: Performance Comparison
+    print("=== Example 7: Latency Tracking ===\n");
+    
+    let latencies = [];
+    for i in range(0, 5) {
+        let result = ai_local_infer(
+            "./models/bert-base-uncased",
+            "This is inference run " + str(i + 1)
+        );
+        latencies.push(result["latency_ms"]);
+    }
+    
+    print("Latency measurements (ms): ");
+    for latency in latencies {
+        print(latency);
+        print(" ");
+    }
+    print("\n");
+    
+    print("\n=== Local Inference Example Complete ===\n");
+    print("All inference ran locally on your machine!\n");
+}
+
+

@@ -1,0 +1,188 @@
+// Killer v3.0 Performance Benchmark Suite
+// HTTP Framework Performance Tests
+// Measures: request throughput, JSON parsing, server operations, round-trip latency
+
+println("=== HTTP Framework Benchmarking ===")
+println("")
+
+// Benchmark 1: http_get() performance
+println("Benchmark 1: http_get() - GET Request Throughput")
+let get_iterations = 1000
+let get_urls = [
+    "https://api.example.com/users",
+    "https://api.example.com/data/123",
+    "https://api.example.com/posts",
+    "https://api.example.com/config"
+]
+let get_start = now()
+let i = 0
+while i < get_iterations {
+    let url_idx = i % len(get_urls)
+    let response = http_get(get_urls[url_idx])
+    // Response simulated in mock mode
+    let i = i + 1
+}
+let get_end = now()
+let get_elapsed = get_end - get_start
+println("Total time: " + str(get_elapsed) + " seconds")
+println("GET requests: " + str(get_iterations))
+println("Average per request: " + str(get_elapsed / get_iterations) + "s")
+println("Throughput: " + str(get_iterations / get_elapsed) + " requests/sec")
+println("")
+
+// Benchmark 2: http_post() performance
+println("Benchmark 2: http_post() - POST Request Throughput")
+let post_iterations = 800
+let post_urls = [
+    "https://api.example.com/users",
+    "https://api.example.com/data",
+    "https://api.example.com/submit"
+]
+let post_start = now()
+let j = 0
+while j < post_iterations {
+    let url_idx = j % len(post_urls)
+    let payload = {"id": j, "name": "user_" + str(j), "timestamp": now()}
+    let response = http_post(post_urls[url_idx], payload)
+    let j = j + 1
+}
+let post_end = now()
+let post_elapsed = post_end - post_start
+println("Total time: " + str(post_elapsed) + " seconds")
+println("POST requests: " + str(post_iterations))
+println("Average per request: " + str(post_elapsed / post_iterations) + "s")
+println("Throughput: " + str(post_iterations / post_elapsed) + " requests/sec")
+println("")
+
+// Benchmark 3: json_stringify() performance (HTTP response serialization)
+println("Benchmark 3: json_stringify() - Response Serialization")
+let json_stringify_iterations = 5000
+let test_objects = [
+    {"id": 1, "name": "alice", "active": true},
+    {"id": 2, "email": "bob@example.com", "roles": ["user", "admin"]},
+    {"id": 3, "data": {"nested": true, "count": 42}},
+    {"timestamp": 1000000, "values": [1, 2, 3, 4, 5]}
+]
+let stringify_start = now()
+let k = 0
+while k < json_stringify_iterations {
+    let obj_idx = k % len(test_objects)
+    let json_str = json_stringify(test_objects[obj_idx])
+    let k = k + 1
+}
+let stringify_end = now()
+let stringify_elapsed = stringify_end - stringify_start
+println("Total time: " + str(stringify_elapsed) + " seconds")
+println("Serializations: " + str(json_stringify_iterations))
+println("Average per stringify: " + str(stringify_elapsed / json_stringify_iterations) + "s")
+println("Throughput: " + str(json_stringify_iterations / stringify_elapsed) + " objects/sec")
+println("")
+
+// Benchmark 4: parse_json() performance (HTTP request parsing)
+println("Benchmark 4: parse_json() - Request Parsing")
+let json_parse_iterations = 5000
+let json_strings = [
+    "{\"id\":1,\"name\":\"alice\",\"active\":true}",
+    "{\"email\":\"bob@example.com\",\"roles\":[\"user\",\"admin\"]}",
+    "{\"data\":{\"nested\":true,\"count\":42}}",
+    "[1,2,3,4,5]"
+]
+let parse_start = now()
+let l = 0
+while l < json_parse_iterations {
+    let json_idx = l % len(json_strings)
+    let parsed = parse_json(json_strings[json_idx])
+    let l = l + 1
+}
+let parse_end = now()
+let parse_elapsed = parse_end - parse_start
+println("Total time: " + str(parse_elapsed) + " seconds")
+println("Parses: " + str(json_parse_iterations))
+println("Average per parse: " + str(parse_elapsed / json_parse_iterations) + "s")
+println("Throughput: " + str(json_parse_iterations / parse_elapsed) + " objects/sec")
+println("")
+
+// Benchmark 5: HttpServer instantiation
+println("Benchmark 5: HttpServer_new() - Server Instantiation")
+let server_iterations = 500
+let server_start = now()
+let m = 0
+while m < server_iterations {
+    let port = 8000 + (m % 100)
+    let addr = "127.0.0.1:" + str(port)
+    let server = HttpServer_new(addr)
+    let m = m + 1
+}
+let server_end = now()
+let server_elapsed = server_end - server_start
+println("Total time: " + str(server_elapsed) + " seconds")
+println("Server instances: " + str(server_iterations))
+println("Average per instance: " + str(server_elapsed / server_iterations) + "s")
+println("Throughput: " + str(server_iterations / server_elapsed) + " servers/sec")
+println("")
+
+// Benchmark 6: Round-trip HTTP request/response cycle
+println("Benchmark 6: Round-Trip Response Building")
+let roundtrip_iterations = 1000
+let roundtrip_start = now()
+let n = 0
+while n < roundtrip_iterations {
+    // Simulate: receive POST request with JSON
+    let request_body = "{\"action\":\"create\",\"data\":{\"field\":\"value\"}}"
+    let parsed = parse_json(request_body)
+    
+    // Process and build response
+    let response = {"status": "success", "id": n, "timestamp": now()}
+    let json_response = json_stringify(response)
+    
+    let n = n + 1
+}
+let roundtrip_end = now()
+let roundtrip_elapsed = roundtrip_end - roundtrip_start
+println("Total time: " + str(roundtrip_elapsed) + " seconds")
+println("Round-trips: " + str(roundtrip_iterations))
+println("Average per cycle: " + str(roundtrip_elapsed / roundtrip_iterations) + "s")
+println("Throughput: " + str(roundtrip_iterations / roundtrip_elapsed) + " cycles/sec")
+println("[Includes: parse JSON + build response + stringify]")
+println("")
+
+// Benchmark 7: Batch request processing simulation
+println("Benchmark 7: Batch Processing (10 requests per cycle)")
+let batch_iterations = 500
+let batch_start = now()
+let o = 0
+while o < batch_iterations {
+    let request_count = 0
+    while request_count < 10 {
+        // Get → Parse → Process → Stringify
+        let url = "https://api.example.com/item/" + str(o * 10 + request_count)
+        let response = http_get(url)
+        let item_data = {"id": request_count, "status": "processed"}
+        let json_item = json_stringify(item_data)
+        let request_count = request_count + 1
+    }
+    let o = o + 1
+}
+let batch_end = now()
+let batch_elapsed = batch_end - batch_start
+let total_batch_requests = batch_iterations * 10
+println("Total time: " + str(batch_elapsed) + " seconds")
+println("Batch cycles: " + str(batch_iterations))
+println("Total requests: " + str(total_batch_requests))
+println("Average per request: " + str(batch_elapsed / total_batch_requests) + "s")
+println("Batch throughput: " + str(total_batch_requests / batch_elapsed) + " requests/sec")
+println("")
+
+// Summary
+println("=== HTTP Framework Performance Summary ===")
+println("http_get(): " + str(get_iterations / get_elapsed) + " ops/sec")
+println("http_post(): " + str(post_iterations / post_elapsed) + " ops/sec")
+println("json_stringify(): " + str(json_stringify_iterations / stringify_elapsed) + " ops/sec")
+println("parse_json(): " + str(json_parse_iterations / parse_elapsed) + " ops/sec")
+println("HttpServer_new(): " + str(server_iterations / server_elapsed) + " ops/sec")
+println("Round-trip: " + str(roundtrip_iterations / roundtrip_elapsed) + " cycles/sec")
+println("Batch (10 req): " + str(total_batch_requests / batch_elapsed) + " ops/sec")
+println("")
+println("✓ HTTP framework benchmarking complete")
+
+

@@ -1,0 +1,6 @@
+# (4 + 6) => 10
+CONST_NUM 4
+CONST_NUM 6
+ADD
+PRINT
+HALT

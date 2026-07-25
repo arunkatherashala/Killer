@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Killer Language — The All-In-One Programming Language</title>
+<style>
+:root{--bg:#0a0a0f;--card:#12121a;--border:#1e1e2e;--text:#e0e0e8;--accent:#6c5ce7;--accent2:#a29bfe;
+--green:#00b894;--orange:#fdcb6e;--red:#e17055;--blue:#74b9ff;--purple:#d2a8ff;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);line-height:1.7;}
+a{color:var(--accent2);text-decoration:none;}a:hover{text-decoration:underline;}
+
+/* Hero */
+.hero{text-align:center;padding:80px 20px 60px;background:linear-gradient(135deg,#0a0a1a,#1a0a2e,#0a1a2e);position:relative;overflow:hidden;}
+.hero::before{content:'';position:absolute;top:-50%;left:-50%;width:200%;height:200%;background:radial-gradient(circle at 50% 50%,rgba(108,92,231,0.08),transparent 50%);animation:pulse 8s ease-in-out infinite;}
+@keyframes pulse{0%,100%{transform:scale(1);}50%{transform:scale(1.1);}}
+.hero h1{font-size:4em;font-weight:800;background:linear-gradient(135deg,var(--accent),var(--accent2),var(--blue));-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:16px;position:relative;}
+.hero .tagline{font-size:1.4em;color:#888;margin-bottom:32px;max-width:650px;margin-left:auto;margin-right:auto;}
+.hero .version{display:inline-block;background:var(--accent);color:#fff;padding:4px 16px;border-radius:20px;font-size:0.85em;font-weight:600;margin-bottom:24px;}
+.cta{display:inline-flex;gap:16px;flex-wrap:wrap;justify-content:center;}
+.btn{padding:14px 32px;border-radius:8px;font-size:1.05em;font-weight:600;cursor:pointer;border:none;transition:all 0.3s;}
+.btn-primary{background:var(--accent);color:#fff;}.btn-primary:hover{background:var(--accent2);transform:translateY(-2px);}
+.btn-secondary{background:transparent;color:var(--accent2);border:2px solid var(--accent2);}.btn-secondary:hover{background:var(--accent2);color:#000;}
+
+/* Stats */
+.stats{display:flex;justify-content:center;gap:40px;padding:40px 20px;flex-wrap:wrap;background:var(--card);border-top:1px solid var(--border);border-bottom:1px solid var(--border);}
+.stat{text-align:center;min-width:120px;}
+.stat .num{font-size:2.4em;font-weight:800;color:var(--accent2);}
+.stat .label{font-size:0.9em;color:#666;}
+
+/* Container */
+.container{max-width:1100px;margin:0 auto;padding:0 20px;}
+
+/* Sections */
+.section{padding:60px 0;}
+.section h2{font-size:2em;text-align:center;margin-bottom:40px;color:var(--accent2);}
+
+/* Feature Grid */
+.features{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px;}
+.feature{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px;transition:border-color 0.3s,transform 0.3s;}
+.feature:hover{border-color:var(--accent);transform:translateY(-4px);}
+.feature .icon{font-size:2em;margin-bottom:12px;}
+.feature h3{color:var(--accent2);margin-bottom:8px;}
+.feature p{color:#888;font-size:0.95em;}
+.feature code{background:#1a1a2e;padding:2px 8px;border-radius:4px;font-size:0.85em;color:var(--green);}
+
+/* Code Block */
+.code-section{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px;margin:20px 0;overflow-x:auto;}
+.code-section pre{font-family:'Cascadia Code','Fira Code',monospace;font-size:0.95em;line-height:1.6;}
+.code-header{color:var(--accent2);font-weight:600;margin-bottom:12px;font-size:1.1em;}
+.kw{color:#c678dd;}.fn{color:#61afef;}.str{color:#98c379;}.num{color:#d19a66;}.cm{color:#5c6370;font-style:italic;}.op{color:#56b6c2;}
+
+/* Compare Table */
+.compare-table{width:100%;border-collapse:collapse;margin:20px 0;}
+.compare-table th,.compare-table td{padding:12px 16px;text-align:center;border:1px solid var(--border);}
+.compare-table th{background:var(--accent);color:#fff;font-weight:600;}
+.compare-table td{background:var(--card);}
+.compare-table tr:hover td{background:#1a1a2e;}
+.yes{color:var(--green);font-weight:700;}.no{color:var(--red);}
+
+/* Install */
+.install-box{background:linear-gradient(135deg,#1a0a2e,#0a1a2e);border:1px solid var(--accent);border-radius:12px;padding:32px;text-align:center;margin:30px 0;}
+.install-box code{font-size:1.2em;background:#000;padding:12px 24px;border-radius:8px;display:inline-block;color:var(--green);font-family:'Cascadia Code',monospace;}
+.install-box p{color:#888;margin-top:12px;}
+
+/* Footer */
+footer{text-align:center;padding:40px 20px;color:#555;border-top:1px solid var(--border);}
+footer strong{color:var(--accent2);}
+
+/* Responsive */
+@media(max-width:768px){.hero h1{font-size:2.5em;}.hero .tagline{font-size:1.1em;}.stat .num{font-size:1.8em;}.features{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+
+<!-- Hero -->
+<section class="hero">
+    <div class="version">v2.1.0 "Enterprise"</div>
+    <h1>Killer Language</h1>
+    <p class="tagline">The all-in-one programming language. 419+ built-in functions, zero dependencies, one binary. Built in pure Rust.</p>
+    <div class="cta">
+        <a href="#install" class="btn btn-primary">Get Started</a>
+        <a href="#features" class="btn btn-secondary">See Features</a>
+        <a href="https://github.com/ArunKathera/killer" class="btn btn-secondary">GitHub</a>
+    </div>
+</section>
+
+<!-- Stats -->
+<div class="stats">
+    <div class="stat"><div class="num">205K</div><div class="label">Lines of Rust</div></div>
+    <div class="stat"><div class="num">419+</div><div class="label">Built-in Functions</div></div>
+    <div class="stat"><div class="num">429</div><div class="label">Source Files</div></div>
+    <div class="stat"><div class="num">3,081</div><div class="label">Tests</div></div>
+    <div class="stat"><div class="num">0</div><div class="label">Dependencies</div></div>
+</div>
+
+<!-- Quick Start -->
+<section class="section" id="install">
+    <div class="container">
+        <h2>Quick Start</h2>
+        <div class="install-box">
+            <code>git clone https://github.com/ArunKathera/killer && cd killer/SOURCE/src/v2-rust/killer && cargo build --release</code>
+            <p>Produces a single binary: <strong>killer-native</strong> (Windows: killer-native.exe)</p>
+        </div>
+
+        <div class="code-section">
+            <div class="code-header">hello.killer</div>
+<pre><span class="cm">// Hello World in Killer</span>
+<span class="kw">let</span> name = <span class="str">"World"</span>
+<span class="fn">print</span>(<span class="str">K"Hello {name}!"</span>)
+
+<span class="cm">// Define a function</span>
+<span class="kw">kfn</span> <span class="fn">greet</span>(person) {
+    <span class="kw">return</span> <span class="str">K"Welcome, {person}!"</span>
+}
+
+<span class="cm">// Use built-in regex</span>
+<span class="kw">let</span> has_email = <span class="fn">regex_match</span>(<span class="str">"user@killer.dev"</span>, <span class="str">"\\w+@\\w+\\.\\w+"</span>)
+<span class="fn">print</span>(<span class="str">K"Valid email? {has_email}"</span>)
+
+<span class="cm">// Built-in database</span>
+<span class="kw">let</span> db = <span class="fn">db_open</span>(<span class="str">"app.kdb"</span>)
+<span class="fn">db_set</span>(db, <span class="str">"user:1"</span>, <span class="str">"Alice"</span>)
+<span class="fn">print</span>(<span class="fn">db_get</span>(db, <span class="str">"user:1"</span>))
+<span class="fn">db_close</span>(db)</pre>
+        </div>
+
+        <div class="code-section">
+            <div class="code-header">Run it</div>
+<pre>$ killer-native hello.killer
+Hello World!
+Valid email? true
+Alice</pre>
+        </div>
+    </div>
+</section>
+
+<!-- Features -->
+<section class="section" id="features">
+    <div class="container">
+        <h2>Everything Built-In</h2>
+        <div class="features">
+            <div class="feature">
+                <div class="icon">📦</div>
+                <h3>Package Manager</h3>
+                <p>Full dependency management with <code>pkg_init()</code>, <code>pkg_add()</code>, <code>pkg_install()</code>. Reads killer.toml, resolves semver, installs to packages/.</p>
+            </div>
+            <div class="feature">
+                <div class="icon">🔍</div>
+                <h3>LSP Server</h3>
+                <p>IDE integration with <code>lsp_start()</code>. Provides diagnostics, completions, hover docs, formatting. JSON-RPC over TCP.</p>
+            </div>
+            <div class="feature">
+                <div class="icon">🐛</div>
+                <h3>Debugger (DAP)</h3>
+                <p>Step debugging with <code>dap_start()</code>, breakpoints, variable inspection, call stack, expression evaluation.</p>
+            </div>
+            <div class="feature">
+                <div class="icon">📚</div>
+                <h3>Docs Generator</h3>
+                <p>Auto-generate HTML documentation from source with <code>docs_generate()</code>. Searchable, dark-mode, serves on HTTP.</p>
+            </div>
+            <div class="feature">
+                <div class="icon">🔤</div>
+                <h3>Regex Engine</h3>
+                <p>NFA-based regex with <code>regex_match()</code>, <code>regex_find_all()</code>, <code>regex_replace()</code>. Supports groups, anchors, character classes.</p>
+            </div>
+            <div class="feature">
+                <div class="icon">💾</div>
+                <h3>File Database</h3>
+                <p>Persistent key-value store with <code>db_open()</code>/<code>db_set()</code>/<code>db_get()</code>. Prefix queries, JSON serialization, zero setup.</p>
+            </div>
+            <div class="feature">
+                <div class="icon">🎨</div>
+                <h3>Formatter + Linter</h3>
+                <p><code>fmt(code)</code> auto-indents. <code>lint_code(code)</code> catches errors statically. Like gofmt + clippy in one.</p>
+            </div>
+            <div class="feature">
+                <div class="icon">🌐</div>
+                <h3>HTTP Client/Server</h3>
+                <p>Built-in <code>http_get()</code>, <code>http_post()</code>, HTTP server. No external framework needed.</p>
+            </div>
+            <div class="feature">
+                <div class="icon">🤖</div>
+                <h3>AI/ML Engine</h3>
+                <p>Native ML primitives, TF-IDF embeddings, vector memory, LLM integration. 2,771 lines of ML code built-in.</p>
+            </div>
+            <div class="feature">
+                <div class="icon">🗜️</div>
+                <h3>Nova Compression</h3>
+                <p>Custom codec that beats Apache Parquet. 84% reduction on CSV. Bit-packed dicts, adaptive codecs, parallel encoding.</p>
+            </div>
+            <div class="feature">
+                <div class="icon">🔒</div>
+                <h3>Encryption</h3>
+                <p>AES-256-GCM, SHA-256, HMAC, secure random — all built-in. No OpenSSL dependency.</p>
+            </div>
+            <div class="feature">
+                <div class="icon">⚡</div>
+                <h3>Performance</h3>
+                <p>13-50M loop ops/sec. Fused instructions, slot-based variables, compile-time optimization. JIT compiler included.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Comparison -->
+<section class="section">
+    <div class="container">
+        <h2>Killer vs Others</h2>
+        <div style="overflow-x:auto;">
+        <table class="compare-table">
+            <tr>
+                <th>Feature</th><th>Killer</th><th>Python</th><th>Go</th><th>Rust</th><th>JavaScript</th>
+            </tr>
+            <tr><td>Package Manager</td><td class="yes">Built-in</td><td>pip (ext)</td><td>go mod</td><td>cargo</td><td>npm (ext)</td></tr>
+            <tr><td>LSP Server</td><td class="yes">Built-in</td><td class="no">pylsp (ext)</td><td class="no">gopls (ext)</td><td class="no">r-a (ext)</td><td class="no">tsserver (ext)</td></tr>
+            <tr><td>Debugger</td><td class="yes">Built-in</td><td>pdb</td><td class="no">delve (ext)</td><td class="no">gdb (ext)</td><td>built-in</td></tr>
+            <tr><td>Regex</td><td class="yes">Built-in</td><td class="yes">Built-in</td><td class="yes">Built-in</td><td class="no">crate</td><td class="yes">Built-in</td></tr>
+            <tr><td>Database</td><td class="yes">Built-in</td><td class="no">sqlite3 (ext)</td><td class="no">ext</td><td class="no">ext</td><td class="no">ext</td></tr>
+            <tr><td>Formatter</td><td class="yes">Built-in</td><td class="no">black (ext)</td><td class="yes">gofmt</td><td class="no">rustfmt (ext)</td><td class="no">prettier (ext)</td></tr>
+            <tr><td>Linter</td><td class="yes">Built-in</td><td class="no">pylint (ext)</td><td class="no">golint (ext)</td><td class="no">clippy (ext)</td><td class="no">eslint (ext)</td></tr>
+            <tr><td>HTTP</td><td class="yes">Built-in</td><td class="no">requests (ext)</td><td class="yes">net/http</td><td class="no">reqwest (ext)</td><td class="yes">fetch</td></tr>
+            <tr><td>Compression</td><td class="yes">Nova (beats Parquet)</td><td class="no">ext</td><td class="no">ext</td><td class="no">ext</td><td class="no">ext</td></tr>
+            <tr><td>Encryption</td><td class="yes">AES-256 Built-in</td><td class="no">ext</td><td>crypto</td><td class="no">ext</td><td class="no">ext</td></tr>
+            <tr><td>AI/ML</td><td class="yes">Built-in</td><td class="no">numpy/torch (ext)</td><td class="no">ext</td><td class="no">ext</td><td class="no">ext</td></tr>
+            <tr><td>External Deps</td><td class="yes"><strong>0</strong></td><td>many</td><td>few</td><td>many</td><td>many</td></tr>
+        </table>
+        </div>
+    </div>
+</section>
+
+<!-- Code Examples -->
+<section class="section">
+    <div class="container">
+        <h2>Code Examples</h2>
+
+        <div class="code-section">
+            <div class="code-header">Package Management</div>
+<pre><span class="fn">pkg_init</span>(<span class="str">"my-app"</span>, <span class="str">"1.0.0"</span>)
+<span class="fn">pkg_add</span>(<span class="str">"killer-http"</span>, <span class="str">"^1.0.0"</span>)
+<span class="fn">pkg_add</span>(<span class="str">"killer-json"</span>)
+<span class="fn">pkg_install</span>()
+<span class="fn">print</span>(<span class="fn">pkg_list</span>())</pre>
+        </div>
+
+        <div class="code-section">
+            <div class="code-header">Debug a Program</div>
+<pre><span class="fn">dap_start</span>(<span class="str">"app.killer"</span>)
+<span class="fn">dap_break</span>(<span class="num">10</span>)          <span class="cm">// breakpoint at line 10</span>
+<span class="fn">dap_continue</span>()         <span class="cm">// run until breakpoint</span>
+<span class="fn">print</span>(<span class="fn">dap_vars</span>())      <span class="cm">// inspect variables</span>
+<span class="fn">print</span>(<span class="fn">dap_stack</span>())     <span class="cm">// call stack</span>
+<span class="fn">dap_step</span>()             <span class="cm">// step one line</span>
+<span class="fn">dap_stop</span>()</pre>
+        </div>
+
+        <div class="code-section">
+            <div class="code-header">Generate Documentation</div>
+<pre><span class="fn">docs_generate</span>(<span class="str">"./src"</span>, <span class="str">"docs"</span>)   <span class="cm">// scan → HTML</span>
+<span class="fn">docs_serve</span>(<span class="num">8080</span>)                    <span class="cm">// http://localhost:8080</span>
+<span class="fn">docs_export</span>(<span class="str">"json"</span>)                <span class="cm">// → docs/api.json</span></pre>
+        </div>
+
+        <div class="code-section">
+            <div class="code-header">Import Modules</div>
+<pre><span class="kw">let</span> utils = <span class="fn">import</span>(<span class="str">"./utils"</span>)         <span class="cm">// local file</span>
+<span class="kw">let</span> http  = <span class="fn">import</span>(<span class="str">"killer-http"</span>)     <span class="cm">// installed package</span>
+<span class="kw">let</span> math  = <span class="fn">import</span>(<span class="str">"std:math"</span>)        <span class="cm">// standard library</span>
+<span class="fn">print</span>(<span class="fn">import_list</span>())                  <span class="cm">// all available modules</span></pre>
+        </div>
+    </div>
+</section>
+
+<!-- Getting Help -->
+<section class="section">
+    <div class="container">
+        <h2>Self-Documenting</h2>
+        <div class="code-section">
+<pre><span class="cm">// Get help on any function</span>
+<span class="fn">print</span>(<span class="fn">help</span>(<span class="str">"regex_match"</span>))
+
+<span class="cm">// Search for functions</span>
+<span class="fn">print</span>(<span class="fn">help_search</span>(<span class="str">"sort"</span>))
+
+<span class="cm">// Tab-complete in REPL</span>
+<span class="fn">print</span>(<span class="fn">repl_complete</span>(<span class="str">"reg"</span>))
+<span class="cm">// → ["regex_match", "regex_find", "regex_find_all", ...]</span>
+
+<span class="cm">// "Did you mean?" on typos</span>
+<span class="fn">print</span>(<span class="fn">suggest</span>(<span class="str">"pritln"</span>))
+<span class="cm">// → Did you mean: println()?</span></pre>
+        </div>
+    </div>
+</section>
+
+<!-- Footer -->
+<footer>
+    <p>Created by <strong>Sai Arun Kumar Kathera</strong></p>
+    <p>Killer Language v2.1.0 "Enterprise" — 205,026 lines of pure Rust</p>
+    <p style="margin-top:8px;"><a href="https://github.com/ArunKathera/killer">GitHub</a></p>
+</footer>
+
+</body>
+</html>

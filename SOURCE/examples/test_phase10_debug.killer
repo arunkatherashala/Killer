@@ -1,0 +1,21 @@
+// Phase 10: Debug email validation
+print "=== Debug Email Validation ==="
+print ""
+
+// Create quality email and check it
+quality test_email = "alice@example.com"
+print "Created quality: " + test_email
+print ""
+
+// Now validate it
+quality result = test_email.validate_email()
+print "After validation:"
+print "Is valid: " + result.is_valid()
+print "Status: " + result.get_status()
+print "Score: " + result.get_quality_score()
+print "Errors: " + result.get_errors()
+print ""
+
+print "Done"
+
+

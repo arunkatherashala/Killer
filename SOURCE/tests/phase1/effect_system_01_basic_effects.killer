@@ -1,0 +1,48 @@
+// EFFECT SYSTEM - TEST SUITE 1: Basic Effect Annotations
+// Tests that functions can be marked with their side effects
+
+// Test 1.1: Pure function (no effects)
+kfn add(a: i32, b: i32) -> i32 pure {
+    a + b
+}
+
+// Test 1.2: Pure recursive function
+kfn factorial(n: i32) -> i32 pure {
+    if n <= 1 { 1 } else { n * factorial(n - 1) }
+}
+
+// Test 1.3: Function with io effect
+kfn read_config(path: String) -> String uses io {
+    "config"  // Simplified
+}
+
+// Test 1.4: Function with random effect
+kfn roll_dice() -> i32 uses random {
+    42  // Simplified
+}
+
+// Test 1.5: Function with allocate effect
+kfn create_array(size: nat) -> [i32] uses allocate {
+    []  // Simplified
+}
+
+// Test 1.6: Pure function can call pure
+kfn multiply_add(a: i32, b: i32, c: i32) -> i32 pure {
+    (a * b) + c  // Calls pure functions
+}
+
+// Test 1.7: Function with multiple effects
+kfn do_everything(path: String) -> [i32] uses (io, allocate, random) {
+    []  // Simplified
+}
+
+// Test 1.8: Effect subtyping - pure <= io
+kfn apply_with_io(f: fn() -> i32 uses io) -> i32 {
+    f()
+}
+
+kfn main() {
+    println("✓ Effect System Tests Loaded");
+}
+
+

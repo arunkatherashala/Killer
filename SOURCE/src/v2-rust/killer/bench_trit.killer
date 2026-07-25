@@ -1,0 +1,66 @@
+kfn trit_and_bench() {
+  ap = T_POS()
+  an = T_NEG()
+  i = 0
+  r = T_ZERO()
+  while i < 1000000 {
+    r = trit_and(ap, an)
+    i = i + 1
+  }
+  return r
+}
+
+kfn trit_or_bench() {
+  ap = T_POS()
+  an = T_NEG()
+  i = 0
+  r = T_ZERO()
+  while i < 1000000 {
+    r = trit_or(ap, an)
+    i = i + 1
+  }
+  return r
+}
+
+kfn trit_not_bench() {
+  ap = T_POS()
+  i = 0
+  r = T_ZERO()
+  while i < 1000000 {
+    r = trit_not(ap)
+    i = i + 1
+  }
+  return r
+}
+
+kfn fuzzy_and_bench() {
+  a = 0.9
+  b = 0.4
+  i = 0
+  r = 0.0
+  while i < 1000000 {
+    r = fuzzy_and(a, b)
+    i = i + 1
+  }
+  return r
+}
+
+t0 = system_time_ms()
+r1 = trit_and_bench()
+t1 = system_time_ms()
+print(K"trit_and 1M iters: {t1 - t0} ms, result={r1}")
+
+t2 = system_time_ms()
+r2 = trit_or_bench()
+t3 = system_time_ms()
+print(K"trit_or  1M iters: {t3 - t2} ms, result={r2}")
+
+t4 = system_time_ms()
+r3 = trit_not_bench()
+t5 = system_time_ms()
+print(K"trit_not 1M iters: {t5 - t4} ms, result={r3}")
+
+t6 = system_time_ms()
+r4 = fuzzy_and_bench()
+t7 = system_time_ms()
+print(K"fuzzy_and 1M iters: {t7 - t6} ms, result={r4}")

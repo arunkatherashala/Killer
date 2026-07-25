@@ -1,0 +1,54 @@
+// ASYNC/AWAIT - TEST SUITE 1: Basic Async Functions
+// Tests basic async function definition and await syntax
+
+// Test 1.1: Simple async function
+async fn fetch(url: String) -> String {
+    "response"  // Simplified
+}
+
+// Test 1.2: Async function with parameters
+async fn download(url: String, timeout: i32) -> String {
+    "data"  // Simplified
+}
+
+// Test 1.3: Async function returning complex type
+async fn fetch_json(url: String) -> [String] {
+    []  // Simplified
+}
+
+// Test 1.4: Await on async function
+async fn main_async() {
+    let result = fetch("url").await;
+    println(result);
+}
+
+// Test 1.5: Multiple awaits in sequence
+async fn get_multiple(urls: [String]) -> [String] {
+    let mut results = [];
+    for url in urls {
+        let result = fetch(url).await;
+        results.push(result);
+    }
+    results
+}
+
+// Test 1.6: Nested await
+async fn download_and_parse(url: String) -> String {
+    let raw = fetch(url).await;
+    raw  // Simplified parsing
+}
+
+// Test 1.7: Error handling in async
+async fn fetch_safe(url: String) -> Result<String> {
+    try {
+        fetch(url).await
+    } catch (e) {
+        Err("Failed")
+    }
+}
+
+kfn main() {
+    println("✓ Async/Await Tests Loaded");
+}
+
+

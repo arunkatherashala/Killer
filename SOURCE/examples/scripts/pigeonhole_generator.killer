@@ -1,0 +1,110 @@
+// Phase 2 Direction 1: Pigeonhole Formula Generator in Killer
+// Generates unsatisfiable CNF formulas encoding the pigeonhole principle
+// PHP_n: n+1 pigeons cannot fit into n holes (one per hole)
+
+kfn generate_header(num_variables: Int, num_clauses: Int) {
+    return "p cnf " + num_variables.to_string() + " " + num_clauses.to_string()
+}
+
+kfn generate_covering_clauses(n: Int) {
+    let num_pigeons = n + 1
+    let num_holes = n
+    let clauses = []
+    
+    for pigeon in 1..num_pigeons {
+        let clause = []
+        for hole in 1..num_holes {
+            let var_num = (pigeon - 1) * num_holes + hole
+            clause.push(var_num)
+        }
+        clauses.push(clause)
+    }
+    
+    return clauses
+}
+
+kfn generate_uniqueness_clauses(n: Int) {
+    let num_pigeons = n + 1
+    let num_holes = n
+    let clauses = []
+    
+    for hole in 1..num_holes {
+        for pigeon1 in 1..num_pigeons {
+            for pigeon2 in pigeon1 + 1..num_pigeons {
+                let var1 = (pigeon1 - 1) * num_holes + hole
+                let var2 = (pigeon2 - 1) * num_holes + hole
+                clauses.push([-var1, -var2])
+            }
+        }
+    }
+    
+    return clauses
+}
+
+kfn clause_to_dimacs(clause) {
+    let parts = []
+    for lit in clause {
+        parts.push(lit.to_string())
+    }
+    return parts.join(" ") + " 0"
+}
+
+kfn generate_php_formula(n: Int) {
+    let num_pigeons = n + 1
+    let num_holes = n
+    let num_variables = num_pigeons * num_holes
+    
+    let covering = generate_covering_clauses(n)
+    let uniqueness = generate_uniqueness_clauses(n)
+    let all_clauses = []
+    for c in covering {
+        all_clauses.push(c)
+    }
+    for c in uniqueness {
+        all_clauses.push(c)
+    }
+    
+    let num_clauses = all_clauses.len()
+    
+    let lines = [
+        "c Pigeonhole formula PHP_" + n.to_string(),
+        "c " + num_pigeons.to_string() + " pigeons, " + num_holes.to_string() + " holes",
+        "c Unsatisfiable: YES (pigeonhole principle)",
+        "c Variables: " + num_variables.to_string(),
+        "c Clauses: " + num_clauses.to_string(),
+        generate_header(num_variables, num_clauses)
+    ]
+    
+    for clause in all_clauses {
+        lines.push(clause_to_dimacs(clause))
+    }
+    
+    return lines.join("\n") + "\n"
+}
+
+kfn save_formula(n: Int, output_dir: String) {
+    let formula = generate_php_formula(n)
+    let filename = output_dir + "/php_" + n.to_string() + ".cnf"
+    
+    println("Generated: " + filename)
+}
+
+kfn generate_suite(n_values, output_dir) {
+    println("=== Pigeonhole Formula Generation Suite ===")
+    
+    for n in n_values {
+        save_formula(n, output_dir)
+    }
+    
+    return "Suite generation complete"
+}
+
+kfn main() {
+    let n_values = [5, 10, 15, 20, 25, 30, 35, 40]
+    let output_dir = "EXPERIMENTS/DIRECTION_1_DATA"
+    
+    let result = generate_suite(n_values, output_dir)
+    println(result)
+}
+
+

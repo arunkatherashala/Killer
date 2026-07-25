@@ -1,0 +1,95 @@
+# module_test.killer
+# Test program demonstrating Killer's module system
+
+print("====================================");
+print("Killer Module System Test");
+print("====================================");
+print("");
+
+# Test 1: Import math utilities
+print("Test 1 - Math Utilities Module");
+print("------------------------------");
+
+import { square, cube, factorial, isPrime, PI } from "./legacy-modules/math_utils";
+
+print("square(5) = ");
+print(square(5));
+
+print("cube(3) = ");
+print(cube(3));
+
+print("factorial(5) = ");
+print(factorial(5));
+
+print("isPrime(17) = ");
+print(isPrime(17));
+
+print("isPrime(20) = ");
+print(isPrime(20));
+
+print("PI = ");
+print(PI);
+
+print("");
+
+# Test 2: Import string utilities
+print("Test 2 - String Utilities Module");
+print("--------------------------------");
+
+import { capitalize, reverse, contains, repeat, split } from "./legacy-modules/string_utils";
+
+text = "hello world";
+
+print("Original text: " + text);
+
+print("Capitalize: " + capitalize(text));
+
+print("Reverse: " + reverse(text));
+
+print("Contains 'world': " + contains(text, "world"));
+
+print("Repeat 3 times: " + repeat("hi", 3));
+
+parts = split(text, " ");
+print("Split by space: ");
+i = 0;
+while (i < parts.length) {
+    print("  - " + parts[i]);
+    i = i + 1;
+}
+
+print("");
+
+# Test 3: Use multiple functions in combination
+print("Test 3 - Combining Module Functions");
+print("-----------------------------------");
+
+import { fibonacci } from "./legacy-modules/math_utils";
+
+fib10 = fibonacci(10);
+
+print("fibonacci(10) = " + fib10);
+
+# Just demonstrate the function works
+fib5 = fibonacci(5);
+print("fibonacci(5) = " + fib5);
+
+print("");
+
+# Test 4: Module namespace import
+print("Test 4 - Namespace Import");
+print("------------------------");
+
+import * as math from "./legacy-modules/math_utils";
+
+print("math.PI = " + math.PI);
+print("math.square(7) = " + math.square(7));
+print("math.gcd(24, 36) = " + math.gcd(24, 36));
+
+print("");
+
+print("====================================");
+print("All module tests completed!");
+print("====================================");
+
+

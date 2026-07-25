@@ -1,0 +1,427 @@
+// dbt_complete_integration.killer
+// Complete DBT Integration Example - Ecommerce Data Warehouse
+// Shows: Incremental processing + Models + Snapshots + Tests working together
+
+// ============================================================================
+// TYPES
+// ============================================================================
+
+record Customer {
+  customer_id: String,
+  name: String,
+  email: String,
+  tier: String,
+  signup_date: String
+}
+
+record Order {
+  order_id: String,
+  customer_id: String,
+  order_date: String,
+  amount: String,
+  status: String
+}
+
+record TestResult {
+  test_id: String,
+  passed: Bool,
+  failed_count: Int,
+  error_msg: String
+}
+
+// ============================================================================
+// STAGE 1: INCREMENTAL LOAD (NEW/CHANGED DATA ONLY)
+// ============================================================================
+
+actor IncrementalLoader {
+  last_id: Int = 0
+  
+  handle load_incremental(all_orders: List<Order>) -> List<Order> {
+    new_orders: List<Order> = []
+    
+    for order in all_orders {
+      id = order.order_id.parse_int()
+      if id != nil && id > this.last_id {
+        new_orders.push(order)
+        if id > this.last_id {
+          this.last_id = id
+        }
+      }
+    }
+    
+    new_orders
+  }
+  
+  handle stats() -> String {
+    "loaded_up_to_id=" + this.last_id.to_string()
+  }
+}
+
+// ============================================================================
+// STAGE 2: TRANSFORM MODELS
+// ============================================================================
+
+// Model 1: Staging Orders (Clean and standardize)
+actor StagingOrdersModel {
+  handle transform(raw_orders: List<Order>) -> List<Order> {
+    cleaned: List<Order> = []
+    
+    for order in raw_orders {
+      // Validation/cleaning logic
+      if order.customer_id != nil && order.order_id != nil {
+        cleaned.push(order)
+      }
+    }
+    
+    cleaned
+  }
+}
+
+// Model 2: Fact Orders (Aggregate/enrich)
+actor FactOrdersModel {
+  handle transform(stg_orders: List<Order>) -> List<Order> {
+    facts: List<Order> = []
+    
+    for order in stg_orders {
+      // Enrich with business logic
+      facts.push(order)
+    }
+    
+    facts
+  }
+}
+
+// Model 3: Daily Sales Report
+actor ReportDailySalesModel {
+  handle transform(fact_orders: List<Order>) -> List<String> {
+    print("  Aggregating into daily sales...")
+    
+    summary: List<String> = []
+    summary.push("date=2024-03-21 total_orders=" + fact_orders.len().to_string())
+    
+    summary
+  }
+}
+
+// ============================================================================
+// STAGE 3: DATA QUALITY TESTS
+// ============================================================================
+
+actor OrderQualityTests {
+  handle test_unique_orders(orders: List<Order>) -> TestResult {
+    seen: Set<String> = {}
+    duplicates: Int = 0
+    
+    for order in orders {
+      if seen.contains(order.order_id) {
+        duplicates = duplicates + 1
+      }
+      seen.add(order.order_id)
+    }
+    
+    TestResult {
+      test_id: "unique_orders",
+      passed: duplicates == 0,
+      failed_count: duplicates,
+      error_msg: if duplicates == 0 { "" } else { 
+        duplicates.to_string() + " duplicate orders" 
+      }
+    }
+  }
+  
+  handle test_not_null_customer(orders: List<Order>) -> TestResult {
+    nulls: Int = 0
+    
+    for order in orders {
+      if order.customer_id == nil || order.customer_id == "" {
+        nulls = nulls + 1
+      }
+    }
+    
+    TestResult {
+      test_id: "not_null_customer",
+      passed: nulls == 0,
+      failed_count: nulls,
+      error_msg: if nulls == 0 { "" } else { 
+        nulls.to_string() + " orders with null customer" 
+      }
+    }
+  }
+  
+  handle test_accepted_status(orders: List<Order>) -> TestResult {
+    allowed: Set<String> = { "pending", "processing", "completed", "cancelled" }
+    invalid: Int = 0
+    
+    for order in orders {
+      if !allowed.contains(order.status) {
+        invalid = invalid + 1
+      }
+    }
+    
+    TestResult {
+      test_id: "accepted_status",
+      passed: invalid == 0,
+      failed_count: invalid,
+      error_msg: if invalid == 0 { "" } else { 
+        invalid.to_string() + " orders with invalid status" 
+      }
+    }
+  }
+}
+
+// ============================================================================
+// STAGE 4: SNAPSHOT HISTORY
+// ============================================================================
+
+actor CustomerSnapshot {
+  snapshots: Map<String, List<Customer>> = {}
+  current_version: Int = 0
+  
+  handle take_snapshot(version: Int, customers: List<Customer>) {
+    snapshot_key = "v" + version.to_string()
+    this.snapshots[snapshot_key] = customers
+    this.current_version = version
+    print("  Snapshot taken (v" + version.to_string() + ", " + customers.len().to_string() + " customers)")
+  }
+  
+  handle get_at_version(version: Int) -> List<Customer> {
+    snapshot_key = "v" + version.to_string()
+    this.snapshots.get(snapshot_key, default=[])
+  }
+}
+
+// ============================================================================
+// COMPLETE PIPELINE ORCHESTRATOR
+// ============================================================================
+
+actor CompletePipeline {
+  incremental_loader: IncrementalLoader = nil
+  stg_model: StagingOrdersModel = nil
+  fact_model: FactOrdersModel = nil
+  report_model: ReportDailySalesModel = nil
+  quality_tests: OrderQualityTests = nil
+  snapshot: CustomerSnapshot = nil
+  
+  handle initialize() {
+    this.incremental_loader = IncrementalLoader::spawn()
+    this.stg_model = StagingOrdersModel::spawn()
+    this.fact_model = FactOrdersModel::spawn()
+    this.report_model = ReportDailySalesModel::spawn()
+    this.quality_tests = OrderQualityTests::spawn()
+    this.snapshot = CustomerSnapshot::spawn()
+  }
+  
+  handle execute_pipeline(
+    raw_orders: List<Order>,
+    customers: List<Customer>
+  ) -> String {
+    print("")
+    print("=" * 70)
+    print("🏗️  DBT Complete Pipeline Execution")
+    print("=" * 70)
+    print("")
+    
+    // ====================================================================
+    // PHASE 1: INCREMENTAL DETECTION
+    // ====================================================================
+    print("📥 PHASE 1: Incremental Data Load")
+    print("  Detecting new/changed orders...")
+    
+    new_orders = this.incremental_loader.load_incremental(raw_orders).await
+    print("  ✓ Found " + new_orders.len().to_string() + " new orders")
+    print("  " + this.incremental_loader.stats().await)
+    incremental_count = new_orders.len()
+    print("")
+    
+    // ====================================================================
+    // PHASE 2: TRANSFORM (DAG EXECUTION)
+    // ====================================================================
+    print("🔄 PHASE 2: Transform Models (DAG Execution)")
+    print("")
+    
+    print("  → stg_orders (staging layer)")
+    stg_orders = this.stg_model.transform(new_orders).await
+    print("    ✓ Cleaned " + stg_orders.len().to_string() + " orders")
+    
+    print("  → fct_orders (fact layer, incremental)")
+    fact_orders = this.fact_model.transform(stg_orders).await
+    print("    ✓ Enriched " + fact_orders.len().to_string() + " orders")
+    
+    print("  → rpt_daily_sales (report layer)")
+    daily_report = this.report_model.transform(fact_orders).await
+    print("    ✓ Generated " + daily_report.len().to_string() + " report rows")
+    print("")
+    
+    // ====================================================================
+    // PHASE 3: QUALITY TESTS
+    // ====================================================================
+    print("✅ PHASE 3: Data Quality Validation")
+    print("")
+    
+    test1 = this.quality_tests.test_unique_orders(fact_orders).await
+    print("  " + (if test1.passed { "✓" } else { "✗" }) + " " + test1.test_id + 
+          (if test1.passed { "" } else { " - " + test1.error_msg }))
+    
+    test2 = this.quality_tests.test_not_null_customer(fact_orders).await
+    print("  " + (if test2.passed { "✓" } else { "✗" }) + " " + test2.test_id + 
+          (if test2.passed { "" } else { " - " + test2.error_msg }))
+    
+    test3 = this.quality_tests.test_accepted_status(fact_orders).await
+    print("  " + (if test3.passed { "✓" } else { "✗" }) + " " + test3.test_id + 
+          (if test3.passed { "" } else { " - " + test3.error_msg }))
+    
+    all_tests_pass = test1.passed && test2.passed && test3.passed
+    if !all_tests_pass {
+      print("  ⚠️  Some tests failed - circuit breaker would pause pipeline")
+    }
+    print("")
+    
+    // ====================================================================
+    // PHASE 4: SNAPSHOTS (TIME TRAVEL)
+    // ====================================================================
+    print("📸 PHASE 4: Customer Snapshots (Time-Travel Data)")
+    print("")
+    
+    this.snapshot.take_snapshot(1, customers).await
+    
+    // Simulate time passing and customer changes
+    modified_customers = customers  // Would be modified version in real scenario
+    this.snapshot.take_snapshot(2, modified_customers).await
+    
+    v1_customers = this.snapshot.get_at_version(1).await
+    print("  ✓ Can query customer state at Version 1: " + v1_customers.len().to_string() + " customers")
+    print("")
+    
+    // ====================================================================
+    // FINAL SUMMARY
+    // ====================================================================
+    print("=" * 70)
+    print("✨ PIPELINE COMPLETE")
+    print("=" * 70)
+    print("")
+    print("📊 Execution Summary:")
+    print("  Incremental rows processed: " + incremental_count.to_string())
+    print("  Models executed: 3 (stg_orders → fct_orders → rpt_daily_sales)")
+    print("  Tests passed: " + (if all_tests_pass { "3/3" } else { "failed" }))
+    print("  Customer snapshots: 2 versions (time-travel enabled)")
+    print("")
+    print("💡 Key Advantages of Killer DBT:")
+    print("  ✓ Incremental: Only processes " + incremental_count.to_string() + " new rows")
+    print("    (vs. reprocessing all " + raw_orders.len().to_string() + " orders)")
+    print("  ✓ DAG Execution: Models run in optimal order")
+    print("  ✓ Quality Gates: Tests fail fast (circuit breaker)")
+    print("  ✓ Time Travel: Snapshots enable historical analysis")
+    print("  ✓ Concurrent: All layers could run in parallel")
+    print("")
+    
+    "success"
+  }
+}
+
+// ============================================================================
+// MAIN: COMPLETE WORKFLOW
+// ============================================================================
+
+kfn main() {
+  print("")
+  print("╔════════════════════════════════════════════════════════════════════╗")
+  print("║           KILLER DBT - COMPLETE INTEGRATION EXAMPLE               ║")
+  print("║                                                                    ║")
+  print("║  Real-world ecommerce data warehouse with all DBT patterns        ║")
+  print("║  Incremental + Models + Tests + Snapshots working together       ║")
+  print("╚════════════════════════════════════════════════════════════════════╝")
+  print("")
+  
+  // Initialize pipeline
+  pipeline = CompletePipeline::spawn()
+  pipeline.initialize().await
+  
+  // ========================================================================
+  // SAMPLE DATA
+  // ========================================================================
+  
+  // Raw orders
+  raw_orders: List<Order> = []
+  
+  raw_orders.push(Order {
+    order_id: "1",
+    customer_id: "cust_001",
+    order_date: "2024-03-20",
+    amount: "100.00",
+    status: "completed"
+  })
+  
+  raw_orders.push(Order {
+    order_id: "2",
+    customer_id: "cust_002",
+    order_date: "2024-03-20",
+    amount: "250.00",
+    status: "completed"
+  })
+  
+  raw_orders.push(Order {
+    order_id: "3",
+    customer_id: "cust_001",
+    order_date: "2024-03-21",
+    amount: "150.00",
+    status: "pending"
+  })
+  
+  raw_orders.push(Order {
+    order_id: "4",
+    customer_id: "cust_003",
+    order_date: "2024-03-21",
+    amount: "500.00",
+    status: "processing"
+  })
+  
+  raw_orders.push(Order {
+    order_id: "5",
+    customer_id: "cust_002",
+    order_date: "2024-03-21",
+    amount: "75.00",
+    status: "pending"
+  })
+  
+  // Customers
+  customers: List<Customer> = []
+  
+  customers.push(Customer {
+    customer_id: "cust_001",
+    name: "Alice Johnson",
+    email: "alice@example.com",
+    tier: "gold",
+    signup_date: "2024-01-01"
+  })
+  
+  customers.push(Customer {
+    customer_id: "cust_002",
+    name: "Bob Smith",
+    email: "bob@example.com",
+    tier: "silver",
+    signup_date: "2024-01-15"
+  })
+  
+  customers.push(Customer {
+    customer_id: "cust_003",
+    name: "Carol White",
+    email: "carol@example.com",
+    tier: "bronze",
+    signup_date: "2024-02-01"
+  })
+  
+  // ========================================================================
+  // EXECUTE
+  // ========================================================================
+  
+  result = pipeline.execute_pipeline(raw_orders, customers).await
+  
+  print("Return status: " + result)
+  print("")
+}
+
+// Helper to avoid string parsing complexity
+kfn parse_int(s: String) -> Int {
+  // Simplified - in real code would handle errors
+  1
+}

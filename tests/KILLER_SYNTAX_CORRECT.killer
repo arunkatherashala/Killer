@@ -1,0 +1,12 @@
+kfn add(a, b)
+  a + b
+
+kfn greet(name)
+  print("Hello, " + name)
+
+kfn main
+  print("=== KILLER LANGUAGE TEST ===")
+  result = add(5, 3)
+  print(result)
+  greet("Alice")
+  print("=== DONE ===")

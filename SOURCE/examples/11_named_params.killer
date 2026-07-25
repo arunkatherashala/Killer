@@ -1,0 +1,256 @@
+// Week 11 Examples: Named and Default Parameters
+// Demonstrates the new parameter passing features in Killer
+
+// ============================================
+// EXAMPLE 1: Default Parameters
+// ============================================
+
+// Function with default parameters
+kfn greet(name = "World", greeting = "Hello") {
+    print(greeting + ", " + name + "!")
+}
+
+// Calls with defaults
+greet()                      // Output: Hello, World!
+greet("Alice")              // Output: Hello, Alice!
+greet("Bob", "Hi")          // Output: Hi, Bob!
+
+
+// ============================================
+// EXAMPLE 2: Named Parameters
+// ============================================
+
+// Function with required and optional parameters
+kfn create_user(email, name = "User", age = 18, city = "Unknown") {
+    print("Creating user:")
+    print("  Email: " + email)
+    print("  Name: " + name)
+    print("  Age: " + age)
+    print("  City: " + city)
+}
+
+// Positional calls
+create_user("john@example.com")
+
+// Named parameter calls (any order)
+create_user(email: "jane@example.com", name: "Jane", age: 25)
+
+// Mixed positional and named
+create_user("bob@example.com", age: 30, city: "NYC")
+
+
+// ============================================
+// EXAMPLE 3: HTTP Request Handler with Validation
+// ============================================
+
+kfn validate_input(method = "GET", path = "/", headers = {}, body = "") {
+    print("Method: " + method)
+    print("Path: " + path)
+    print("Has body: " + (body != ""))
+    
+    return {
+        method: method,
+        path: path,
+        valid: true
+    }
+}
+
+// Using in HTTP context
+result1 = validate_input()
+result2 = validate_input(method: "POST", body: '{"data": "test"}')
+result3 = validate_input("PUT", "/api/users", {}, '{"id": 1}')
+
+
+// ============================================
+// EXAMPLE 4: Complex Configuration Function
+// ============================================
+
+kfn configure_server(
+    host = "127.0.0.1",
+    port = 8080,
+    ssl = false,
+    timeout = 30,
+    max_connections = 1000,
+    cors_enabled = true
+) {
+    settings = {
+        host: host,
+        port: port,
+        ssl: ssl,
+        timeout: timeout,
+        max_connections: max_connections,
+        cors: cors_enabled
+    }
+    return settings
+}
+
+// Easy to use with sensible defaults
+server1 = configure_server()
+
+// Override just what you need
+server2 = configure_server(
+    port: 3000,
+    ssl: true,
+    timeout: 60
+)
+
+// Clear intent with named parameters
+server3 = configure_server(
+    host: "0.0.0.0",
+    max_connections: 5000,
+    cors_enabled: false
+)
+
+
+// ============================================
+// EXAMPLE 5: Data Processing Pipeline
+// ============================================
+
+kfn process_data(
+    input,
+    transform = null,
+    filter_null = true,
+    sort_order = "asc",
+    limit = -1  // -1 means no limit
+) {
+    data = input
+    
+    // Apply transformation if provided
+    if (transform != null) {
+        data = transform(data)
+    }
+    
+    // Apply sorting
+    if (sort_order == "desc") {
+        data = reverse(data)  // or similar
+    }
+    
+    // Apply limit
+    if (limit > 0) {
+        data = slice(data, 0, limit)
+    }
+    
+    return data
+}
+
+// Various usage patterns
+process_data([1, 2, 3, 4, 5])
+process_data([1, 2, 3], limit: 2)
+process_data([5, 4, 3, 2, 1], sort_order: "asc", limit: 3)
+
+
+// ============================================
+// EXAMPLE 6: API Response Formatter
+// ============================================
+
+kfn format_response(
+    status = 200,
+    data = null,
+    message = "Success",
+    headers = {},
+    pretty_print = false
+) {
+    response = {
+        status: status,
+        message: message,
+        data: data,
+        timestamp: now(),
+        headers: headers
+    }
+    
+    if (pretty_print) {
+        return stringify_pretty(response)
+    } else {
+        return stringify(response)
+    }
+}
+
+// Simple response
+ok_response = format_response()
+
+// Success with data
+user_response = format_response(
+    status: 200,
+    data: {id: 1, name: "John", email: "john@example.com"},
+    message: "User created"
+)
+
+// Error response
+error_response = format_response(
+    status: 404,
+    message: "Not found",
+    pretty_print: true
+)
+
+
+// ============================================
+// EXAMPLE 7: Optional Parameters for Feature Flags
+// ============================================
+
+kfn render_card(
+    title,
+    content,
+    show_header = true,
+    show_footer = true,
+    theme = "light",
+    interactive = false
+) {
+    html = "<div class='card'>"
+    
+    if (show_header) {
+        html = html + "<header>" + title + "</header>"
+    }
+    
+    html = html + "<div class='content'>" + content + "</div>"
+    
+    if (show_footer) {
+        html = html + "<footer>Generated</footer>"
+    }
+    
+    if (interactive) {
+        html = html + "<script>// interactive code</script>"
+    }
+    
+    html = html + "</div>"
+    return html
+}
+
+// Minimal card
+card1 = render_card("Title", "Content")
+
+// Card with all features
+card2 = render_card(
+    title: "Full Featured",
+    content: "Rich content",
+    show_header: true,
+    show_footer: true,
+    theme: "dark",
+    interactive: true
+)
+
+
+// ============================================
+// EXAMPLE 8: Backward Compatibility
+// ============================================
+
+// Old code still works (positional only)
+kfn old_style_function(x, y, z) {
+    return x + y + z
+}
+
+result = old_style_function(1, 2, 3)  // Still works!
+
+
+// New code uses defaults
+kfn new_style_function(x, y = 2, z = 3) {
+    return x + y + z
+}
+
+result1 = new_style_function(1)           // 1 + 2 + 3 = 6
+result2 = new_style_function(1, 5)        // 1 + 5 + 3 = 9
+result3 = new_style_function(1, 5, 10)    // 1 + 5 + 10 = 16
+
+
+print("All examples completed successfully!")
+
+

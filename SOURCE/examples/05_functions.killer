@@ -1,0 +1,33 @@
+# Test function definitions and calls
+
+kfn add(a, b) {
+    return a + b;
+}
+
+kfn greet(name) {
+    print("Hello, ", name);
+}
+
+kfn factorial(n) {
+    if (n <= 1) {
+        return 1;
+    } else {
+        return n * factorial(n - 1);
+    }
+}
+
+# Test simple function
+result = add(5, 3);
+print("5 + 3 =", result);
+
+# Test function with side effects
+greet("World");
+greet("Killer Language");
+
+# Test recursive function
+fac5 = factorial(5);
+print("5! =", fac5);
+
+print("--- Functions work! ---");
+
+

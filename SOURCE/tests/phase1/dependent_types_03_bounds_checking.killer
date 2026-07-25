@@ -1,0 +1,53 @@
+// DEPENDENT TYPES - TEST SUITE 3: Bounds Checking and Safety
+// Tests that dependent types enable safe array access without runtime checks
+
+// Test 3.1: Safe vector access with proven bounds
+kfn safe_access[n: nat](v: Vector[n], i: Idx[n]) -> i32 {
+    // i is proven < n at compile time
+    v.data[i]
+}
+
+// Test 3.2: Unsafe access would be rejected
+// fn unsafe_access[n: nat](v: Vector[n], i: i32) -> i32 {
+//     v.data[i]  // ERROR: i is not proven < n
+// }
+
+// Test 3.3: Loop with bounded iteration
+kfn sum_vector[n: nat](v: Vector[n]) -> i32 {
+    let mut total = 0;
+    for i in 0..n {
+        // i is proven Idx[n]
+        total = total + v.data[i];
+    }
+    total
+}
+
+// Test 3.4: Fold operation
+kfn fold_left[n: nat](v: Vector[n], init: i32, f: fn(i32, i32) -> i32) -> i32 {
+    let mut acc = init;
+    for i in 0..n {
+        acc = f(acc, v.data[i]);
+    }
+    acc
+}
+
+// Test 3.5: Map operation
+kfn map[n: nat](v: Vector[n], f: fn(i32) -> i32) -> Vector[n] {
+    let mut result = Vector { data: [], len: n };
+    for i in 0..n {
+        result.data[i] = f(v.data[i]);
+    }
+    result
+}
+
+// Test 3.6: Filter maintains invariant
+kfn filter[n: nat](v: Vector[n], p: fn(i32) -> bool) -> Vector[n] {
+    // Simplified - in reality size might decrease
+    v
+}
+
+kfn main() {
+    println("✓ Bounds Checking Tests Loaded");
+}
+
+

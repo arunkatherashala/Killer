@@ -1,0 +1,47 @@
+# Example 4: Self-Modifying Code!
+# Ghost reads its own bytecode, modifies it, then the modified code runs
+.fuel 1000
+.data 200 "Before modify: "
+.data 220 "\nAfter modify: "
+.data 240 "\nGhost rewrote its own brain!\n"
+
+# Step 1: Push 10 (this instruction will be modified later!)
+push 10         # at code offset 0: [01, 0A, 00, 00, 00]
+syscall 3       # prints "10"
+
+# Print "Before modify: 10"
+# Actually let's print the label first, then the number
+# Hmm, let me restructure:
+
+# Print "Before modify: "
+push 200
+push 15
+syscall 4
+
+# The PUSH 10 is at code offset 0. Its value byte is at offset 1.
+# Let's read it:
+push 1          # offset 1 in code
+syscall 12      # SYS_CODE_READ: pushes code[1] = 10
+syscall 3       # prints "10"
+
+# Now OVERWRITE code[1] with 99!
+push 1          # offset
+push 99         # new value
+syscall 13      # SYS_CODE_WRITE: code[1] = 99
+
+# Print "\nAfter modify: "
+push 220
+push 15
+syscall 4
+
+# Read code[1] again to prove it changed
+push 1
+syscall 12      # SYS_CODE_READ: now pushes 99!
+syscall 3       # prints "99"
+
+# Print celebration
+push 240
+push 29
+syscall 4
+
+halt

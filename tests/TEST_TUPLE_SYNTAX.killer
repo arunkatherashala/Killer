@@ -1,0 +1,159 @@
+#!/usr/bin/env killer
+// TEST: Tuple Syntax Loop "for i in (1,5)"
+// All edge cases and interpretations
+
+// ============================================================
+// TEST 1: Basic - Tuple (1, 5)
+// ============================================================
+kfn test_tuple_basic() {
+  print("TEST 1: for i in (1, 5)")
+  for i in (1, 5) {
+    print(i)
+    print(" ")
+  }
+  print("\n")
+}
+
+// ============================================================
+// TEST 2: Three values - Tuple (1, 2, 3)
+// ============================================================
+kfn test_tuple_three() {
+  print("TEST 2: for i in (1, 2, 3)")
+  for i in (1, 2, 3) {
+    print(i)
+    print(" ")
+  }
+  print("\n")
+}
+
+// ============================================================
+// TEST 3: Strings - Tuple ("a", "b", "c")
+// ============================================================
+kfn test_tuple_strings() {
+  print("TEST 3: for i in (\"a\", \"b\", \"c\")")
+  for i in ("a", "b", "c") {
+    print(i)
+    print(" ")
+  }
+  print("\n")
+}
+
+// ============================================================
+// TEST 4: Single value - Tuple (5)
+// ============================================================
+kfn test_tuple_single() {
+  print("TEST 4: for i in (5)")
+  for i in (5) {
+    print(i)
+    print(" ")
+  }
+  print("\n")
+}
+
+// ============================================================
+// TEST 5: Empty tuple - Tuple ()
+// ============================================================
+kfn test_tuple_empty() {
+  print("TEST 5: for i in () - empty tuple")
+  for i in () {
+    print(i)
+    print(" ")
+  }
+  print("(empty output expected)\n")
+}
+
+// ============================================================
+// TEST 6: Mixed types - Tuple (1, "two", 3)
+// ============================================================
+kfn test_tuple_mixed() {
+  print("TEST 6: for i in (1, \"two\", 3)")
+  for i in (1, "two", 3) {
+    print(i)
+    print(" ")
+  }
+  print("\n")
+}
+
+// ============================================================
+// TEST 7: Nested tuples - (1, 2), (3, 4)
+// ============================================================
+kfn test_tuple_nested() {
+  print("TEST 7: for i in ((1, 2), (3, 4))")
+  for i in ((1, 2), (3, 4)) {
+    print(i)
+    print(" ")
+  }
+  print("\n")
+}
+
+// ============================================================
+// TEST 8: Comparison with range syntax
+// ============================================================
+kfn test_comparison() {
+  print("TEST 8: Comparison\n")
+  
+  print("Range (1..5): ")
+  for i in 1..5 {
+    print(i)
+    print(" ")
+  }
+  print("\n")
+  
+  print("Tuple (1, 5): ")
+  for i in (1, 5) {
+    print(i)
+    print(" ")
+  }
+  print("\n")
+}
+
+// ============================================================
+// TEST 9: Variable in tuple
+// ============================================================
+kfn test_tuple_variable() {
+  print("TEST 9: for i in (a, b, c) with variables")
+  a = 10
+  b = 20
+  c = 30
+  for i in (a, b, c) {
+    print(i)
+    print(" ")
+  }
+  print("\n")
+}
+
+// ============================================================
+// TEST 10: Large tuple
+// ============================================================
+kfn test_tuple_large() {
+  print("TEST 10: for i in (1,2,3,4,5,6,7,8,9,10)")
+  for i in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10) {
+    print(i)
+    print(" ")
+  }
+  print("\n")
+}
+
+// ============================================================
+// MAIN - Run all tests
+// ============================================================
+kfn main() {
+  print("=== KILLER TUPLE SYNTAX LOOP TEST ===\n")
+  print("Testing: for i in (values) - tuple iteration\n\n")
+  
+  test_tuple_basic()
+  test_tuple_three()
+  test_tuple_strings()
+  test_tuple_single()
+  test_tuple_empty()
+  test_tuple_mixed()
+  test_tuple_nested()
+  test_comparison()
+  test_tuple_variable()
+  test_tuple_large()
+  
+  print("\n=== ALL TESTS COMPLETED ===\n")
+}
+
+// Run main
+main()

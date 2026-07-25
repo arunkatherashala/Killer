@@ -1,0 +1,12 @@
+// Test what's on stack after validator
+print "=== Test Stack After Validator ==="
+
+quality x = "hello"
+print "Before: " + x.get_status()
+
+quality y = x.validate_not_null()
+print "Result y status: " + y.get_status()
+
+print "Done"
+
+

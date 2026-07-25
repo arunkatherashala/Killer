@@ -1,0 +1,66 @@
+// Week 22: Large-Scale Data Processing - Example 2
+// Tumbling Window Aggregation
+
+kfn create_event(timestamp, value) {
+    return {
+        timestamp: timestamp,
+        value: value
+    };
+}
+
+kfn tumbling_window_aggregate(events, window_size) {
+    // Create windows
+    let windows = {};
+    
+    for i in 0..length(events) {
+        let event = events[i];
+        let window_start = (event.timestamp / window_size) * window_size;
+        let window_key = str(window_start);
+        
+        if windows[window_key] == null {
+            windows[window_key] = {
+                start: window_start,
+                end: window_start + window_size,
+                values: [],
+                sum: 0,
+                count: 0
+            };
+        }
+        
+        windows[window_key].values.push(event.value);
+        windows[window_key].sum = windows[window_key].sum + event.value;
+        windows[window_key].count = windows[window_key].count + 1;
+    }
+    
+    return windows;
+}
+
+kfn print_window_stats(windows) {
+    for key, window in windows {
+        let avg = 0;
+        if window.count > 0 {
+            avg = window.sum / window.count;
+        }
+        
+        print("Window [" + str(window.start) + "-" + str(window.end) + "]:");
+        print("  Count: " + str(window.count));
+        print("  Sum: " + str(window.sum));
+        print("  Avg: " + str(avg));
+    }
+}
+
+// Test: Events every second for 10 seconds, 5-second windows
+let events = [];
+events.push(create_event(0, 100));
+events.push(create_event(1, 110));
+events.push(create_event(2, 120));
+events.push(create_event(5, 200));
+events.push(create_event(6, 210));
+events.push(create_event(7, 220));
+events.push(create_event(10, 300));
+events.push(create_event(11, 310));
+
+let windows = tumbling_window_aggregate(events, 5);
+print_window_stats(windows);
+
+

@@ -1,0 +1,19 @@
+kfn fib_fast(n: Int) -> Int {
+    if n <= 1 { return n; }
+    let mut a = 0;
+    let mut b = 1;
+    let mut count = 0;
+    for i in [1, 2, 3, 4, 5] {
+        let temp = a + b;
+        a = b;
+        b = temp;
+    }
+    return b;
+}
+
+kfn main() {
+    let result = fib_fast(10000);
+    println(result.to_string());
+}
+
+

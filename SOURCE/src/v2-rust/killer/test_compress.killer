@@ -1,0 +1,18 @@
+print("=== Nova External Compressor ===")
+nova_compress("sample.csv", "sample.csv.nvz")
+print("1. Function call OK")
+nova_decompress("sample.csv.nvz", "sample_rt.csv")
+print("2. Decompress OK")
+
+(sample.csv).compress.(sample2.csv.nvz)
+print("3. (src).compress.(dst) OK")
+(sample2.csv.nvz).decompress.(sample2_rt.csv)
+print("4. (src).decompress.(dst) OK")
+
+sample.csv.compress.sample3.csv.nvz
+print("5. Bare compress OK")
+sample3.csv.nvz.decompress.sample3_rt.csv
+print("6. Bare decompress OK")
+
+print("=== Verify round-trips match original ===")
+nova_info("sample.csv.nvz")

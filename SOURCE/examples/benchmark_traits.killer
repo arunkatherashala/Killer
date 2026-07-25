@@ -1,0 +1,147 @@
+// Killer v3.0 Performance Benchmark Suite
+// Trait System Performance Tests
+// Measures: trait checking, method resolution, lookup caching
+
+println("=== Trait System Benchmarking ===")
+println("")
+
+// Benchmark 1: trait_check() performance (uncached)
+println("Benchmark 1: trait_check() - Type Validation")
+let types = ["String", "Number", "Array", "Dict", "Bool"]
+let traits_list = ["Display", "Comparable", "Cloneable", "Iterable"]
+
+let check_iterations = 10000
+let check_start = now()
+let i = 0
+while i < check_iterations {
+    // Test each combination
+    let type_idx = i % len(types)
+    let trait_idx = (i / len(types)) % len(traits_list)
+    let _ = trait_check(types[type_idx], traits_list[trait_idx])
+    let i = i + 1
+}
+let check_end = now()
+let check_elapsed = check_end - check_start
+println("Total time: " + str(check_elapsed) + " seconds")
+println("Checks: " + str(check_iterations))
+println("Average per check: " + str(check_elapsed / check_iterations) + "s")
+println("Throughput: " + str(check_iterations / check_elapsed) + " checks/sec")
+println("Type combinations: " + str(len(types) * len(traits_list)))
+println("")
+
+// Benchmark 2: trait_resolve() performance
+println("Benchmark 2: trait_resolve() - Method Resolution")
+let resolve_methods = ["to_string", "compare_to", "equals", "clone", "iterator", "has_next"]
+let resolve_iterations = 5000
+let resolve_start = now()
+let j = 0
+while j < resolve_iterations {
+    let type_idx = j % len(types)
+    let method_idx = j % len(resolve_methods)
+    let _ = trait_resolve(types[type_idx], resolve_methods[method_idx])
+    let j = j + 1
+}
+let resolve_end = now()
+let resolve_elapsed = resolve_end - resolve_start
+println("Total time: " + str(resolve_elapsed) + " seconds")
+println("Resolutions: " + str(resolve_iterations))
+println("Average per resolution: " + str(resolve_elapsed / resolve_iterations) + "s")
+println("Throughput: " + str(resolve_iterations / resolve_elapsed) + " resolutions/sec")
+println("")
+
+// Benchmark 3: trait_new() definition
+println("Benchmark 3: trait_new() - Trait Definition")
+let new_iterations = 1000
+let new_start = now()
+let k = 0
+while k < new_iterations {
+    let trait_name = "CustomTrait_" + str(k)
+    let _ = trait_new(trait_name, ["method1", "method2"])
+    let k = k + 1
+}
+let new_end = now()
+let new_elapsed = new_end - new_start
+println("Total time: " + str(new_elapsed) + " seconds")
+println("Definitions: " + str(new_iterations))
+println("Average per definition: " + str(new_elapsed / new_iterations) + "s")
+println("Throughput: " + str(new_iterations / new_elapsed) + " definitions/sec")
+println("")
+
+// Benchmark 4: trait_impl() registration
+println("Benchmark 4: trait_impl() - Implementation Registration")
+let impl_iterations = 1000
+let impl_start = now()
+let l = 0
+while l < impl_iterations {
+    let type_name = "Type_" + str(l)
+    let trait_name = "Trait_" + str(l % len(traits_list))
+    let _ = trait_impl(trait_name, type_name)
+    let l = l + 1
+}
+let impl_end = now()
+let impl_elapsed = impl_end - impl_start
+println("Total time: " + str(impl_elapsed) + " seconds")
+println("Implementations: " + str(impl_iterations))
+println("Average per impl: " + str(impl_elapsed / impl_iterations) + "s")
+println("Throughput: " + str(impl_iterations / impl_elapsed) + " impls/sec")
+println("")
+
+// Benchmark 5: Method resolution with caching
+println("Benchmark 5: Cached Resolution (Hot Path)")
+let cache_iterations = 20000
+let cache_types = ["String", "Number", "Array"]  // Most common types
+let cache_methods = ["to_string", "iterator"]    // Common methods
+let cache_start = now()
+let m = 0
+while m < cache_iterations {
+    let cached_type = cache_types[m % len(cache_types)]
+    let cached_method = cache_methods[m % len(cache_methods)]
+    let _ = trait_resolve(cached_type, cached_method)
+    let m = m + 1
+}
+let cache_end = now()
+let cache_elapsed = cache_end - cache_start
+println("Total time: " + str(cache_elapsed) + " seconds")
+println("Cached resolutions: " + str(cache_iterations))
+println("Average per resolution: " + str(cache_elapsed / cache_iterations) + "s")
+println("Throughput: " + str(cache_iterations / cache_elapsed) + " lookups/sec")
+println("[Note: Cache hit rate expected ~100% on repeated lookups]")
+println("")
+
+// Benchmark 6: Polymorphic function dispatch
+println("Benchmark 6: Polymorphic Dispatch Simulation")
+let dispatch_iterations = 5000
+let dispatch_start = now()
+let n = 0
+while n < dispatch_iterations {
+    // Simulate: check if type implements Display, then resolve method
+    let test_type = types[n % len(types)]
+    if trait_check(test_type, "Display") {
+        let method_info = trait_resolve(test_type, "to_string")
+        if method_info != null {
+            // Would call method here in real scenario
+        }
+    }
+    let n = n + 1
+}
+let dispatch_end = now()
+let dispatch_elapsed = dispatch_end - dispatch_start
+println("Total time: " + str(dispatch_elapsed) + " seconds")
+println("Dispatch operations: " + str(dispatch_iterations))
+println("Average per dispatch: " + str(dispatch_elapsed / dispatch_iterations) + "s")
+println("Throughput: " + str(dispatch_iterations / dispatch_elapsed) + " dispatches/sec")
+println("[Includes: check trait + resolve method + null verification]")
+println("")
+
+// Summary
+println("=== Trait System Performance Summary ===")
+println("trait_check(): " + str(check_iterations / check_elapsed) + " ops/sec")
+println("trait_resolve(): " + str(resolve_iterations / resolve_elapsed) + " ops/sec")
+println("trait_new(): " + str(new_iterations / new_elapsed) + " ops/sec")
+println("trait_impl(): " + str(impl_iterations / impl_elapsed) + " ops/sec")
+println("Cached lookups: " + str(cache_iterations / cache_elapsed) + " ops/sec")
+println("Polymorphic dispatch: " + str(dispatch_iterations / dispatch_elapsed) + " ops/sec")
+println("")
+println("✓ Trait system benchmarking complete")
+
+

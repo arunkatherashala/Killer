@@ -1,0 +1,2 @@
+q = "KORE format"
+print(khlm_classify(q))

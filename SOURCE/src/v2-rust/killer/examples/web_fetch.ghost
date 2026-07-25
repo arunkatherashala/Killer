@@ -1,0 +1,37 @@
+# web_fetch.ghost — Ghost that fetches a webpage and prints the response.
+# Run: ghost_vm world web_fetch.ghst --allow-http --fuel 50000
+#
+# Uses SYS_HTTP_GET (40) to fetch http://example.com/ and prints the result.
+
+.fuel 50000
+.data 0 "http://example.com/"
+.data 100 "Response:\n"
+
+# Print header "Response:\n"
+    push 100        # addr
+    push 10         # len
+    syscall 4       # SYS_PRINT_STR
+
+# HTTP GET: push dest_addr, url_addr, url_len
+    push 1024       # dest_addr for response body
+    push 0          # url_addr
+    push 19         # url_len ("http://example.com/" = 19 chars)
+    syscall 40      # SYS_HTTP_GET → bytes_received on stack
+
+# Check if error
+    dup
+    push -1
+    eq
+    jmpif error
+
+# Print response body
+    push 1024       # addr of response
+    swap            # now: addr, bytes_received
+    syscall 4       # SYS_PRINT_STR
+    halt
+
+error:
+    pop             # discard -1
+    push 0          # Print error msg from RAM
+    push 0          # (would print nothing, just halt)
+    halt

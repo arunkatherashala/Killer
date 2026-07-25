@@ -1,0 +1,15 @@
+# main
+CONST_NUM 20
+CONST_NUM 22
+CALL add_and_print 2
+CONST_STR "done"
+PRINT
+HALT
+
+# function add_and_print(arg0, arg1)
+FUNC add_and_print 2
+LOAD arg0
+LOAD arg1
+ADD
+PRINT
+RET

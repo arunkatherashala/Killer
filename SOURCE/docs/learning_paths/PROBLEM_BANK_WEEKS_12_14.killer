@@ -1,0 +1,914 @@
+// CONTRACT PROGRAMMING PROBLEM BANK (Weeks 12-14)
+// 400+ problems for mastery-level learning
+// Each problem tests specific contract programming principles
+
+// ============================================================================
+// WEEK 12: PRECONDITIONS & POSTCONDITIONS (120 problems)
+// ============================================================================
+
+// PRIMARY CATEGORY: BASIC PRECONDITIONS (30 problems)
+// Problems 12.1.1 - 12.1.30
+
+/*
+12.1.1: Integer Range Check
+Precondition: 0 <= temperature <= 50
+Write function: celsius_to_fahrenheit(c)
+Must verify precondition before calculation
+Return error if violated
+Test: 25 (valid), -5 (invalid), 100 (invalid)
+*/
+
+// Example Contract:
+// fn celsius_to_fahrenheit(c: i32) -> Result<f64, String> {
+//     if c < 0 || c > 50 {
+//         return Err("Temperature must be 0-50 celsius".into());
+//     }
+//     Ok(c as f64 * 9.0 / 5.0 + 32.0)
+// }
+
+/*
+12.1.2: Array Non-Empty Check
+Precondition: array.len() > 0
+Write function: first_element(arr)
+Return Element or error if empty
+Test: [1,2,3] (valid), [] (invalid)
+*/
+
+/*
+12.1.3: Non-Null Pointer Check
+Precondition: pointer != nullptr
+Write function: dereference_safe(ptr)
+Return value if not null, error if null
+Test: valid pointer (valid), null (invalid)
+*/
+
+/*
+12.1.4: String Non-Empty Check
+Precondition: string.len() > 0
+Write function: first_char(s)
+Return first character or error
+Test: "hello" (valid), "" (invalid)
+*/
+
+/*
+12.1.5: Divisor Not Zero
+Precondition: divisor != 0
+Write function: safe_divide(a, b)
+Return a/b or error
+Test: 10/2 (valid), 10/0 (invalid)
+*/
+
+/*
+12.1.6: Age Range
+Precondition: 0 <= age <= 150
+Write function: age_group(age)
+Return: "child", "adult", or "error"
+Test: 5, 30, 200 (invalid)
+*/
+
+/*
+12.1.7: Index In Bounds
+Precondition: 0 <= index < array.len()
+Write function: get_element(arr, idx)
+Return element or error
+Test: arr[1] (valid), arr[10] where arr.len=5 (invalid)
+*/
+
+/*
+12.1.8: Two Values Ordered
+Precondition: a < b
+Write function: find_midpoint(a, b)
+Return (a+b)/2 or error
+Test: (1,5) (valid), (5,1) (invalid)
+*/
+
+/*
+12.1.9: Positive Number
+Precondition: x > 0
+Write function: square_root(x)
+Return sqrt(x) or error
+Test: 4 (valid), -1 (invalid)
+*/
+
+/*
+12.1.10: Multiple Constraints
+Precondition: 0 <= x <= 100 AND 0 <= y <= 100
+Write function: point_in_grid(x, y)
+Return true if valid, error if not
+Test: (50,50), (150,50), (-1,50)
+*/
+
+/*
+12.1.11: Collection Size Range
+Precondition: 1 <= size <= 1000
+Write function: allocate_buffer(size)
+Return buffer or error
+Test: 500 (valid), 0 (invalid), 2000 (invalid)
+*/
+
+/*
+12.1.12: String Format
+Precondition: email contains '@' and '.'
+Write function: parse_email(email)
+Return user/domain or error
+Test: "user@domain.com" (valid), "invalid" (invalid)
+*/
+
+/*
+12.1.13: File Exists
+Precondition: file exists and is readable
+Write function: read_file(path)
+Return contents or error
+Test: existing readable file (valid), non-existent (invalid)
+*/
+
+/*
+12.1.14: Resource Available
+Precondition: enough memory available
+Write function: allocate(bytes)
+Return pointer or error
+Test: 1MB when 10GB free (valid), when full (invalid)
+*/
+
+/*
+12.1.15: Version Compatible
+Precondition: version >= 2.0
+Write function: use_feature(feat, version)
+Return result or error
+Test: 2.5 (valid), 1.9 (invalid)
+*/
+
+/*
+12.1.16: Date Valid
+Precondition: 1 <= day <= 31, 1 <= month <= 12, year > 0
+Write function: create_date(day, month, year)
+Return date or error
+Test: (15, 6, 2024) (valid), (32, 1, 2024) (invalid)
+*/
+
+/*
+12.1.17: Password Strong
+Precondition: len >= 8, has upper+lower+digit+special
+Write function: check_password(pwd)
+Return bool or error
+Test: "SecP@ss1" (valid), "weak" (invalid)
+*/
+
+/*
+12.1.18: List Unique Elements
+Precondition: all elements are unique
+Write function: check_duplicates(list)
+Return count or error if duplicates found
+Test: [1,2,3] (valid), [1,2,1] (invalid)
+*/
+
+/*
+12.1.19: Network Port Range
+Precondition: 1024 <= port <= 65535
+Write function: bind_port(port)
+Return socket or error
+Test: 8080 (valid), 80 (invalid - requires root)
+*/
+
+/*
+12.1.20: Timeout Valid
+Precondition: 0 < timeout <= 30000ms
+Write function: wait_with_timeout(timeout)
+Return true or error
+Test: 5000 (valid), -1 (invalid)
+*/
+
+/*
+12.1.21: Command Arguments
+Precondition: args.len() >= 1
+Write function: parse_command(args)
+Return command or error
+Test: ["help"] (valid), [] (invalid)
+*/
+
+/*
+12.1.22: Concurrent Access
+Precondition: lock acquired
+Write function: access_critical_section()
+Return result or error
+Test: with lock (valid), without lock (invalid)
+*/
+
+/*
+12.1.23: Number Precision
+Precondition: -1.0 <= probability <= 1.0
+Write function: probability_complement(p)
+Return 1-p or error
+Test: 0.5 (valid), 1.5 (invalid)
+*/
+
+/*
+12.1.24: Matrix Dimensions
+Precondition: rows > 0 AND cols > 0
+Write function: create_matrix(rows, cols)
+Return matrix or error
+Test: (3,4) (valid), (0,5) (invalid)
+*/
+
+/*
+12.1.25: Time Order
+Precondition: start_time < end_time
+Write function: duration(start, end)
+Return duration or error
+Test: (10:00, 12:00) (valid), (12:00, 10:00) (invalid)
+*/
+
+/*
+12.1.26: Ratio Valid
+Precondition: numerator > 0 AND denominator > 0
+Write function: ratio_percentage(num, denom)
+Return percentage or error
+Test: (50, 100) (valid), (100, 0) (invalid)
+*/
+
+/*
+12.1.27: Language Code
+Precondition: lang_code in ["en", "es", "fr", "de"]
+Write function: get_translation(code, key)
+Return translation or error
+Test: "en" (valid), "invalid" (invalid)
+*/
+
+/*
+12.1.28: Color Value
+Precondition: 0 <= r,g,b <= 255
+Write function: rgb_to_hex(r, g, b)
+Return hex string or error
+Test: (255, 128, 0) (valid), (256, 0, 0) (invalid)
+*/
+
+/*
+12.1.29: Bit Position Valid
+Precondition: 0 <= position < 32 (for u32)
+Write function: set_bit(value, pos)
+Return modified value or error
+Test: pos=5 (valid), pos=40 (invalid)
+*/
+
+/*
+12.1.30: Thread Count
+Precondition: 1 <= threads <= number_of_cpus
+Write function: create_thread_pool(count)
+Return pool or error
+Test: 4 on 8-core (valid), 100 (probably invalid)
+*/
+
+// PRIMARY CATEGORY: BASIC POSTCONDITIONS (30 problems)
+// Problems 12.2.1 - 12.2.30
+
+/*
+12.2.1: Result Non-Negative
+Postcondition: result >= 0
+Write function: absolute_value(x)
+Verify result >= 0
+Test: -5 (result 5), 3 (result 3)
+*/
+
+/*
+12.2.2: Array Sorted
+Postcondition: array is ascending order
+Write function: sort_ascending(arr)
+Verify all a[i] <= a[i+1]
+Test: [3,1,2] => [1,2,3]
+*/
+
+/*
+12.2.3: Array Same Size
+Postcondition: len(result) == len(input)
+Write function: double_each(arr)
+Verify size preserved
+Test: [1,2,3] => [2,4,6]
+*/
+
+/*
+12.2.4: Between Min/Max
+Postcondition: min <= result <= max
+Write function: clamp(value, min, max)
+Verify result in bounds
+Test: clamp(5, 0, 10) => 5
+*/
+
+/*
+12.2.5: Incrementedness
+Postcondition: result == input + 1
+Write function: increment(x)
+Verify result exactly 1 larger
+Test: 5 => 6
+*/
+
+/*
+12.2.6: No Duplicates
+Postcondition: all elements unique
+Write function: remove_duplicates(arr)
+Verify uniqueness
+Test: [1,2,1,3] => [1,2,3]
+*/
+
+/*
+12.2.7: Count Matches
+Postcondition: count of X == expected
+Write function: count_element(arr, val)
+Verify count correct
+Test: count(1) in [1,1,2,1] => 3
+*/
+
+/*
+12.2.8: String Length
+Postcondition: len(result) >= len(input)
+Write function: trim_spaces(s)
+Verify result shorter or equal
+Test: "  hello  " => "hello"
+*/
+
+/*
+12.2.9: Property Verification
+Postcondition: is_even(result)
+Write function: next_even(x)
+Verify result is even
+Test: 5 => 6, 4 => 4 or 6
+*/
+
+/*
+12.2.10: Sum Invariant
+Postcondition: sum(result) == sum(input)
+Write function: shuffle(arr)
+Verify sum preserved
+Test: [1,2,3] shuffled still sums to 6
+*/
+
+/*
+12.2.11: Type Conversion
+Postcondition: result >= 0 AND result is integer
+Write function: count_chars(s)
+Verify correct type/range
+Test: "hello" => 5
+*/
+
+/*
+12.2.12: Binary Search Result
+Postcondition: arr[result] == target OR result == -1
+Write function: binary_search(arr, target)
+Verify correct index or not found
+Test: search in [1,3,5,7,9]
+*/
+
+/*
+12.2.13: Output Format
+Postcondition: result matches regex "[A-Z][a-z]+"
+Write function: capitalize(s)
+Verify correct format
+Test: "hello" => "Hello"
+*/
+
+/*
+12.2.14: Performance
+Postcondition: execution_time <= 100ms
+Write function: quick_algorithm(n)
+Verify within time
+Test: n=1000000
+*/
+
+/*
+12.2.15: Memory Usage
+Postcondition: memory_used <= 1MB
+Write function: efficient_parse(data)
+Verify memory bounded
+Test: parse 1GB of data
+*/
+
+/*
+12.2.16: Equivalence
+Postcondition: result == computed_directly
+Write function: cached_calculation(x)
+Verify cache correctness
+Test: compare with non-cached
+*/
+
+/*
+12.2.17: Bounds Checking
+Postcondition: 0 <= result.x < width AND 0 <= result.y < height
+Write function: normalize_coordinates(x, y, w, h)
+Verify in bounds
+Test: various x,y with width=100, height=100
+*/
+
+/*
+12.2.18: Sum Guarantee
+Postcondition: sum of components >= original
+Write function: decompose(value)
+Verify sum preserved
+Test: 100 => parts that sum to 100
+*/
+
+/*
+12.2.19: Inverse Operation
+Postcondition: decrypt(encrypt(msg)) == msg
+Write function: encrypt_decrypt(msg)
+Verify round-trip
+Test: "secret" round trip
+*/
+
+/*
+12.2.20: Idempotence
+Postcondition: f(f(x)) == f(x)
+Write function: sort(arr)
+Verify idempotent
+Test: sort(sort(arr)) == sort(arr)
+*/
+
+/*
+12.2.21: Monotonicity
+Postcondition: if x1 < x2 then f(x1) <= f(x2)
+Write function: price_tier(usage)
+Verify monotonic
+Test: price(100) <= price(200)
+*/
+
+/*
+12.2.22: Consistency
+Postcondition: multiple calls with same input give same output
+Write function: deterministic_hash(data)
+Verify consistency
+Test: hash("abc") always same
+*/
+
+/*
+12.2.23: Termination
+Postcondition: function always returns (no infinite loop)
+Write function: euclidean_gcd(a, b)
+Verify always terminates
+Test: gcd(48, 18)
+*/
+
+/*
+12.2.24: Degree Check
+Postcondition: polynomial.degree <= 3
+Write function: fit_cubic(points)
+Verify degree
+Test: fit and check
+*/
+
+/*
+12.2.25: Graph Property
+Postcondition: result is connected graph
+Write function: minimum_spanning_tree(graph)
+Verify connectedness
+Test: on various graphs
+*/
+
+/*
+12.2.26: XML Validity
+Postcondition: result is valid XML
+Write function: generate_xml(data)
+Verify XML valid
+Test: generate and parse
+*/
+
+/*
+12.2.27: Case Preservation
+Postcondition: uppercase chars unchanged count
+Write function: title_case(s)
+Verify correct transformation
+Test: "hello WORLD" => "Hello World"
+*/
+
+/*
+12.2.28: Array Completeness
+Postcondition: result contains all input elements
+Write function: filter_and_sort(arr, pred)
+Verify no loss
+Test: filter even from [1,2,3,4,5]
+*/
+
+/*
+12.2.29: Index Range
+Postcondition: 0 <= returned_index < array.len()
+Write function: find_max(arr)
+Verify valid index
+Test: find max in [3,1,4,1,5]
+*/
+
+/*
+12.2.30: Null Safety
+Postcondition: result != null (or Some/Ok)
+Write function: safe_operation(input)
+Verify non-null result
+Test: various inputs
+*/
+
+// PRIMARY CATEGORY: COMBINED PRE+POST CONDITIONS (30 problems)
+// Problems 12.3.1 - 12.3.30
+
+/*
+12.3.1: Integer Math
+Precondition: b != 0
+Postcondition: (result * b + remainder) == a
+Write function: divide_with_remainder(a, b)
+*/
+
+/*
+12.3.2: Array Reversal
+Precondition: array.len() > 0
+Postcondition: array[i] == result[n-1-i] for all i
+Write function: reverse(arr)
+*/
+
+/*
+12.3.3: Queue Operations
+Precondition: queue not empty
+Postcondition: returned element was at front, queue size decreased
+Write function: dequeue(queue)
+*/
+
+/*
+12.3.4: String Search
+Precondition: needle.len() > 0
+Postcondition: result == -1 OR haystack[result..result+needle.len()] == needle
+Write function: string_find(haystack, needle)
+*/
+
+/*
+12.3.5: Set Intersection
+Precondition: both sets non-empty
+Postcondition: all elements in result are in both sets
+Write function: set_intersection(set1, set2)
+*/
+
+/*
+12.3.6: Merge Sorted
+Precondition: both arrays sorted
+Postcondition: result is sorted AND contains all elements from both
+Write function: merge_sorted_arrays(arr1, arr2)
+*/
+
+/*
+12.3.7: Binary Insert
+Precondition: array sorted
+Postcondition: result sorted AND contains element at correct position
+Write function: binary_insert(arr, val)
+*/
+
+/*
+12.3.8: Remove Element
+Precondition: array.len() > 0
+Postcondition: element removed, other elements unchanged
+Write function: remove_element(arr, idx)
+*/
+
+/*
+12.3.9: Rotate Array
+Precondition: 0 < rotation < array.len()
+Postcondition: array rotated by exactly k positions
+Write function: rotate_right(arr, k)
+*/
+
+/*
+12.3.10: Substring Extract
+Precondition: 0 <= start <= end <= string.len()
+Postcondition: result == string[start..end]
+Write function: substring(s, start, end)
+*/
+
+/*
+12.3.11: Key-Value Storage
+Precondition: key != null/empty
+Postcondition: after storing, retrieve returns same value
+Write function: store_and_retrieve(key, value)
+*/
+
+/*
+12.3.12: Min of Range
+Precondition: low <= high
+Postcondition: low <= result <= high AND result in values
+Write function: find_min_in_range(values, low, high)
+*/
+
+/*
+12.3.13: Element Count
+Precondition: container.len() > 0
+Postcondition: count <= container.len()
+Write function: count_occurrences(container, element)
+*/
+
+/*
+12.3.14: Shuffle and Verify
+Precondition: array.len() > 1
+Postcondition: result contains same elements, different order
+Write function: shuffle(arr)
+*/
+
+/*
+12.3.15: Parse Integer
+Precondition: string contains digits only
+Postcondition: result >= 0 AND to_string(result) == string
+Write function: parse_int(s)
+*/
+
+/*
+12.3.16: Tree Traversal
+Precondition: tree is valid
+Postcondition: all nodes visited, count == num_nodes
+Write function: traverse_tree(tree)
+*/
+
+/*
+12.3.17: Divide Into Chunks
+Precondition: chunk_size > 0
+Postcondition: each chunk size <= chunk_size, all elements included
+Write function: chunk_array(arr, chunk_size)
+*/
+
+/*
+12.3.18: GCD Computation
+Precondition: a > 0 AND b > 0
+Postcondition: result divides both a and b, is maximum such divisor
+Write function: gcd(a, b)
+*/
+
+/*
+12.3.19: LCM Computation
+Precondition: a > 0 AND b > 0
+Postcondition: result divisible by both a and b, is minimum such
+Write function: lcm(a, b)
+*/
+
+/*
+12.3.20: Polynomial Evaluation
+Precondition: coefficients.len() >= 1
+Postcondition: result matches mathematical evaluation
+Write function: eval_polynomial(coeffs, x)
+*/
+
+/*
+12.3.21: Matrix Transpose
+Precondition: matrix.rows > 0 AND matrix.cols > 0
+Postcondition: result[i][j] == input[j][i]
+Write function: transpose(matrix)
+*/
+
+/*
+12.3.22: Vector Norm
+Precondition: vector.len() > 0
+Postcondition: result >= 0 AND result == sqrt(sum(v[i]^2))
+Write function: vector_norm(v)
+*/
+
+/*
+12.3.23: Permutation Check
+Precondition: arrays same length
+Postcondition: true if same elements (possibly different order)
+Write function: is_permutation(arr1, arr2)
+*/
+
+/*
+12.3.24: Common Prefix
+Precondition: strings.len() > 0
+Postcondition: result is longest common prefix
+Write function: longest_common_prefix(strings)
+*/
+
+/*
+12.3.25: Balanced Parentheses
+Precondition: string not empty
+Postcondition: true iff all parens matched correctly
+Write function: is_balanced(s)
+*/
+
+/*
+12.3.26: Nth Fibonacci
+Precondition: n >= 0
+Postcondition: result == fib(n) mathematically
+Write function: fibonacci(n)
+*/
+
+/*
+12.3.27: Prime Check
+Precondition: n >= 2
+Postcondition: true iff n is prime
+Write function: is_prime(n)
+*/
+
+/*
+12.3.28: Digit Sum
+Precondition: n >= 0
+Postcondition: result == sum of digits of n
+Write function: digit_sum(n)
+*/
+
+/*
+12.3.29: Unique Elements Count
+Precondition: array.len() >= 0
+Postcondition: result == count of unique elements
+Write function: count_unique(arr)
+*/
+
+/*
+12.3.30: Interval Merge
+Precondition: intervals are (start, end) pairs
+Postcondition: overlapping intervals merged, sorted
+Write function: merge_intervals(intervals)
+*/
+
+// PRIMARY CATEGORY: CONTRACT VIOLATION DETECTION (30 problems)
+// Problems 12.4.1 - 12.4.30
+
+/*
+12.4.1: Identify Violated Precondition
+Given:
+function sqrt(x):
+    precondition: x >= 0
+    ...
+Calls: sqrt(-5)
+Identify: precondition violated
+Create: meaningful error message
+*/
+
+/*
+12.4.2: Identify Violated Postcondition
+Given:
+function sort(arr):
+    postcondition: array is sorted
+    Implementation has bug
+Error: identify and fix
+*/
+
+/*
+12.4.3: Multiple Violations
+Function has 3 preconditions
+2 are violated
+Identify: which ones
+Create: comprehensive error report
+*/
+
+/*
+12.4.4: Cascading Failures
+First precondition violation
+Leads to postcondition failure
+Identify: root cause
+*/
+
+/*
+12.4.5: Silent Contract Failure
+Function doesn't raise error
+But contract violated
+Detect: programmatically
+*/
+
+/*
+12.4.6: Boundary Violation
+Input: just barely violates precondition
+Detect: boundary cases
+*/
+
+/*
+12.4.7: Off-by-One Error
+Postcondition: result.len() == input.len() + 1
+Implementation: len() == input.len() (missing +1)
+Detect: test reveals bug
+*/
+
+/*
+12.4.8: Wrong Comparison Operator
+Precondition: x > 0
+Implementation: x >= 0
+Detect: boundary test catches
+*/
+
+/*
+12.4.9: State-Dependent Violation
+Precondition: file must be open
+But implementation closes it
+Detect: violation
+*/
+
+/*
+12.4.10: Exception Specification Violation
+Contract: no exceptions thrown
+Implementation: throws IndexOutOfBoundsException
+Detect: contract violation
+*/
+
+// Continue with patterns...
+/*
+12.4.11-12.4.30: Additional violation patterns
+- Type violations
+- Null pointer violations
+- Array bounds violations
+- Memory violations
+- Concurrency violations
+- Resource violations
+- Format violations
+- Range violations
+- Relationship violations
+- Existence violations
+*/
+
+// ============================================================================
+// WEEK 13: CLASS INVARIANTS & OBJECT CONTRACTS (140 problems)
+// ============================================================================
+
+// These problems follow similar structure but focus on classes/objects
+// Problems 13.1.1 - 13.4.35 organized as:
+// - Category 1: Simple Invariants (35 problems)
+// - Category 2: Invariants with Preconditions (35 problems)
+// - Category 3: Invariants with Postconditions (35 problems)
+// - Category 4: Complex Invariants (35 problems)
+
+/*
+13.1.1: Counter Never Negative
+Class: Counter
+Invariant: count >= 0
+Methods: increment(), decrement(), reset()
+Test: ensure invariant after each operation
+*/
+
+/*
+13.2.1: Bank Account Balance
+Class: BankAccount
+Invariant: balance >= 0
+Methods: deposit(amount), withdraw(amount)
+Precondition withdraw: amount <= balance
+Postcondition: balance changed by exactly amount
+*/
+
+/*
+13.3.1: Stack Operations
+Class: Stack<T>
+Invariant: size >= 0 AND size <= capacity
+Method push(item):
+  Precondition: size < capacity
+  Postcondition: size increased by 1, item at top
+  Maintains: invariant
+*/
+
+/*
+13.4.1: Binary Search Tree
+Class: BST
+Invariant: for all nodes, left < node < right
+Methods: insert(value), delete(value), search(value)
+All methods must maintain BST invariant
+Complex operations with multiple constraints
+*/
+
+// ... (95 more problems following similar patterns)
+
+// ============================================================================
+// WEEK 14: AUTOMATED VERIFICATION & TESTING (140 problems)
+// ============================================================================
+
+/*
+14.1.1: Test Case Generation from Precondition
+Precondition: 0 <= x <= 100
+Generate:
+- Boundary values: 0, 100, -1, 101
+- Mid-range: 50
+- Just beyond: 101, -1
+Expected: 6 test cases
+*/
+
+/*
+14.2.1: Verification Framework Implementation
+Implement:
+- precondition_violated(contract, input) -> bool
+- postcondition_violated(contract, output) -> bool
+- check_contract(contract, input, output) -> Result
+Test: on sample contracts
+*/
+
+/*
+14.3.1: Property-Based Testing
+Property: sort(sort(list)) == sort(list) (idempotence)
+Generate: 100 random lists
+Verify: property holds for all
+*/
+
+/*
+14.4.1: Contract-Driven Development
+Start: write only contracts
+Then: implement to satisfy
+Verify: implementation matches contracts
+Test: edge cases and violations
+*/
+
+// ... (135 more problems)
+
+// ============================================================================
+// SOLUTIONS TEMPLATE
+// ============================================================================
+/*
+For each problem, solution should include:
+1. Contract definition (pre, post, invariants)
+2. Implementation
+3. Test cases (valid, invalid, boundary)
+4. Verification code
+5. Error handling
+6. Performance analysis
+7. Real-world application
+*/
+
+

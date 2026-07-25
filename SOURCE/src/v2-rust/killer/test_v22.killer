@@ -1,0 +1,38 @@
+kfn add<T>(a, b) {
+  return a + b
+}
+result = add(10, 32)
+print(result)
+
+kfn fib(n) {
+  if n <= 1 {
+    return n
+  }
+  return fib(n - 1) + fib(n - 2)
+}
+
+t1 = system_time_ms()
+h1 = spawn fib(20)
+h2 = spawn fib(20)
+r1 = await h1
+r2 = await h2
+t2 = system_time_ms()
+elapsed = t2 - t1
+print(K"fib(20)={r1} fib(20)={r2}")
+print(K"parallel time={elapsed}ms")
+
+async kfn compute(x) {
+  return x * x
+}
+handle = spawn compute(7)
+squared = await handle
+print(squared)
+
+kfn multiply(a: Int, b: Int) -> Int {
+  return a * b
+}
+product = multiply(6, 7)
+print(product)
+
+import nonexistent_package
+print("all done")

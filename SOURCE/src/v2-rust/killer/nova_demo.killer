@@ -1,0 +1,56 @@
+# nova_demo.killer — Nova Compression demo
+# Uses nova_write / nova_info / nova_read_col builtins
+# Nova = KORE columnar encoding (RLE+delta+dict+varint) + LZ77 sliding window
+# Pure Rust stdlib, zero external dependencies
+
+csv_path  = "C:/Users/skathera/Downloads/test_data_100records.csv"
+nova_path = "C:/Users/skathera/Downloads/kore/1st_data.nova"
+
+print("=== Nova Compression Demo ===")
+print("")
+
+# --- Write ---
+print("Encoding CSV to Nova format...")
+ok = nova_write(csv_path, nova_path)
+print("Write success: ")
+print(ok)
+print("")
+
+# --- Info ---
+print("--- File Info ---")
+info = nova_info(nova_path)
+print(info)
+print("")
+
+# --- Read column: TRANSSOURCE (string/dict) ---
+print("--- Column: TRANSSOURCE ---")
+ts = nova_read_col(nova_path, "TRANSSOURCE")
+first = ts[0]
+total = len(ts)
+print("Total rows: ")
+print(total)
+print("First value: ")
+print(first)
+print("")
+
+# --- Read column: LPLACCOUNTNO (int/delta) ---
+print("--- Column: LPLACCOUNTNO ---")
+accts = nova_read_col(nova_path, "LPLACCOUNTNO")
+a0 = accts[0]
+a1 = accts[1]
+a2 = accts[2]
+print("First 3 account numbers: ")
+print(a0)
+print(a1)
+print(a2)
+print("")
+
+# --- Read column: PRICE (float/rle) ---
+print("--- Column: PRICE ---")
+prices = nova_read_col(nova_path, "PRICE")
+p0 = prices[0]
+print("First price: ")
+print(p0)
+print("")
+
+print("=== Nova Demo Complete ===")

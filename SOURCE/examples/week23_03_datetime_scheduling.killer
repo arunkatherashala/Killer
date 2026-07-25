@@ -1,0 +1,97 @@
+// week23_03_datetime_scheduling.killer
+// Using DateTime for scheduling and time-based logic
+
+// Get current time
+now = now()
+println("Starting scheduler at: " + now.iso_string)
+
+// Check if it's morning, afternoon, or evening
+hour = now.hour
+if hour < 12 {
+    period = "morning"
+}
+else if hour < 18 {
+    period = "afternoon"
+}
+else {
+    period = "evening"
+}
+
+println("Current period: " + period)
+
+// Simulate scheduled jobs (check if it's certain times)
+println("\n=== Scheduled Events ===")
+
+// Schedule jobs at specific hours
+scheduled_hours = [9, 12, 15, 18, 21]
+
+for scheduled_hour in scheduled_hours {
+    if hour == scheduled_hour {
+        println("ALERT: Running job scheduled for " + str(scheduled_hour) + ":00")
+    }
+    else {
+        minutes_until = ((scheduled_hour - hour + 24) % 24) * 60 - now.minute
+        if minutes_until < 0 {
+            minutes_until = minutes_until + 24 * 60
+        }
+        // Show next 3 scheduled times
+        if scheduled_hour > hour && scheduled_hour - hour <= 3 {
+            println("Upcoming: Job at " + str(scheduled_hour) + ":00 (in ~" + str(minutes_until) + " minutes)")
+        }
+    }
+}
+
+// Weekend/weekday logic
+println("\n=== Day Type ===")
+weekday = now.weekday  // 0 = Monday, 6 = Sunday
+if weekday >= 5 {
+    day_type = "Weekend"
+}
+else {
+    day_type = "Weekday"
+}
+println("Today is: " + day_type)
+
+// Month-based logic
+println("\n=== Monthly Tasks ===")
+month = now.month
+if month == 1 || month == 4 || month == 7 || month == 10 {
+    println("Running quarterly review")
+}
+
+if month == 1 {
+    println("Running annual review")
+}
+
+// Check if it's a special date
+println("\n=== Date Checking ===")
+if now.month == 3 && now.day == 14 {
+    println("Today is Pi Day! (3.14)")
+}
+
+// Create a deadline checker function
+kfn is_deadline_passed(deadline_str) {
+    deadline = parse_datetime(deadline_str)
+    if now.seconds >= deadline.seconds {
+        return true
+    }
+    return false
+}
+
+println("\n=== Deadline Check ===")
+deadlines = [
+    "2026-03-10",
+    "2026-03-15",
+    "2026-03-20",
+]
+
+for deadline in deadlines {
+    if is_deadline_passed(deadline) {
+        println("OVERDUE: " + deadline)
+    }
+    else {
+        println("PENDING: " + deadline)
+    }
+}
+
+

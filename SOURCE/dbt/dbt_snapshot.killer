@@ -1,0 +1,534 @@
+// dbt_snapshot.killer
+// DBT Snapshot System - Track data state over time
+// Generalizable pattern: multi-agent beliefs, proof states, audit trails, etc.
+
+// ============================================================================
+// SNAPSHOT CORE TYPES
+// ============================================================================
+
+record SnapshotMetadata {
+  snapshot_name: String,
+  model_name: String,
+  run_timestamp: Int,
+  run_id: String
+}
+
+record SnapshotRecord {
+  key: String,
+  payload: Map<String, String>,
+  dbt_valid_from: Int,
+  dbt_valid_to: Int,
+  is_current: Bool,
+  change_type: String
+}
+
+record SnapshotDiff {
+  key: String,
+  old_values: Map<String, String>,
+  new_values: Map<String, String>,
+  changed_fields: List<String>,
+  timestamp: Int
+}
+
+// ============================================================================
+// SNAPSHOT STORE - VERSIONED STATE STORAGE
+// ============================================================================
+
+actor SnapshotStore {
+  snapshots: Map<String, List<SnapshotRecord>> = {}
+  diffs: Map<String, List<SnapshotDiff>> = {}
+  run_history: List<Int> = []
+  
+  handle store_snapshot(model_name: String, records: List<SnapshotRecord>) {
+    snapshot_key = model_name + "_snapshots"
+    current_list = this.snapshots.get(snapshot_key, default=[])
+    
+    for record in records {
+      current_list.push(record)
+    }
+    
+    this.snapshots[snapshot_key] = current_list
+  }
+  
+  handle get_snapshots(model_name: String) -> List<SnapshotRecord> {
+    snapshot_key = model_name + "_snapshots"
+    this.snapshots.get(snapshot_key, default=[])
+  }
+  
+  handle get_snapshot_at(model_name: String, timestamp: Int) -> List<SnapshotRecord> {
+    all_snapshots = this.get_snapshots(model_name).await
+    valid_at_time: List<SnapshotRecord> = []
+    
+    for record in all_snapshots {
+      if record.dbt_valid_from <= timestamp {
+        if record.dbt_valid_to == 0 || record.dbt_valid_to > timestamp {
+          valid_at_time.push(record)
+        }
+      }
+    }
+    
+    valid_at_time
+  }
+  
+  handle store_diff(model_name: String, diff: SnapshotDiff) {
+    diff_key = model_name + "_diffs"
+    current_diffs = this.diffs.get(diff_key, default=[])
+    current_diffs.push(diff)
+    this.diffs[diff_key] = current_diffs
+  }
+  
+  handle get_diffs(model_name: String) -> List<SnapshotDiff> {
+    diff_key = model_name + "_diffs"
+    this.diffs.get(diff_key, default=[])
+  }
+  
+  handle record_run(timestamp: Int) {
+    this.run_history.push(timestamp)
+  }
+}
+
+// ============================================================================
+// SNAPSHOT DETECTOR - FIND CHANGES BETWEEN RUNS
+// ============================================================================
+
+actor SnapshotDetector {
+  handle detect_changes(
+    model_name: String,
+    current_data: Map<String, Map<String, String>>,
+    previous_data: Map<String, Map<String, String>>,
+    unique_key: String
+  ) -> List<SnapshotDiff> {
+    diffs: List<SnapshotDiff> = []
+    
+    // 1. Find CHANGED records
+    for key, current_record in current_data {
+      prev_record = previous_data.get(key)
+      if prev_record != nil {
+        changed_fields: List<String> = []
+        
+        for field, current_val in current_record {
+          prev_val = prev_record.get(field)
+          if prev_val != current_val {
+            changed_fields.push(field)
+          }
+        }
+        
+        if changed_fields.len() > 0 {
+          diff = SnapshotDiff {
+            key: key,
+            old_values: prev_record,
+            new_values: current_record,
+            changed_fields: changed_fields,
+            timestamp: 0
+          }
+          diffs.push(diff)
+        }
+      }
+    }
+    
+    // 2. Find NEW records
+    for key in current_data.keys() {
+      if previous_data.get(key) == nil {
+        diff = SnapshotDiff {
+          key: key,
+          old_values: {},
+          new_values: current_data[key],
+          changed_fields: ["*new*"],
+          timestamp: 0
+        }
+        diffs.push(diff)
+      }
+    }
+    
+    // 3. Find DELETED records
+    for key in previous_data.keys() {
+      if current_data.get(key) == nil {
+        diff = SnapshotDiff {
+          key: key,
+          old_values: previous_data[key],
+          new_values: {},
+          changed_fields: ["*deleted*"],
+          timestamp: 0
+        }
+        diffs.push(diff)
+      }
+    }
+    
+    diffs
+  }
+}
+
+// ============================================================================
+// SNAPSHOT BUILDER - CREATE VERSIONED RECORDS
+// ============================================================================
+
+actor SnapshotBuilder {
+  detector: SnapshotDetector = nil
+  current_run: Int = 0
+  
+  handle initialize(detector: SnapshotDetector) {
+    this.detector = detector
+  }
+  
+  handle build_snapshot(
+    model_name: String,
+    current_data: Map<String, Map<String, String>>,
+    previous_data: Map<String, Map<String, String>>,
+    unique_key: String,
+    run_timestamp: Int
+  ) -> List<SnapshotRecord> {
+    records: List<SnapshotRecord> = []
+    
+    // Detect what changed
+    diffs = this.detector.detect_changes(model_name, current_data, previous_data, unique_key).await
+    
+    // 1. Close off old versions
+    for key, prev_record in previous_data {
+      current_ver = current_data.get(key)
+      
+      if current_ver == nil {
+        // Deleted
+        record = SnapshotRecord {
+          key: key,
+          payload: prev_record,
+          dbt_valid_from: 0,
+          dbt_valid_to: run_timestamp,
+          is_current: false,
+          change_type: "deleted"
+        }
+        records.push(record)
+      } else if serialize(current_ver) != serialize(prev_record) {
+        // Modified - close old version
+        record = SnapshotRecord {
+          key: key,
+          payload: prev_record,
+          dbt_valid_from: 0,
+          dbt_valid_to: run_timestamp,
+          is_current: false,
+          change_type: "modified"
+        }
+        records.push(record)
+        
+        // Create new version
+        new_record = SnapshotRecord {
+          key: key,
+          payload: current_ver,
+          dbt_valid_from: run_timestamp,
+          dbt_valid_to: 0,
+          is_current: true,
+          change_type: "current"
+        }
+        records.push(new_record)
+      } else {
+        // Unchanged - keep current
+        record = SnapshotRecord {
+          key: key,
+          payload: current_ver,
+          dbt_valid_from: 0,
+          dbt_valid_to: 0,
+          is_current: true,
+          change_type: "current"
+        }
+        records.push(record)
+      }
+    }
+    
+    // 2. Add new records
+    for key, current_record in current_data {
+      if previous_data.get(key) == nil {
+        record = SnapshotRecord {
+          key: key,
+          payload: current_record,
+          dbt_valid_from: run_timestamp,
+          dbt_valid_to: 0,
+          is_current: true,
+          change_type: "new"
+        }
+        records.push(record)
+      }
+    }
+    
+    records
+  }
+}
+
+// ============================================================================
+// SNAPSHOT QUERY ENGINE - TIME-TRAVEL QUERIES
+// ============================================================================
+
+actor SnapshotQueryEngine {
+  store: SnapshotStore = nil
+  
+  handle initialize(store: SnapshotStore) {
+    this.store = store
+  }
+  
+  handle query_at_time(model_name: String, timestamp: Int) -> List<SnapshotRecord> {
+    this.store.get_snapshot_at(model_name, timestamp).await
+  }
+  
+  handle query_current(model_name: String) -> List<SnapshotRecord> {
+    all_snapshots = this.store.get_snapshots(model_name).await
+    current: List<SnapshotRecord> = []
+    
+    for snapshot in all_snapshots {
+      if snapshot.is_current {
+        current.push(snapshot)
+      }
+    }
+    
+    current
+  }
+  
+  handle query_history(model_name: String, key: String) -> List<SnapshotRecord> {
+    all_snapshots = this.store.get_snapshots(model_name).await
+    history: List<SnapshotRecord> = []
+    
+    for snapshot in all_snapshots {
+      if snapshot.key == key {
+        history.push(snapshot)
+      }
+    }
+    
+    history
+  }
+  
+  handle get_all_diffs(model_name: String) -> List<SnapshotDiff> {
+    this.store.get_diffs(model_name).await
+  }
+  
+  handle count_at_time(model_name: String, timestamp: Int) -> String {
+    records = this.query_at_time(model_name, timestamp).await
+    "count=" + records.len().to_string() + " at_timestamp=" + timestamp.to_string()
+  }
+}
+
+// ============================================================================
+// SNAPSHOT REPORTER - ANALYZE CHANGES
+// ============================================================================
+
+actor SnapshotReporter {
+  query_engine: SnapshotQueryEngine = nil
+  
+  handle initialize(query_engine: SnapshotQueryEngine) {
+    this.query_engine = query_engine
+  }
+  
+  handle report_changes(model_name: String) -> String {
+    diffs = this.query_engine.get_all_diffs(model_name).await
+    
+    new_count = 0
+    modified_count = 0
+    deleted_count = 0
+    
+    for diff in diffs {
+      if diff.changed_fields[0] == "*new*" {
+        new_count = new_count + 1
+      } else if diff.changed_fields[0] == "*deleted*" {
+        deleted_count = deleted_count + 1
+      } else {
+        modified_count = modified_count + 1
+      }
+    }
+    
+    "changes in " + model_name + ": new=" + new_count.to_string() + 
+    " modified=" + modified_count.to_string() + 
+    " deleted=" + deleted_count.to_string()
+  }
+  
+  handle report_history(model_name: String, key: String) -> String {
+    history = this.query_engine.query_history(model_name, key).await
+    "history_count=" + history.len().to_string() + " key=" + key
+  }
+}
+
+// ============================================================================
+// MAIN: DEMONSTRATION - CUSTOMER SNAPSHOT OVER TIME
+// ============================================================================
+
+kfn main() {
+  print("🚀 Killer DBT Snapshot System")
+  print("")
+  
+  // Initialize
+  detector = SnapshotDetector::spawn()
+  builder = SnapshotBuilder::spawn()
+  store = SnapshotStore::spawn()
+  query = SnapshotQueryEngine::spawn()
+  reporter = SnapshotReporter::spawn()
+  
+  builder.initialize(detector).await
+  query.initialize(store).await
+  reporter.initialize(query).await
+  
+  print("📸 Customer Snapshot Example - Tracking changes over time")
+  print("")
+  
+  // ========================================================================
+  // DAY 1 - Initial customers
+  // ========================================================================
+  
+  print("DAY 1 - Initial load (2024-01-01)")
+  
+  day1_customers: Map<String, Map<String, String>> = {}
+  day1_customers["cust_1"] = {
+    "name": "Alice",
+    "email": "alice@example.com",
+    "tier": "gold",
+    "signup_date": "2024-01-01"
+  }
+  day1_customers["cust_2"] = {
+    "name": "Bob",
+    "email": "bob@example.com",
+    "tier": "silver",
+    "signup_date": "2024-01-01"
+  }
+  
+  records_day1 = builder.build_snapshot(
+    "customers",
+    day1_customers,
+    {},
+    "customer_id",
+    20240101
+  ).await
+  
+  store.store_snapshot("customers", records_day1).await
+  store.record_run(20240101).await
+  
+  print("✓ Loaded " + records_day1.len().to_string() + " records")
+  
+  current_day1 = query.query_current("customers").await
+  print("  Current state: " + current_day1.len().to_string() + " customers")
+  print("")
+  
+  // ========================================================================
+  // DAY 2 - Changes arrive
+  // ========================================================================
+  
+  print("DAY 2 - Changes (2024-01-15)")
+  
+  day2_customers: Map<String, Map<String, String>> = {}
+  day2_customers["cust_1"] = {
+    "name": "Alice",
+    "email": "alice.new@example.com",  // EMAIL CHANGED
+    "tier": "platinum",                 // TIER UPGRADED
+    "signup_date": "2024-01-01"
+  }
+  day2_customers["cust_2"] = {
+    "name": "Bob",
+    "email": "bob@example.com",
+    "tier": "silver",
+    "signup_date": "2024-01-01"
+  }
+  day2_customers["cust_3"] = {
+    "name": "Charlie",                  // NEW CUSTOMER
+    "email": "charlie@example.com",
+    "tier": "bronze",
+    "signup_date": "2024-01-15"
+  }
+  
+  records_day2 = builder.build_snapshot(
+    "customers",
+    day2_customers,
+    day1_customers,  // Previous state
+    "customer_id",
+    20240115
+  ).await
+  
+  store.store_snapshot("customers", records_day2).await
+  store.record_run(20240115).await
+  
+  changes = reporter.report_changes("customers").await
+  print("✓ " + changes)
+  print("")
+  
+  // ========================================================================
+  // DAY 15 - More changes
+  // ========================================================================
+  
+  print("DAY 15 - More changes (2024-02-01)")
+  
+  day15_customers: Map<String, Map<String, String>> = {}
+  day15_customers["cust_1"] = {
+    "name": "Alice",
+    "email": "alice.new@example.com",
+    "tier": "platinum",
+    "signup_date": "2024-01-01"
+  }
+  // cust_2 deleted
+  day15_customers["cust_3"] = {
+    "name": "Charlie",
+    "email": "charlie@example.com",
+    "tier": "bronze",
+    "signup_date": "2024-01-15"
+  }
+  day15_customers["cust_4"] = {
+    "name": "Diana",                   // NEW
+    "email": "diana@example.com",
+    "tier": "gold",
+    "signup_date": "2024-02-01"
+  }
+  
+  records_day15 = builder.build_snapshot(
+    "customers",
+    day15_customers,
+    day2_customers,
+    "customer_id",
+    20240201
+  ).await
+  
+  store.store_snapshot("customers", records_day15).await
+  store.record_run(20240201).await
+  
+  changes = reporter.report_changes("customers").await
+  print("✓ " + changes)
+  print("")
+  
+  // ========================================================================
+  // TIME TRAVEL QUERIES
+  // ========================================================================
+  
+  print("⏰ TIME TRAVEL QUERIES")
+  print("")
+  
+  print("Q: What was customer state on DAY 1?")
+  day1_snapshot = query.query_at_time("customers", 20240101).await
+  print("  Answer: " + day1_snapshot.len().to_string() + " records")
+  for rec in day1_snapshot {
+    print("    " + rec.key + " (tier=" + rec.payload.get("tier") + ")")
+  }
+  print("")
+  
+  print("Q: What is current state (DAY 15)?")
+  current = query.query_current("customers").await
+  print("  Answer: " + current.len().to_string() + " records")
+  for rec in current {
+    print("    " + rec.key + " (tier=" + rec.payload.get("tier") + ") - " + rec.change_type)
+  }
+  print("")
+  
+  print("Q: History of cust_1?")
+  hist = query.query_history("customers", "cust_1").await
+  print("  Answer: " + hist.len().to_string() + " versions")
+  for rec in hist {
+    print("    valid=" + rec.dbt_valid_from.to_string() + 
+          " tier=" + rec.payload.get("tier") + " (" + rec.change_type + ")")
+  }
+  print("")
+  
+  print("✨ Snapshot system complete!")
+  print("")
+  print("💡 Generalization: This pattern works for:")
+  print("   - Multi-agent belief tracking (what did agent believe at time T?)")
+  print("   - Proof state history (what lemmas were valid in proof version 5?)")
+  print("   - Audit trails (who changed what, when?)")
+  print("   - Any time-series data warehouse")
+}
+
+kfn serialize(obj: Map<String, String>) -> String {
+  str = ""
+  for k, v in obj {
+    str = str + k + "=" + v + "|"
+  }
+  str
+}

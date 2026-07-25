@@ -1,0 +1,844 @@
+#!/usr/bin/env killer
+# KILLER SELF-HOSTED INTERPRETER - PHASE 1
+# Killer Programming Language Interpreter (Executor) written in Killer
+# Purpose: Execute Abstract Syntax Tree (AST)
+
+# ============================================================================
+# ENVIRONMENT / SCOPE MANAGEMENT
+# ============================================================================
+
+class Environment {
+    constructor(parent = null) {
+        this.parent = parent;
+        this.vars = {};
+    }
+    
+    define(name, value) {
+        this.vars[name] = value;
+    }
+    
+    get(name) {
+        if (this.vars[name] !== undefined) {
+            return this.vars[name];
+        }
+        if (this.parent) {
+            return this.parent.get(name);
+        }
+        throw `Undefined variable: ${name}`;
+    }
+    
+    set(name, value) {
+        if (this.vars[name] !== undefined) {
+            this.vars[name] = value;
+            return;
+        }
+        if (this.parent) {
+            this.parent.set(name, value);
+            return;
+        }
+        this.vars[name] = value;
+    }
+    
+    has(name) {
+        if (this.vars[name] !== undefined) return true;
+        if (this.parent) return this.parent.has(name);
+        return false;
+    }
+}
+
+# ============================================================================
+# CONTROL FLOW EXCEPTIONS
+# ============================================================================
+
+class ReturnValue {
+    constructor(value) {
+        this.value = value;
+    }
+}
+
+class BreakException {
+    constructor() {}
+}
+
+class ContinueException {
+    constructor() {}
+}
+
+# ============================================================================
+# FUNCTION WRAPPER
+# ============================================================================
+
+class KillerFunction {
+    constructor(params, body, closure) {
+        this.params = params;
+        this.body = body;
+        this.closure = closure;  # Lexical scope
+    }
+}
+
+class KillerClass {
+    constructor(name, constructor, methods, superClass = null) {
+        this.name = name;
+        this.constructor = constructor;
+        this.methods = methods;
+        this.superClass = superClass;
+        this.staticMethods = {};
+    }
+}
+
+class KillerObject {
+    constructor(klass = null) {
+        this.klass = klass;
+        this.properties = {};
+    }
+}
+
+# ============================================================================
+# INTERPRETER CLASS
+# ============================================================================
+
+class Interpreter {
+    constructor() {
+        this.globalEnv = new Environment();
+        this.currentEnv = this.globalEnv;
+        
+        # Initialize built-in objects
+        this.initBuiltins();
+    }
+    
+    # Initialize built-in functions and objects
+    initBuiltins() {
+        # Math object
+        math = {
+            PI: 3.14159265359,
+            E: 2.71828182846,
+            abs: x => {
+                if (x < 0) return 0 - x;
+                return x;
+            },
+            sqrt: x => {
+                # Simple Newton's method
+                if (x < 0) return 0; # NaN
+                if (x === 0) return 0;
+                guess = x / 2;
+                i = 0;
+                while (i < 20) {
+                    guess = (guess + x / guess) / 2;
+                    i = i + 1;
+                }
+                return guess;
+            },
+            pow: (x, y) => {
+                result = 1;
+                i = 0;
+                while (i < y) {
+                    result = result * x;
+                    i = i + 1;
+                }
+                return result;
+            },
+            max: (...args) => {
+                if (args.length === 0) return 0;
+                max = args[0];
+                i = 1;
+                while (i < args.length) {
+                    if (args[i] > max) max = args[i];
+                    i = i + 1;
+                }
+                return max;
+            },
+            min: (...args) => {
+                if (args.length === 0) return 0;
+                min = args[0];
+                i = 1;
+                while (i < args.length) {
+                    if (args[i] < min) min = args[i];
+                    i = i + 1;
+                }
+                return min;
+            },
+            round: x => {
+                floor = (x - (x % 1));
+                if ((x % 1) >= 0.5) return floor + 1;
+                return floor;
+            },
+            floor: x => x - (x % 1),
+            ceil: x => {
+                floor = x - (x % 1);
+                if (x === floor) return x;
+                return floor + 1;
+            },
+            random: () => {
+                # Simplified pseudo-random
+                return 0.5;  # Placeholder
+            }
+        };
+        
+        this.globalEnv.define("Math", math);
+        
+        # Global functions
+        this.globalEnv.define("print", print_func = (...args) => {
+            output = "";
+            i = 0;
+            while (i < args.length) {
+                if (i > 0) output = output + ", ";
+                output = output + this.toString(args[i]);
+                i = i + 1;
+            }
+            print(output);
+            return null;
+        });
+        
+        this.globalEnv.define("Array.isArray", (arr) => {
+            return arr instanceof Array;
+        });
+        
+        this.globalEnv.define("parseInt", (str) => {
+            # Simple implementation
+            result = 0;
+            i = 0;
+            while (i < str.length) {
+                result = result * 10;
+                digit = str.charAt(i);
+                if (digit === "0") result = result + 0;
+                else if (digit === "1") result = result + 1;
+                else if (digit === "2") result = result + 2;
+                else if (digit === "3") result = result + 3;
+                else if (digit === "4") result = result + 4;
+                else if (digit === "5") result = result + 5;
+                else if (digit === "6") result = result + 6;
+                else if (digit === "7") result = result + 7;
+                else if (digit === "8") result = result + 8;
+                else if (digit === "9") result = result + 9;
+                i = i + 1;
+            }
+            return result;
+        });
+        
+        this.globalEnv.define("parseFloat", (str) => {
+            parts = str.split(".");
+            whole = parseInt(parts[0]);
+            if (parts.length === 1) return whole;
+            frac = parseInt(parts[1]);
+            divisor = 1;
+            i = 0;
+            while (i < parts[1].length) {
+                divisor = divisor * 10;
+                i = i + 1;
+            }
+            return whole + (frac / divisor);
+        });
+        
+        this.globalEnv.define("isNaN", (val) => {
+            # Simplified
+            if (typeof val === "number" && val === val) return false;
+            return true;
+        });
+        
+        this.globalEnv.define("isFinite", (val) => {
+            if (typeof val === "number") return true;
+            return false;
+        });
+    }
+    
+    # Convert value to string
+    toString(value) {
+        if (value === null) return "null";
+        if (value === undefined) return "undefined";
+        if (typeof value === "boolean") {
+            if (value) return "true";
+            return "false";
+        }
+        if (typeof value === "string") return value;
+        if (typeof value === "number") return value + "";
+        if (value instanceof Array) {
+            result = "[";
+            i = 0;
+            while (i < value.length) {
+                if (i > 0) result = result + ", ";
+                result = result + this.toString(value[i]);
+                i = i + 1;
+            }
+            result = result + "]";
+            return result;
+        }
+        if (typeof value === "object") {
+            return "[object Object]";
+        }
+        return value + "";
+    }
+    
+    # Main interpret function
+    interpret(ast) {
+        try {
+            return this.evaluateProgram(ast);
+        } catch e {
+            print(`Runtime Error: ${e}`);
+            return null;
+        }
+    }
+    
+    # Evaluate Program node
+    evaluateProgram(node) {
+        result = null;
+        i = 0;
+        while (i < node.body.length) {
+            result = this.evaluate(node.body[i]);
+            i = i + 1;
+        }
+        return result;
+    }
+    
+    # Main evaluate dispatch
+    evaluate(node) {
+        if (!node) return null;
+        
+        # Statements
+        if (node.type === "ExpressionStatement") {
+            return this.evaluate(node.expression);
+        }
+        
+        if (node.type === "BlockStatement") {
+            return this.evaluateBlock(node);
+        }
+        
+        if (node.type === "VariableDeclaration") {
+            name = node.id.name;
+            value = null;
+            if (node.init) {
+                value = this.evaluate(node.init);
+            }
+            this.currentEnv.define(name, value);
+            return null;
+        }
+        
+        if (node.type === "FunctionDeclaration") {
+            name = node.id.name;
+            func = new KillerFunction(node.params, node.body, this.currentEnv);
+            this.currentEnv.define(name, func);
+            return null;
+        }
+        
+        if (node.type === "ReturnStatement") {
+            value = null;
+            if (node.argument) {
+                value = this.evaluate(node.argument);
+            }
+            throw new ReturnValue(value);
+        }
+        
+        if (node.type === "IfStatement") {
+            test = this.evaluate(node.test);
+            if (this.isTruthy(test)) {
+                return this.evaluate(node.consequent);
+            } else if (node.alternate) {
+                return this.evaluate(node.alternate);
+            }
+            return null;
+        }
+        
+        if (node.type === "WhileStatement") {
+            while (this.isTruthy(this.evaluate(node.test))) {
+                try {
+                    this.evaluate(node.body);
+                } catch e {
+                    if (e instanceof BreakException) break;
+                    if (e instanceof ContinueException) continue;
+                    throw e;
+                }
+            }
+            return null;
+        }
+        
+        if (node.type === "DoWhileStatement") {
+            loop_first = true;
+            while (loop_first || this.isTruthy(this.evaluate(node.test))) {
+                loop_first = false;
+                try {
+                    this.evaluate(node.body);
+                } catch e {
+                    if (e instanceof BreakException) break;
+                    if (e instanceof ContinueException) continue;
+                    throw e;
+                }
+            }
+            return null;
+        }
+        
+        if (node.type === "ForStatement") {
+            newEnv = new Environment(this.currentEnv);
+            prevEnv = this.currentEnv;
+            this.currentEnv = newEnv;
+            
+            if (node.init) this.evaluate(node.init);
+            
+            while (!node.test || this.isTruthy(this.evaluate(node.test))) {
+                try {
+                    this.evaluate(node.body);
+                } catch e {
+                    if (e instanceof BreakException) break;
+                    if (e instanceof ContinueException) {
+                        if (node.update) this.evaluate(node.update);
+                        continue;
+                    }
+                    this.currentEnv = prevEnv;
+                    throw e;
+                }
+                if (node.update) this.evaluate(node.update);
+            }
+            
+            this.currentEnv = prevEnv;
+            return null;
+        }
+        
+        if (node.type === "ForInStatement") {
+            name = node.left.name;
+            iterable = this.evaluate(node.right);
+            
+            if (iterable instanceof Array) {
+                i = 0;
+                while (i < iterable.length) {
+                    this.currentEnv.set(name, iterable[i]);
+                    try {
+                        this.evaluate(node.body);
+                    } catch e {
+                        if (e instanceof BreakException) break;
+                        if (e instanceof ContinueException) {
+                            i = i + 1;
+                            continue;
+                        }
+                        throw e;
+                    }
+                    i = i + 1;
+                }
+            }
+            return null;
+        }
+        
+        if (node.type === "BreakStatement") {
+            throw new BreakException();
+        }
+        
+        if (node.type === "ContinueStatement") {
+            throw new ContinueException();
+        }
+        
+        if (node.type === "SwitchStatement") {
+            discriminant = this.evaluate(node.discriminant);
+            matched = false;
+            
+            i = 0;
+            while (i < node.cases.length) {
+                c = node.cases[i];
+                
+                if (!matched && !c.test) {
+                    # Default case
+                    matched = true;
+                } else if (!matched && c.test) {
+                    testVal = this.evaluate(c.test);
+                    if (this.strictEqual(discriminant, testVal)) {
+                        matched = true;
+                    }
+                }
+                
+                if (matched) {
+                    j = 0;
+                    while (j < c.consequent.body.length) {
+                        try {
+                            this.evaluate(c.consequent.body[j]);
+                        } catch e {
+                            if (e instanceof BreakException) return null;
+                            throw e;
+                        }
+                        j = j + 1;
+                    }
+                }
+                
+                i = i + 1;
+            }
+            return null;
+        }
+        
+        if (node.type === "TryStatement") {
+            try {
+                this.evaluate(node.block);
+            } catch e {
+                if (node.handler) {
+                    newEnv = new Environment(this.currentEnv);
+                    newEnv.define(node.handler.param.name, e);
+                    prevEnv = this.currentEnv;
+                    this.currentEnv = newEnv;
+                    this.evaluate(node.handler.body);
+                    this.currentEnv = prevEnv;
+                }
+            }
+            if (node.finalizer) {
+                this.evaluate(node.finalizer);
+            }
+            return null;
+        }
+        
+        if (node.type === "ClassDeclaration") {
+            name = node.id.name;
+            superClass = null;
+            if (node.superClass) {
+                superClass = this.evaluate(node.superClass);
+            }
+            
+            # Extract constructor and methods
+            constructor = null;
+            methods = {};
+            staticMethods = {};
+            
+            i = 0;
+            while (i < node.body.body.length) {
+                method = node.body.body[i];
+                methodName = method.key.name;
+                methodFunc = this.evaluate(method.value);
+                
+                if (method.kind === "constructor") {
+                    constructor = methodFunc;
+                } else if (method.static) {
+                    staticMethods[methodName] = methodFunc;
+                } else {
+                    methods[methodName] = methodFunc;
+                }
+                i = i + 1;
+            }
+            
+            klass = new KillerClass(name, constructor, methods, superClass);
+            klass.staticMethods = staticMethods;
+            this.currentEnv.define(name, klass);
+            return null;
+        }
+        
+        # Expressions
+        if (node.type === "NumberLiteral") {
+            return node.value;
+        }
+        
+        if (node.type === "StringLiteral") {
+            return node.value;
+        }
+        
+        if (node.type === "BooleanLiteral") {
+            return node.value;
+        }
+        
+        if (node.type === "Identifier") {
+            return this.currentEnv.get(node.name);
+        }
+        
+        if (node.type === "ArrayLiteral") {
+            arr = [];
+            i = 0;
+            while (i < node.elements.length) {
+                arr.push(this.evaluate(node.elements[i]));
+                i = i + 1;
+            }
+            return arr;
+        }
+        
+        if (node.type === "ObjectLiteral") {
+            obj = {};
+            i = 0;
+            while (i < node.properties.length) {
+                prop = node.properties[i];
+                obj[prop.key] = this.evaluate(prop.value);
+                i = i + 1;
+            }
+            return obj;
+        }
+        
+        if (node.type === "BinaryExpression") {
+            left = this.evaluate(node.left);
+            right = this.evaluate(node.right);
+            
+            if (node.operator === "+") return left + right;
+            if (node.operator === "-") return left - right;
+            if (node.operator === "*") return left * right;
+            if (node.operator === "/") {
+                if (right === 0) throw "Division by zero";
+                return left / right;
+            }
+            if (node.operator === "%") return left % right;
+            if (node.operator === "**") {
+                result = 1;
+                i = 0;
+                while (i < right) {
+                    result = result * left;
+                    i = i + 1;
+                }
+                return result;
+            }
+            if (node.operator === "<") return left < right;
+            if (node.operator === ">") return left > right;
+            if (node.operator === "<=") return left <= right;
+            if (node.operator === ">=") return left >= right;
+            if (node.operator === "==") return left == right;
+            if (node.operator === "!=") return left != right;
+            if (node.operator === "&&") {
+                if (!this.isTruthy(left)) return left;
+                return right;
+            }
+            if (node.operator === "||") {
+                if (this.isTruthy(left)) return left;
+                return right;
+            }
+            
+            throw `Unknown binary operator: ${node.operator}`;
+        }
+        
+        if (node.type === "UnaryExpression") {
+            operand = this.evaluate(node.operand);
+            
+            if (node.operator === "-") return 0 - operand;
+            if (node.operator === "+") return operand;
+            if (node.operator === "!") return !this.isTruthy(operand);
+            if (node.operator === "typeof") {
+                if (operand === null) return "object";
+                if (operand instanceof Array) return "array";
+                return typeof operand;
+            }
+            if (node.operator === "++") {
+                if (node.prefix) {
+                    # Prefix ++
+                    newVal = operand + 1;
+                    this.currentEnv.set(node.operand.name, newVal);
+                    return newVal;
+                } else {
+                    # Postfix ++
+                    newVal = operand + 1;
+                    this.currentEnv.set(node.operand.name, newVal);
+                    return operand;
+                }
+            }
+            if (node.operator === "--") {
+                if (node.prefix) {
+                    newVal = operand - 1;
+                    this.currentEnv.set(node.operand.name, newVal);
+                    return newVal;
+                } else {
+                    newVal = operand - 1;
+                    this.currentEnv.set(node.operand.name, newVal);
+                    return operand;
+                }
+            }
+            
+            throw `Unknown unary operator: ${node.operator}`;
+        }
+        
+        if (node.type === "CallExpression") {
+            callee = this.evaluate(node.callee);
+            args = [];
+            i = 0;
+            while (i < node.arguments.length) {
+                args.push(this.evaluate(node.arguments[i]));
+                i = i + 1;
+            }
+            
+            # Call native function
+            if (typeof callee === "function") {
+                return callee(...args);
+            }
+            
+            # Call Killer function
+            if (callee instanceof KillerFunction) {
+                newEnv = new Environment(callee.closure);
+                
+                # Bind parameters
+                i = 0;
+                while (i < callee.params.length && i < args.length) {
+                    newEnv.define(callee.params[i].name, args[i]);
+                    i = i + 1;
+                }
+                
+                # Call with new environment
+                prevEnv = this.currentEnv;
+                this.currentEnv = newEnv;
+                
+                try {
+                    this.evaluate(callee.body);
+                    result = null;
+                } catch e {
+                    if (e instanceof ReturnValue) {
+                        result = e.value;
+                    } else {
+                        this.currentEnv = prevEnv;
+                        throw e;
+                    }
+                }
+                
+                this.currentEnv = prevEnv;
+                return result;
+            }
+            
+            throw `Not a function: ${typeof callee}`;
+        }
+        
+        if (node.type === "MemberExpression") {
+            object = this.evaluate(node.object);
+            
+            if (node.computed) {
+                # obj[prop]
+                property = this.evaluate(node.property);
+                return object[property];
+            } else {
+                # obj.prop
+                property = node.property.name;
+                return object[property];
+            }
+        }
+        
+        if (node.type === "FunctionExpression" || node.type === "ArrowFunctionExpression") {
+            return new KillerFunction(node.params, node.body, this.currentEnv);
+        }
+        
+        if (node.type === "ConditionalExpression") {
+            test = this.evaluate(node.test);
+            if (this.isTruthy(test)) {
+                return this.evaluate(node.consequent);
+            }
+            return this.evaluate(node.alternate);
+        }
+        
+        if (node.type === "AssignmentExpression") {
+            value = this.evaluate(node.right);
+            
+            if (node.left.type === "Identifier") {
+                name = node.left.name;
+                
+                if (node.operator === "=") {
+                    this.currentEnv.set(name, value);
+                } else if (node.operator === "+=") {
+                    current = this.currentEnv.get(name);
+                    this.currentEnv.set(name, current + value);
+                } else if (node.operator === "-=") {
+                    current = this.currentEnv.get(name);
+                    this.currentEnv.set(name, current - value);
+                } else if (node.operator === "*=") {
+                    current = this.currentEnv.get(name);
+                    this.currentEnv.set(name, current * value);
+                } else if (node.operator === "/=") {
+                    current = this.currentEnv.get(name);
+                    this.currentEnv.set(name, current / value);
+                } else if (node.operator === "%=") {
+                    current = this.currentEnv.get(name);
+                    this.currentEnv.set(name, current % value);
+                }
+                
+                return value;
+            }
+            
+            throw "Invalid assignment target";
+        }
+        
+        if (node.type === "NewExpression") {
+            klass = this.evaluate(node.callee);
+            args = [];
+            i = 0;
+            while (i < node.arguments.length) {
+                args.push(this.evaluate(node.arguments[i]));
+                i = i + 1;
+            }
+            
+            # Create new instance
+            instance = new KillerObject(klass);
+            
+            # Call constructor if exists
+            if (klass.constructor) {
+                newEnv = new Environment(klass.constructor.closure);
+                newEnv.define("this", instance);
+                
+                # Bind parameters
+                i = 0;
+                while (i < klass.constructor.params.length && i < args.length) {
+                    newEnv.define(klass.constructor.params[i].name, args[i]);
+                    i = i + 1;
+                }
+                
+                prevEnv = this.currentEnv;
+                this.currentEnv = newEnv;
+                
+                try {
+                    this.evaluate(klass.constructor.body);
+                } catch e {
+                    if (!(e instanceof ReturnValue)) {
+                        this.currentEnv = prevEnv;
+                        throw e;
+                    }
+                }
+                
+                this.currentEnv = prevEnv;
+            }
+            
+            return instance;
+        }
+        
+        if (node.type === "ThisExpression") {
+            return this.currentEnv.get("this");
+        }
+        
+        if (node.type === "TemplateExpression") {
+            result = "";
+            i = 0;
+            while (i < node.quasis.length) {
+                result = result + node.quasis[i];
+                if (i < node.expressions.length) {
+                    result = result + this.toString(this.evaluate(node.expressions[i]));
+                }
+                i = i + 1;
+            }
+            return result;
+        }
+        
+        throw `Unknown node type: ${node.type}`;
+    }
+    
+    # Evaluate block with new environment
+    evaluateBlock(node) {
+        newEnv = new Environment(this.currentEnv);
+        prevEnv = this.currentEnv;
+        this.currentEnv = newEnv;
+        
+        result = null;
+        i = 0;
+        while (i < node.body.length) {
+            result = this.evaluate(node.body[i]);
+            i = i + 1;
+        }
+        
+        this.currentEnv = prevEnv;
+        return result;
+    }
+    
+    # Check if value is truthy
+    isTruthy(value) {
+        if (value === false) return false;
+        if (value === null) return false;
+        if (value === 0) return false;
+        if (value === "") return false;
+        return true;
+    }
+    
+    # Strict equality
+    strictEqual(a, b) {
+        if (typeof a !== typeof b) return false;
+        return a === b;
+    }
+}
+
+# ============================================================================
+# MAIN EXPORT
+# ============================================================================
+
+exports = {
+    Interpreter: Interpreter,
+    Environment: Environment,
+    KillerFunction: KillerFunction,
+    KillerClass: KillerClass
+};
+
+print("Killer Self-Hosted Interpreter loaded successfully");
+
+

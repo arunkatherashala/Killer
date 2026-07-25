@@ -1,0 +1,22 @@
+# Optional: run Criterion benches on demand (slow; not on every push).
+name: killer-bench
+
+on:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  criterion:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: SOURCE/src/v2-rust/killer
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: VM + compile benchmarks (stdout timings)
+        run: cargo bench --bench vm_runtime
+      - name: AI-shaped micro-benchmarks
+        run: cargo bench --bench ai_benchmark

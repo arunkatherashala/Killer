@@ -1,0 +1,109 @@
+# abstract_interface_test.killer
+# Test program for abstract classes and interfaces
+
+print("====================================");
+print("Abstract Classes & Interfaces Test");
+print("====================================");
+print("");
+
+# Test 1: Try to instantiate abstract class (should fail)
+print("Test 1 - Abstract Class Instantiation");
+print("-------------------------------------");
+
+abstract class Vehicle {
+    abstract start();
+    abstract stop();
+    
+    honk() {
+        print("Honk!");
+    }
+}
+
+print("Abstract class Vehicle defined");
+print("(Attempting to instantiate will fail)");
+print("");
+
+# Test 2: Interface definition
+print("Test 2 - Interface Definition");
+print("---------------------------");
+
+interface Drawable {
+    draw();
+    erase();
+}
+
+print("Interface Drawable defined");
+print("");
+
+# Test 3: Concrete classes extending abstract class
+print("Test 3 - Concrete Classes");
+print("-----------------------");
+
+class Car extends Vehicle {
+    start() {
+        print("Car engine started");
+    }
+    
+    stop() {
+        print("Car engine stopped");
+    }
+}
+
+class Motorcycle extends Vehicle {
+    init(type) {
+        this.type = type;
+    }
+    
+    start() {
+        print(this.type + " started");
+    }
+    
+    stop() {
+        print(this.type + " stopped");
+    }
+}
+
+print("Concrete classes Car and Motorcycle created");
+print("");
+
+# Test 4: Instantiate concrete classes
+print("Test 4 - Using Concrete Classes");
+print("------------------------------");
+
+car = new Car();
+car.start();
+car.honk();
+car.stop();
+
+print("");
+
+bike = new Motorcycle("Harley");
+bike.start();
+bike.honk();
+bike.stop();
+
+print("");
+
+# Test 5: Using module with abstract classes
+print("Test 5 - Module with Shapes");
+print("---------------------------");
+
+import { Circle, Rectangle, printShapeInfo } from "./legacy-modules/shapes";
+
+circle = new Circle(5);
+print("Circle with radius 5:");
+printShapeInfo(circle);
+
+print("");
+
+rectangle = new Rectangle(4, 6);
+print("Rectangle with width 4, height 6:");
+printShapeInfo(rectangle);
+
+print("");
+
+print("====================================");
+print("All tests completed!");
+print("====================================");
+
+

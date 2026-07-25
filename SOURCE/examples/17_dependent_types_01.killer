@@ -1,0 +1,53 @@
+// Week 2: First Dependent Types Program in Killer
+// Demonstrates Vector[n] syntax and type-safe array operations
+
+// fn process[n: nat](arr: Vector[n]) -> i32 {
+//     // This function operates on vectors of any size
+//     // Type system proves bounds at compile time
+//     return arr[0];
+// }
+
+// For now, use comments to show desired syntax
+// Once parser integration is complete, this should compile
+
+kfn sum_array(arr) {
+    // Traditional function - no dependent types
+    // Array bounds are checked at runtime
+    let result = 0;
+    for i in range(0, len(arr)) {
+        result = result + arr[i];
+    }
+    return result;
+}
+
+kfn process_vector(arr) {
+    // This demonstrates what we want:
+    // fn process_vector[n: nat](arr: Vector[n]) -> i32 {
+    //     Type system proves: 0 < n, index access is safe
+    //     return arr[0];
+    // }
+    
+    if (len(arr) > 0) {
+        return arr[0];
+    }
+    return 0;
+}
+
+kfn main() {
+    // Create and process a vector
+    let v = [1, 2, 3, 4, 5];
+    let s = sum_array(v);
+    println("Sum:", s);
+    
+    let first = process_vector(v);
+    println("First element:", first);
+    
+    // Future: With dependent types, vector operations
+    // would be statically proven safe
+    println("Vector processing complete");
+}
+
+// Call main
+main();
+
+

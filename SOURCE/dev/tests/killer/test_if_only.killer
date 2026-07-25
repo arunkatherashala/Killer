@@ -1,0 +1,10 @@
+kfn test(): string {
+    if (true) {
+        return "yes";
+    }
+    return "no";
+}
+
+print(test());
+
+

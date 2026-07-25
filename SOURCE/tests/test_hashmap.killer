@@ -1,0 +1,20 @@
+println("===== HASHMAP TEST =====")
+
+map = {}
+map["Alice"] = 95
+map["Bob"] = 87
+map["Charlie"] = 92
+
+println("HashMap size: " + len(map).to_string())
+println("Alice score: " + map["Alice"].to_string())
+println("Bob score: " + map["Bob"].to_string())
+println("Charlie score: " + map["Charlie"].to_string())
+
+found_alice = map["Alice"] != null
+println("Alice found: " + (if found_alice { "YES" } else { "NO" }))
+
+passed = len(map) == 3
+println("")
+println("Result: " + (if passed { "PASS ✓" } else { "FAIL ✗" }))
+
+

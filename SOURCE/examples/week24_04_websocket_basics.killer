@@ -1,0 +1,50 @@
+// WebSocket Basics - Real-time Communication
+// Week 24B: WebSocket Protocol Support
+// Demonstrates: connection, messaging, disconnection
+
+// Create a new WebSocket connection
+let ws = websocket_new("ws://localhost:8080/chat")
+
+// Print websocket details
+println("WebSocket created:")
+println("ID: " + ws["id"])
+println("URL: " + ws["url"])
+println("State: " + ws["state"])
+
+// Connect to the WebSocket server
+let connected_ws = ws_connect(ws)
+println("\n[CLIENT] Connected to server")
+println("New state: " + connected_ws["state"])
+
+// Send a message
+let send_result = ws_send(connected_ws, "Hello WebSocket Server!")
+println("\n[CLIENT] Message sent:")
+println("Status: " + send_result["status"])
+println("Message: " + send_result["message"])
+println("Time: " + send_result["timestamp"])
+
+// Simulate server sending a message
+let recv_result = ws_receive(connected_ws)
+println("\n[SERVER RESPONSE] Message received:")
+println("Type: " + recv_result["type"])
+println("Data: " + recv_result["data"])
+
+// Send another message
+let msg2 = ws_send(connected_ws, "How are you?")
+println("\n[CLIENT] Second message:")
+println("Status: " + msg2["status"])
+
+// Send formatted message
+let formatted_msg = "User: Alice | Message: Checking connection status"
+let send2 = ws_send(connected_ws, formatted_msg)
+println("\n[CLIENT] Formatted message:")
+println(send2["message"])
+
+// Disconnect from WebSocket
+let disconnected_ws = ws_disconnect(connected_ws)
+println("\n[CLIENT] Disconnected from server")
+println("Final state: " + disconnected_ws["state"])
+
+println("\n✓ WebSocket basics demo complete")
+
+

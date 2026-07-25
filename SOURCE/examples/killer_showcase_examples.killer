@@ -1,0 +1,395 @@
+// ============================================================================
+// KILLER LANGUAGE - BEAUTIFUL EXAMPLES
+// Showcasing dual-syntax, standard library, and language features
+// ============================================================================
+
+// ============================================================================
+// 1. CLASSIC ALGORITHMS - Both Syntax Styles
+// ============================================================================
+
+// FIBONACCI - Indentation Style
+kfn fibonacci_indent(n)
+    if n <= 1
+        n
+    else
+        fibonacci_indent(n - 1) + fibonacci_indent(n - 2)
+
+
+// FIBONACCI - Brace Style
+kfn fibonacci_braces(n) {
+    if (n <= 1) {
+        n
+    } else {
+        fibonacci_braces(n - 1) + fibonacci_braces(n - 2)
+    }
+}
+
+
+// QUICK SORT - Mixed Style (Pythonic simplicity + Go-style clarity)
+kfn quicksort(arr)
+    if len(arr) <= 1
+        arr
+    else {
+        pivot = arr[0]
+        left = []
+        right = []
+        
+        for i in range(1, len(arr)) {
+            if arr[i] < pivot
+                left.push(arr[i])
+            else
+                right.push(arr[i])
+        }
+        
+        quicksort(left).concat([pivot]).concat(quicksort(right))
+    }
+
+
+// ============================================================================
+// 2. DATA PROCESSING - Real-World Examples
+// ============================================================================
+
+// Student Grades Processing
+kfn analyze_grades(students)
+    filtered = []
+    
+    for student in students
+        if student["grade"] > 80
+            filtered.push({
+                "name": student["name"],
+                "score": student["grade"],
+                "status": "pass"
+            })
+    
+    {
+        "passed": len(filtered),
+        "total": len(students),
+        "percentage": (len(filtered) / len(students)) * 100,
+        "top_performers": filtered
+    }
+
+// Usage example
+grades_data = [
+    {"name": "Alice", "grade": 95},
+    {"name": "Bob", "grade": 75},
+    {"name": "Charlie", "grade": 88},
+    {"name": "Diana", "grade": 92}
+]
+
+result = analyze_grades(grades_data)
+print(result["passed"])      // 3
+print(result["percentage"])  // 75.0
+
+
+// ============================================================================
+// 3. STRING PROCESSING - All String Methods
+// ============================================================================
+
+kfn string_processing_demo()
+    text = "  Hello, World!  "
+    
+    // Whitespace handling
+    cleaned = trim(text)
+    print(cleaned)          // "Hello, World!"
+    print(upper(cleaned))   // "HELLO, WORLD!"
+    print(lower(cleaned))   // "hello, world!"
+    
+    // String searching
+    if starts_with(cleaned, "Hello")
+        print("Greeting detected")
+    
+    if contains(cleaned, "World")
+        print("Contains World")
+    
+    // String manipulation
+    modified = replace(cleaned, "World", "Killer")
+    print(modified)         // "Hello, Killer!"
+    
+    // String analysis
+    position = index_of(modified, "Killer")
+    print(position)         // Position of "Killer"
+    
+    // String splitting
+    words = split(modified, " ")
+    print(len(words))       // 2
+    print(words)            // ["Hello,", "Killer!"]
+
+
+// ============================================================================
+// 4. ARRAY OPERATIONS - All Array Methods
+// ============================================================================
+
+kfn array_operations_demo() {
+    numbers = [3, 1, 4, 1, 5, 9, 2, 6]
+    
+    // Array inspection
+    print(len(numbers))              // 8
+    print(index_of(numbers, 5))      // 4
+    print(contains(numbers, 3))      // true
+    
+    // Array transformation
+    reversed = reverse(numbers)
+    print(reversed)                  // [6, 2, 9, 5, 1, 4, 1, 3]
+    
+    // Array slicing
+    subset = slice(numbers, 2, 5)
+    print(subset)                    // [4, 1, 5]
+    
+    // Array combination
+    more_numbers = [7, 8, 9]
+    combined = concat(numbers, more_numbers)
+    print(len(combined))             // 11
+    
+    // Array joining
+    text = join(reversed, ", ")
+    print(text)                      // "6, 2, 9, 5, 1, 4, 1, 3"
+    
+    // Array modification
+    updated = push(numbers, 10)
+    print(len(updated))              // 9
+}
+
+
+// ============================================================================
+// 5. TYPE SYSTEM - Type Checking and Conversion
+// ============================================================================
+
+kfn type_demonstration()
+    values = [42, "hello", [1, 2, 3], {"key": "value"}, true, null]
+    
+    for val in values {
+        t = type(val)
+        print(t)
+    }
+    
+    // Conversions
+    print(str(42))           // "42"
+    print(int("100"))        // 100
+    print(int(3.99))         // 3
+
+
+// ============================================================================
+// 6. CONTROL FLOW - If/While/For with Dual Syntax
+// ============================================================================
+
+kfn control_flow_demo()
+    // Indentation-based if
+    x = 15
+    if x > 10
+        if x < 20
+            print("Between 10 and 20")
+    
+    // Brace-based while
+    count = 0
+    while (count < 5) {
+        print(count)
+        count = count + 1
+    }
+    
+    // Range iteration
+    for i in range(0, 3)
+        print(i)  // 0, 1, 2
+    
+    // Complex for with nested breaks
+    results = []
+    for score in [85, 92, 78, 95, 88] {
+        if score > 90
+            results.push({"excellent": score})
+        else
+            results.push({"good": score})
+    }
+
+
+// ============================================================================
+// 7. FUNCTIONAL STYLE - Arrow Functions and Composition
+// ============================================================================
+
+// Simple arrow functions
+double(x) => x * 2
+square(x) => x * x
+add(a, b) => a + b
+greet(name) => "Hello, " + name
+
+// Usage
+print(double(5))         // 10
+print(square(4))         // 16
+print(add(3, 7))         // 10
+print(greet("Killer"))   // "Hello, Killer"
+
+// Arrow with data structures
+make_person(name, age) => {"name": name, "age": age}
+
+person = make_person("Alice", 30)
+print(person["name"])    // "Alice"
+
+
+// ============================================================================
+// 8. DICTIONARY OPERATIONS - Using Keys and Values
+// ============================================================================
+
+kfn dict_demo() {
+    user = {
+        "id": 1,
+        "name": "Bob",
+        "email": "bob@example.com",
+        "active": true
+    }
+    
+    // Get structure info
+    print(len(user))           // 4
+    field_names = keys(user)
+    field_values = values(user)
+    
+    // Access fields
+    for field_name in field_names
+        print(field_name)
+    
+    // Access values
+    for field_value in field_values
+        print(field_value)
+    
+    // Update dictionary
+    user_updated = user
+    user_updated["active"] = false
+    user_updated["updated"] = true
+    print(len(user_updated))   // 5
+}
+
+
+// ============================================================================
+// 9. RANGE GENERATION - Multiple Variations
+// ============================================================================
+
+kfn range_examples() {
+    // Single argument: range(end) → [0, 1, 2, 3, 4]
+    nums1 = range(5)
+    print(len(nums1))  // 5
+    
+    // Two arguments: range(start, end) → [10, 11, 12, 13, 14]
+    nums2 = range(10, 15)
+    print(len(nums2))  // 5
+    
+    // Three arguments: range(start, end, step)
+    nums3 = range(0, 20, 5)    // [0, 5, 10, 15]
+    print(len(nums3))  // 4
+    
+    // Negative step
+    nums4 = range(5, 0, -1)    // [5, 4, 3, 2, 1]
+    print(len(nums4))  // 5
+}
+
+
+// ============================================================================
+// 10. COMPLETE PROGRAM - Todo List Manager
+// ============================================================================
+
+// Types and helpers for todo tracker
+create_todo(id, title, done) => {
+    "id": id,
+    "title": title,
+    "completed": done,
+    "created": 1234567890
+}
+
+kfn add_todo(todos, title)
+    new_id = len(todos) + 1
+    todos.push(create_todo(new_id, title, false))
+    todos
+
+kfn mark_complete(todos, id) {
+    for todo in todos
+        if todo["id"] == id
+            todo["completed"] = true
+    todos
+}
+
+kfn get_completed_count(todos)
+    count = 0
+    for todo in todos
+        if todo["completed"]
+            count = count + 1
+    count
+
+kfn display_todos(todos) {
+    for todo in todos {
+        status = "[ ]"
+        if todo["completed"]
+            status = "[x]"
+        
+        print(status + " " + str(todo["id"]) + ": " + todo["title"])
+    }
+}
+
+// Usage
+my_todos = []
+my_todos = add_todo(my_todos, "Learn Killer")
+my_todos = add_todo(my_todos, "Build something awesome")
+my_todos = add_todo(my_todos, "Share with world")
+
+display_todos(my_todos)
+
+my_todos = mark_complete(my_todos, 1)
+print("Completed: " + str(get_completed_count(my_todos)))
+
+display_todos(my_todos)
+
+
+// ============================================================================
+// 11. EDGE CASES - Demonstrating Error Handling and Safety
+// ============================================================================
+
+kfn safe_access(arr, index)
+    if index < 0
+        "Error: negative index"
+    else if index >= len(arr)
+        "Error: index out of bounds"
+    else
+        arr[index]
+
+kfn divide_safely(a, b)
+    if b == 0 {
+        "Error: division by zero"
+    } else {
+        a / b
+    }
+
+print(safe_access([1, 2, 3], 5))    // "Error: index out of bounds"
+print(divide_safely(10, 0))          // "Error: division by zero"
+print(divide_safely(10, 2))          // 5
+
+
+// ============================================================================
+// DEMONSTRATION - Run all examples
+// ============================================================================
+
+print("=== FIBONACCI ===")
+print(fibonacci_indent(6))    // 8
+print(fibonacci_braces(6))    // 8
+
+print("=== QUICKSORT ===")
+print(quicksort([3, 1, 4, 1, 5, 9, 2]))  // [1, 1, 2, 3, 4, 5, 9]
+
+print("=== STRING OPERATIONS ===")
+string_processing_demo()
+
+print("=== ARRAY OPERATIONS ===")
+array_operations_demo()
+
+print("=== TYPE SYSTEM ===")
+type_demonstration()
+
+print("=== CONTROL FLOW ===")
+control_flow_demo()
+
+print("=== DICTIONARY OPERATIONS ===")
+dict_demo()
+
+print("=== RANGE EXAMPLES ===")
+range_examples()
+
+print("=== TODO LIST ===")
+print("(See usage above)")
+
+print("=== ALL EXAMPLES COMPLETE ===")
+
+

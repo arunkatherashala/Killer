@@ -1,0 +1,9 @@
+dict = {"name": "Alice", "age": "30", "city": "NYC"}
+
+dict_keys = keys(dict)
+print(dict_keys)
+
+dict_values = values(dict)
+print(dict_values)
+
+

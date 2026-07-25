@@ -1,0 +1,10 @@
+// Simple HashMap Test
+map = {}
+map["a"] = 1
+map["b"] = 2
+map["c"] = 3
+
+println("Map size: " + len(map).to_string())
+println("Test completed")
+
+

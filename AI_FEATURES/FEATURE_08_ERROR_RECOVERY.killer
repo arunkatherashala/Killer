@@ -1,0 +1,328 @@
+// ============================================================================
+// KILLER v2.0 - FEATURE #8: ERROR RECOVERY
+// Retry, circuit breaker, and fallback strategies
+// ============================================================================
+
+// Retry policy
+enum RetryStrategy {
+  Immediate,
+  Linear,
+  ExponentialBackoff
+}
+
+record RetryConfig {
+  max_attempts: Int,
+  strategy: RetryStrategy,
+  base_delay_ms: Int,
+  max_delay_ms: Int
+}
+
+// Circuit breaker states
+enum CircuitState {
+  Closed,
+  Open,
+  HalfOpen
+}
+
+record CircuitBreakerConfig {
+  failure_threshold: Int,
+  success_threshold_half_open: Int,
+  reset_timeout_ms: Int
+}
+
+// ============================================================================
+// RETRY DECORATOR
+// ============================================================================
+
+actor RetryableExecutor {
+  handle call_with_retry<T>(
+    func_name: String,
+    func: fn() -> T,
+    config: RetryConfig
+  ) -> T {
+    attempt = 0
+    last_error = nil
+    
+    loop {
+      attempt = attempt + 1
+      
+      try {
+        result = func()
+        return result
+      } catch error {
+        last_error = error
+        
+        if attempt >= config.max_attempts {
+          // Failed all attempts
+          err_msg = K"Failed after {config.max_attempts} attempts: {error.to_string()}"
+          println(K"❌ {func_name}: {err_msg}")
+          throw error
+        }
+        
+        // Calculate delay
+        delay_ms = match config.strategy {
+          RetryStrategy::Immediate -> 0
+          RetryStrategy::Linear -> config.base_delay_ms * attempt
+          RetryStrategy::ExponentialBackoff -> {
+            exp = config.base_delay_ms * (2 ^ (attempt - 1))
+            if exp > config.max_delay_ms {config.max_delay_ms} else {exp}
+          }
+        }
+        
+        if delay_ms > 0 {
+          // In real implementation: await sleep_ms(delay_ms)
+          println(K"  ⏳ Retry in {delay_ms}ms (attempt {attempt + 1}/{config.max_attempts})")
+        }
+      }
+    }
+  }
+}
+
+// ============================================================================
+// CIRCUIT BREAKER
+// ============================================================================
+
+actor CircuitBreaker {
+  state: CircuitState = CircuitState::Closed
+  failure_count: Int = 0
+  success_count: Int = 0
+  config: CircuitBreakerConfig
+  last_failure_time: Int = 0
+  
+  handle initialize(config: CircuitBreakerConfig) {
+    this.config = config
+  }
+  
+  handle call<T>(
+    service_name: String,
+    func: fn() -> T
+  ) -> T {
+    match this.state {
+      CircuitState::Closed -> {
+        try {
+          result = func()
+          this.failure_count = 0
+          result
+        } catch error {
+          this.failure_count = this.failure_count + 1
+          this.last_failure_time = time_ms() as Int
+          
+          if this.failure_count >= this.config.failure_threshold {
+            this.state = CircuitState::Open
+            println(K"🚨 Circuit breaker OPEN after {this.failure_count} failures: {service_name}")
+          }
+          
+          throw error
+        }
+      }
+      
+      CircuitState::Open -> {
+        elapsed = (time_ms() as Int) - this.last_failure_time
+        
+        if elapsed > this.config.reset_timeout_ms {
+          this.state = CircuitState::HalfOpen
+          this.success_count = 0
+          println(K"📋 Circuit breaker HALF_OPEN, testing recovery: {service_name}")
+        } else {
+          remaining = this.config.reset_timeout_ms - elapsed
+          throw K"Circuit breaker is OPEN ({remaining}ms remaining)"
+        }
+        
+        // Continue to HalfOpen logic below
+        try {
+          result = func()
+          this.success_count = this.success_count + 1
+          
+          if this.success_count >= this.config.success_threshold_half_open {
+            this.state = CircuitState::Closed
+            this.failure_count = 0
+            println(K"✅ Circuit breaker CLOSED: {service_name}")
+          }
+          
+          result
+        } catch error {
+          this.state = CircuitState::Open
+          this.last_failure_time = time_ms() as Int
+          throw error
+        }
+      }
+      
+      CircuitState::HalfOpen -> {
+        try {
+          result = func()
+          this.success_count = this.success_count + 1
+          
+          if this.success_count >= this.config.success_threshold_half_open {
+            this.state = CircuitState::Closed
+            this.failure_count = 0
+            println(K"✅ Circuit breaker CLOSED: {service_name}")
+          }
+          
+          result
+        } catch error {
+          this.state = CircuitState::Open
+          this.last_failure_time = time_ms() as Int
+          println(K"🚨 Circuit breaker reopened: {service_name}")
+          throw error
+        }
+      }
+    }
+  }
+  
+  handle get_state() -> String {
+    match this.state {
+      CircuitState::Closed -> "Closed (operational)"
+      CircuitState::Open -> K"Open (failures: {this.failure_count})"
+      CircuitState::HalfOpen -> K"Half-Open (testing recovery, success: {this.success_count})"
+    }
+  }
+}
+
+// ============================================================================
+// FALLBACK STRATEGY
+// ============================================================================
+
+actor FallbackExecutor {
+  handle call_with_fallback<T>(
+    primary: fn() -> T,
+    fallback: fn() -> T,
+    service_name: String
+  ) -> T {
+    try {
+      result = primary()
+      println(K"✓ Primary call succeeded: {service_name}")
+      result
+    } catch primary_error {
+      println(K"⚠️  Primary failed ({primary_error.to_string()}), using fallback: {service_name}")
+      
+      try {
+        result = fallback()
+        println(K"✓ Fallback succeeded: {service_name}")
+        result
+      } catch fallback_error {
+        println(K"❌ Both primary and fallback failed: {service_name}")
+        throw K"All strategies failed: {fallback_error.to_string()}"
+      }
+    }
+  }
+  
+  handle call_with_multiple_fallbacks<T>(
+    strategies: List<fn() -> T>,
+    service_name: String
+  ) -> T {
+    last_error = nil
+    
+    for i in 0..strategies.len() {
+      strategy = strategies[i]
+      strategy_name = if i == 0 {"primary"} else {K"fallback_{i}"}
+      
+      try {
+        result = strategy()
+        println(K"✓ {strategy_name} succeeded: {service_name}")
+        return result
+      } catch error {
+        last_error = error
+        println(K"  ✗ {strategy_name} failed: {error.to_string()}")
+      }
+    }
+    
+    throw K"All {strategies.len()} strategies failed: {last_error.to_string()}"
+  }
+}
+
+// ============================================================================
+// MAIN EXAMPLE
+// ============================================================================
+
+kfn main() {
+  println("=== KILLER v2.0 Feature #8: Error Recovery ===")
+  
+  // Example 1: Retry decorator
+  println("\n🔄 Retry Decorator:")
+  
+  retryable = RetryableExecutor::spawn()
+  
+  attempt_count = 0
+  kfn flaky_api_call() {
+    attempt_count = attempt_count + 1
+    
+    if attempt_count < 3 {
+      throw K"API timeout (attempt {attempt_count})"
+    }
+    
+    "Success on attempt 3"
+  }
+  
+  config = RetryConfig {
+    max_attempts: 5,
+    strategy: RetryStrategy::ExponentialBackoff,
+    base_delay_ms: 100,
+    max_delay_ms: 5000
+  }
+  
+  result = retryable.call_with_retry("flaky_api_call", kfn { flaky_api_call() }, config).await
+  println(K"Result: {result}")
+  
+  // Example 2: Circuit breaker
+  println("\n🔌 Circuit Breaker:")
+  
+  breaker = CircuitBreaker::spawn()
+  breaker.initialize(CircuitBreakerConfig {
+    failure_threshold: 3,
+    success_threshold_half_open: 2,
+    reset_timeout_ms: 10000
+  }).await
+  
+  // Simulate failures
+  for i in 0..5 {
+    state = breaker.get_state().await
+    println(K"State: {state}")
+    
+    try {
+      if i < 3 {
+        result = breaker.call("test_service", kfn { throw "Service error" }).await
+      } else {
+        result = breaker.call("test_service", kfn { "Success" }).await
+      }
+    } catch err {
+      println(K"  Error: {err.to_string()}")
+    }
+  }
+  
+  // Example 3: Fallback
+  println("\n🔀 Fallback Strategy:")
+  
+  fallback_exec = FallbackExecutor::spawn()
+  
+  kfn primary_cache() {
+    throw "Cache miss"
+  }
+  
+  kfn fallback_database() {
+    "Data from database"
+  }
+  
+  data = fallback_exec.call_with_fallback(
+    kfn { primary_cache() },
+    kfn { fallback_database() },
+    "data_retrieval"
+  ).await
+  
+  println(K"Got data: {data}")
+  
+  // Example 4: Multiple fallbacks
+  println("\n⛓️  Multiple Fallbacks:")
+  
+  kfn strategy1() { throw "API 1 down" }
+  kfn strategy2() { throw "API 2 timeout" }
+  kfn strategy3() { "Success from API 3" }
+  
+  result = fallback_exec.call_with_multiple_fallbacks(
+    [kfn { strategy1() }, kfn { strategy2() }, kfn { strategy3() }],
+    "multi_api_call"
+  ).await
+  
+  println(K"Result: {result}")
+  
+  println("\n✅ Feature #8 (Error Recovery) Complete!")
+}

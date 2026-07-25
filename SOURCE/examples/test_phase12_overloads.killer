@@ -1,0 +1,85 @@
+// Phase 12: Operator Overloading Test
+// Test custom operator methods (__add__, __sub__, __eq__, etc.)
+
+class Vector
+{
+    init(x, y)
+    {
+        this.x = x;
+        this.y = y;
+    }
+    
+    __add__(other)
+    {
+        // Add two vectors
+        let result = new Vector(this.x + other.x, this.y + other.y);
+        return result;
+    }
+    
+    __sub__(other)
+    {
+        // Subtract two vectors
+        let result = new Vector(this.x - other.x, this.y - other.y);
+        return result;
+    }
+    
+    __eq__(other)
+    {
+        // Check equality
+        return (this.x == other.x) and (this.y == other.y);
+    }
+    
+    __mul__(scalar)
+    {
+        // Scalar multiplication
+        let result = new Vector(this.x * scalar, this.y * scalar);
+        return result;
+    }
+    
+    to_string()
+    {
+        return "(" + str(this.x) + ", " + str(this.y) + ")";
+    }
+}
+
+// Test operator overloads
+let v1 = new Vector(3, 4);
+let v2 = new Vector(1, 2);
+
+// Test addition
+let v3 = v1 + v2;
+print("v1 + v2 = ");
+print(v3.to_string());
+print(" (expected (4, 6))");
+print("");
+
+// Test subtraction
+let v4 = v1 - v2;
+print("v1 - v2 = ");
+print(v4.to_string());
+print(" (expected (2, 2))");
+print("");
+
+// Test equality
+let v5 = new Vector(3, 4);
+print("v1 == v5: ");
+print(v1 == v5);
+print(" (expected true)");
+print("");
+
+// Test inequality
+print("v1 == v2: ");
+print(v1 == v2);
+print(" (expected false)");
+print("");
+
+// Test scalar multiplication
+let v6 = v1 * 2;
+print("v1 * 2 = ");
+print(v6.to_string());
+print(" (expected (6, 8))");
+print("");
+
+print("=== All Phase 12 operator overload tests completed ===");
+
+

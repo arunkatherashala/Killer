@@ -1,0 +1,78 @@
+// Week 20: Real-Time Systems - Example 2
+// Memory Pool (GC-free allocation)
+
+kfn create_memory_pool(size) {
+    let pool = {
+        buffers: [],
+        available: [],
+        capacity: size,
+        allocated: 0
+    };
+    
+    for i in 0..size {
+        pool.buffers.push({id: i, data: null, in_use: false});
+        pool.available.push(i);
+    }
+    
+    return pool;
+}
+
+kfn allocate_buffer(pool, data_size) {
+    if length(pool.available) == 0 {
+        return {success: false, buffer_id: -1, message: "No buffers available"};
+    }
+    
+    let buffer_id = pool.available[0];
+    // Remove from available
+    let new_available = [];
+    for i in 1..length(pool.available) {
+        new_available.push(pool.available[i]);
+    }
+    pool.available = new_available;
+    
+    pool.buffers[buffer_id].in_use = true;
+    pool.buffers[buffer_id].data = data_size;
+    pool.allocated = pool.allocated + 1;
+    
+    return {success: true, buffer_id: buffer_id, message: "Buffer allocated"};
+}
+
+kfn release_buffer(pool, buffer_id) {
+    if buffer_id < 0 || buffer_id >= length(pool.buffers) {
+        return {success: false, message: "Invalid buffer ID"};
+    }
+    
+    pool.buffers[buffer_id].in_use = false;
+    pool.buffers[buffer_id].data = null;
+    pool.available.push(buffer_id);
+    pool.allocated = pool.allocated - 1;
+    
+    return {success: true, message: "Buffer released"};
+}
+
+kfn get_pool_stats(pool) {
+    return {
+        capacity: pool.capacity,
+        allocated: pool.allocated,
+        available: length(pool.available),
+        utilization: (pool.allocated * 100) / pool.capacity
+    };
+}
+
+// Test
+let pool = create_memory_pool(10);
+
+let a1 = allocate_buffer(pool, 512);
+let a2 = allocate_buffer(pool, 1024);
+let a3 = allocate_buffer(pool, 256);
+
+let stats = get_pool_stats(pool);
+print("Pool stats: " + str(stats.allocated) + "/" + str(stats.capacity) + " allocated");
+print("Utilization: " + str(stats.utilization) + "%");
+
+release_buffer(pool, a1.buffer_id);
+
+stats = get_pool_stats(pool);
+print("After release: " + str(stats.allocated) + "/" + str(stats.capacity) + " allocated");
+
+

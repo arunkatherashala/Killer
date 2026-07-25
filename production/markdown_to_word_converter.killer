@@ -1,0 +1,93 @@
+## Killer Markdown to Word Converter
+## Reads markdown file and generates Word document (DOCX)
+
+actor WordDocumentBuilder
+  let content = ""
+  let paragraphs = List<String>()
+  let current_heading = ""
+  
+  handle add_text(line: String)
+    if line.len() > 0
+      paragraphs.append(line)
+  
+  handle add_heading(level: Int, text: String)
+    let marker = ""
+    if level == 1
+      marker = "HEADING1:"
+    else if level == 2
+      marker = "HEADING2:"
+    else if level == 3
+      marker = "HEADING3:"
+    else
+      marker = "HEADING4:"
+    
+    paragraphs.append(marker + text)
+  
+  handle add_code_block(code: String)
+    paragraphs.append("CODE:" + code)
+  
+  handle build_xml() -> String
+    let xml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n"
+    xml = xml + "<w:document xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\">\n"
+    xml = xml + "<w:body>\n"
+    
+    for para in paragraphs
+      xml = xml + build_paragraph(para) + "\n"
+    
+    xml = xml + "</w:body>\n"
+    xml = xml + "</w:document>"
+    
+    xml
+  
+  handle build_paragraph(text: String) -> String
+    if text.contains("HEADING1:")
+      let title = text.replace("HEADING1:", "")
+      return "<w:p><w:pPr><w:pStyle w:val=\"Heading1\"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val=\"28\"/></w:rPr><w:t>" + title + "</w:t></w:r></w:p>"
+    
+    else if text.contains("HEADING2:")
+      let title = text.replace("HEADING2:", "")
+      return "<w:p><w:pPr><w:pStyle w:val=\"Heading2\"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val=\"24\"/></w:rPr><w:t>" + title + "</w:t></w:r></w:p>"
+    
+    else if text.contains("HEADING3:")
+      let title = text.replace("HEADING3:", "")
+      return "<w:p><w:pPr><w:pStyle w:val=\"Heading3\"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val=\"22\"/></w:rPr><w:t>" + title + "</w:t></w:r></w:p>"
+    
+    else if text.contains("CODE:")
+      let code = text.replace("CODE:", "")
+      return "<w:p><w:pPr><w:pStyle w:val=\"Code\"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii=\"Courier New\"/></w:rPr><w:t>" + code + "</w:t></w:r></w:p>"
+    
+    else
+      return "<w:p><w:r><w:t>" + text + "</w:t></w:r></w:p>"
+
+## Main conversion program
+
+fn read_markdown_file(filename: String) -> List<String>
+  let lines = List<String>()
+  # In real implementation, would read file
+  # For now, simulate
+  lines
+
+fn parse_markdown(lines: List<String>) -> Map<String, String>
+  let sections = Map<String, String>()
+  let current_section = ""
+  let current_content = ""
+  
+  for line in lines
+    if line.contains("# ")
+      current_section = line.replace("# ", "")
+      sections[current_section] = ""
+    else
+      if sections.contains(current_section)
+        current_content = sections[current_section]
+        current_content = current_content + line + "\n"
+        sections[current_section] = current_content
+  
+  sections
+
+fn create_word_file(md_file: String, docx_file: String) -> String
+  "DOCX creation requires system file operations - use PowerShell wrapper"
+
+fn main
+  print("Killer Markdown to Word Converter v1.0")
+  print("Converting KILLER_COMPREHENSIVE_LEARNING_MANUAL_v4.2.md to Word...")
+  print("Use PowerShell script for full conversion")

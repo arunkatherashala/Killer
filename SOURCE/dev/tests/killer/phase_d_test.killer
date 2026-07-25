@@ -1,0 +1,213 @@
+// ============================================================
+// Phase D Test (incremental): Python-parity unpacking assignment
+// ============================================================
+
+print("=== Phase D Incremental: Unpacking Assignment ===")
+
+(a, b, c) = (10, 20, 30)
+print(a)
+print(b)
+print(c)
+
+(x, y) = [1, 2]
+print(x + y)
+
+nums = [7, 8, 9];
+(p, q, r) = nums
+print(p)
+print(q)
+print(r)
+
+print("=== Phase D Incremental: Newline + Negative Indexing ===")
+
+vals = [11, 22, 33]
+(u, v, w) = vals
+print(u)
+print(v)
+print(w)
+
+print(vals[-1])
+print(vals[-2])
+t = (5, 6, 7)
+print(t[-1])
+print("killer"[-1])
+print("killer".charAt(-2))
+
+print("=== Phase D Incremental: For-Loop Unpacking ===")
+
+pairs = [(1, 10), (2, 20), (3, 30)]
+total = 0
+for (left, right) in pairs {
+	total = total + left + right
+}
+print(total)
+
+print("=== Phase D Incremental: Starred Unpacking ===")
+
+(a, *mid, b) = [1, 2, 3, 4, 5]
+print(a)
+print(mid)
+print(b)
+
+(head, *tail) = [9, 8, 7]
+print(head)
+print(tail)
+
+triples = [(1, 2, 3), (4, 5, 6)]
+acc = 0
+for (x, *rest) in triples {
+	acc = acc + x + rest[0] + rest[1]
+}
+print(acc)
+
+print("=== Phase D Incremental: Nested Unpacking ===")
+
+(n1, (n2, n3)) = [100, [200, 300]]
+print(n1)
+print(n2)
+print(n3)
+
+records = [(1, (2, 3)), (4, (5, 6))]
+nested_total = 0
+for (outer, (inner_a, inner_b)) in records {
+	nested_total = nested_total + outer + inner_a + inner_b
+}
+print(nested_total)
+
+(lead, (inner_head, *inner_rest), tail) = [1, [2, 3, 4], 5]
+print(lead)
+print(inner_head)
+print(inner_rest)
+print(tail)
+
+print("=== Phase D Incremental: Unpacking Error Semantics ===")
+
+# Trailing comma targets (Python parity)
+(tc1, tc2,) = [12, 34]
+print(tc1)
+print(tc2)
+
+try {
+	(e1, e2) = [1]
+} catch (err) {
+	print(err)
+}
+
+try {
+	(e3, e4) = [1, 2, 3]
+} catch (err) {
+	print(err)
+}
+
+try {
+	(h, *mid2, t2) = [9]
+} catch (err) {
+	print(err)
+}
+
+print("=== Phase D Incremental: Destructured Function Params ===")
+
+kfn pairSum((x, y)) {
+	return x + y
+}
+print(pairSum([7, 8]))
+
+kfn splitParts((head, *tail)) {
+	return head + tail[0]
+}
+print(splitParts([10, 20, 30]))
+
+kfn nestedPick((p, (q, r))) {
+	return p + q + r
+}
+print(nestedPick([1, [2, 3]]))
+
+try {
+	pairSum([1])
+} catch (err) {
+	print(err)
+}
+
+print("=== Phase D Incremental: Arrow Destructured Params ===")
+
+pairArrow = ((x, y)) => x + y
+print(pairArrow([4, 9]))
+
+headTailArrow = ((h, *t)) => h + t[0]
+print(headTailArrow([5, 6, 7]))
+
+nestedArrow = ((a, (b, c))) => a + b + c
+print(nestedArrow([1, [2, 3]]))
+
+arr_cb = [[2, 3], [4, 5]]
+mapped = arr_cb.map(((x, y)) => x * y)
+print(mapped)
+
+try {
+	print(pairArrow([1]))
+} catch (err) {
+	print(err)
+}
+
+print("=== Phase D Incremental: Bare Unpack Targets ===")
+
+ba, bb = [40, 2]
+print(ba + bb)
+
+head2, *mid3, tail2 = [9, 8, 7, 6]
+print(head2)
+print(mid3)
+print(tail2)
+
+outerA, (innerB, innerC) = [1, [2, 3]]
+print(outerA + innerB + innerC)
+
+sumBareFor = 0
+for left2, right2 in [(1, 2), (3, 4)] {
+	sumBareFor = sumBareFor + left2 + right2
+}
+print(sumBareFor)
+
+print("=== Phase D Incremental: Scope Safety Stress ===")
+
+kfn fibStress(n) {
+	if (n <= 1) {
+		return n
+	}
+	return fibStress(n - 1) + fibStress(n - 2)
+}
+print(fibStress(8))
+
+vals2 = [1, 2, 3]
+mapped2 = vals2.map((x) => {
+	if (x == 2) {
+		return x * 10
+	}
+	return x + 1
+})
+print(mapped2)
+
+try {
+	vals2.map((x) => {
+		if (x == 2) {
+			y = missingScopeVar + 1
+			return y
+		}
+		return x
+	})
+} catch (err) {
+	print("caught")
+}
+
+keep = 123
+pairs2 = [[1, 2], [3, 4]]
+sumPairs = pairs2.map(((a, b)) => {
+	tmp2 = a + b
+	return tmp2
+})
+print(sumPairs)
+print(keep)
+
+print("Phase D incremental tests complete")
+
+

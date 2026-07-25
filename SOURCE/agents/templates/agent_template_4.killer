@@ -1,0 +1,61 @@
+// ============================================================================
+// 4-AGENT CONSENSUS SYSTEM - LIGHTWEIGHT TEMPLATE
+// For quick validation, business decisions, small proofs
+// ============================================================================
+
+problem_input = "Your problem here"
+
+actor ValidatorAgent {
+  handle validate(input: String) -> Bool {
+    // YOUR validation logic
+    true
+  }
+}
+
+actor BenchmarkAgent {
+  handle benchmark(input: String) -> Float {
+    // YOUR quality metrics
+    0.90
+  }
+}
+
+actor DocAgent {
+  handle generate_report(input: String) -> String {
+    "Analysis complete"
+  }
+}
+
+actor QualityAgent {
+  handle audit(input: String) -> Bool {
+    // YOUR quality checks
+    true
+  }
+}
+
+actor Orchestrator {
+  handle run() {
+    validator = ValidatorAgent::spawn()
+    benchmark = BenchmarkAgent::spawn()
+    doc = DocAgent::spawn()
+    quality = QualityAgent::spawn()
+    
+    v_result = validator.validate(problem_input).await
+    b_score = benchmark.benchmark(problem_input).await
+    d_report = doc.generate_report(problem_input).await
+    q_result = quality.audit(problem_input).await
+    
+    agents_ok = 0
+    if v_result { agents_ok = agents_ok + 1 }
+    if q_result { agents_ok = agents_ok + 1 }
+    
+    println("4-Agent Consensus: " + agents_ok.to_string() + "/4 agents agree")
+    println("Confidence: " + b_score.to_string())
+  }
+}
+
+kfn main() {
+  orchestrator = Orchestrator::spawn()
+  orchestrator.run().await
+}
+
+main()

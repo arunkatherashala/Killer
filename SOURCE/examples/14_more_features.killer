@@ -1,0 +1,102 @@
+# Example 14: More Core Features - Switch/Case, Do-While, String/Array Methods
+
+# ===== SWITCH/CASE STATEMENTS =====
+print("=== SWITCH/CASE STATEMENTS ===");
+
+kfn grade(score) {
+    switch(score) {
+        case 90:
+            return "A";
+        case 80:
+            return "B";
+        case 70:
+            return "C";
+        default:
+            return "F";
+    }
+}
+
+print(grade(90));
+print(grade(80));
+print(grade(70));
+print(grade(50));
+
+# ===== DO-WHILE LOOPS =====
+print("=== DO-WHILE LOOPS ===");
+
+x = 0;
+do {
+    print(x);
+    x++;
+} while (x < 3);
+
+# ===== STRING METHODS =====
+print("=== STRING METHODS ===");
+
+# trim
+s = "  hello world  ";
+print(s.trim());
+
+# split
+words = "apple,banana,cherry".split(",");
+print(words);
+
+# replace
+txt = "hello world";
+print(txt.replace("world", "killer"));
+
+# ===== ARRAY METHODS =====
+print("=== ARRAY METHODS ===");
+
+# Define helper functions for callbacks
+kfn double(x) {
+    return x * 2;
+}
+
+kfn add_acc(acc, x) {
+    return acc + x;
+}
+
+kfn compare_nums(a, b) {
+    return a - b;
+}
+
+# map
+nums = [1, 2, 3];
+doubled = nums.map(double);
+print(doubled);
+
+# reduce
+sum = [1, 2, 3, 4].reduce(add_acc, 0);
+print(sum);
+
+# join
+arr = ["a", "b", "c"];
+print(arr.join("-"));
+
+# sort with comparator
+unsorted = [3, 1, 4, 1, 5];
+unsorted.sort(compare_nums);
+print(unsorted);
+
+# reverse
+arr2 = [1, 2, 3];
+arr2.reverse();
+print(arr2);
+
+# splice
+arr3 = [1, 2, 3, 4, 5];
+removed = arr3.splice(1, 2, 10, 20);
+print("Removed:");
+print(removed);
+print("After splice:");
+print(arr3);
+
+# ===== ARRAY.isArray =====
+print("=== ARRAY.isArray ===");
+
+print(Array.isArray([1, 2, 3]));
+print(Array.isArray("not an array"));
+print(Array.isArray(42));
+
+

@@ -1,0 +1,8 @@
+print "Phase 9: Quality Test"
+quality x = 42
+print "Quality x = "
+print x
+print "Type of x = "
+print type(x)
+
+

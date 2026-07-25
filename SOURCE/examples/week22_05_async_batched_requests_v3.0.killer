@@ -1,0 +1,138 @@
+// Week 22: Async HTTP with Batched Requests (v3.0 - Async I/O Ready)
+// Demonstrates async request handling for scalable data processing
+// Curriculum: Asynchronous I/O, event loops, batched operations
+// Status: Ready for Week 22 (Large-Scale Data Processing, async patterns)
+
+kfn processRequest(requestId, dataSize) {
+    print(`Request ${requestId}: Processing ${dataSize} items...`);
+    
+    var startTime = system_time_ms();
+    
+    // Simulate data processing with sleep (represents async I/O in real system)
+    var processingTime = dataSize / 100;  // 1ms per 100 items
+    thread_sleep_ms(processingTime);
+    
+    var endTime = system_time_ms();
+    var duration = endTime - startTime;
+    
+    print(`Request ${requestId}: Processed ${dataSize} items in ${duration}ms`);
+    return {
+        "request_id": requestId,
+        "items_processed": dataSize,
+        "duration_ms": duration
+    };
+}
+
+kfn batchRequests(batchId, requests) {
+    print(`Batch ${batchId}: Starting ${requests.length} requests...`);
+    
+    var batchStart = system_time_ms();
+    var futures = [];
+    var totalItems = 0;
+    
+    // Launch all requests asynchronously
+    for (var i = 0; i < requests.length; i = i + 1) {
+        var requestData = requests[i];
+        var reqId = requestData["id"];
+        var dataSize = requestData["size"];
+        
+        totalItems = totalItems + dataSize;
+        
+        // Create async request closure
+        var handler = fn() {
+            processRequest(reqId, dataSize);
+        };
+        
+        // Spawn as async task (Week 4 API)
+        var future = async_spawn(handler);
+        futures.push(future);
+    }
+    
+    // Wait for all requests to complete
+    var results = [];
+    for (var i = 0; i < futures.length; i = i + 1) {
+        var result = async_await(futures[i]);
+        results.push(result);
+    }
+    
+    var batchEnd = system_time_ms();
+    var batchDuration = batchEnd - batchStart;
+    
+    print(`Batch ${batchId}: Completed ${requests.length} requests with ${totalItems} total items in ${batchDuration}ms`);
+    return {
+        "batch_id": batchId,
+        "requests": requests.length,
+        "items_total": totalItems,
+        "duration_ms": batchDuration,
+        "throughput": totalItems * 1000 / batchDuration
+    };
+}
+
+kfn main() {
+    print("=== Week 22: Async HTTP with Batched Requests ===");
+    print("Simulating scalable data processing with async operations");
+    print("");
+    
+    // Define 3 batches of requests
+    var batch1 = [
+        { "id": 1, "size": 1000 },
+        { "id": 2, "size": 1500 },
+        { "id": 3, "size": 800 }
+    ];
+    
+    var batch2 = [
+        { "id": 4, "size": 2000 },
+        { "id": 5, "size": 1200 }
+    ];
+    
+    var batch3 = [
+        { "id": 6, "size": 1800 },
+        { "id": 7, "size": 1500 },
+        { "id": 8, "size": 900 },
+        { "id": 9, "size": 1100 }
+    ];
+    
+    // Process batches
+    var batchResults = [];
+    
+    print("Processing Batch 1...");
+    var result1 = batchRequests(1, batch1);
+    batchResults.push(result1);
+    
+    print("");
+    print("Processing Batch 2...");
+    var result2 = batchRequests(2, batch2);
+    batchResults.push(result2);
+    
+    print("");
+    print("Processing Batch 3...");
+    var result3 = batchRequests(3, batch3);
+    batchResults.push(result3);
+    
+    // Print summary
+    print("");
+    print("=== Overall Statistics ===");
+    
+    var totalRequests = 0;
+    var totalItems = 0;
+    var totalTime = 0;
+    
+    for (var i = 0; i < batchResults.length; i = i + 1) {
+        var result = batchResults[i];
+        totalRequests = totalRequests + result["requests"];
+        totalItems = totalItems + result["items_total"];
+        totalTime = totalTime + result["duration_ms"];
+        
+        print(`Batch ${result["batch_id"]}: ${result["requests"]} requests, ${result["items_total"]} items, throughput: ${result["throughput"]} items/sec`);
+    }
+    
+    print("");
+    print(`Total requests: ${totalRequests}`);
+    print(`Total items processed: ${totalItems}`);
+    print(`Total time: ${totalTime}ms`);
+    print(`Average throughput: ${totalItems * 1000 / totalTime} items/sec`);
+}
+
+main();
+
+

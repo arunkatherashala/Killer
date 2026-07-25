@@ -1,0 +1,21 @@
+kfn fib(n) {
+  if n <= 1 {
+    return n
+  }
+  return fib(n - 1) + fib(n - 2)
+}
+
+h1 = spawn fib(3)
+r1 = await h1
+print(K"fib(3)={r1}")
+
+async kfn compute(x) {
+  return x * x
+}
+
+t1 = system_time_ms()
+handle = spawn compute(7)
+squared = await handle
+t2 = system_time_ms()
+elapsed = t2 - t1
+print(K"squared={squared} in {elapsed}ms")

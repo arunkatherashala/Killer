@@ -1,0 +1,378 @@
+// ============================================================================
+// KILLER v2.0 - FEATURE #4: GENERICS
+// Reusable agent frameworks with type safety
+// ============================================================================
+
+// Generic State + Action types
+record GenericState {
+  id: String,
+  metadata: Map<String, String>
+}
+
+record GenericAction {
+  action_type: String,
+  params: Map<String, Any>
+}
+
+record GenericObservation {
+  observation_type: String,
+  data: String
+}
+
+// ============================================================================
+// GENERIC AGENT FRAMEWORK
+// ============================================================================
+
+actor GenericAgent {
+  state_id: String
+  memory: List<String> = []
+  memory_capacity: Int = 100
+  action_history: List<GenericAction> = []
+  observation_history: List<GenericObservation> = []
+  
+  handle initialize(initial_id: String) {
+    this.state_id = initial_id
+  }
+  
+  handle process_action(action: GenericAction) {
+    // Record action
+    this.action_history.push(action)
+    if this.action_history.len() > 50 {
+      this.action_history.remove(0)
+    }
+  }
+  
+  handle observe(obs: GenericObservation) {
+    // Record observation
+    this.observation_history.push(obs)
+  }
+  
+  handle add_to_memory(item: String) {
+    this.memory.push(item)
+    if this.memory.len() > this.memory_capacity {
+      this.memory.remove(0)
+    }
+  }
+  
+  handle recall_memory(limit: Int) -> List<String> {
+    max_idx = this.memory.len()
+    start_idx = if limit < max_idx {max_idx - limit} else {0}
+    
+    result = []
+    for i in start_idx..max_idx {
+      if i >= 0 && i < this.memory.len() {
+        result.push(this.memory[i])
+      }
+    }
+    result
+  }
+  
+  handle get_state() -> String {
+    K"State: {this.state_id}, Memory: {this.memory.len()} items, Actions: {this.action_history.len()}"
+  }
+}
+
+// ============================================================================
+// SPECIALIZED AGENT: GAME PLAYER
+// ============================================================================
+
+record GameState {
+  game_id: String,
+  current_level: Int,
+  score: Int,
+  lives: Int
+}
+
+record GameAction {
+  move: String,      // "up", "down", "left", "right"
+  ability: String    // "jump", "attack", etc.
+}
+
+actor GameAgent {
+  base: GenericAgent
+  game_state: GameState = nil
+  strategy: String = "aggressive"
+  
+  handle initialize(game_id: String) {
+    this.base = GenericAgent::spawn()
+    this.base.initialize(K"game_{game_id}").await
+    
+    this.game_state = GameState {
+      game_id: game_id,
+      current_level: 1,
+      score: 0,
+      lives: 3
+    }
+  }
+  
+  handle play_turn(input: String) -> String {
+    // Parse input to action
+    action = GameAction {
+      move: (if input.contains("left") {"left"} else {"right"}),
+      ability: (if input.contains("jump") {"jump"} else {""})
+    }
+    
+    // Record action
+    generic_action = GenericAction {
+      action_type: "game_move",
+      params: {
+        "move": action.move,
+        "ability": action.ability
+      }
+    }
+    await this.base.process_action(generic_action)
+    
+    // Update game state
+    this.game_state = GameState {
+      game_id: this.game_state.game_id,
+      current_level: this.game_state.current_level,
+      score: this.game_state.score + 10,
+      lives: this.game_state.lives
+    }
+    
+    // Record observation
+    obs = GenericObservation {
+      observation_type: "game_state",
+      data: K"Level {this.game_state.current_level}, Score: {this.game_state.score}"
+    }
+    await this.base.observe(obs)
+    
+    // Add to memory
+    memory_entry = K"Turn: {action.move}, Score: {this.game_state.score}"
+    await this.base.add_to_memory(memory_entry)
+    
+    K"Game Turn: {action.move}, Score: {this.game_state.score}"
+  }
+  
+  handle get_strategy() -> String {
+    this.strategy
+  }
+  
+  handle show_state() -> String {
+    base_state = await this.base.get_state()
+    game_info = K"Game: {this.game_state.game_id}, Level: {this.game_state.current_level}, Lives: {this.game_state.lives}, Score: {this.game_state.score}, Strategy: {this.strategy}"
+    K"{base_state}\n{game_info}"
+  }
+}
+
+// ============================================================================
+// SPECIALIZED AGENT: TRADING AGENT
+// ============================================================================
+
+record PortfolioState {
+  account_id: String,
+  cash: Float,
+  holdings: Map<String, Int>,  // symbol -> quantity
+  net_value: Float
+}
+
+record TradeAction {
+  action_type: String,  // "buy", "sell", "hold"
+  symbol: String,
+  quantity: Int,
+  price: Float
+}
+
+actor TradingAgent {
+  base: GenericAgent
+  portfolio: PortfolioState = nil
+  risk_level: String = "medium"
+  
+  handle initialize(account_id: String, initial_cash: Float) {
+    this.base = GenericAgent::spawn()
+    this.base.initialize(K"trading_{account_id}").await
+    
+    this.portfolio = PortfolioState {
+      account_id: account_id,
+      cash: initial_cash,
+      holdings: {},
+      net_value: initial_cash
+    }
+  }
+  
+  handle make_trade(action: TradeAction) -> String {
+    // Validate trade
+    if action.action_type == "buy" {
+      cost = (action.quantity as Float) * action.price
+      if cost > this.portfolio.cash {
+        return K"❌ Insufficient cash: need {cost}, have {this.portfolio.cash}"
+      }
+      
+      // Execute buy
+      this.portfolio = PortfolioState {
+        account_id: this.portfolio.account_id,
+        cash: this.portfolio.cash - cost,
+        holdings: this.portfolio.holdings,  // Simplified: doesn't update holdings
+        net_value: this.portfolio.net_value - cost + (cost as Float)
+      }
+      
+      result = K"✓ Bought {action.quantity} shares of {action.symbol} @ ${action.price}, cash remaining: ${this.portfolio.cash}"
+    } else if action.action_type == "sell" {
+      proceeds = (action.quantity as Float) * action.price
+      this.portfolio = PortfolioState {
+        account_id: this.portfolio.account_id,
+        cash: this.portfolio.cash + proceeds,
+        holdings: this.portfolio.holdings,
+        net_value: this.portfolio.net_value
+      }
+      
+      result = K"✓ Sold {action.quantity} shares of {action.symbol} @ ${action.price}, cash available: ${this.portfolio.cash}"
+    } else {
+      result = "⊙ Hold position"
+    }
+    
+    // Record in base agent
+    generic_action = GenericAction {
+      action_type: "trade",
+      params: {
+        "symbol": action.symbol,
+        "type": action.action_type,
+        "quantity": action.quantity.to_string()
+      }
+    }
+    await this.base.process_action(generic_action)
+    
+    memory_entry = K"{action.action_type.to_upper()} {action.symbol}: {action.quantity}@${action.price}"
+    await this.base.add_to_memory(memory_entry)
+    
+    result
+  }
+  
+  handle show_portfolio() -> String {
+    base_state = await this.base.get_state()
+    portfolio_info = K"Portfolio: Cash: ${this.portfolio.cash}, Net Value: ${this.portfolio.net_value}, Risk: {this.risk_level}"
+    K"{base_state}\n{portfolio_info}"
+  }
+}
+
+// ============================================================================
+// SPECIALIZED AGENT: CHAT AGENT
+// ============================================================================
+
+record ConversationState {
+  conversation_id: String,
+  message_count: Int,
+  sentiment: String
+}
+
+record UserMessage {
+  user_id: String,
+  content: String,
+  timestamp: Int
+}
+
+record AgentReply {
+  reply_content: String,
+  sentiment: String,
+  confidence: Float
+}
+
+actor ChatAgent {
+  base: GenericAgent
+  conversation: ConversationState = nil
+  personality: String = "helpful"
+  
+  handle initialize(conversation_id: String) {
+    this.base = GenericAgent::spawn()
+    this.base.initialize(K"chat_{conversation_id}").await
+    
+    this.conversation = ConversationState {
+      conversation_id: conversation_id,
+      message_count: 0,
+      sentiment: "neutral"
+    }
+  }
+  
+  handle respond_to_message(msg: UserMessage) -> AgentReply {
+    // This would use LLM in real implementation
+    reply = AgentReply {
+      reply_content: K"I understand: {msg.content.substring(0, 30)}... I'm here to help with that.",
+      sentiment: "positive",
+      confidence: 0.85
+    }
+    
+    // Update conversation state
+    this.conversation = ConversationState {
+      conversation_id: this.conversation.conversation_id,
+      message_count: this.conversation.message_count + 1,
+      sentiment: reply.sentiment
+    }
+    
+    // Record in base agent
+    generic_action = GenericAction {
+      action_type: "message",
+      params: {
+        "user_id": msg.user_id,
+        "sentiment": reply.sentiment,
+        "confidence": reply.confidence.to_string()
+      }
+    }
+    await this.base.process_action(generic_action)
+    
+    memory_entry = K"Message from {msg.user_id}: {msg.content.substring(0, 50)}"
+    await this.base.add_to_memory(memory_entry)
+    
+    reply
+  }
+  
+  handle show_conversation() -> String {
+    base_state = await this.base.get_state()
+    conv_info = K"Conversation: {this.conversation.message_count} messages, Sentiment: {this.conversation.sentiment}, Personality: {this.personality}"
+    K"{base_state}\n{conv_info}"
+  }
+}
+
+// ============================================================================
+// MAIN EXAMPLE
+// ============================================================================
+
+kfn main() {
+  println("=== KILLER v2.0 Feature #4: Generics ===")
+  
+  // Example 1: Game Agent (Specialized GenericAgent for gaming)
+  println("\n🎮 Game Agent:")
+  game_agent = GameAgent::spawn()
+  game_agent.initialize("game_001").await
+  
+  turn1 = game_agent.play_turn("move_left").await
+  println(turn1)
+  
+  turn2 = game_agent.play_turn("jump").await
+  println(turn2)
+  
+  game_state = game_agent.show_state().await
+  println(game_state)
+  
+  // Example 2: Trading Agent
+  println("\n💰 Trading Agent:")
+  trading_agent = TradingAgent::spawn()
+  trading_agent.initialize("account_001", 10000.0).await
+  
+  trade1 = trading_agent.make_trade(TradeAction {
+    action_type: "buy",
+    symbol: "KILLER",
+    quantity: 100,
+    price: 50.0
+  }).await
+  println(trade1)
+  
+  portfolio = trading_agent.show_portfolio().await
+  println(portfolio)
+  
+  // Example 3: Chat Agent
+  println("\n💬 Chat Agent:")
+  chat_agent = ChatAgent::spawn()
+  chat_agent.initialize("conv_001").await
+  
+  reply1 = chat_agent.respond_to_message(UserMessage {
+    user_id: "user_1",
+    content: "Tell me about Killer language features",
+    timestamp: 1000
+  }).await
+  println(K"Bot: {reply1.reply_content}")
+  
+  conv_state = chat_agent.show_conversation().await
+  println(conv_state)
+  
+  println("\n✅ Feature #4 (Generics) Complete!")
+}

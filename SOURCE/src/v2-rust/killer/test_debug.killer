@@ -1,0 +1,22 @@
+kfn fib(n) {
+  if n <= 1 {
+    return n
+  }
+  return fib(n - 1) + fib(n - 2)
+}
+
+h1 = spawn fib(10)
+r1 = await h1
+print(K"fib(10)={r1}")
+
+h2 = spawn fib(10)
+r2 = await h2
+print(K"fib(10)again={r2}")
+
+async kfn compute(x) {
+  return x * x
+}
+handle = spawn compute(7)
+squared = await handle
+print(K"squared={squared}")
+print("done")

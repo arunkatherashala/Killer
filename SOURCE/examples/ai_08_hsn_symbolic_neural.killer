@@ -1,0 +1,306 @@
+// Example: Hybrid Symbolic-Neural Intelligence (HSN)
+// Building AI that combines logic and learning
+
+kfn main() {
+    print("=== Killer HSN: Hybrid Symbolic-Neural Intelligence ===\n\n");
+    
+    // Initialize the hybrid system
+    let hsn = create_hsn_system();
+    
+    // Example 1: Medical Diagnosis (HSN in Action)
+    print("=== Example 1: Medical Diagnosis with HSN ===\n\n");
+    
+    let patient_data = {
+        "symptoms": ["fever", "cough", "fatigue"],
+        "temperature": 102.5,
+        "age": 45,
+        "smoking": false,
+        "medical_history": ["asthma", "allergies"]
+    };
+    
+    print("Patient Data:\n");
+    print("  Symptoms: ");
+    print(patient_data["symptoms"]);
+    print("\n");
+    print("  Temperature: ");
+    print(patient_data["temperature"]);
+    print("F\n");
+    print("  Age: ");
+    print(patient_data["age"]);
+    print("\n\n");
+    
+    // Step 1: Symbolic Reasoning (Rule-Based)
+    print("Step 1: Symbolic Reasoning Layer\n");
+    let symbolic_rules = [
+        "IF fever > 100 AND cough THEN respiratory_concern",
+        "IF fatigue AND fever THEN possible_infection",
+        "IF asthma IN history THEN respiratory_risk_elevated",
+        "IF age > 40 AND smoking THEN pneumonia_risk_high"
+    ];
+    
+    let symbolic_conclusions = apply_rules(patient_data, symbolic_rules);
+    print("Rule-Based Conclusions:\n");
+    for conclusion in symbolic_conclusions {
+        print("  ✓ ");
+        print(conclusion);
+        print("\n");
+    }
+    print("\n");
+    
+    // Step 2: Neural Pattern Recognition
+    print("Step 2: Neural Pattern Recognition Layer\n");
+    let symptom_embedding = ai_embed("fever, cough, fatigue");
+    print("Symptom embedding generated\n");
+    
+    let neural_patterns = ai_classify("fever cough fatigue", 
+        ["pneumonia", "common_cold", "flu", "asthma", "allergies"]);
+    
+    print("Neural Pattern Analysis:\n");
+    print("  Predicted diagnosis: ");
+    print(neural_patterns["category"]);
+    print("\n");
+    print("  Confidence: ");
+    print(neural_patterns["confidence"]);
+    print("\n");
+    print("  All scores:");
+    for score in neural_patterns["all_scores"] {
+        print("    ");
+        print(score);
+        print("\n");
+    }
+    print("\n");
+    
+    // Step 3: Integration & Reconciliation
+    print("Step 3: Integration & Reconciliation\n");
+    
+    let final_diagnosis = {
+        "symbolic_component": {
+            "primary": "respiratory_concern",
+            "secondary": "possible_infection",
+            "risk_factors": ["respiratory_risk_elevated", "pneumonia_risk"]
+        },
+        "neural_component": {
+            "prediction": neural_patterns["category"],
+            "confidence": neural_patterns["confidence"]
+        },
+        "disagreement_check": check_consistency(symbolic_conclusions, neural_patterns),
+        "recommended_action": recommend_action(symbolic_conclusions, neural_patterns)
+    };
+    
+    print("Combined Diagnosis:\n");
+    print("  Symbolic Assessment: ");
+    print(final_diagnosis["symbolic_component"]["primary"]);
+    print("\n");
+    print("  Neural Prediction: ");
+    print(final_diagnosis["neural_component"]["prediction"]);
+    print("\n");
+    print("  Consistency: ");
+    if final_diagnosis["disagreement_check"] {
+        print("HIGH (Agree)\n");
+    } else {
+        print("LOW (Disagree - investigate)\n");
+    }
+    print("  Recommended: ");
+    print(final_diagnosis["recommended_action"]);
+    print("\n\n");
+    
+    // Example 2: Legal Document Analysis (HSN)
+    print("=== Example 2: Legal Document Review with HSN ===\n\n");
+    
+    let contract_text = "This agreement is made on March 14, 2026 between Company A and Company B. " +
+                       "Company A agrees to provide services worth $50,000 per month for 12 months. " +
+                       "Payments are due on the 1st of each month. Either party may terminate with 30 days notice. " +
+                       "The agreement is governed by California law.";
+    
+    print("Contract Text:\n");
+    print(contract_text);
+    print("\n\n");
+    
+    // Symbolic analysis: Extract structure
+    print("Symbolic Analysis (Contract Structure):\n");
+    let contract_features = extract_contract_features(contract_text);
+    
+    let obligations = [
+        "Company A: $50,000/month for 12 months",
+        "Payment terms: Due on 1st of month",
+        "Termination: 30 days notice allowed"
+    ];
+    
+    let legal_risks = [
+        "Missing: Definition of services",
+        "Missing: Liability clause",
+        "Missing: Force majeure clause",
+        "Alert: California law may have specific requirements"
+    ];
+    
+    print("Obligations:\n");
+    for ob in obligations {
+        print("  ✓ ");
+        print(ob);
+        print("\n");
+    }
+    print("\nPotential Issues:\n");
+    for risk in legal_risks {
+        print("  ⚠ ");
+        print(risk);
+        print("\n");
+    }
+    print("\n");
+    
+    // Neural analysis: Semantic understanding
+    print("Neural Analysis (Semantic Understanding):\n");
+    let contract_classification = ai_classify(
+        contract_text,
+        ["favorable", "neutral", "unfavorable"]
+    );
+    
+    print("Classification: ");
+    print(contract_classification["category"]);
+    print(" (");
+    print(contract_classification["confidence"]);
+    print(")\n\n");
+    
+    // Integration: Combined assessment
+    print("Combined Legal Assessment:\n");
+    let legal_assessment = {
+        "completeness": 0.65,
+        "risk_level": "medium",
+        "recommendation": "Review with legal counsel before signing",
+        "top_issues": [
+            "Missing service definition",
+            "Incomplete liability coverage",
+            "California law expertise required"
+        ]
+    };
+    
+    print("  Overall Risk: ");
+    print(legal_assessment["risk_level"]);
+    print("\n");
+    print("  Completeness Score: ");
+    print(legal_assessment["completeness"]);
+    print("\n");
+    print("  Recommendation: ");
+    print(legal_assessment["recommendation"]);
+    print("\n\n");
+    
+    // Example 3: Financial Market Analysis
+    print("=== Example 3: Market Sentiment Analysis with HSN ===\n\n");
+    
+    let market_news = "Tech stock gains after beating earnings but concerns about AI regulation remain. " +
+                     "Fed signals no rate changes, supporting equity valuations. Growth stocks rally.";
+    
+    print("Market News: ");
+    print(market_news);
+    print("\n\n");
+    
+    // Symbolic: Identify factors
+    print("Symbolic Factors Identified:\n");
+    let market_factors = [
+        "Positive: Earnings beat",
+        "Negative: AI regulation concerns",
+        "Positive: No rate changes",
+        "Positive: Growth stock rally"
+    ];
+    
+    for factor in market_factors {
+        print("  • ");
+        print(factor);
+        print("\n");
+    }
+    print("\n");
+    
+    // Neural: Overall sentiment
+    print("Neural Sentiment Analysis:\n");
+    let sentiment = ai_classify(market_news, 
+        ["very_bullish", "bullish", "neutral", "bearish", "very_bearish"]);
+    
+    print("Market Sentiment: ");
+    print(sentiment["category"]);
+    print(" (");
+    print(sentiment["confidence"]);
+    print(")\n\n");
+    
+    // Integrated recommendation
+    print("Integrated Trading Decision:\n");
+    print("  Symbolic Signals: Mixed (2 positive, 2 concerns)\n");
+    print("  Neural Sentiment: ");
+    print(sentiment["category"]);
+    print("\n");
+    print("  Recommended Action: BUY (with 30% allocation limit)\n");
+    print("  Rationale: Earnings and Fed support outweigh regulation risks\n\n");
+    
+    // Explainability
+    print("=== Explainability in HSN ===\n\n");
+    print("Why this decision?\n");
+    print("  1. Symbolic rules triggered on earnings AND no rate changes\n");
+    print("  2. Neural model confirms bullish sentiment (80% confidence)\n");
+    print("  3. Regulation concern noted but not overriding positive factors\n");
+    print("  4. Risk-adjusted position: Buy but maintain discipline\n\n");
+    
+    print("=== HSN Example Complete ===\n");
+}
+
+// Helper functions
+
+kfn create_hsn_system() {
+    return {
+        "name": "HSN System",
+        "version": "1.0",
+        "layers": {
+            "symbolic": "Rule-based reasoning engine",
+            "neural": "Pattern recognition engine",
+            "integration": "Reconciliation layer",
+            "explanation": "Decision tracing"
+        }
+    };
+}
+
+kfn apply_rules(data, rules) {
+    let conclusions = [];
+    
+    // Simulate rule application
+    let has_fever = data["temperature"] > 100;
+    let has_cough = has_value_in_list(data["symptoms"], "cough");
+    let has_fatigue = has_value_in_list(data["symptoms"], "fatigue");
+    
+    if has_fever && has_cough {
+        conclusions.push("respiratory_concern");
+    }
+    if has_fatigue && has_fever {
+        conclusions.push("possible_infection");
+    }
+    if has_value_in_list(data["medical_history"], "asthma") {
+        conclusions.push("respiratory_risk_elevated");
+    }
+    
+    return conclusions;
+}
+
+kfn has_value_in_list(list, value) {
+    for item in list {
+        if item == value {
+            return true;
+        }
+    }
+    return false;
+}
+
+kfn check_consistency(symbolic, neural) {
+    // Simple consistency check
+    return true;  // In real system: compare conclusions
+}
+
+kfn recommend_action(symbolic, neural) {
+    return "Further testing recommended";
+}
+
+kfn extract_contract_features(text) {
+    return {
+        "parties": 2,
+        "amount": 50000,
+        "duration": 12,
+        "termination": true
+    };
+}
+
+

@@ -1,0 +1,10 @@
+r1 = range(5)
+print(r1)
+
+r2 = range(2, 8)
+print(r2)
+
+r3 = range(0, 10, 2)
+print(r3)
+
+

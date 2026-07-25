@@ -1,0 +1,89 @@
+// Week 19: Race Condition & Synchronization (Concurrency Gap #1)
+// Demonstrates safe concurrent access to shared resources
+// Curriculum: Concurrent data, race conditions, atomicity
+// Status: Week 19 completion (+5%)
+
+kfn sharedCounter() {
+    // In v3.0: Demonstrates race condition scenario
+    // In v3.1+: Would use Mutex with proper locking
+    var counter = 0;
+    var threads = [];
+    
+    print("=== Race Condition Example ===");
+    print("Spawning 10 threads, each incrementing counter 100 times");
+    print("Without locks: Expected 1000, likely to get less");
+    print("");
+    
+    for (var i = 0; i < 10; i = i + 1) {
+        var incrementer = fn() {
+            for (var j = 0; j < 100; j = j + 1) {
+                counter = counter + 1;
+            }
+        };
+        var handle = spawn_thread(incrementer);
+        threads.push(handle);
+    }
+    
+    // Join all threads
+    for (var i = 0; i < threads.length; i = i + 1) {
+        join_thread(threads[i]);
+    }
+    
+    print(`Final counter value: ${counter}`);
+    print("Expected: 1000 (if synchronized)");
+    print("Actual: ${counter} (demonstrates race condition)");
+}
+
+kfn synchronizedCounter() {
+    // Counter with dictionary-based lock simulation
+    var state = {
+        "value": 0,
+        "is_locked": false
+    };
+    
+    var threads = [];
+    print("");
+    print("=== Synchronized Counter (Lock Simulation) ===");
+    print("Same 10 threads × 100 increments (with lock discipline)");
+    
+    for (var i = 0; i < 10; i = i + 1) {
+        var incrementer = fn() {
+            for (var j = 0; j < 100; j = j + 1) {
+                // Simulate acquiring lock
+                while (state["is_locked"]) {
+                    thread_sleep_ms(1);  // Busy-wait (not ideal, but illustrates concept)
+                }
+                state["is_locked"] = true;
+                
+                // Critical section
+                state["value"] = state["value"] + 1;
+                
+                // Release lock
+                state["is_locked"] = false;
+            }
+        };
+        var handle = spawn_thread(incrementer);
+        threads.push(handle);
+    }
+    
+    // Join all threads
+    for (var i = 0; i < threads.length; i = i + 1) {
+        join_thread(threads[i]);
+    }
+    
+    print(`Final counter value: ${state["value"]}`);
+    print("Expected: 1000 (with synchronization)");
+}
+
+kfn main() {
+    print("Week 19: Race Conditions and Synchronization");
+    print("==========================================");
+    print("");
+    
+    sharedCounter();
+    synchronizedCounter();
+}
+
+main();
+
+

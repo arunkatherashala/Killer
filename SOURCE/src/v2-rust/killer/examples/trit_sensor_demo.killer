@@ -1,0 +1,31 @@
+# Trit + fuzzy + Signal — simple “sensor fusion” sketch (Innovation / trinary track)
+#
+# Run: killer-native trit_sensor_demo.killer
+#
+# Two noisy readings are thresholded into trits, wrapped as Signals, then fused with
+# signal_and (conservative) and signal_or (permissive).
+
+println("=== trit_sensor_demo.killer ===")
+
+# Normalized “sensor” levels in [0,1]
+level_a = 0.78
+level_b = 0.41
+
+# Fuzzy threshold around 0.55 → trit (yes / maybe / no)
+t_a = fuzzy_threshold(level_a, 0.55)
+t_b = fuzzy_threshold(level_b, 0.55)
+
+println("fuzzy_threshold(A) word -> " + trit_word(t_a))
+println("fuzzy_threshold(B) word -> " + trit_word(t_b))
+
+sig_a = signal_create(t_a, 0.9, "hall sensor A")
+sig_b = signal_create(t_b, 0.65, "hall sensor B")
+
+conservative = signal_and(sig_a, sig_b)
+permissive = signal_or(sig_a, sig_b)
+
+println("signal_and  -> " + signal_to_str(conservative))
+println("signal_or   -> " + signal_to_str(permissive))
+println("confident (and) @ 0.5 ? " + str(signal_confident(conservative, 0.5)))
+
+println("=== end trit_sensor_demo ===")

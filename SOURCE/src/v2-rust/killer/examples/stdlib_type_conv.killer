@@ -1,0 +1,28 @@
+t1 = type(42);
+print(t1);
+
+t2 = type("hello");
+print(t2);
+
+t3 = type(true);
+print(t3);
+
+t4 = type([1, 2, 3]);
+print(t4);
+
+t5 = type({"a": 1});
+print(t5);
+
+s1 = str(123);
+print(s1);
+
+s2 = str(3.14);
+print(s2);
+
+i1 = int("456");
+print(i1);
+
+i2 = int(3.99);
+print(i2);
+
+

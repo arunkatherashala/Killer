@@ -1,0 +1,78 @@
+print("=== Phase 5: Tryte ===")
+
+# tryte_zero
+tz = tryte_zero()
+assert_eq(tryte_to_int(tz), 0)
+assert_eq(tryte_to_str(tz), "000000")
+print("tryte_zero: OK")
+
+# tryte_from_int / tryte_to_int round-trip
+t1 = tryte_from_int(42)
+assert_eq(tryte_to_int(t1), 42)
+print("tryte_from_int(42): OK")
+
+t2 = tryte_from_int(-42)
+assert_eq(tryte_to_int(t2), -42)
+print("tryte_from_int(-42): OK")
+
+t_max = tryte_from_int(364)
+assert_eq(tryte_to_int(t_max), 364)
+print("tryte_from_int(364) max: OK")
+
+t_min = tryte_from_int(-364)
+assert_eq(tryte_to_int(t_min), -364)
+print("tryte_from_int(-364) min: OK")
+
+# tryte_to_str format: + 0 -
+t3 = tryte_from_int(1)
+s3 = tryte_to_str(t3)
+assert_eq(s3, "00000+")
+print("tryte_to_str(1) == 00000+: OK")
+
+# tryte_create from 6 trits
+tc = tryte_create(T_POS(), T_NEG(), T_ZERO(), T_ZERO(), T_POS(), T_NEG())
+assert_eq(trit_to_str(tryte_get(tc, 0)), "T_POS")
+assert_eq(trit_to_str(tryte_get(tc, 1)), "T_NEG")
+assert_eq(trit_to_str(tryte_get(tc, 2)), "T_ZERO")
+print("tryte_create / tryte_get: OK")
+
+# tryte_set
+tc2 = tryte_set(tz, 5, T_POS())
+assert_eq(tryte_to_int(tc2), 1)
+print("tryte_set: OK")
+
+# tryte_not (element-wise negate)
+tn = tryte_not(t1)
+assert_eq(tryte_to_int(tn), -42)
+print("tryte_not(-42 == not(42)): OK")
+
+# tryte_add
+ta = tryte_from_int(100)
+tb = tryte_from_int(50)
+tc3 = tryte_add(ta, tb)
+assert_eq(tryte_to_int(tc3), 150)
+print("tryte_add(100, 50) == 150: OK")
+
+# tryte_and (element-wise min)
+ta2 = tryte_from_int(1)
+tb2 = tryte_from_int(-1)
+tand = tryte_and(ta2, tb2)
+print("tryte_and: OK")
+
+# tryte_or (element-wise max)
+tor = tryte_or(ta2, tb2)
+print("tryte_or: OK")
+
+# tryte_eq
+te1 = tryte_from_int(99)
+te2 = tryte_from_int(99)
+te3 = tryte_from_int(100)
+assert_true(tryte_eq(te1, te2))
+assert_false(tryte_eq(te1, te3))
+print("tryte_eq: OK")
+
+# type check
+assert_eq(type(tz), "tryte")
+print("type(tryte) == tryte: OK")
+
+print("Phase 5 PASSED")

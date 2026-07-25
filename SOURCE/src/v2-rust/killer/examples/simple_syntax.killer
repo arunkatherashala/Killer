@@ -1,0 +1,22 @@
+kfn add(a, b) {
+    a + b
+}
+
+kfn multiply(x, y) {
+    x * y
+}
+
+result = add(5, 3)
+print(result)
+
+product = multiply(2, 4)
+print(product)
+
+nums = [1, 2, 3, 4, 5]
+len_nums = len(nums)
+print(len_nums)
+
+y = range(3)
+print(y)
+
+

@@ -1,0 +1,98 @@
+[
+  {
+    "formula_type": "pigeonhole",
+    "n": 5,
+    "num_pigeons": 6,
+    "num_holes": 5,
+    "num_variables": 30,
+    "num_clauses": 81,
+    "satisfiable": false,
+    "haken_lower_bound": "2^\u03a9(5)",
+    "covering_clauses": 6,
+    "uniqueness_clauses": 75
+  },
+  {
+    "formula_type": "pigeonhole",
+    "n": 10,
+    "num_pigeons": 11,
+    "num_holes": 10,
+    "num_variables": 110,
+    "num_clauses": 561,
+    "satisfiable": false,
+    "haken_lower_bound": "2^\u03a9(10)",
+    "covering_clauses": 11,
+    "uniqueness_clauses": 550
+  },
+  {
+    "formula_type": "pigeonhole",
+    "n": 15,
+    "num_pigeons": 16,
+    "num_holes": 15,
+    "num_variables": 240,
+    "num_clauses": 1816,
+    "satisfiable": false,
+    "haken_lower_bound": "2^\u03a9(15)",
+    "covering_clauses": 16,
+    "uniqueness_clauses": 1800
+  },
+  {
+    "formula_type": "pigeonhole",
+    "n": 20,
+    "num_pigeons": 21,
+    "num_holes": 20,
+    "num_variables": 420,
+    "num_clauses": 4221,
+    "satisfiable": false,
+    "haken_lower_bound": "2^\u03a9(20)",
+    "covering_clauses": 21,
+    "uniqueness_clauses": 4200
+  },
+  {
+    "formula_type": "pigeonhole",
+    "n": 25,
+    "num_pigeons": 26,
+    "num_holes": 25,
+    "num_variables": 650,
+    "num_clauses": 8151,
+    "satisfiable": false,
+    "haken_lower_bound": "2^\u03a9(25)",
+    "covering_clauses": 26,
+    "uniqueness_clauses": 8125
+  },
+  {
+    "formula_type": "pigeonhole",
+    "n": 30,
+    "num_pigeons": 31,
+    "num_holes": 30,
+    "num_variables": 930,
+    "num_clauses": 13981,
+    "satisfiable": false,
+    "haken_lower_bound": "2^\u03a9(30)",
+    "covering_clauses": 31,
+    "uniqueness_clauses": 13950
+  },
+  {
+    "formula_type": "pigeonhole",
+    "n": 35,
+    "num_pigeons": 36,
+    "num_holes": 35,
+    "num_variables": 1260,
+    "num_clauses": 22086,
+    "satisfiable": false,
+    "haken_lower_bound": "2^\u03a9(35)",
+    "covering_clauses": 36,
+    "uniqueness_clauses": 22050
+  },
+  {
+    "formula_type": "pigeonhole",
+    "n": 40,
+    "num_pigeons": 41,
+    "num_holes": 40,
+    "num_variables": 1640,
+    "num_clauses": 32841,
+    "satisfiable": false,
+    "haken_lower_bound": "2^\u03a9(40)",
+    "covering_clauses": 41,
+    "uniqueness_clauses": 32800
+  }
+]

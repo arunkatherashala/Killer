@@ -1,0 +1,4 @@
+kfn main()
+  x = 42
+  y = x + 8
+  -- auto return x y

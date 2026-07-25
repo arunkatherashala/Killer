@@ -1,0 +1,27 @@
+// Phase 10: Test validator effect
+print "=== Test Validator Effect ==="
+print ""
+
+// Create and validate in one expression
+quality x = 25
+quality valid_x = x.validate_positive()
+print "x after validate_positive:"
+print "Status: " + valid_x.get_status()
+print "Is valid: " + valid_x.is_valid()
+print "Accuracy: " + valid_x.get_all_metrics().accuracy
+print ""
+
+// Test email
+quality email = "test@test.com"
+quality validated_email = email.validate_email()
+print "email after validate_email:"
+print "Status: " + validated_email.get_status()
+print "Is valid: " + validated_email.is_valid()
+let metrics = validated_email.get_all_metrics()
+print "Validity: " + metrics.validity
+print "Accuracy: " + metrics.accuracy
+print ""
+
+print "Done"
+
+

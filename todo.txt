@@ -1,0 +1,156 @@
+## ⚠️ STANDING RULES (ALWAYS FOLLOW)
+
+### RULE 1 — FILE ORGANIZATION
+> Root stays CLEAN — only todo.txt + folders. All new files go here:
+> - .killer test files    → tests/features/ or tests/bench/ or tests/unit/ or tests/misc/
+> - .md docs/reports      → DOCS/
+> - .txt output/analysis  → _LOGS/analysis/
+> - .ps1 scripts          → scripts/
+> - .toml configs         → reference/
+> - .csv trackers         → _TOOLS/
+> - Rust source           → SOURCE/src/v2-rust/killer/src/
+
+### RULE 2 — CSV TRACKING (MANDATORY)
+> Every change MUST be logged in _TOOLS/KILLER_MASTER_TRACKER.csv before closing.
+> Columns: ID, Category, Module_Name, Source_File, Description, Status, Date_Completed,
+>          Tests_Total, Tests_Passing, LOC_Done, Build_Status, Performance_Impact,
+>          Security_Status, Production_Ready, Notes
+> - New feature/file  → add row with Status=Complete
+> - Work in progress  → add row with Status=In-Progress, update when done
+> - Bug fix           → add row with Status=Complete + describe fix in Notes
+> - Current last ID   → check _TOOLS/KILLER_MASTER_TRACKER.csv last row
+
+---
+
+Compacted conversationHere's what I understand about each of the 3 features:
+
+---
+
+## Feature 1: Compression for Killer
+
+**What it is**: Expose compression/encoding as native Killer language builtins so users can write:
+```killer
+compressed = compress("hello world hello world", "rle")
+original = decompress(compressed, "rle")
+encoded = b64_encode("secret data")
+decoded = b64_decode(encoded)
+```
+
+**What already exists**: `src/compression_module.rs` already has RLE, base64, and hex in pure Rust — just not wired into the language as builtins. No external crates needed.
+
+**Missing piece**: LZ77 sliding-window compression (pure stdlib Rust) + wiring everything into `builtin.rs` and `compiler.rs`.
+
+---
+
+## Feature 2: Killer Debugging + Auto-Correction
+
+**What it is**: Two new builtins:
+- `debug_check(code)` — scans your Killer source, returns a list of detected issues (missing `kfn`, unclosed braces, wrong syntax, undefined vars)
+- `auto_fix(code)` — returns a corrected version of the source code automatically
+
+**What already exists**: `src/debugger.rs` has a basic interactive debugger (breakpoints, step/next/continue) but variable inspection and auto-fix are stubs with no real implementation.
+
+**Missing piece**: An error pattern matcher that recognizes common Killer mistakes and suggests/applies fixes.
+
+---
+
+## Feature 3: Polyglot `@lang{}` Syntax
+
+**What it is**: Write and execute any language directly inside a `.killer` file:
+```killer
+result = @python {
+    x = 10 * 5
+    print(x)
+}
+
+@java {
+    System.out.println("Hello from Java!");
+}
+
+@bash {
+    echo "disk usage:"
+    df -h
+}
+```
+
+**What already exists**: The lexer already emits `TokenKind::At` for `@` — but it does nothing with the identifier after it. No parser rule, no polyglot executor exists.
+
+**Missing pieces**:
+1. `src/polyglot.rs` — new file that detects installed runtimes (python, java, node, go, bash, etc.), writes code to a temp file, runs it via `std::process::Command`, returns stdout as a `String`
+2. Lexer extension: `@java` → emit `LangAnnotation("java")` instead of just `At`
+3. Parser rule: `@lang { ... }` → compiles to `polyglot_exec("lang", "code_block")`
+4. Builtins: `polyglot_exec(lang, code)` and `polyglot_list()` (lists all detected runtimes)
+
+---
+
+## Key Constraint Across All 3
+
+**Zero external crates** — Cargo.toml has no dependencies due to corporate SSL policy. Everything must be pure `std` Rust.
+
+---
+
+Ready to start? I'd suggest this order:
+1. **Polyglot** — biggest impact, needs new file + lexer/parser changes
+2. **Compression** — simple wiring of existing code + LZ77 implementation
+3. **Debug/Auto-fix** — enhances existing debugger
+
+Or we can do them in any order you prefer. Which first?
+
+
+## Mind-Bending Mathematical Objects
+
+### 1. Non-Orientable Surfaces (no inside/outside)
+| # | Object | Mind-bending property |
+|---|--------|----------------------|
+| 1 | **Möbius Strip** | 1 side, 1 edge — ant walks forever without crossing an edge |
+| 2 | **Klein Bottle** | 1 side, 0 edges — no inside or outside |
+| 3 | **Real Projective Plane** | Every line meets itself — can't exist in 3D at all |
+| 4 | **Boy's Surface** | Projective plane immersed in 3D — self-intersects |
+
+### 2. Fractal Objects (infinite detail, fractional dimension)
+| # | Object | Mind-bending property |
+|---|--------|----------------------|
+| 5 | **Mandelbrot Set** | Infinite complexity from `z² + c` |
+| 6 | **Sierpinski Triangle** | Remove triangles forever — dimension = 1.585 |
+| 7 | **Cantor Set** | Remove middle thirds forever — uncountably infinite points, zero length |
+| 8 | **Koch Snowflake** | Finite area, **infinite perimeter** |
+| 9 | **Menger Sponge** | Infinite surface area, zero volume |
+
+### 3. Paradoxical Constructions
+| # | Object | Mind-bending property |
+|---|--------|----------------------|
+| 10 | **Banach-Tarski Ball** | Split a sphere into 5 pieces, reassemble into 2 identical spheres |
+| 11 | **Gabriel's Horn** | Finite volume — can be filled with paint. Infinite surface — can never be painted |
+| 12 | **Hilbert Curve** | 1D line that fills an entire 2D square |
+| 13 | **Weierstrass Function** | Continuous everywhere, differentiable **nowhere** |
+| 14 | **Conway's Base-13 Function** | Takes every real value on every interval |
+
+### 4. Higher-Dimensional Shapes
+| # | Object | Mind-bending property |
+|---|--------|----------------------|
+| 15 | **Tesseract (4D Cube)** | 4D hypercube — impossible to truly visualize |
+| 16 | **Hypersphere (4D)** | Surface is 3D — the universe might be this shape |
+| 17 | **Exotic R⁴** | 4D space that's topologically R⁴ but not smoothly R⁴ — only exists in exactly 4D |
+
+### 5. Knots & Topology
+| # | Object | Mind-bending property |
+|---|--------|----------------------|
+| 18 | **Trefoil Knot** | Cannot be untangled without cutting — its mirror image is different |
+| 19 | **Alexander Horned Sphere** | Topologically a sphere but traps space around it |
+| 20 | **Wild Knot** | Infinite self-similar knotting — can't be described algebraically |
+
+### 6. Infinite Strangeness
+| # | Object | Mind-bending property |
+|---|--------|----------------------|
+| 21 | **Hilbert Hotel** | Infinite rooms, always room for more guests |
+| 22 | **Cantor's Transfinite Numbers** | Some infinities are bigger than others (ℵ₀ < ℵ₁) |
+| 23 | **Peano Arithmetic** | True statements that can never be proven (Gödel) |
+
+---
+
+**Total: 23 mind-bending objects** across 6 categories.
+
+The **top 3 most mind-bending** are arguably:
+1. **Banach-Tarski** — defies physical intuition entirely
+2. **Cantor Set** — infinite points, zero measure
+3. **Gabriel's Horn** — paint paradox breaks your brain

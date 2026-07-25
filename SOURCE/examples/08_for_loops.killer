@@ -1,0 +1,24 @@
+// Test for loops with ranges
+for i in 0..5
+{
+    print(i);
+}
+
+print("---");
+
+// Test for loop with array
+arr = [10, 20, 30, 40];
+for x in arr
+{
+    print(x);
+}
+
+print("---");
+
+// Test for loop with range and step
+for j in 0..10..2
+{
+    print(j);
+}
+
+

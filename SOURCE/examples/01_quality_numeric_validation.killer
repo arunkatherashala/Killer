@@ -1,0 +1,35 @@
+// example_01_quality_numeric_validation.killer
+// Numeric validation with quality tracking
+// Demonstrates: Number validators, range checks, quality metrics
+
+print "=== Numeric Validation Example ==="
+
+// Single score validation
+quality test_score = 95
+test_score.validate_range(0, 100)
+test_score.validate_positive()
+
+if test_score.is_valid():
+    print "✅ Score is valid"
+    print "   Score: " + test_score
+    print "   Quality: " + test_score.quality()
+else:
+    print "❌ Score validation failed"
+
+print ""
+
+// Multiple scores
+scores = [95, 87, -5, 102, 78, 91]
+
+print "Checking scores (valid range 0-100, must be positive):"
+for score in scores:
+    quality s = score
+    s.validate_range(0, 100)
+    s.validate_positive()
+    
+    if s.is_valid():
+        print "✅ " + score
+    else:
+        print "❌ " + score + " - " + s.get_errors()
+
+

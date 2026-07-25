@@ -1,0 +1,164 @@
+﻿[
+    {
+        "example":  "01_hello.killer",
+        "v1_pass":  true,
+        "v2_pass":  true,
+        "v1_exit":  0,
+        "v2_exit":  0,
+        "v1_out_head":  "Executing (interpreter): C:\\Users\\skathera\\Downloads\\killer_V2_R_M11\\examples\\01_hello.killer || ============================================================",
+        "v2_out_head":  "Welcome to Killer! || x = 10"
+    },
+    {
+        "example":  "02_conditionals.killer",
+        "v1_pass":  true,
+        "v2_pass":  true,
+        "v1_exit":  0,
+        "v2_exit":  0,
+        "v1_out_head":  "Executing (interpreter): C:\\Users\\skathera\\Downloads\\killer_V2_R_M11\\examples\\02_conditionals.killer || ============================================================",
+        "v2_out_head":  "Testing conditionals... || You are an adult!"
+    },
+    {
+        "example":  "03_loops.killer",
+        "v1_pass":  true,
+        "v2_pass":  true,
+        "v1_exit":  0,
+        "v2_exit":  0,
+        "v1_out_head":  "Executing (interpreter): C:\\Users\\skathera\\Downloads\\killer_V2_R_M11\\examples\\03_loops.killer || ============================================================",
+        "v2_out_head":  "While loop counting from 0 to 4: || 0"
+    },
+    {
+        "example":  "04_calculator.killer",
+        "v1_pass":  true,
+        "v2_pass":  true,
+        "v1_exit":  0,
+        "v2_exit":  0,
+        "v1_out_head":  "Executing (interpreter): C:\\Users\\skathera\\Downloads\\killer_V2_R_M11\\examples\\04_calculator.killer || ============================================================",
+        "v2_out_head":  "=== Killer Calculator === || Numbers: 10 3"
+    },
+    {
+        "example":  "05_functions.killer",
+        "v1_pass":  true,
+        "v2_pass":  true,
+        "v1_exit":  0,
+        "v2_exit":  0,
+        "v1_out_head":  "Executing (interpreter): C:\\Users\\skathera\\Downloads\\killer_V2_R_M11\\examples\\05_functions.killer || ============================================================",
+        "v2_out_head":  "5 + 3 = 8 || Hello,  World"
+    },
+    {
+        "example":  "06_arrays.killer",
+        "v1_pass":  true,
+        "v2_pass":  true,
+        "v1_exit":  0,
+        "v2_exit":  0,
+        "v1_out_head":  "Executing (interpreter): C:\\Users\\skathera\\Downloads\\killer_V2_R_M11\\examples\\06_arrays.killer || ============================================================",
+        "v2_out_head":  "First number: 1 || Last name: Charlie"
+    },
+    {
+        "example":  "07_dicts.killer",
+        "v1_pass":  true,
+        "v2_pass":  false,
+        "v1_exit":  0,
+        "v2_exit":  1,
+        "v1_out_head":  "Executing (interpreter): C:\\Users\\skathera\\Downloads\\killer_V2_R_M11\\examples\\07_dicts.killer || ============================================================",
+        "v2_out_head":  "Runtime error: Undefined variable `name`"
+    },
+    {
+        "example":  "08_for_loops.killer",
+        "v1_pass":  true,
+        "v2_pass":  true,
+        "v1_exit":  0,
+        "v2_exit":  0,
+        "v1_out_head":  "Executing (interpreter): C:\\Users\\skathera\\Downloads\\killer_V2_R_M11\\examples\\08_for_loops.killer || ============================================================",
+        "v2_out_head":  "--- || 0"
+    },
+    {
+        "example":  "09_string_methods.killer",
+        "v1_pass":  true,
+        "v2_pass":  false,
+        "v1_exit":  0,
+        "v2_exit":  1,
+        "v1_out_head":  "Executing (interpreter): C:\\Users\\skathera\\Downloads\\killer_V2_R_M11\\examples\\09_string_methods.killer || ============================================================",
+        "v2_out_head":  "Runtime error: Cannot call method length on non-object value: Hello World"
+    },
+    {
+        "example":  "10_try_catch.killer",
+        "v1_pass":  true,
+        "v2_pass":  false,
+        "v1_exit":  0,
+        "v2_exit":  1,
+        "v1_out_head":  "Executing (interpreter): C:\\Users\\skathera\\Downloads\\killer_V2_R_M11\\examples\\10_try_catch.killer || ============================================================",
+        "v2_out_head":  "Parse error: Parser error: expected LBrace, got LParen"
+    },
+    {
+        "example":  "11_classes.killer",
+        "v1_pass":  true,
+        "v2_pass":  false,
+        "v1_exit":  0,
+        "v2_exit":  1,
+        "v1_out_head":  "Executing (interpreter): C:\\Users\\skathera\\Downloads\\killer_V2_R_M11\\examples\\11_classes.killer || ============================================================",
+        "v2_out_head":  "Parse error: Parser error: invalid assignment target"
+    },
+    {
+        "example":  "12_advanced_features.killer",
+        "v1_pass":  true,
+        "v2_pass":  false,
+        "v1_exit":  0,
+        "v2_exit":  1,
+        "v1_out_head":  "Executing (interpreter): C:\\Users\\skathera\\Downloads\\killer_V2_R_M11\\examples\\12_advanced_features.killer || ============================================================",
+        "v2_out_head":  "Parse error: Lexer error: unexpected character: \u0027?\u0027"
+    },
+    {
+        "example":  "13_complete_features.killer",
+        "v1_pass":  true,
+        "v2_pass":  false,
+        "v1_exit":  0,
+        "v2_exit":  1,
+        "v1_out_head":  "Executing (interpreter): C:\\Users\\skathera\\Downloads\\killer_V2_R_M11\\examples\\13_complete_features.killer || ============================================================",
+        "v2_out_head":  "Parse error: Parser error: expected RParen, got Identifier(\"x\")"
+    },
+    {
+        "example":  "14_more_features.killer",
+        "v1_pass":  true,
+        "v2_pass":  false,
+        "v1_exit":  0,
+        "v2_exit":  1,
+        "v1_out_head":  "Executing (interpreter): C:\\Users\\skathera\\Downloads\\killer_V2_R_M11\\examples\\14_more_features.killer || ============================================================",
+        "v2_out_head":  "Parse error: Parser error: expected Colon, got Number(90.0)"
+    },
+    {
+        "example":  "15_phase1.killer",
+        "v1_pass":  true,
+        "v2_pass":  false,
+        "v1_exit":  0,
+        "v2_exit":  1,
+        "v1_out_head":  "Executing (interpreter): C:\\Users\\skathera\\Downloads\\killer_V2_R_M11\\examples\\15_phase1.killer || ============================================================",
+        "v2_out_head":  "Parse error: Parser error: expected RParen, got Comma"
+    },
+    {
+        "example":  "16_phase2_oop.killer",
+        "v1_pass":  true,
+        "v2_pass":  false,
+        "v1_exit":  0,
+        "v2_exit":  1,
+        "v1_out_head":  "Executing (interpreter): C:\\Users\\skathera\\Downloads\\killer_V2_R_M11\\examples\\16_phase2_oop.killer || ============================================================",
+        "v2_out_head":  "Parse error: Parser error: invalid assignment target"
+    },
+    {
+        "example":  "killer_showcase_examples.killer",
+        "v1_pass":  true,
+        "v2_pass":  false,
+        "v1_exit":  0,
+        "v2_exit":  1,
+        "v1_out_head":  "Executing (interpreter): C:\\Users\\skathera\\Downloads\\killer_V2_R_M11\\examples\\killer_showcase_examples.killer || ============================================================",
+        "v2_out_head":  "Parse error: Parser error: expected \u0027=\u003e\u0027, \u0027{\u0027, or indented block after function parameters"
+    },
+    {
+        "example":  "killer-v2-showcase.killer",
+        "v1_pass":  false,
+        "v2_pass":  false,
+        "v1_exit":  1,
+        "v2_exit":  1,
+        "v1_out_head":  "Traceback (most recent call last): ||   File \"main.py\", line 199, in \u003cmodule\u003e",
+        "v2_out_head":  "Parse error: Parser error: unexpected token: Minus"
+    }
+]

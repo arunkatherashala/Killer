@@ -1,0 +1,21 @@
+// Test if Killer has input() function
+
+kfn main() {
+    print("Testing Killer builtin functions...")
+    print("")
+    
+    print("Test 1: Simple output with print()")
+    print("Result: SUCCESS")
+    print("")
+    
+    print("Test 2: Attempting to use input() function")
+    print("If this works, input() is supported:")
+    print("")
+    
+    user_input = input("Enter something: ")
+    print("You entered: " + user_input)
+}
+
+main()
+
+

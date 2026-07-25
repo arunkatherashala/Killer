@@ -1,0 +1,58 @@
+// INTEGRATION TESTS - DEPENDENT TYPES + EFFECTS
+// Tests combining dependent types with effect system
+
+// Type-safe IO with dependent types
+async fn read_n_lines[n: nat](
+    file: String
+) -> Vector[n] uses io {
+    // Returns exactly n lines, proven at compile time
+    let mut lines = Vector { data: [], len: n };
+    // Simplified - actual implementation would read from file
+    lines
+}
+
+// Safe-indexed read with effects
+kfn peek_element[n: nat](
+    data: Vector[n],
+    index: Idx[n]
+) -> i32 uses io {
+    // index is proven < n
+    println("Accessing element");
+    data.data[index]
+}
+
+// Pure computation on dependent types
+kfn sum[n: nat](v: Vector[n]) -> i32 pure {
+    let mut total = 0;
+    for i in 0..n {
+        total = total + v.data[i];
+    }
+    total
+}
+
+// Contracts with dependent types
+kfn safe_get[n: nat](
+    v: Vector[n],
+    i: Idx[n]
+) -> i32
+    requires n > 0;
+    ensures result >= 0;
+{
+    v.data[i]
+}
+
+// Async read with dependent vector return
+async fn fetch_column[rows: nat](
+    url: String
+) -> Vector[rows] uses io {
+    // Type guarantees exactly rows elements returned
+    let data = fetch(url).await;
+    let v = Vector { data: [], len: rows };
+    v
+}
+
+kfn main() {
+    println("✓ Integration Tests Loaded");
+}
+
+

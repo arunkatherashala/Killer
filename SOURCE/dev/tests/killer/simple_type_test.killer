@@ -1,0 +1,8 @@
+// Simple type annotation test
+kfn add(x: number, y: number) {
+    return x + y;
+}
+
+print(add(5, 3));
+
+

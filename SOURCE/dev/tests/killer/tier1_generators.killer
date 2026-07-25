@@ -1,0 +1,163 @@
+// TEST SUITE: Generators - yield, next(), state management
+kfn assert(condition, message) {
+    if(condition == false) {
+        print("[ERROR] " + message);
+        throw message;
+    }
+}
+
+// Simple generator
+kfn simpleGen() {
+    yield 1;
+    yield 2;
+    yield 3;
+}
+gen = simpleGen();
+assert(gen != null, "gen create failed");
+print("TEST 1: Generator creation - PASS");
+
+// Generator next()
+kfn countGen() {
+    yield 1;
+    yield 2;
+    yield 3;
+}
+gen = countGen();
+v1 = next(gen);
+v2 = next(gen);
+v3 = next(gen);
+assert(v1 == 1, "next v1 failed");
+assert(v2 == 2, "next v2 failed");
+assert(v3 == 3, "next v3 failed");
+print("TEST 2: Generator next - PASS");
+
+// Generator exhaustion
+kfn finished() {
+    yield "a";
+    yield "b";
+}
+gen = finished();
+v1 = next(gen);
+v2 = next(gen);
+v3 = next(gen);
+assert(v1 == "a", "v1 failed");
+assert(v2 == "b", "v2 failed");
+assert(v3 == null, "exhausted failed");
+print("TEST 3: Exhaustion - PASS");
+
+// Generator in loop
+kfn rangeGen(n) {
+    i = 0;
+    while(i < n) {
+        yield i;
+        i = i + 1;
+    }
+}
+gen = rangeGen(5);
+values = [];
+while(true) {
+    v = next(gen);
+    if(v == null) break;
+    values.push(v);
+}
+assert(values.length == 5, "range len failed");
+assert(values[0] == 0, "range[0] failed");
+assert(values[4] == 4, "range[4] failed");
+print("TEST 4: Generator loop - PASS");
+
+// Generator with computation
+kfn sqGen(n) {
+    i = 0;
+    while(i < n) {
+        yield i * i;
+        i = i + 1;
+    }
+}
+gen = sqGen(4);
+s1 = next(gen);
+s2 = next(gen);
+s3 = next(gen);
+assert(s1 == 0, "sq0 failed");
+assert(s2 == 1, "sq1 failed");
+assert(s3 == 4, "sq4 failed");
+print("TEST 5: Computation - PASS");
+
+// Multiple generators
+kfn counter() {
+    yield 1;
+    yield 2;
+}
+g1 = counter();
+g2 = counter();
+assert(next(g1) == 1, "g1 first failed");
+assert(next(g2) == 1, "g2 first failed");
+assert(next(g1) == 2, "g1 second failed");
+assert(next(g2) == 2, "g2 second failed");
+print("TEST 6: Multiple generators - PASS");
+
+// Generator with conditional
+kfn evenGen(max) {
+    i = 0;
+    while(i < max) {
+        if(i % 2 == 0) {
+            yield i;
+        }
+        i = i + 1;
+    }
+}
+gen = evenGen(10);
+evens = [];
+while(true) {
+    v = next(gen);
+    if(v == null) break;
+    evens.push(v);
+}
+assert(evens.length == 5, "evens len failed");
+assert(evens[0] == 0, "even0 failed");
+print("TEST 7: Conditional yield - PASS");
+
+// Generator with array param
+kfn iterGen(arr) {
+    i = 0;
+    while(i < arr.length) {
+        yield arr[i];
+        i = i + 1;
+    }
+}
+gen = iterGen([10, 20, 30]);
+v1 = next(gen);
+v2 = next(gen);
+v3 = next(gen);
+assert(v1 == 10, "iter0 failed");
+assert(v2 == 20, "iter1 failed");
+assert(v3 == 30, "iter2 failed");
+print("TEST 8: Array param - PASS");
+
+// Generator with early return
+kfn earlyRet() {
+    yield 1;
+    yield 2;
+    return;
+    yield 3;
+}
+gen = earlyRet();
+v1 = next(gen);
+v2 = next(gen);
+v3 = next(gen);
+assert(v1 == 1, "ret1 failed");
+assert(v2 == 2, "ret2 failed");
+assert(v3 == null, "ret stop failed");
+print("TEST 9: Early return - PASS");
+
+// Generator type
+kfn typeGen() {
+    yield 1;
+}
+gen = typeGen();
+t = typeof(gen);
+assert(t == "generator", "type failed");
+print("TEST 10: Generator type - PASS");
+
+print("GENERATORS: COMPLETE");
+
+

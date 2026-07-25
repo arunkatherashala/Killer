@@ -1,0 +1,65 @@
+# ACTIVE Q&A AGENT
+# Interactive question-answering agent
+# Date: March 19, 2026
+
+print("╔═══════════════════════════════════════════╗")
+print("║  KILLER ACTIVE Q&A AGENT                 ║")
+print("║  Ask me anything! Type 'exit' to quit     ║")
+print("╚═══════════════════════════════════════════╝")
+print("")
+
+conversation_count = 0
+
+loop {
+  print_input("You: ")
+  user_input = input()
+  
+  if user_input == "exit" || user_input == "quit" {
+    print("")
+    print("Agent: Goodbye! Thank you for chatting.")
+    break
+  }
+  
+  if user_input == "" {
+    continue
+  }
+  
+  conversation_count = conversation_count + 1
+  
+  # Analyze and answer question
+  lower = user_input.to_lower()
+  
+  if lower.contains("killer") && lower.contains("language") {
+    answer = "Killer is a high-performance programming language with: actors for concurrency, pattern matching, type system, and JIT compilation. Designed for distributed systems, real-time applications, and systems programming."
+  } else if lower.contains("agent") {
+    answer = "An agent is an autonomous entity that can reason, remember facts, take actions, and observe results. Killer agents use chain-of-thought reasoning and can be organized in swarms."
+  } else if lower.contains("performance") {
+    answer = "Killer achieves ~1-2M operations/sec on single-threaded workloads, and 1000+ req/sec through its actor-based concurrency model."
+  } else if lower.contains("how") && lower.contains("actor") {
+    answer = "Actors are created with spawn(), messages are sent with send(), and responses are awaited with await. Killer's actor model manages concurrency automatically."
+  } else if lower.contains("deploy") || lower.contains("production") {
+    answer = "Killer supports cloud deployment via Docker, Kubernetes, and serverless platforms. Use blue-green, canary, or rolling deployments for safe updates."
+  } else if lower.contains("why") {
+    answer = "The reason is: Through the combination of core principles and architectural design, this demonstrates important concepts in distributed systems."
+  } else if lower.contains("how") {
+    answer = "The steps are: 1) prepare, 2) initialize, 3) execute, 4) monitor, 5) complete."
+  } else if lower.contains("what") {
+    answer = "This is a fundamental concept characterized by distinct properties and behaviors in the system."
+  } else {
+    answer = "That's interesting! Based on reasoning patterns: This demonstrates important principles of system design and knowledge sharing."
+  }
+  
+  print("Agent: " + answer)
+  print("")
+}
+
+print("")
+print("═══════════════════════════════════════")
+print("Chat ended. Questions answered: " + str(conversation_count))
+print("═══════════════════════════════════════")
+
+kfn print_input(msg) {
+  print(msg)
+}
+
+

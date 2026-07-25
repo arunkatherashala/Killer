@@ -1,0 +1,10 @@
+# Tier 4 — line sugar (preprocessor): whole-line `ui …` → VM builtins.
+# Run: cargo run --bin killer-native -- examples/ui_tier4_sugar.killer
+
+kfn main() {
+  println(ui_help())
+  v = ui version
+  println(get(v, "label"))
+  s = ui snapshot
+  println(substring(s, 0, 80) + "...")
+}

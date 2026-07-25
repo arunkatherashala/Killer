@@ -1,0 +1,52 @@
+// ============================================================
+// Phase C Test: Bitwise Operators and String Methods
+// ============================================================
+
+print("=== Phase C: Bitwise & String Methods ===")
+
+print("\n--- Bitwise Operators ---")
+a = 12
+b = 10
+
+print("a = " + a)
+print("b = " + b)
+print("a & b = " + (a & b))
+print("a | b = " + (a | b))
+print("a ^ b = " + (a ^ b))
+print("~a = " + (~a))
+print("a << 2 = " + (a << 2))
+print("a >> 2 = " + (a >> 2))
+
+print("\n--- Bitwise Precedence ---")
+print("1 | 2 & 3 = " + (1 | 2 & 3))
+print("(1 | 2) & 3 = " + ((1 | 2) & 3))
+
+print("\n--- String Methods ---")
+s = "  hello world  "
+print("s = '  hello world  '")
+print("trim: '" + s.trim() + "'")
+print("upper: " + s.upper())
+print("lower: " + s.lower())
+print("replaceAll: " + s.replaceAll("l", "L"))
+print("capitalize: " + s.trim().capitalize())
+print("reverse: " + s.trim().reverse())
+print("padStart: '" + "7".padStart(3, "0") + "'")
+print("padEnd: '" + "K".padEnd(4, "-") + "'")
+
+print("\n--- String + Object __str ---")
+class Box {
+    init(v: number) {
+        this.v = v
+    }
+
+    __str(): string {
+        return "Box(" + this.v + ")"
+    }
+}
+
+box = new Box(99)
+print("box: " + box)
+
+print("\nPhase C tests complete")
+
+

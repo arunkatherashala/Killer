@@ -1,0 +1,4 @@
+load 0
+dup
+mul
+halt

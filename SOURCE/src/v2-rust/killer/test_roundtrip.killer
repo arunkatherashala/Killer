@@ -1,0 +1,32 @@
+nova_write("sample.csv", "rt.kore")
+nova_to_json("rt.kore", "rt.json")
+nova_from_json("rt.json", "rt_from_json.kore")
+nova_to_csv("rt_from_json.kore", "rt_from_json.csv")
+print("JSON round-trip:")
+nova_info("rt_from_json.kore")
+
+nova_to_xml("rt.kore", "rt.xml")
+nova_from_xml("rt.xml", "rt_from_xml.kore")
+nova_to_csv("rt_from_xml.kore", "rt_from_xml.csv")
+print("XML round-trip:")
+nova_info("rt_from_xml.kore")
+
+nova_to_ndjson("rt.kore", "rt.ndjson")
+nova_from_ndjson("rt.ndjson", "rt_from_ndjson.kore")
+nova_to_csv("rt_from_ndjson.kore", "rt_from_ndjson.csv")
+print("NDJSON round-trip:")
+nova_info("rt_from_ndjson.kore")
+
+nova_to_avro("rt.kore", "rt.avro")
+nova_from_avro("rt.avro", "rt_from_avro.kore")
+nova_to_csv("rt_from_avro.kore", "rt_from_avro.csv")
+print("Avro round-trip:")
+nova_info("rt_from_avro.kore")
+
+nova_to_parquet("rt.kore", "rt.parquet")
+nova_from_parquet("rt.parquet", "rt_from_parquet.kore")
+nova_to_csv("rt_from_parquet.kore", "rt_from_parquet.csv")
+print("Parquet round-trip:")
+nova_info("rt_from_parquet.kore")
+
+print("=== All round-trips complete ===")

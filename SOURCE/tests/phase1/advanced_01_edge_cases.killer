@@ -1,0 +1,186 @@
+// EDGE CASES AND ADVANCED SCENARIOS
+// Tests that show edge cases and complex interactions
+
+// Test 1: Zero-sized dependent types
+kfn handle_empty[n: nat](
+    v: Vector[n]
+) -> i32 pure
+    requires n >= 0;  // allows zero-sized
+    ensures result >= 0;
+{
+    0  // no elements to process
+}
+
+// Test 2: Nested dependent types
+struct Matrix3D[m: nat][n: nat][p: nat] {
+    data: Vector[m],
+}
+
+kfn flatten_3d[m: nat][n: nat][p: nat](
+    cube: Matrix3D[m][n][p]
+) -> Vector[m] pure {
+    cube.data
+}
+
+// Test 3: Effect polymorphism
+kfn process_pure[T](x: T) -> T pure {
+    x
+}
+
+kfn process_io[T](x: T) -> T uses io {
+    x
+}
+
+// Test 4: Async with error handling
+async fn retryable_fetch(
+    url: String,
+    max_retries: i32
+) -> String uses io
+    requires max_retries > 0;
+{
+    let mut attempt = 0;
+    loop {
+        match fetch(url).await {
+            Ok(result) => return result,
+            Err(e) => {
+                attempt = attempt + 1;
+                if attempt >= max_retries {
+                    return "";
+                }
+            }
+        }
+    }
+}
+
+// Test 5: Type-level arithmetic
+kfn add_dimensions[m: nat][n: nat][p: nat]() -> i32 pure {
+    // m + n + p at compile time
+    0
+}
+
+// Test 6: Contract with complex postcondition
+kfn safe_divide(
+    a: i32,
+    b: i32
+) -> Option[i32] pure
+    requires b != 0;
+    ensures match result {
+        Some(x) => x * b == a || x * b + b > a,
+        None => false,
+    };
+{
+    if b == 0 {
+        None
+    } else {
+        Some(a / b)
+    }
+}
+
+// Test 7: Effect unions
+async fn complex_operation() uses (io, allocate, random) {
+    // Can use all three effects
+    let _x = fetch("url").await;  // io
+    let _y = Vec::new();          // allocate
+    let _z = random_int();        // random
+}
+
+// Test 8: Polymorphic function with dependent type parameter
+kfn apply_to_vector[n: nat][T](
+    v: Vector[n],
+    f: fn(T) -> T pure
+) -> Vector[n] pure {
+    // f is parametric
+    v
+}
+
+// Test 9: Dependent types with generics
+struct GenericQueue[T][n: nat] {
+    items: Vector[n],
+}
+
+kfn push[T][n: nat](
+    mut q: GenericQueue[T][n+1],
+    item: T
+) -> GenericQueue[T][n+1] {
+    q
+}
+
+// Test 10: Async spawn with dependent constraints
+async fn spawned_task[n: nat]() uses (io, allocate) {
+    let handles = Vec::new();
+    for i in 0..n {
+        let handle = spawn(async {
+            i
+        });
+        handles.push(handle);
+    }
+}
+
+// Test 11: Contract with loop invariant
+kfn counted_iteration(
+    count: i32
+) -> i32 pure
+    requires count >= 0;
+    ensures result == count;
+{
+    let mut i = 0;
+    loop {
+        // invariant i <= count
+        if i >= count {
+            break;
+        }
+        i = i + 1;
+    }
+    i
+}
+
+// Test 12: Multiple dependent parameters in pattern matching
+kfn case_split[m: nat][n: nat](
+    v1: Vector[m],
+    v2: Vector[n]
+) -> i32 pure {
+    if m == n {
+        m
+    } else if m > n {
+        m
+    } else {
+        n
+    }
+}
+
+// Test 13: Type-level conditional
+kfn compatible[n: nat][m: nat]() -> bool pure {
+    // At compile time: n == m?
+    true
+}
+
+// Test 14: Async stream with dependent type
+async fn process_stream[n: nat](
+    items: Vector[n]
+) -> Vector[n] uses io {
+    let mut results = Vector { data: [], len: n };
+    for i in 0..n {
+        let processed = fetch_and_process(items.data[i]).await;
+        results.data[i] = processed;
+    }
+    results
+}
+
+// Test 15: Chained effects
+async fn chained_ops() uses (io, allocate)
+    ensures true;  // effect union allowed in ensures
+{
+    // First: allocate
+    let vec = Vec::new();
+    
+    // Then: io
+    let _data = fetch("url").await;
+    
+    // All effects in union
+}
+
+kfn main() {
+    println("✓ Edge Cases and Advanced Scenarios Loaded");
+}
+
+

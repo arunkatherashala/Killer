@@ -1,0 +1,12 @@
+person = {"name": "Alice", "age": "30"};
+print(person);
+name = person["name"];
+age = person["age"];
+print(name);
+print(age);
+person["age"] = "31";
+print(person);
+config = {"debug": "true", "port": "8080", "host": "localhost"};
+print(config);
+
+

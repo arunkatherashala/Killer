@@ -1,0 +1,7 @@
+# Sample Ghost VM assembly — ghost_vm assemble programs/hello.ghost out.ghst
+# Stdin: echo halt | ghost_vm assemble - out.ghst
+.ram 16
+push 40
+push 2
+add
+halt

@@ -1,0 +1,17 @@
+# native subset logical operators aligned with advanced features
+x = 5;
+y = 10;
+
+if (x < 10 && y > 5) {
+    print("and-true");
+}
+
+if (x > 10 || y == 10) {
+    print("or-true");
+}
+
+if (false || false) {
+    print("should-not-print");
+}
+
+

@@ -1,0 +1,45 @@
+kfn add(a, b)
+  a + b
+
+kfn loop_test()
+  for i in 1..5
+    print(i)
+
+kfn check(x)
+  if x > 0
+    "positive"
+  else if x < 0
+    "negative"
+  else
+    "zero"
+
+kfn list_test()
+  list = [1, 2, 3, 4, 5]
+  for item in list
+    print(item)
+
+kfn filter_even()
+  nums = [1, 2, 3, 4, 5, 6]
+  evens = []
+  for n in nums
+    if n % 2 == 0
+      evens.push(n)
+  evens
+
+kfn main()
+  result = add(5, 3)
+  print("add result: ")
+  print(result)
+  
+  print("loop test: ")
+  loop_test()
+  
+  print("check 10: ")
+  print(check(10))
+  
+  print("list test: ")
+  list_test()
+  
+  print("filter test: ")
+  filtered = filter_even()
+  print(filtered)

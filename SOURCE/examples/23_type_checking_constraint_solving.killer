@@ -1,0 +1,56 @@
+// Week 4: Type Checking Runtime - Constraint Solving
+//
+// Demonstrates:
+// - Constraint solver deducing sizes from relationships
+// - Type parameter inference from expressions
+// - Safe code generation from proven constraints
+//
+// Example: If we know total_size = m * n and we know m, solver deduces n
+// Performance: Enables optimizations impossible without constraint solving
+
+kfn process_flattened_matrix[total_size: nat][m: nat][n: nat]() {
+    // Type system constraint: m * n == total_size
+    // If we know total_size and m, solver can deduce n
+    
+    let matrix: Matrix[m][n] = Matrix::zeros(m, n);
+    
+    // Flatten to 1D
+    let flat: Vector[total_size] = Vector::with_capacity(total_size);
+    
+    for i in range(0, m) {
+        for j in range(0, n) {
+            // Calculate flat index from 2D coordinates
+            let idx = i * n + j;
+            // Type checker proves: idx < total_size
+            flat.push(matrix[i][j]);
+        }
+    }
+    
+    // Unflatten back to 2D
+    for idx in range(0, total_size) {
+        // Constraint solver proves: idx < total_size
+        let value = flat[idx];
+        
+        // Recover 2D coordinates
+        let i = idx / n;  // Row
+        let j = idx % n;  // Column
+        
+        // Type checker verifies: i < m AND j < n
+        print("Flat[", idx, "] = Matrix[", i, "][", j, "]");
+    }
+}
+
+kfn main() {
+    // 3×4 matrix flattened to 12 elements
+    // Type system knows: 12 = 3 * 4
+    print("Processing 3×4 matrix (12 total elements):");
+    process_flattened_matrix[12][3][4]();
+    
+    // Constraint solver deduced:
+    // - total_size = 12
+    // - m = 3, n = 4
+    // - All array accesses proven safe
+    // - Zero bounds checks needed
+}
+
+

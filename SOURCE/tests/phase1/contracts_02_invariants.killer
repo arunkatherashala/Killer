@@ -1,0 +1,76 @@
+// CONTRACT PROGRAMMING - TEST SUITE 2: Loop and Struct Invariants  
+// Tests that invariants hold throughout execution
+
+// Test 2.1: Loop invariant - array is partially sorted
+kfn bubble_sort(mut arr: [i32]) -> [i32] {
+    for i in 0..arr.len() {
+        invariant arr[0..i].is_sorted();
+        
+        for j in 0..(arr.len() - i - 1) {
+            if arr[j] > arr[j+1] {
+                let temp = arr[j];
+                arr[j] = arr[j+1];
+                arr[j+1] = temp;
+            }
+        }
+    }
+    arr
+}
+
+// Test 2.2: Loop invariant with counter bounds
+kfn copy_elements[n: nat](src: Vector[n], mut dst: Vector[n]) -> Vector[n] {
+    for i in 0..n {
+        invariant i >= 0 && i <= n;
+        invariant dst is partially_filled;
+        
+        dst.data[i] = src.data[i];
+    }
+    dst
+}
+
+// Test 2.3: Struct invariant - semaphore count
+struct Semaphore {
+    count: nat,
+    
+    invariant count >= 0;
+}
+
+// Test 2.4: Struct invariant - queue bounds
+struct Queue[T] {
+    items: [T],
+    head: nat,
+    tail: nat,
+    
+    invariant head <= tail;
+    invariant tail <= items.len();
+}
+
+// Test 2.5: Stack invariant
+struct Stack[T] {
+    items: [T],
+    top: nat,
+    
+    invariant top >= 0;
+    invariant top <= items.len();
+}
+
+kfn push[T](mut stack: Stack[T], item: T) -> Stack[T] {
+    stack.items.push(item);
+    stack.top = stack.top + 1;
+    // Compiler verifies: invariant still holds
+    stack
+}
+
+// Test 2.6: State machine with invariant
+struct StateMachine {
+    state: i32,
+    data: String,
+    
+    invariant state >= 0 && state <= 3;
+}
+
+kfn main() {
+    println("✓ Invariant Tests Loaded");
+}
+
+

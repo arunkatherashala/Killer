@@ -1,0 +1,38 @@
+# file_scanner.ghost — Ghost that lists directory contents and reads a file.
+# Run: ghost_vm world file_scanner.ghst --allow-files --sandbox . --fuel 50000
+#
+# Uses SYS_FILE_LIST (35) and SYS_FILE_READ (30).
+
+.fuel 50000
+.data 0 "."
+.data 50 "Files:\n"
+.data 100 "\n---\n"
+
+# Print "Files:\n"
+    push 50         # addr
+    push 7          # len
+    syscall 4       # SYS_PRINT_STR
+
+# List directory "." into RAM[512..]
+    push 512        # dest_addr
+    push 0          # dirname_addr
+    push 1          # dirname_len (".")
+    syscall 35      # SYS_FILE_LIST → bytes written
+
+# Print the listing
+    dup
+    push -1
+    eq
+    jmpif done
+
+    push 512        # addr
+    swap
+    syscall 4       # SYS_PRINT_STR
+
+# Print separator
+    push 100
+    push 5
+    syscall 4       # SYS_PRINT_STR
+
+done:
+    halt

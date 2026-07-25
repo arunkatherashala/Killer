@@ -1,0 +1,92 @@
+// Polymorphic Functions - Using Traits for Abstraction
+// Week 24C: Trait System Support
+// Demonstrates: generic functions, trait bounds, runtime polymorphism
+
+println("=== Polymorphic Function Examples ===")
+println("")
+
+// Generic function that works with any type implementing Display
+let print_value = fn(value, type_name) {
+    // Check if type implements Display trait
+    let has_display = trait_check(type_name, "Display")
+    
+    if has_display {
+        println("Value of type " + type_name + " has Display trait")
+        println("Can be converted to string via to_string()")
+    } else {
+        println("Type " + type_name + " does not implement Display")
+    }
+}
+
+println("Testing Display trait polymorphism:")
+print_value("hello", "String")
+print_value(42, "Number")
+println("")
+
+// Generic comparison function using Comparable trait
+let compare_values = fn(a_type, b_type) {
+    let a_comparable = trait_check(a_type, "Comparable")
+    let b_comparable = trait_check(b_type, "Comparable")
+    
+    println("Type " + a_type + " is Comparable: " + str(a_comparable))
+    println("Type " + b_type + " is Comparable: " + str(b_comparable))
+    
+    if a_comparable && b_comparable {
+        println("→ Can compare these types using trait methods")
+    } else {
+        println("→ Cannot compare - at least one type lacks Comparable trait")
+    }
+}
+
+println("")
+println("Testing Comparable trait:")
+compare_values("Number", "Number")
+
+println("")
+compare_values("String", "Number")
+
+println("")
+println("=== Implementing Custom Traits ===")
+println("")
+
+// Define custom Serializable trait
+let SerializableTrait = trait_new("Serializable", ["to_json", "from_json"])
+println("✓ Serializable trait defined:")
+println("  Methods: to_json(), from_json()")
+
+// Implement Serializable for custom User type
+let user_serializable = trait_impl("Serializable", "User")
+println("")
+println("✓ Serializable implemented for User type:")
+println("  Trait: " + user_serializable["trait"])
+println("  Type: " + user_serializable["for_type"])
+println("  Status: " + user_serializable["status"])
+
+println("")
+println("=== Trait-Based Polymorphism Pattern ===")
+println("")
+
+// Function that uses polymorphism to handle multiple types
+let serialize = fn(obj, obj_type) {
+    // Resolve serialization method through trait
+    let json_method = trait_resolve(obj_type, "to_json")
+    
+    if json_method != null && json_method["resolved"] {
+        println("[" + obj_type + "] Using trait method:")
+        println("  Trait: " + json_method["trait"])
+        println("  Method: " + json_method["method"])
+        println("  Serialization: SUCCESS")
+    } else {
+        println("[" + obj_type + "] Type not serializable")
+    }
+}
+
+println("Serializing different types:")
+serialize("hello", "String")
+println("")
+serialize("user_obj", "User")
+
+println("")
+println("✓ Polymorphic function demo complete")
+
+

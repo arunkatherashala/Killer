@@ -1,0 +1,84 @@
+-- ROUND 6: HEAVY LOAD TEST
+
+kfn test_large_list_creation()
+  println("TEST 1: Create Large List (5000 items)")
+  lst = []
+  i = 0
+  while i < 5000
+    lst = push(lst, i * i)
+    i = i + 1
+  len = length(lst)
+  println("Created list with " + len.to_string() + " items")
+  assert_eq(len, 5000)
+  println("✓ PASSED")
+
+kfn test_deep_recursion()
+  println("TEST 2: Deep Recursion (100 levels)")
+  
+  kfn count_down(n: Int) -> Int
+    if n <= 0
+      return 0
+    return 1 + count_down(n - 1)
+  
+  result = count_down(100)
+  println("Recursion depth result: " + result.to_string())
+  assert_eq(result, 100)
+  println("✓ PASSED")
+
+kfn test_complex_computation()
+  println("TEST 3: Complex Computation (10K operations)")
+  result = 0
+  i = 0
+  j = 0
+  while i < 100
+    j = 0
+    while j < 100
+      result = result + (i * j)
+      j = j + 1
+    i = i + 1
+  println("Complex computation result: " + result.to_string())
+  println("✓ PASSED")
+
+kfn test_string_heavy()
+  println("TEST 4: Heavy String Operations (1000 concat)")
+  str = ""
+  i = 0
+  while i < 1000
+    str = str + "x"
+    i = i + 1
+  len = length(str)
+  println("String length after 1000 concat: " + len.to_string())
+  assert_eq(len, 1000)
+  println("✓ PASSED")
+
+kfn test_mixed_heavy_load()
+  println("TEST 5: Mixed Heavy Load (Arithmetic + Lists)")
+  lst = []
+  sum = 0
+  i = 0
+  while i < 1000
+    val = (i * i) + (i / 2)
+    lst = push(lst, val)
+    sum = sum + val
+    i = i + 1
+  len = length(lst)
+  println("Processed " + len.to_string() + " items, sum: " + sum.to_string())
+  println("✓ PASSED")
+
+kfn main()
+  println("=" * 50)
+  println("ROUND 6: HEAVY LOAD TEST")
+  println("=" * 50)
+  test_large_list_creation()
+  println("")
+  test_deep_recursion()
+  println("")
+  test_complex_computation()
+  println("")
+  test_string_heavy()
+  println("")
+  test_mixed_heavy_load()
+  println("")
+  println("=" * 50)
+  println("ROUND 6: ALL HEAVY LOAD TESTS PASSED ✓")
+  println("=" * 50)

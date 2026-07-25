@@ -1,0 +1,108 @@
+-- test_builtin_aliases.killer — Verify all newly registered builtins
+-- Tests: time_ms, sleep_ms, sin, cos, tan, random
+
+passed = 0
+failed = 0
+
+print("=== BUILTIN ALIASES TEST SUITE ===")
+print("")
+
+-- Test 1: time_ms (alias for system_time_ms)
+t1 = time_ms()
+if t1 > 0 {
+    print(K"  [PASS] 1. time_ms() = {t1}")
+    passed = passed + 1
+} else {
+    print(K"  [FAIL] 1. time_ms() = {t1}")
+    failed = failed + 1
+}
+
+-- Test 2: system_time_ms (original)
+t2 = system_time_ms()
+if t2 > 0 {
+    print(K"  [PASS] 2. system_time_ms() = {t2}")
+    passed = passed + 1
+} else {
+    print(K"  [FAIL] 2. system_time_ms() = {t2}")
+    failed = failed + 1
+}
+
+-- Test 3: sin
+s = sin(0)
+if s == 0 {
+    print(K"  [PASS] 3. sin(0) = {s}")
+    passed = passed + 1
+} else {
+    print(K"  [FAIL] 3. sin(0) = {s}")
+    failed = failed + 1
+}
+
+-- Test 4: cos
+c = cos(0)
+if c == 1 {
+    print(K"  [PASS] 4. cos(0) = {c}")
+    passed = passed + 1
+} else {
+    print(K"  [FAIL] 4. cos(0) = {c}")
+    failed = failed + 1
+}
+
+-- Test 5: tan
+t = tan(0)
+if t == 0 {
+    print(K"  [PASS] 5. tan(0) = {t}")
+    passed = passed + 1
+} else {
+    print(K"  [FAIL] 5. tan(0) = {t}")
+    failed = failed + 1
+}
+
+-- Test 6: random
+r = random()
+if r >= 0 {
+    print(K"  [PASS] 6. random() = {r}")
+    passed = passed + 1
+} else {
+    print(K"  [FAIL] 6. random() = {r}")
+    failed = failed + 1
+}
+
+-- Test 7: sleep_ms (alias for thread_sleep_ms) — sleep 10ms
+t_before = time_ms()
+sleep_ms(10)
+t_after = time_ms()
+elapsed = t_after - t_before
+if elapsed >= 5 {
+    print(K"  [PASS] 7. sleep_ms(10) took {elapsed}ms")
+    passed = passed + 1
+} else {
+    print(K"  [FAIL] 7. sleep_ms(10) took {elapsed}ms (too fast)")
+    failed = failed + 1
+}
+
+-- Test 8: Integer division still works
+val = 100 // 7
+if val == 14 {
+    print("  [PASS] 8. 100 // 7 = 14")
+    passed = passed + 1
+} else {
+    print(K"  [FAIL] 8. 100 // 7 = {val}")
+    failed = failed + 1
+}
+
+-- Test 9: Parenthesized expressions still work
+val2 = (3 + 4) * (2 + 1)
+if val2 == 21 {
+    print("  [PASS] 9. (3+4)*(2+1) = 21")
+    passed = passed + 1
+} else {
+    print(K"  [FAIL] 9. (3+4)*(2+1) = {val2}")
+    failed = failed + 1
+}
+
+print("")
+total = passed + failed
+print(K"RESULTS: {passed}/{total} passed, {failed} failed")
+if failed == 0 {
+    print("ALL BUILTIN ALIAS TESTS PASSED")
+}

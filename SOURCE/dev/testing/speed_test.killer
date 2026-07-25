@@ -1,0 +1,76 @@
+# Killer Speed Test - Comprehensive Performance Benchmark
+
+# Test 1: Simple Loop (100,000 iterations)
+print("=== Test 1: Loop Performance ===")
+start = 0
+count = 0
+while (count < 100000) {
+    count = count + 1
+}
+print("Looped 100,000 times")
+
+# Test 2: Arithmetic Operations
+print("=== Test 2: Arithmetic ===")
+result = 0
+i = 0
+while (i < 50000) {
+    result = result + i
+    result = result * 2
+    result = result / 2
+    i = i + 1
+}
+print("Arithmetic result:", result)
+
+# Test 3: Array Operations
+print("=== Test 3: Array Operations ===")
+arr = []
+j = 0
+while (j < 10000) {
+    arr.push(j)
+    j = j + 1
+}
+print("Created array with", arr.length, "elements")
+print("First element:", arr[0])
+print("Last element:", arr[arr.length - 1])
+
+# Test 4: Function Calls (recursion)
+print("=== Test 4: Recursion ===")
+kfn fibonacci(n) {
+    if (n <= 1) { return n }
+    return fibonacci(n - 1) + fibonacci(n - 2)
+}
+fib_result = fibonacci(20)
+print("fibonacci(20) =", fib_result)
+
+# Test 5: String Operations
+print("=== Test 5: String Operations ===")
+str_result = ""
+k = 0
+while (k < 1000) {
+    str_result = str_result + "x"
+    k = k + 1
+}
+print("String length:", str_result.length)
+
+# Test 6: Class Instantiation
+print("=== Test 6: Class Operations ===")
+class Counter {
+    init() {
+        this.count = 0
+    }
+    increment() {
+        this.count = this.count + 1
+        return this.count
+    }
+}
+c = new Counter()
+m = 0
+while (m < 1000) {
+    c.increment()
+    m = m + 1
+}
+print("Counter final value:", c.count)
+
+print("=== Speed Test Complete ===")
+
+

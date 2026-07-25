@@ -1,0 +1,51 @@
+// DEPENDENT TYPES - TEST SUITE 2: Type-level Arithmetic
+// Tests that dependent types support arithmetic in their parameters
+
+// Test 2.1: Vector concatenation with size addition
+kfn concat[n: nat, m: nat](v1: Vector[n], v2: Vector[m]) -> Vector[n + m] {
+    // Result size is provably n + m
+    v1  // Simplified for testing
+}
+
+// Test 2.2: Matrix transpose swaps dimensions
+kfn transpose[m: nat, n: nat](a: Matrix[m][n]) -> Matrix[n][m] {
+    a   // Simplified
+}
+
+// Test 2.3: Multi-dimensional indexing
+kfn get_matrix_element[m: nat, n: nat](
+    mat: Matrix[m][n],
+    row: Idx[m],
+    col: Idx[n]
+) -> f64 {
+    mat.data[row * n + col]  // Simplified
+}
+
+// Test 2.4: Vector multiplication size checking
+kfn vector_product_size[n: nat, k: nat, m: nat](
+    a: Matrix[n][k],
+    b: Matrix[k][m]
+) -> Matrix[n][m] {
+    a  // Size proven: n×k * k×m = n×m
+}
+
+// Test 2.5: Subarray extraction maintains constraint
+kfn slice[n: nat](v: Vector[n], start: nat, end: nat) -> Vector[end - start] {
+    v  // Simplified
+}
+
+// Test 2.6: Nested dependent types
+type Grid[cols: nat, rows: nat] {
+    data: Vector[cols * rows],
+}
+
+// Test 2.7: Type-level min function
+kfn min[n: nat, m: nat](a: nat, b: nat) -> nat {
+    if a < b { a } else { b }
+}
+
+kfn main() {
+    println("✓ Dependent Types Arithmetic Tests Loaded");
+}
+
+

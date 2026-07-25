@@ -1,0 +1,49 @@
+// week23_04_http_basics.killer
+// Basic HTTP API usage - GET requests and response handling
+
+println("=== HTTP GET Examples ===\n")
+
+// Simple GET request
+response = http_get("https://api.example.com/users")
+println("GET request status: " + str(response.status))
+println("Response body: " + response.body)
+
+// Check response status
+if response.status == 200 {
+    println("✓ Request successful")
+}
+else {
+    println("✗ Request failed with status: " + str(response.status))
+}
+
+// Parse JSON response
+user_json = "{\"id\": 1, \"name\": \"Alice\", \"role\": \"Engineer\"}"
+parsed = parse_json(user_json)
+println("\nParsed user:")
+println("  Name: " + parsed.name)
+println("  Role: " + parsed.role)
+println("  ID: " + str(parsed.id))
+
+// Different endpoints
+println("\n=== Multiple Endpoints ===")
+endpoints = [
+    "https://api.example.com/users",
+    "https://api.example.com/posts",
+    "https://api.example.com/comments",
+]
+
+for endpoint in endpoints {
+    response = http_get(endpoint)
+    println(endpoint + " => status " + str(response.status))
+}
+
+// Error handling
+println("\n=== Error Handling ===")
+error_response = http_get("https://api.example.com/error")
+if error_response.status >= 400 {
+    println("ERROR: Server returned " + str(error_response.status))
+    error_data = parse_json(error_response.body)
+    println("Error message: " + error_data.error)
+}
+
+

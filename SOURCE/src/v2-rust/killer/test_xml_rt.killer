@@ -1,0 +1,4 @@
+nova_from_xml("out.xml", "xml_rt.kore")
+nova_info("xml_rt.kore")
+nova_to_csv("xml_rt.kore", "xml_rt.csv")
+print("XML round-trip OK")

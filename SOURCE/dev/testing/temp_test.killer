@@ -1,0 +1,7 @@
+
+kfn sayHi() {
+    print("Hi")
+}
+sayHi()
+
+

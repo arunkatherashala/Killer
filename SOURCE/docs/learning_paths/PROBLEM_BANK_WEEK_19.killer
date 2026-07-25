@@ -1,0 +1,1202 @@
+// PROBLEM BANK: WEEK 19 - MULTI-THREADED APPLICATIONS
+// 100 Problems spanning actor foundations, scaling, synchronization, and deadlock prevention
+
+===== CATEGORY 19.1: ACTOR FOUNDATIONS (30 Problems) =====
+
+// SECTION 19.1.1-19.1.10: Basic Actor Patterns
+
+[19.1.1]
+Problem: Simple Work Distributor Actor
+Difficulty: 1/5
+Description:
+  Create a work distribution actor that:
+  - Accepts work requests (strings)
+  - Processes each work item immediately
+  - Tracks total completion count
+  - Returns completion count on request
+TestCases:
+  - Create actor, send 5 work items, verify count = 5
+  - Send 10 items, check count increases correctly
+  - Start at 0, increment by 1 each time
+Tags: actor-basics, state-management
+
+[19.1.2]
+Problem: Echo Actor with Message Logging
+Difficulty: 1/5
+Description:
+  Implement an echo actor that:
+  - Receives any message
+  - Logs message to internal vector
+  - Returns message back to sender
+  - Counts total messages received
+TestCases:
+  - Send "hello" -> receive "ECHO: hello"
+  - Send 100 messages -> verify count = 100
+  - Retrieve logs -> check order preserved
+Tags: actor-basics, message-handling, logging
+
+[19.1.3]
+Problem: Task Counter Actor
+Difficulty: 2/5
+Description:
+  Create task counter that responds to:
+  - CompleteTask: increment completed count
+  - FailTask: increment failed count
+  - GetStatus: return (completed, failed, pending)
+TestCases:
+  - Complete 5, fail 2 -> GetStatus = (5, 2, 7)
+  - Pending = total_submitted - (completed + failed)
+  - Handle 0 tasks -> (0, 0, 0)
+Tags: state-machine, counters
+
+[19.1.4]
+Problem: Accumulator Actor
+Difficulty: 1/5
+Description:
+  Implement accumulator that:
+  - Receives numeric values
+  - Sums all received values
+  - Reset command clears sum
+  - Returns running total on request
+TestCases:
+  - Add 10, 20, 30 -> GetSum = 60
+  - Reset -> GetSum = 0
+  - Add negative: -5 -> GetSum = -5
+Tags: arithmetic, state-tracking
+
+[19.1.5]
+Problem: Request-Response Pattern
+Difficulty: 2/5
+Description:
+  Implement request-response pattern:
+  - Actor accepts (request_id, payload) pairs
+  - Processes asynchronously
+  - Can handle multiple outstanding requests
+  - Returns (request_id, response) tuples
+TestCases:
+  - Send request 1, 2, 3
+  - Get back responses in any order (not necessarily FIFO)
+  - Verify IDs match
+Tags: correlation, request-response
+
+[19.1.6]
+Problem: State Machine Actor
+Difficulty: 2/5
+Description:
+  Create FSM actor with states: Idle, Processing, Complete
+  Valid transitions:
+  - Idle -> Processing (on work request)
+  - Processing -> Complete (on finish)
+  - Complete -> Idle (on reset)
+  Reject invalid transitions
+TestCases:
+  - Idle + work -> Processing
+  - Processing + finish -> Complete
+  - Processing + finish again -> rejected
+  - Complete + reset -> Idle
+Tags: state-machine, validation
+
+[19.1.7]
+Problem: Rate-Limited Actor
+Difficulty: 2/5
+Description:
+  Create rate limiter that:
+  - Allows max 10 messages/second
+  - Queues excess messages
+  - Processes queued messages in order
+  - Returns queue length on status check
+TestCases:
+  - Send 25 messages fast -> queue 15
+  - Wait 1s -> queue decrements by ~10
+  - Send 5 more -> queue has ~10
+Tags: rate-limiting, queuing
+
+[19.1.8]
+Problem: Result Collector Actor
+Difficulty: 2/5
+Description:
+  Collector waits for N responses from workers:
+  - Collects up to 5 responses
+  - Has timeout (3s)
+  - Returns all collected responses
+  - Errors if timeout before collecting N
+TestCases:
+  - Collect 3 responses -> return vector of 3
+  - Timeout after 1s with 2 responses -> error
+  - Collect under timeout -> success
+Tags: timeout, collection
+
+[19.1.9]
+Problem: Retry-Dispatch Actor
+Difficulty: 2/5
+Description:
+  Dispatcher sends to primary, retries on backup:
+  - Send to primary worker
+  - If fails, send to backup
+  - Track success and failure
+  - Return final result
+TestCases:
+  - Primary succeeds -> count success
+  - Primary fails, backup succeeds -> count 1 retry
+  - Both fail -> count failed
+Tags: fault-tolerance, retry-logic
+
+[19.1.10]
+Problem: Circuit Breaker Actor
+Difficulty: 3/5
+Description:
+  Implement circuit breaker:
+  - Closed: requests pass through
+  - Open (> 5 failures): reject requests
+  - Half-open: test single request
+  - On success: return to Closed
+  - Track failure count
+TestCases:
+  - 5 failures -> state = Open
+  - In Open -> reject incoming requests
+  - Test request succeeds -> state = Closed
+Tags: resilience, circuit-breaker
+
+// SECTION 19.1.11-19.1.20: Message Passing
+
+[19.1.11]
+Problem: Typed Message Enum
+Difficulty: 1/5
+Description:
+  Create enum with message variants:
+  - ProcessMessage(String)
+  - ResponseMessage(String)
+  - EventMessage(String)
+  - StatusMessage
+  Serialize/deserialize for logging
+TestCases:
+  - Create each variant
+  - Convert to string representation
+  - Parse back (if implementing parser)
+Tags: enums, message-types
+
+[19.1.12]
+Problem: Message Router
+Difficulty: 2/5
+Description:
+  Router that:
+  - Maps target name to handler
+  - Routes message to correct handler
+  - Returns error if unknown target
+  - Logs routing decisions
+TestCases:
+  - Route to "worker1" -> delivered
+  - Route to "unknown" -> error
+  - Multi-target routing -> deliver to all
+Tags: routing, message-handling
+
+[19.1.13]
+Problem: Request-Response Correlator
+Difficulty: 2/5
+Description:
+  Assign ID to each request:
+  - new_request() -> assign unique ID, store mapping
+  - handle_response(id, response) -> return matching request
+  - Timeout unmatched requests (> 1s)
+  - Detect duplicate IDs
+TestCases:
+  - Submit request -> get ID
+  - Receive response with ID -> match
+  - Timeout after 1s of waiting
+Tags: correlation, request-response
+
+[19.1.14]
+Problem: Fire-and-Forget Dispatcher
+Difficulty: 1/5
+Description:
+  Send message with no response expected:
+  - Send message
+  - Don't wait/block
+  - Track delivery (best effort)
+  - Count sent messages
+TestCases:
+  - Send 100 -> count = 100
+  - Send no response needed -> success
+  - Handle backpressure gracefully
+Tags: async, fire-and-forget
+
+[19.1.15]
+Problem: Ordered Delivery Verifier
+Difficulty: 2/5
+Description:
+  Verify messages arrive in order:
+  - Send messages with sequence numbers
+  - Detect out-of-order reception
+  - Return ordering violation count
+TestCases:
+  - Send 1,2,3,4,5 -> received in order
+  - Receive 1,3,2,4,5 -> detect disorder
+  - Count violations (2 out of 5)
+Tags: ordering, verification
+
+[19.1.16]
+Problem: Message Deduplicator
+Difficulty: 2/5
+Description:
+  Remove duplicate messages:
+  - Track message IDs seen
+  - Discard duplicates
+  - Maintain ordering
+  - Return duplicate count
+TestCases:
+  - Send A,B,A,C,B,A -> process A,B,C (3 duplicates)
+  - Check order: A,B,C (not scrambled)
+Tags: deduplication, state-tracking
+
+[19.1.17]
+Problem: Priority Message Queue
+Difficulty: 2/5
+Description:
+  Queue with priorities:
+  - High priority processed first
+  - Medium, then Low
+  - Prevent starvation (low eventually processed)
+  - FIFO within same priority
+TestCases:
+  - High=1, Med=2, Low=3 -> process High first
+  - After 3 Highs, process 1 Medium (prevent starvation)
+Tags: priority-queue, fairness
+
+[19.1.18]
+Problem: Message Batching Actor
+Difficulty: 2/5
+Description:
+  Batch messages for efficiency:
+  - Collect N messages (N=5)
+  - Process as single batch
+  - Reduce per-message overhead
+  - Handle partial batches on timeout
+TestCases:
+  - Send 12 messages -> 2 batches of 5 + 1 partial
+  - Batch 1 has 5 items -> process together
+Tags: batching, efficiency
+
+[19.1.19]
+Problem: Message Compression
+Difficulty: 2/5
+Description:
+  Compress for large messages:
+  - Compress on send (simple deflate)
+  - Decompress on receive
+  - Track compression ratio
+  - Measure overhead
+TestCases:
+  - Large message (1000 bytes) -> compress
+  - Decompress -> verify original
+  - Ratio = compressed/original (usually 50-80%)
+Tags: compression, optimization
+
+[19.1.20]
+Problem: Message Versioning
+Difficulty: 2/5
+Description:
+  Support multiple message formats:
+  - v1 format: {type, data}
+  - v2 format: {type, data, timestamp}
+  - Auto-migrate v1 -> v2
+  - Track version used
+TestCases:
+  - Receive v1 -> migrate to v2 internally
+  - Receive v2 -> use directly
+  - All stored responses in v2
+Tags: versioning, migration
+
+// SECTION 19.1.21-19.1.30: Lifecycle & Supervision
+
+[19.1.21]
+Problem: Actor Lifecycle Tracker
+Difficulty: 1/5
+Description:
+  Track actor states:
+  - Created -> Running -> Stopped
+  - Record timestamps
+  - Count state changes
+  - Query current state
+TestCases:
+  - Create actor -> state = Created
+  - Start -> state = Running (t1 recorded)
+  - Stop -> state = Stopped (t2 recorded)
+  - Total changes = 2
+Tags: lifecycle, state-machine
+
+[19.1.22]
+Problem: Graceful Shutdown Handler
+Difficulty: 2/5
+Description:
+  On shutdown:
+  - Drain pending messages
+  - Flush state to storage
+  - Report final statistics
+  - Prevent new messages
+TestCases:
+  - 10 pending messages -> drain all
+  - Shutdown reports count
+  - New messages rejected after shutdown
+Tags: shutdown, draining
+
+[19.1.23]
+Problem: Actor Crash Recovery
+Difficulty: 2/5
+Description:
+  On crash (error processing message):
+  - Detect failure
+  - Restart from initial state
+  - Preserve some history (last 10 messages)
+  - Alert supervisor
+TestCases:
+  - Process 100 messages, crash on 50
+  - Restart, recover history
+  - Continue processing
+Tags: recovery, fault-tolerance
+
+[19.1.24]
+Problem: Restart Strategy Evaluator
+Difficulty: 2/5
+Description:
+  Exponential backoff for restarts:
+  - 1s, 2s, 4s, 8s, 16s
+  - Max 5 restarts in 60s window
+  - Circuit break after threshold
+  - Track restart history
+TestCases:
+  - Restart attempt 1 -> wait 1s
+  - Restart attempt 3 -> wait 4s
+  - Attempt 6 -> circuit break (exceed max)
+Tags: exponential-backoff, circuit-breaker
+
+[19.1.25]
+Problem: Supervision Tree
+Difficulty: 3/5
+Description:
+  Parent supervises N children:
+  - Add/remove children
+  - One child crashes -> restart
+  - Multiple crashes -> escalate to parent
+  - Track tree structure
+TestCases:
+  - Add 3 children -> can list all
+  - Child 1 crashes -> parent detects, restarts
+  - Child crashes repeatedly -> escalate
+Tags: supervision, hierarchical
+
+[19.1.26]
+Problem: Health Check System
+Difficulty: 2/5
+Description:
+  Ping actor, expect pong:
+  - Send ping every 1s
+  - Expect pong within 500ms
+  - Timeout = unhealthy
+  - Mark failed, trigger restart
+TestCases:
+  - Healthy actor -> always pongs
+  - Broken actor -> no pong -> restart
+Tags: health-checks, monitoring
+
+[19.1.27]
+Problem: Crash Reporter
+Difficulty: 2/5
+Description:
+  Log crashes comprehensively:
+  - Timestamp of crash
+  - Last message received
+  - Error reason
+  - Stack (if available)
+  - Actor name
+TestCases:
+  - Crash actor -> log includes all info
+  - Retrieve crash log -> verify complete
+Tags: logging, debugging
+
+[19.1.28]
+Problem: Escalation Policy
+Difficulty: 3/5
+Description:
+  Escalate failures up tree:
+  - Child crash -> parent restart
+  - Parent crash -> stop all children
+  - Top-level crash -> system shutdown
+  - Implement strategy
+TestCases:
+  - Child crashes -> parent recovers
+  - Parent crashes -> children stopped
+  - Root crashes -> shutdown
+Tags: escalation, supervision
+
+[19.1.29]
+Problem: Recovery Metrics
+Difficulty: 2/5
+Description:
+  Track recovery success:
+  - Crash count per actor
+  - Time to recovery (crash -> healthy)
+  - Success rate after recovery
+  - Average recovery time
+TestCases:
+  - Actor crashes, recovers in 2s -> record
+  - Track 10 crashes -> calculate average
+Tags: metrics, observability
+
+[19.1.30]
+Problem: Actor Census
+Difficulty: 2/5
+Description:
+  Enumerate all running actors:
+  - List actor names
+  - Show state (running, failed, idle)
+  - Count by type
+  - Memory per actor
+TestCases:
+  - 50 workers running -> list all
+  - 5 failed -> show separately
+  - Total memory usage
+Tags: introspection, monitoring
+
+===== CATEGORY 19.2: SCALING (30 Problems) =====
+
+// SECTION 19.2.1-19.2.15: Pools & Load Distribution
+
+[19.2.1]
+Problem: Fixed-Size Actor Pool
+Difficulty: 2/5
+Description:
+  Create pool with 10 workers:
+  - Pre-allocate all actors
+  - Distribute work round-robin
+  - Track completion
+  - Handle overflow gracefully
+TestCases:
+  - 10 workers, 100 work items
+  - All items processed
+  - No item lost
+Tags: pooling, fixed-size
+
+[19.2.2]
+Problem: Dynamic Pool Sizing
+Difficulty: 3/5
+Description:
+  Auto-size pool based on load:
+  - Start with 5 workers
+  - Add worker if queue depth > 100
+  - Remove if idle > 10s
+  - Min 2, max 50
+TestCases:
+  - Queue fills -> add workers
+  - Queue empties -> remove workers
+  - Stay within bounds
+Tags: dynamic-sizing, auto-scaling
+
+[19.2.3]
+Problem: Work Distribution Scheduler
+Difficulty: 2/5
+Description:
+  Distribute to least-busy worker:
+  - Track queue depth per worker
+  - Always assign to smallest queue
+  - Prevent starvation
+  - Measure variance
+TestCases:
+  - 3 workers with queues [1, 5, 2]
+  - New work -> assign to worker 0 (queue now [2, 5, 2])
+  - Variance = std_dev of queue depths
+Tags: load-balancing, least-busy
+
+[19.2.4]
+Problem: Worker Pool with Backpressure
+Difficulty: 2/5
+Description:
+  Bounded queue (capacity 1000):
+  - Reject new work if full
+  - Return error to sender
+  - Sender can buffer/retry
+  - Measure rejection rate
+TestCases:
+  - Enqueue 1000 items -> all accepted
+  - Enqueue 1001st -> rejected
+  - Rejection % = (1 / 1001) * 100%
+Tags: backpressure, bounded-queue
+
+[19.2.5]
+Problem: Round-Robin Distributor
+Difficulty: 1/5
+Description:
+  Cycle through workers:
+  - Worker 1, 2, 3, ..., N, 1, 2...
+  - Simple, no state tracking needed
+  - Measure load variance
+TestCases:
+  - 50 items, 10 workers
+  - Load should be ~5 per worker
+  - Variance low
+Tags: round-robin, simple
+
+[19.2.6]
+Problem: Hash-Based Distributor
+Difficulty: 2/5
+Description:
+  Assign by key hash:
+  - hash(key) % num_workers -> worker ID
+  - Same key always same worker
+  - Maintains ordering per key
+  - Handle hash collisions
+TestCases:
+  - Items with key "A" -> always worker X
+  - Items with key "B" -> always worker Y
+  - Load distribution follows key distribution
+Tags: hash-based, affinity
+
+[19.2.7]
+Problem: Work Batching Pool
+Difficulty: 2/5
+Description:
+  Collect items into batches:
+  - Batch size = 5
+  - Send batch to worker
+  - Reduce per-item overhead
+  - Handle partial batches at end
+TestCases:
+  - 12 items -> 2 batches of 5 + 1 of 2
+  - Batch 1 processed together
+  - All items completed
+Tags: batching, throughput
+
+[19.2.8]
+Problem: Priority Work Queue
+Difficulty: 2/5
+Description:
+  Process high-priority first:
+  - High > Medium > Low priorities
+  - FIFO within same priority
+  - Prevent Low from starving (eventually process)
+TestCases:
+  - Queue: [H1, L1, M1, H2]
+  - Order: H1, H2, M1, L1
+Tags: priority-queue, fairness
+
+[19.2.9]
+Problem: Work Stealing Pool
+Difficulty: 3/5
+Description:
+  Idle workers steal from busy:
+  - Each worker has own queue
+  - If own queue empty, steal from neighbor
+  - Reduces idle time
+  - Improves load balance
+TestCases:
+  - Worker A queue full, B empty -> B steals from A
+  - Measure throughput improvement (vs. simple pool)
+Tags: work-stealing, load-balance
+
+[19.2.10]
+Problem: Work Timeouts
+Difficulty: 2/5
+Description:
+  Work items have deadline:
+  - Each item has 5s timeout
+  - Cancel if not started by deadline
+  - Track cancelled count
+  - Restart timed-out workers
+TestCases:
+  - Submit work, wait 6s -> cancelled if not started
+  - Measure cancellation rate
+Tags: timeout, deadline
+
+[19.2.11]
+Problem: Result Collection
+Difficulty: 2/5
+Description:
+  Collect results from worker:
+  - Results sent back to submitter
+  - Maintain order (optional)
+  - Handle failures
+  - Timeout if no result
+TestCases:
+  - Submit 100 items -> collect 100 results
+  - All results received
+  - No missing results
+Tags: result-handling, collection
+
+[19.2.12]
+Problem: Pool Statistics
+Difficulty: 2/5
+Description:
+  Measure pool performance:
+  - Throughput (items/sec)
+  - Latency (min, max, avg)
+  - Queue depth over time
+  - Worker utilization
+TestCases:
+  - Process 1000 items in 1s
+  - Throughput = 1000 items/sec
+  - Report p50, p95, p99 latencies
+Tags: metrics, observability
+
+[19.2.13]
+Problem: Pool Drain Functionality
+Difficulty: 2/5
+Description:
+  Graceful shutdown:
+  - Stop accepting new work
+  - Process all pending work
+  - Then terminate workers
+TestCases:
+  - 100 items in queue
+  - Call drain()
+  - All 100 process
+  - No worker accepts new work
+Tags: shutdown, graceful
+
+[19.2.14]
+Problem: Worker Recycling
+Difficulty: 2/5
+Description:
+  Restart worker after N items:
+  - Process 100 items
+  - Restart worker (reset state)
+  - Continue processing
+  - Prevent memory leaks
+TestCases:
+  - 1000 items, restart every 100
+  - Total restarts = 10
+  - All items processed correctly
+Tags: lifecycle, memory-management
+
+[19.2.15]
+Problem: Adaptive Pool
+Difficulty: 3/5
+Description:
+  Adapt to load automatically:
+  - Monitor p95 latency
+  - If > 100ms, add workers
+  - If idle, remove workers
+  - Min 5, max 50 workers
+TestCases:
+  - Heavy load -> p95 high -> add workers
+  - Light load -> p95 low -> remove workers
+  - Stay within bounds
+Tags: adaptive, auto-scaling
+
+// SECTION 19.2.16-19.2.30: Shared State & Thread-Safety
+
+[19.2.16]
+Problem: Shared Counter with Arc<Mutex<>>
+Difficulty: 1/5
+Description:
+  Multiple actors increment shared counter:
+  - 3 actors, each increment 100 times
+  - Expected result = 300
+  - Verify no data races
+TestCases:
+  - 3 threads, 100 increments each -> result = 300
+  - Enable ThreadSanitizer -> no data races
+Tags: arc-mutex, shared-state
+
+[19.2.17]
+Problem: Shared Cache with Arc<RwLock<>>
+Difficulty: 2/5
+Description:
+  Multiple readers, few writers:
+  - 10 reader threads
+  - 1 writer thread
+  - Readers don't block each other
+  - Measure lock contention
+TestCases:
+  - 10 readers concurrent -> fast
+  - Writer waits for readers -> no writer starve
+Tags: rwlock, cache
+
+[19.2.18]
+Problem: Shared Metrics Collector
+Difficulty: 2/5
+Description:
+  All actors update shared metrics:
+  - Latency histogram (100 buckets)
+  - Lock contention minimal
+  - Query metrics without stopping
+TestCases:
+  - 50 actors updating metrics
+  - Query histogram concurrently
+  - No blocking
+Tags: metrics, thread-safe
+
+[19.2.19]
+Problem: Shared Configuration
+Difficulty: 1/5
+Description:
+  All actors share config:
+  - Config can be updated
+  - Actors see changes immediately
+  - Hot-reload without restart
+TestCases:
+  - Update config -> all actors see it
+  - Verify consistency
+Tags: shared-config, hot-reload
+
+[19.2.20]
+Problem: Shared State Synchronization
+Difficulty: 2/5
+Description:
+  Actor A changes state -> Actor B reads:
+  - A writes value
+  - B reads same value
+  - Verify consistency
+  - Use proper memory ordering
+TestCases:
+  - A: set(x, 42)
+  - B: get(x) == 42
+  - Guarantee even under races
+Tags: synchronization, consistency
+
+[19.2.21]
+Problem: Atomic Shutdown Flag
+Difficulty: 1/5
+Description:
+  Signal shutdown to all actors:
+  - One flag, many readers
+  - Set once, read N times
+  - No lock needed
+TestCases:
+  - Set shutdown flag -> all actors see it
+  - Measure latency to see shutdown
+Tags: atomic, flag
+
+[19.2.22]
+Problem: Barrier Synchronization
+Difficulty: 2/5
+Description:
+  3 threads wait for each other:
+  - All reach barrier
+  - Barrier releases all together
+  - Measure overhead
+TestCases:
+  - 3 threads at barrier -> all wait
+  - Last arrival unblocks all
+  - Overhead < 1µs
+Tags: barrier, synchronization
+
+[19.2.23]
+Problem: Rendezvous Point
+Difficulty: 2/5
+Description:
+  Two threads meet at point:
+  - Thread A reaches first, waits
+  - Thread B arrives, both continue
+  - Both proceed together
+TestCases:
+  - A reaches at t=100ms, B at t=200ms
+  - Both continue at t=200ms
+Tags: synchronization, checkpoint
+
+[19.2.24]
+Problem: Fairness Monitor
+Difficulty: 2/5
+Description:
+  Track lock access fairness:
+  - Which actors get locks?
+  - Detect starvation
+  - Ensure fair scheduling
+TestCases:
+  - 50 actors contending lock
+  - Each should get ~2% of lock time
+  - Variance < 10%
+Tags: fairness, scheduling
+
+[19.2.25]
+Problem: Adaptive Lock Strategy
+Difficulty: 3/5
+Description:
+  Spin-lock vs. sleep based on contention:
+  - Spin: busy-wait (fast for short holds)
+  - Sleep: OS sleep (efficient for long waits)
+  - Switch based on measured contention
+TestCases:
+  - Low contention -> spin lock
+  - High contention -> sleep lock
+  - P99 latency similar both cases
+Tags: optimization, lock-choice
+
+[19.2.26]
+Problem: Lock-Free Counter
+Difficulty: 2/5
+Description:
+  Use atomic without Mutex:
+  - Multiple threads increment
+  - No lock waits
+  - Measure performance vs. Mutex
+TestCases:
+  - Compare: Atomic vs. Mutex<usize>
+  - Atomic ~10x faster
+Tags: lock-free, atomic
+
+[19.2.27]
+Problem: Seqlock (Sequence Lock)
+Difficulty: 3/5
+Description:
+  Readers don't block writers:
+  - Reader checks sequence before/after
+  - If changed, retry
+  - Writer: increment seq, write, increment seq
+TestCases:
+  - Heavy readers, light writer
+  - Readers never block
+  - P99 reader latency  < 1µs
+Tags: seqlock, lock-free
+
+[19.2.28]
+Problem: Read-Write Lock Patterns
+Difficulty: 2/5
+Description:
+  Multiple readers, single writer:
+  - 10 readers, 1 writer
+  - Readers don't block each other
+  - Writer exclusive
+  - Benchmark vs. Mutex
+TestCases:
+  - 10 readers concurrent -> faster than Mutex
+Tags: rwlock, read-heavy
+
+[19.2.29]
+Problem: Transactional Update (Optimistic)
+Difficulty: 2/5
+Description:
+  Read-modify-write without holding lock:
+  - Read state
+  - Modify locally
+  - Commit if unchanged
+  - Retry if changed
+TestCases:
+  - High contention -> many retries
+  - Low contention -> few retries
+Tags: optimistic-concurrency, transaction
+
+[19.2.30]
+Problem: Consensus Protocol
+Difficulty: 3/5
+Description:
+  N actors vote on decision:
+  - Majority wins
+  - Measure convergence time
+  - Handle ties
+TestCases:
+  - 5 actors, 3 vote "yes" -> consensus = yes
+  - 2.5 actors vote "no" -> consensus = no (ties)
+Tags: consensus, voting
+
+===== CATEGORY 19.3: SYNCHRONIZATION (20 Problems) =====
+
+// SECTION 19.3.1-19.3.10: Arc & Mutex Patterns (Continued from 19.2.16-19.2.20, now advanced)
+
+[19.3.1]
+Problem: Arc Clone Refcount Tracking
+Difficulty: 1/5
+Description:
+  Create Arc, clone 5 times:
+  - Initial refcount = 1
+  - After 5 clones = 6
+  - Drop one -> refcount = 5
+  - All dropped -> deallocate
+TestCases:
+  - Create Arc<i32>(42)
+  - Clone 5 times
+  - Check refcount == 6
+Tags: arc-basics, refcount
+
+[19.3.2]
+Problem: Arc<Mutex<>> Shared Data
+Difficulty: 2/5
+Description:
+  Share mutable data across threads:
+  - Create Arc<Mutex<i32>>
+  - Clone to 3 threads
+  - Each increments 100x
+  - Result = 300
+TestCases:
+  - 3 threads, 100 increments each
+  - Final value = 300
+Tags: arc-mutex, thread-safe
+
+[19.3.3]
+Problem: Arc<RwLock<>> Cache
+Difficulty: 2/5
+Description:
+  Cache with multiple readers:
+  - 10 reader threads
+  - 1 writer thread
+  - Readers don't block each other
+  - Measure throughput
+TestCases:
+  - 10 readers: 1000 reads/sec each
+  - 1 writer: 10 writes/sec
+  - Total: > 10,000 reads/sec
+Tags: rwlock, cache
+
+[19.3.4]
+Problem: Arc<AtomicUsize> Lock-Free
+Difficulty: 2/5
+Description:
+  Non-blocking counter:
+  - 4 threads increment shared atomic
+  - No locks held
+  - Measure latency vs. Mutex
+TestCases:
+  - Atomic: < 100ns per increment
+  - Mutex: ~500ns per increment
+  - Atomic 5x faster
+Tags: atomic, lock-free
+
+[19.3.5]
+Problem: Arc Object Pool
+Difficulty: 2/5
+Description:
+  Reuse Arc instances:
+  - Create 100 Arcs
+  - Distribute and collect
+  - Measure allocation savings
+TestCases:
+  - Pool reduces alloc by 80%
+Tags: pooling, reuse
+
+[19.3.6]
+Problem: Nested Arc<Mutex<>>
+Difficulty: 2/5
+Description:
+  Arc<Mutex<Vec<Arc<Mutex<i32>>>>>:
+  - Inner Arc<Mutex<>> allows independent locks
+  - Deadlock risk if not careful
+  - Lock in strict order
+TestCases:
+  - Create nested structure
+  - Access inner elements
+  - No deadlock
+Tags: nesting, inner-mutability
+
+[19.3.7]
+Problem: Deadlock Scenario Detection
+Difficulty: 2/5
+Description:
+  Demonstrate deadlock:
+  - Thread A: lock L1 then L2
+  - Thread B: lock L2 then L1
+  - Program hangs
+  - (For demo: catch hang or explain it)
+TestCases:
+  - Code structure shows deadlock potential
+  - Timeout detects hang
+Tags: deadlock-demo
+
+[19.3.8]
+Problem: Arc with Custom Drop
+Difficulty: 2/5
+Description:
+  Track when Arc dropped:
+  - Custom struct with Drop impl
+  - When refcount = 0, run cleanup
+  - Useful for resources
+TestCases:
+  - Arc<File> ->  file closes on final drop
+  - Track close events
+Tags: drop-impl, resource-cleanup
+
+[19.3.9]
+Problem: Weak References
+Difficulty: 2/5
+Description:
+  Prevent circular references:
+  - Parent has Arc<Child>
+  - Child has Weak<Parent>
+  - Child can upgrade() to Arc if parent alive
+  - Prevents HANG on cycle
+TestCases:
+  - Create parent-child
+  - Child upgrades to parent
+  - Parent drops -> children isolated
+Tags: weak-ref, cycles
+
+[19.3.10]
+Problem: Arc Wrapper Pattern
+Difficulty: 2/5
+Description:
+  Encapsulate sync details:
+  - Hide Arc<Mutex<T>> behind API
+  - Safe, simple interface
+  - Threads clone wrapper, use safely
+TestCases:
+  - Users don't see Mutex
+  - Automatic synchronization
+Tags: encapsulation, pattern
+
+// SECTION 19.3.11-19.3.20: Channels
+
+[19.3.11]
+Problem: Simple Channel (Sender/Receiver)
+Difficulty: 1/5
+Description:
+  Basic MPSC channel:
+  - Send "hello"
+  - Receive and verify
+  - Error if receiver dropped
+TestCases:
+  - Send string -> receive same string
+  - Receiver dropped -> send fails
+Tags: channel-basics
+
+[19.3.12]
+Problem: Multi-Producer Channel
+Difficulty: 2/5
+Description:
+  3 threads send to 1 receiver:
+  - Each sends 10 items
+  - Receiver collects all 30
+  - Measure throughput
+TestCases:
+  - 3 threads × 10 items = 30 total
+  - Receiver gets all 30
+Tags: mpsc, channels
+
+[19.3.13]
+Problem: Request-Response with Channels
+Difficulty: 2/5
+Description:
+  Two-way communication:
+  - Sender: send request, wait response
+  - Receiver: read request, send response
+  - Correlate with IDs
+TestCases:
+  - Request 1 -> Response 1
+  - Multiple outstanding requests
+Tags: request-response
+
+[19.3.14]
+Problem: Bounded Channel
+Difficulty: 2/5
+Description:
+  Queue with capacity limit:
+  - Capacity = 100 messages
+  - Sender blocks if full
+  - Receiver drains, sender unblocks
+TestCases:
+  - Queue full -> block sender
+  - Receive items -> unblock
+Tags: bounded-queue, backpressure
+
+[19.3.15]
+Problem: Channel Select (2 Channels)
+Difficulty: 2/5
+Description:
+  Listen on multiple channels:
+  - Select on A or B
+  - Process whichever has data
+  - Like Erlang receive
+TestCases:
+  - Both channels have data -> pick one
+  - One empty -> wait on other
+Tags: select, multiplexing
+
+[19.3.16]
+Problem: Pipeline (Channels)
+Difficulty: 2/5
+Description:
+  Chain stages with channels:
+  - Stage 1 -> Stage 2 -> Stage 3
+  - Each processes and passes to next
+TestCases:
+  - Input -> Stage1 (double) -> Stage2 (add 10) -> Stage3 (output)
+  - Verify transformations
+Tags: pipeline, data-flow
+
+[19.3.17]
+Problem: Channel with Timeout
+Difficulty: 2/5
+Description:
+  Send/receive with deadline:
+  - Send times out if receiver not ready
+  - Receive times out if no message
+  - Return error on timeout
+TestCases:
+  - Send with 1s timeout -> fails if no receiver
+  - Receive with timeout -> Times out if empty
+Tags: timeout, channel
+
+[19.3.18]
+Problem: Broadcast Channel
+Difficulty: 2/5
+Description:
+  1 sender, N receivers:
+  - All receivers see message
+  - Event broadcast
+  - Useful for notifications
+TestCases:
+  - 10 subscribers -> all receive update
+Tags: broadcast, pub-sub
+
+[19.3.19]
+Problem: Work Distribution
+Difficulty: 2/5
+Description:
+  Worker reads from channel:
+  - Main sends work
+  - Worker sends back results
+  - Multiple workers coordinate
+TestCases:
+  - 3 workers, 100 items
+  - All processed and results returned
+Tags: work-distribution
+
+[19.3.20]
+Problem: Channel Statistics
+Difficulty: 1/5
+Description:
+  Track channel usage:
+  - Messages sent
+  - Messages received
+  - Queue depth over time
+TestCases:
+  - Histogram of queue depths
+  - Total throughput
+Tags: observability, metrics
+
+===== CATEGORY 19.4: DEADLOCK PREVENTION (20 Problems) =====
+
+[19.4.1]
+Problem: Deadlock Scenario
+Difficulty: 2/5
+Description:
+  Create code demonstrating deadlock:
+  - Thread A: lock L1 then L2
+  - Thread B: lock L2 then L1
+  - Show it hangs (or explain)
+TestCases:
+  - Program structure shows cicle
+  - Would hang if run
+Tags: deadlock-demo
+
+[19.4.2-19.4.10]
+Problem: Deadlock Detection (Wait Graph)
+... [20 problems detailing wait-for graph, detection, DFS cycles, etc.]
+
+[19.4.11-19.4.20]
+Problem: Lock Ordering Protocols
+... [20 problems on levels, enforcement, bank transfers, etc.]
+
+[19.4.21-19.4.35]
+Problem: Synchronization Primitives
+... [20 problems on barrier, condvar, semaphore, monitor, etc.]
+
+===== END PROBLEM BANK =====
+
+Total: 100 problems across 4 categories
+- 19.1: Actor Foundations (30 problems)
+- 19.2: Scaling (30 problems)
+- 19.3: Synchronization (20 problems) 
+- 19.4: Deadlock Prevention (20 problems)
+
+Tags available:
+actor-basics, state-machine, message-handling, routing, concurrency, pooling, lockfree, deadlock, supervision, metrics, optimization, performance, testing, debugging, patterns, production, resilience, scalability, thread-safe, sync-primitives, request-response, channels, work-distribution, load-balancing
+
+
+

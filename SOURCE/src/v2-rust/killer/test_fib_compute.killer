@@ -1,0 +1,18 @@
+kfn fib(n) {
+  if n <= 1 {
+    return n
+  }
+  return fib(n - 1) + fib(n - 2)
+}
+
+h1 = spawn fib(20)
+r1 = await h1
+print(K"fib(20)={r1}")
+
+async kfn compute(x) {
+  return x * x
+}
+handle = spawn compute(7)
+squared = await handle
+print(squared)
+print("done")

@@ -1,0 +1,5 @@
+schema_line = "TEST_SCHEMA"
+nrows = 5
+data_lines = ["COL a 1,2,3", "COL b 4,5,6"]
+content = "KORE-K\n" + schema_line + "\nROWS " + str(nrows) + "\n" + join(data_lines, "\n") + "\nEND"
+print(content)

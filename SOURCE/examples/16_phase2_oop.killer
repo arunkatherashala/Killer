@@ -1,0 +1,107 @@
+// Phase 2: Advanced OOP - Inheritance, Static Methods, Super, Getters/Setters
+
+// Parent class
+class Animal {
+    init(name) {
+        this.name = name;
+    }
+    
+    speak() {
+        return this.name + " makes sound";
+    }
+    
+    getName() {
+        return this.name;
+    }
+}
+
+// Child class with inheritance
+class Dog extends Animal {
+    init(name, breed) {
+        this.breed = breed;
+        this.name = name;
+    }
+    
+    speak() {
+        return this.name + " says woof!";
+    }
+    
+    getBreed() {
+        return this.breed;
+    }
+    
+    static getSpecies() {
+        return "Canis lupus";
+    }
+    
+    static compareBreeds(breed1, breed2) {
+        return breed1 == breed2;
+    }
+}
+
+// Test inheritance
+dog = new Dog("Buddy", "Golden Retriever");
+print(dog.speak());
+print(dog.getName());
+print(dog.getBreed());
+
+// Test static methods
+print(Dog.getSpecies());
+print(Dog.compareBreeds("Labrador", "Labrador"));
+print(Dog.compareBreeds("Poodle", "Dachshund"));
+
+// Test with getters and setters
+class Rectangle {
+    init(width, height) {
+        this.width = width;
+        this.height = height;
+    }
+    
+    get area() {
+        return this.width * this.height;
+    }
+    
+    get perimeter() {
+        return 2 * (this.width + this.height);
+    }
+}
+
+rect = new Rectangle(5, 10);
+print(rect.area);
+print(rect.perimeter);
+
+// More complex inheritance test
+class Vehicle {
+    init(type) {
+        this.type = type;
+    }
+    
+    describe() {
+        return "Vehicle type: " + this.type;
+    }
+    
+    static getMaxSpeed() {
+        return 200;
+    }
+}
+
+class Car extends Vehicle {
+    init(type, doors) {
+        this.type = type;
+        this.doors = doors;
+    }
+    
+    describe() {
+        return "Car with " + this.doors + " doors, type: " + this.type;
+    }
+    
+    static getMaxSpeed() {
+        return 300;
+    }
+}
+
+car = new Car("Sedan", 4);
+print(car.describe());
+print(Car.getMaxSpeed());
+
+

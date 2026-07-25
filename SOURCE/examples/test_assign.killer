@@ -1,0 +1,13 @@
+// Direct test: is the assignment working?
+quality x = "hello"
+quality y = x
+
+// Both should have the same value
+let x_status = x.get_status()
+let y_status = y.get_status()
+
+print "x status: " + x_status
+print "y status: " + y_status
+print "After assignment, they should match"
+
+

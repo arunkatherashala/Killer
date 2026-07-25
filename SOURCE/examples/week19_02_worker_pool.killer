@@ -1,0 +1,59 @@
+// Week 19: Actor Pools & Concurrency - Example 2
+// Actor Pool with Work Queue
+
+kfn create_worker_pool(pool_size) {
+    let workers = [];
+    for i in 0..pool_size {
+        workers.push({
+            id: i,
+            queue: [],
+            processed: 0
+        });
+    }
+    return workers;
+}
+
+kfn submit_work(workers, work_item) {
+    // Find worker with smallest queue (load balancing)
+    let best_worker = 0;
+    let smallest_queue = length(workers[0].queue);
+    
+    for i in 1..length(workers) {
+        let queue_size = length(workers[i].queue);
+        if queue_size < smallest_queue {
+            smallest_queue = queue_size;
+            best_worker = i;
+        }
+    }
+    
+    workers[best_worker].queue.push(work_item);
+    return workers;
+}
+
+kfn process_all_workers(workers) {
+    for i in 0..length(workers) {
+        let worker = workers[i];
+        print("Worker " + str(worker.id) + " processing " + str(length(worker.queue)) + " items");
+        
+        for j in 0..length(worker.queue) {
+            print("  - Processing: " + str(worker.queue[j]));
+            worker.processed = worker.processed + 1;
+        }
+        worker.queue = [];
+    }
+    return workers;
+}
+
+// Test
+let pool = create_worker_pool(4);
+pool = submit_work(pool, {type: "task", id: 1});
+pool = submit_work(pool, {type: "task", id: 2});
+pool = submit_work(pool, {type: "task", id: 3});
+pool = submit_work(pool, {type: "task", id: 4});
+pool = submit_work(pool, {type: "task", id: 5});
+
+pool = process_all_workers(pool);
+
+print("Total processed: " + str(pool[0].processed + pool[1].processed + pool[2].processed + pool[3].processed));
+
+

@@ -1,0 +1,65 @@
+kfn bench_prefix(n) {
+  i = 0
+  while i < n {
+    s = K"v={i}"
+    i = i + 1
+  }
+  return s
+}
+
+kfn bench_suffix(n) {
+  i = 0
+  while i < n {
+    s = K"{i} done"
+    i = i + 1
+  }
+  return s
+}
+
+kfn bench_both(n) {
+  i = 0
+  while i < n {
+    s = K"item={i}/end"
+    i = i + 1
+  }
+  return s
+}
+
+kfn bench_plain_concat(n) {
+  i = 0
+  while i < n {
+    s = "v=" + str(i)
+    i = i + 1
+  }
+  return s
+}
+
+ITERS = 100000
+
+t0 = system_time_ms()
+r = bench_prefix(ITERS)
+t1 = system_time_ms()
+e1 = t1 - t0
+ns1 = e1 * 10
+print(K"K-string prefix+slot  100k: {e1} ms  ({ns1} ns/iter)  last={r}")
+
+t2 = system_time_ms()
+r = bench_suffix(ITERS)
+t3 = system_time_ms()
+e2 = t3 - t2
+ns2 = e2 * 10
+print(K"K-string slot+suffix  100k: {e2} ms  ({ns2} ns/iter)  last={r}")
+
+t4 = system_time_ms()
+r = bench_both(ITERS)
+t5 = system_time_ms()
+e3 = t5 - t4
+ns3 = e3 * 10
+print(K"K-string pre+slot+suf 100k: {e3} ms  ({ns3} ns/iter)  last={r}")
+
+t6 = system_time_ms()
+r = bench_plain_concat(ITERS)
+t7 = system_time_ms()
+e4 = t7 - t6
+ns4 = e4 * 10
+print(K"plain concat str(i)   100k: {e4} ms  ({ns4} ns/iter)  last={r}")

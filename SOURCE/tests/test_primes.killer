@@ -1,0 +1,21 @@
+count = 0
+num = 2
+primes = []
+while (count < 20) {
+    is_prime = true
+    i = 2
+    while (i * i <= num) {
+        if (num % i == 0) {
+            is_prime = false
+        }
+        i = i + 1
+    }
+    if (is_prime) {
+        primes.push(num)
+        count = count + 1
+    }
+    num = num + 1
+}
+println(primes.len().to_string())
+
+

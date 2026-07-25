@@ -1,0 +1,45 @@
+# animal_interface.killer
+# Interface defining what makes an Animal
+
+export interface Animal {
+    name();
+    eat();
+    sleep();
+    makeSound();
+}
+
+# Abstract class providing some implementation
+export abstract class AnimalBase extends Animal {
+    abstract makeSound();
+    
+    eat() {
+        print("Eating...");
+    }
+    
+    sleep() {
+        print("Sleeping...");
+    }
+}
+
+# Concrete Dog class
+export class Dog extends AnimalBase {
+    makeSound() {
+        print("Woof!");
+    }
+}
+
+# Concrete Cat class
+export class Cat extends AnimalBase {
+    makeSound() {
+        print("Meow!");
+    }
+}
+
+# Concrete Bird class
+export class Bird extends AnimalBase {
+    makeSound() {
+        print("Tweet!");
+    }
+}
+
+

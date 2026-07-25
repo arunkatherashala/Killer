@@ -1,0 +1,10 @@
+kfn test(x: number): string {
+    if x == 1 {
+        return "one";
+    }
+    return "other";
+}
+
+print(test(1));
+
+

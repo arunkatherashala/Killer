@@ -1,0 +1,237 @@
+// ============================================================
+// Phase B Test: Magic Methods
+// ============================================================
+
+print("=" + "=".repeat(56))
+print("PHASE B: MAGIC METHODS TEST SUITE")
+print("Special methods like __str__, __add__, __len__, etc.")
+print("=" + "=".repeat(56))
+
+// ============================================================
+// Part 1: String Representation Magic Methods
+// ============================================================
+
+print("\n### Part 1: String Representation (__str__) ###\n")
+
+print("Test 1.1: Simple __str__() magic method")
+class Point {
+    init(x: number, y: number) {
+        this.x = x
+        this.y = y
+    }
+    
+    __str(): string {
+        return "Point(" + this.x + ", " + this.y + ")"
+    }
+}
+
+p1 = new Point(3, 4)
+print("p1 = new Point(3, 4)")
+print("Default print: " + p1)
+
+// ============================================================
+// Part 2: Length Magic Methods
+// ============================================================
+
+print("\n### Part 2: Length (__len__) ###\n")
+
+print("Test 2.1: __len__() magic method")
+class Container {
+    init() {
+        this.items = []
+    }
+    
+    __len(): number {
+        return this.items.length
+    }
+    
+    add(item) {
+        this.items.push(item)
+    }
+}
+
+c1 = new Container()
+c1.add("a")
+c1.add("b")
+c1.add("c")
+print("c1 = Container with 3 items")
+print("c1.length = " + c1.length)
+
+// ============================================================
+// Part 3: Indexing Magic Methods
+// ============================================================
+
+print("\n### Part 3: Indexing (__getitem__) ###\n")
+
+print("Test 3.1: __getitem__() magic method")
+class MyList {
+    init(arr) {
+        this.data = arr
+    }
+    
+    __getitem(index: number) {
+        return this.data[index] * 2  // Return doubled value
+    }
+    
+    __len(): number {
+        return this.data.length
+    }
+}
+
+list1 = new MyList([1, 2, 3, 4, 5])
+print("list1 = MyList([1, 2, 3, 4, 5])")
+print("list1[0] = " + list1[0] + " (should be 2, doubled)")
+print("list1[2] = " + list1[2] + " (should be 6, doubled)")
+
+// ============================================================
+// Part 4: Arithmetic Magic Methods
+// ============================================================
+
+print("\n### Part 4: Arithmetic Operations (__add__, __sub__, __mul__) ###\n")
+
+print("Test 4.1: __add__() magic method")
+class Vector {
+    init(x: number, y: number) {
+        this.x = x
+        this.y = y
+    }
+    
+    __add(other: any): any {
+        return new Vector(this.x + other.x, this.y + other.y)
+    }
+    
+    __str(): string {
+        return "Vector(" + this.x + ", " + this.y + ")"
+    }
+}
+
+v1 = new Vector(1, 2)
+v2 = new Vector(3, 4)
+v3 = v1 + v2
+print("v1 = Vector(1, 2)")
+print("v2 = Vector(3, 4)")
+print("v3 = v1 + v2")
+print("v3 = " + v3 + " (should be Vector(4, 6))")
+
+print("\nTest 4.2: __sub__() magic method")
+class Value {
+    init(val: number) {
+        this.val = val
+    }
+    
+    __sub(other: any): any {
+        return new Value(this.val - other.val)
+    }
+    
+    __str(): string {
+        return "Value(" + this.val + ")"
+    }
+}
+
+val1 = new Value(10)
+val2 = new Value(3)
+val3 = val1 - val2
+print("val1 = Value(10)")
+print("val2 = Value(3)")
+print("val3 = val1 - val2")
+print("val3 = " + val3 + " (should be Value(7))")
+
+// ============================================================
+// Part 5: Comparison Magic Methods
+// ============================================================
+
+print("\n### Part 5: Comparison Operations (__eq__, __lt__) ###\n")
+
+print("Test 5.1: __eq__() magic method")
+class Person {
+    init(name: string, age: number) {
+        this.name = name
+        this.age = age
+    }
+    
+    __eq(other: any): boolean {
+        return this.age == other.age
+    }
+    
+    __str(): string {
+        return "Person(" + this.name + ", " + this.age + ")"
+    }
+}
+
+alice = new Person("Alice", 30)
+bob = new Person("Bob", 30)
+charlie = new Person("Charlie", 25)
+
+print("alice = Person(\"Alice\", 30)")
+print("bob = Person(\"Bob\", 30)")
+print("charlie = Person(\"Charlie\", 25)")
+print("alice == bob: " + (alice == bob) + " (should be true, same age)")
+print("alice == charlie: " + (alice == charlie) + " (should be false, different age)")
+
+print("\nTest 5.2: __lt__() magic method")
+class Score {
+    init(points: number) {
+        this.points = points
+    }
+    
+    __lt(other: any): boolean {
+        return this.points < other.points
+    }
+    
+    __str(): string {
+        return "Score(" + this.points + ")"
+    }
+}
+
+s1 = new Score(100)
+s2 = new Score(150)
+
+print("s1 = Score(100)")
+print("s2 = Score(150)")
+print("s1 < s2: " + (s1 < s2) + " (should be true)")
+
+// ============================================================
+// Part 6: Integration Tests
+// ============================================================
+
+print("\n### Part 6: Integration Tests ###\n")
+
+print("Test 6.1: Complex object with multiple magic methods")
+class Counter {
+    init(start: number) {
+        this.count = start
+    }
+    
+    __str(): string {
+        return "Counter(" + this.count + ")"
+    }
+    
+    __add(other: any): any {
+        return new Counter(this.count + other.count)
+    }
+    
+    __eq(other: any): boolean {
+        return this.count == other.count
+    }
+    
+    __lt(other: any): boolean {
+        return this.count < other.count
+    }
+}
+
+cnt1 = new Counter(5)
+cnt2 = new Counter(3)
+cnt3 = cnt1 + cnt2
+
+print("cnt1 = Counter(5)")
+print("cnt2 = Counter(3)")
+print("cnt3 = cnt1 + cnt2")
+print("String: " + cnt3)
+print("cnt1 == new Counter(5): " + (cnt1 == new Counter(5)))
+print("cnt2 < cnt1: " + (cnt2 < cnt1))
+
+print("\n" + "=" + "=".repeat(56))
+print("PHASE B TESTS COMPLETE")
+print("=" + "=".repeat(56))
+
+

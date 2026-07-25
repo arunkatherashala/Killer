@@ -1,0 +1,26 @@
+# native subset aligned with examples/02_conditionals.killer
+age = 20;
+
+if (age >= 18) {
+    print("adult");
+}
+
+age = 10;
+if (age >= 18) {
+    print("adult");
+} else {
+    print("minor");
+}
+
+num = 15;
+if (num > 20) {
+    print("gt20");
+} else {
+    if (num <= 10) {
+        print("le10");
+    } else {
+        print("between11and20");
+    }
+}
+
+

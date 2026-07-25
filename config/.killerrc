@@ -1,0 +1,53 @@
+# Killer Project Configuration
+# This file can be customized per project to enforce consistent style
+
+[linter]
+# Maximum line length before warning
+max_line_length = 100
+
+# Enable naming convention checks (snake_case, CamelCase, CONST_CASE)
+check_naming = true
+
+# Enable unused code detection (variables, functions, imports)
+check_unused = true
+
+# Enable security issue detection (SQL injection, command injection risks)
+check_security = true
+
+# Enable performance pattern detection
+check_performance = true
+
+# Minimum severity to report (0=info, 1=warning, 2=error)
+min_severity = 0
+
+# Rules to disable (comma-separated list)
+disabled_rules = []
+
+
+[formatter]
+# Indentation style: "spaces" or "tabs"
+indent_style = "spaces"
+
+# Indentation size (number of spaces/tabs per level)
+indent_size = 2
+
+# Target line length for formatting
+line_length = 100
+
+# Trailing comma style: "never", "always", or "multiline"
+trailing_comma = "multiline"
+
+# Brace style: "same-line" (if (x) {) or "new-line" (if (x)\n{)
+brace_style = "same-line"
+
+# Add spaces around operators (=, +, -, *, /)
+spaces_around_operators = true
+
+# Add space after keywords (if, for, while, etc.)
+spaces_after_keywords = true
+
+# Convert keywords to uppercase (false for lowercase)
+uppercase_keywords = false
+
+# Maximum consecutive blank lines
+max_blank_lines = 2

@@ -1,0 +1,156 @@
+// Killer v3.0 Performance Benchmark Suite
+// JSON/CSV API Performance Tests
+// Measures: parsing, serialization, formatting speed
+
+println("=== JSON/CSV API Benchmarking ===")
+println("")
+
+// Benchmark 1: json_stringify() performance
+println("Benchmark 1: json_stringify()")
+let data = dict(
+    "name", "Alice",
+    "email", "alice@example.com",
+    "age", 30,
+    "active", true,
+    "tags", ["engineer", "python", "rust", "golang"]
+)
+let json_iterations = 10000
+let json_start = now()
+let i = 0
+while i < json_iterations {
+    let _ = json_stringify(data)
+    let i = i + 1
+}
+let json_end = now()
+let json_elapsed = json_end - json_start
+println("Total time: " + str(json_elapsed) + " seconds")
+println("Serializations: " + str(json_iterations))
+println("Average per call: " + str(json_elapsed / json_iterations) + "s")
+println("Throughput: " + str(json_iterations / json_elapsed) + " ops/sec")
+println("")
+
+// Benchmark 2: parse_json() performance
+println("Benchmark 2: parse_json()")
+let json_string = '{"name":"Alice","email":"alice@example.com","age":30,"active":true}'
+let parse_json_iterations = 5000
+let parse_json_start = now()
+let j = 0
+while j < parse_json_iterations {
+    let _ = parse_json(json_string)
+    let j = j + 1
+}
+let parse_json_end = now()
+let parse_json_elapsed = parse_json_end - parse_json_start
+println("Total time: " + str(parse_json_elapsed) + " seconds")
+println("Parses: " + str(parse_json_iterations))
+println("Average per parse: " + str(parse_json_elapsed / parse_json_iterations) + "s")
+println("Throughput: " + str(parse_json_iterations / parse_json_elapsed) + " ops/sec")
+println("")
+
+// Benchmark 3: json_pretty() performance
+println("Benchmark 3: json_pretty() - Formatting")
+let indent_iterations = 2000
+let indent_values = [0, 2, 4, 8]
+let i_idx = 0
+while i_idx < len(indent_values) {
+    let indent = indent_values[i_idx]
+    let pretty_start = now()
+    let k = 0
+    while k < indent_iterations {
+        let _ = json_pretty(json_string, indent)
+        let k = k + 1
+    }
+    let pretty_end = now()
+    let pretty_time = pretty_end - pretty_start
+    println("  Indent=" + str(indent) + ": " + str(pretty_time) + "s (" + str(indent_iterations / pretty_time) + " ops/sec)")
+    let i_idx = i_idx + 1
+}
+println("")
+
+// Benchmark 4: parse_csv() performance
+println("Benchmark 4: parse_csv()")
+let csv_small = "name,age,city,email\nAlice,30,NYC,alice@ex.com\nBob,25,LA,bob@ex.com\nCharlie,35,SF,charlie@ex.com"
+let csv_iterations = 5000
+let csv_start = now()
+let l = 0
+while l < csv_iterations {
+    let _ = parse_csv(csv_small, ",")
+    let l = l + 1
+}
+let csv_end = now()
+let csv_elapsed = csv_end - csv_start
+println("Total time: " + str(csv_elapsed) + " seconds")
+println("Parses: " + str(csv_iterations))
+println("Average per parse: " + str(csv_elapsed / csv_iterations) + "s")
+println("Throughput: " + str(csv_iterations / csv_elapsed) + " ops/sec")
+println("Data size: 180 bytes, 4 rows")
+println("")
+
+// Benchmark 5: to_csv() generation
+println("Benchmark 5: to_csv() - Generation")
+let rows = [
+    dict("name", "Alice", "age", 30, "city", "NYC"),
+    dict("name", "Bob", "age", 25, "city", "LA"),
+    dict("name", "Charlie", "age", 35, "city", "SF")
+]
+let to_csv_iterations = 3000
+let to_csv_start = now()
+let m = 0
+while m < to_csv_iterations {
+    let _ = to_csv(rows, ",")
+    let m = m + 1
+}
+let to_csv_end = now()
+let to_csv_elapsed = to_csv_end - to_csv_start
+println("Total time: " + str(to_csv_elapsed) + " seconds")
+println("Generations: " + str(to_csv_iterations))
+println("Average per generation: " + str(to_csv_elapsed / to_csv_iterations) + "s")
+println("Throughput: " + str(to_csv_iterations / to_csv_elapsed) + " ops/sec")
+println("Rows generated: " + str(len(rows)))
+println("")
+
+// Benchmark 6: to_yaml() conversion
+println("Benchmark 6: to_yaml()")
+let yaml_iterations = 2000
+let yaml_start = now()
+let n = 0
+while n < yaml_iterations {
+    let _ = to_yaml(data, 2)
+    let n = n + 1
+}
+let yaml_end = now()
+let yaml_elapsed = yaml_end - yaml_start
+println("Total time: " + str(yaml_elapsed) + " seconds")
+println("Conversions: " + str(yaml_iterations))
+println("Average per conversion: " + str(yaml_elapsed / yaml_iterations) + "s")
+println("Throughput: " + str(yaml_iterations / yaml_elapsed) + " ops/sec")
+println("")
+
+// Benchmark 7: Round-trip performance (parse → process → generate)
+println("Benchmark 7: Round-trip Performance")
+let roundtrip_iterations = 500
+let roundtrip_start = now()
+let o = 0
+while o < roundtrip_iterations {
+    // Parse CSV
+    let parsed = parse_csv(csv_small, ",")
+    // Convert to JSON
+    let json = json_stringify(parsed)
+    // Format JSON
+    let pretty = json_pretty(json, 2)
+    // Convert back to CSV
+    let generated = to_csv(parsed, ",")
+    let o = o + 1
+}
+let roundtrip_end = now()
+let roundtrip_elapsed = roundtrip_end - roundtrip_start
+println("Total time: " + str(roundtrip_elapsed) + " seconds")
+println("Round-trips: " + str(roundtrip_iterations))
+println("Average per round-trip: " + str(roundtrip_elapsed / roundtrip_iterations) + "s")
+println("Operations per round-trip: 4 (parse, stringify, pretty, to_csv)")
+println("Total operations: " + str(roundtrip_iterations * 4))
+println("")
+
+println("✓ JSON/CSV benchmarking complete")
+
+

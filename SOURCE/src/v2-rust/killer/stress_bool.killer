@@ -1,0 +1,9 @@
+pass = 0
+fail = 0
+i = 0
+while i < 2000000 {
+  if i % 2 == 0 { pass = pass + 1 }
+  else { fail = fail + 1 }
+  i = i + 1
+}
+print(K"pass={pass} fail={fail}")

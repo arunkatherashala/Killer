@@ -1,0 +1,23 @@
+# Killer — super language surface: everything you show ships as .killer from now.
+# Rust in this repo = VM + tools only. Demos, curriculum, product logic = these files.
+
+print("")
+print("============================================================")
+print("  Killer — .killer is the authoring format (ready now)")
+print("============================================================")
+print("")
+print("Write your super-language programs here: kfn, print/println, trits, stdlib, K-strings.")
+print("Trinary: T_POS T_ZERO T_NEG  trit_and trit_or trit_not")
+print("         int_to_trit trit_word trit_add trit_mul trit_to_int …")
+print("")
+print("Start here (examples/):")
+print("  killer_language_ready.killer   — this manifest")
+print("  hello.killer                   — baseline kfn + I/O (killer_super)")
+print("  trinary_awake.killer           — trinary + killer_super native path")
+print("  trinary_in_killer.killer      — trinary + VM (use # top-level comments)")
+print("  trinary_kleene_table.killer   — full Kleene AND/OR/NOT tables")
+print("  fibonacci*.killer stdlib_*.killer stdlib_pythonic.killer subset_*.killer — more pure Killer")
+print("")
+print("Docs: SOURCE/docs/POSITIONING.md  SOURCE/docs/LANGUAGE_PIPELINE.md")
+print("This file is Killer only — readable without writing Rust.")
+print("============================================================")

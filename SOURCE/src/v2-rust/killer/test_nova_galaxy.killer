@@ -1,0 +1,94 @@
+print("============================================================")
+print("  NOVA GALAXY ENGINE  -- Phase A + B + C")
+print("============================================================")
+print("")
+
+print("--- Phase A: Native Trit Jump Opcodes ---")
+
+# trit_and via builtin (eventually compiler will use TritAnd opcode)
+a = trit_and(T_POS(), T_ZERO())
+assert_eq(trit_to_str(a), "T_ZERO")
+print(K"TritAnd(T_POS, T_ZERO) = {trit_to_str(a)}  OK")
+
+b = trit_or(T_NEG(), T_POS())
+assert_eq(trit_to_str(b), "T_POS")
+print(K"TritOr(T_NEG, T_POS)   = {trit_to_str(b)}  OK")
+
+c = trit_not(T_NEG())
+assert_eq(trit_to_str(c), "T_POS")
+print(K"TritNot(T_NEG)          = {trit_to_str(c)}  OK")
+
+# Trit-based branching (replaces is_truthy bridge)
+verdict = trit_and(T_POS(), T_ZERO())
+v = trit_to_str(verdict)
+if v == "T_POS"  { print("Branch: ALLOW") }
+if v == "T_ZERO" { print("Branch: T_ZERO -> ASK MFA  OK") }
+if v == "T_NEG"  { print("Branch: DENY") }
+
+print("Phase A: PASSED")
+print("")
+
+print("--- Phase B: Signal Fast Path ---")
+
+# signal accessors (SignalGetValue, SignalGetConfidence, SignalGetReason opcodes)
+s = signal_create(T_POS(), 0.94, "token valid")
+sv = signal_value(s)
+sc = signal_confidence(s)
+sr = signal_reason(s)
+assert_eq(trit_to_str(sv), "T_POS")
+assert_eq(sc, 0.94)
+assert_eq(sr, "token valid")
+print(K"SignalGetValue      = {trit_to_str(sv)}   OK")
+print(K"SignalGetConfidence = {sc}  OK")
+print(K"SignalGetReason     = {sr}   OK")
+
+# JumpIfSignalConfident -- high confidence passes threshold
+if signal_confident(s, 0.90) {
+  print("JumpIfSignalConfident(0.94 >= 0.90): JUMPED  OK")
+}
+
+# JumpIfSignalUncertain -- low threshold triggers uncertain
+if signal_uncertain(s, 0.99) {
+  print("JumpIfSignalUncertain(0.94 < 0.99): JUMPED  OK")
+}
+
+print("Phase B: PASSED")
+print("")
+
+print("--- Phase C: Qubit Probabilistic Branching ---")
+
+# QubitHadamard opcode
+q0 = qubit_create(1.0, 0.0)
+qh = qubit_hadamard(q0)
+p0 = qubit_prob0(qh)
+p1 = qubit_prob1(qh)
+assert_true(p0 > 0.4)
+assert_true(p1 > 0.4)
+print(K"QubitHadamard: P(0)={p0}  P(1)={p1}  OK")
+
+# QubitMeasure opcode -- collapses to 0 or 1
+q_always0 = qubit_create(1.0, 0.0)
+q_always1 = qubit_create(0.0, 1.0)
+m0 = qubit_measure(q_always0)
+m1 = qubit_measure(q_always1)
+assert_eq(m0, 0)
+assert_eq(m1, 1)
+print(K"QubitMeasure |0> = {m0}  OK")
+print(K"QubitMeasure |1> = {m1}  OK")
+
+# JumpIfQubitMeasure -- probabilistic branch
+q_super = qubit_hadamard(qubit_create(1.0, 0.0))
+m = qubit_measure(q_super)
+print(K"JumpIfQubitMeasure (50/50): measured={m}  OK")
+
+# QubitPauliX -- bit flip
+qx = qubit_pauli_x(qubit_create(1.0, 0.0))
+assert_eq(qubit_prob0(qx), 0.0)
+assert_eq(qubit_prob1(qx), 1.0)
+print("QubitPauliX |0> -> |1>  OK")
+
+print("Phase C: PASSED")
+print("")
+print("============================================================")
+print("  NOVA GALAXY ENGINE: ALL 3 PHASES PASSED")
+print("============================================================")

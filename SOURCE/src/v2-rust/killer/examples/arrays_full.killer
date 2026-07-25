@@ -1,0 +1,12 @@
+arr = [1, 2, 3, 4, 5];
+print(arr);
+first = arr[0];
+second = arr[1];
+print(first);
+print(second);
+arr[0] = 10;
+print(arr);
+mixed = ["hello", 42, true];
+print(mixed);
+
+

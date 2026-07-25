@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>index.killer</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background: #0d1117;
+            color: #c9d1d9;
+            font-family: 'Courier New', monospace;
+            line-height: 1.5;
+        }
+        
+        pre {
+            background: #0d1117;
+            padding: 20px;
+            border-radius: 6px;
+            overflow-x: auto;
+            border: 1px solid #30363d;
+        }
+        
+        code {
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+
+        .keyword { color: #ff7b72; }
+        .string { color: #79c0ff; }
+        .comment { color: #8b949e; }
+        .number { color: #79c0ff; }
+    </style>
+</head>
+<body>
+    <pre id="code">Loading index.killer...</pre>
+    <script>
+        fetch('index.killer')
+            .then(r => r.text())
+            .then(text => {
+                document.getElementById('code').textContent = text;
+            })
+            .catch(err => {
+                document.getElementById('code').textContent = 'Error loading file: ' + err;
+            });
+    </script>
+</body>
+</html>

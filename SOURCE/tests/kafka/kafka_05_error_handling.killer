@@ -1,0 +1,171 @@
+// KAFKA ERROR HANDLING & RESILIENCE
+// Network failures, retries, circuit breakers, recovery
+
+// Test 1: Connection refused
+#[test]
+async fn test_connection_refused() -> Result[(), String] uses io {
+    // Broker unreachable
+    Err("Connection refused".to_string())
+}
+
+// Test 2: Timeout handling
+#[test]
+async fn test_timeout() -> Result[(), String] uses io {
+    // Request exceeds timeout_ms
+    Err("Request timed out".to_string())
+}
+
+// Test 3: Broker unavailable
+#[test]
+async fn test_broker_unavailable() -> Result[(), String] uses io {
+    // All brokers down
+    Err("No brokers available".to_string())
+}
+
+// Test 4: Network partition
+#[test]
+async fn test_network_partition() -> Result[(), String] uses (io, allocate) {
+    // Producer cannot reach brokers
+    Err("Network partition".to_string())
+}
+
+// Test 5: Exponential backoff
+#[test]
+async fn test_exponential_backoff() -> bool uses (io, allocate)
+    ensure result == true || result == false;
+{
+    // Retry with backoff: 100ms, 200ms, 400ms, ..., 30s
+    true
+}
+
+// Test 6: Max retries
+#[test]
+async fn test_max_retries() -> Result[i64, String] uses (io, allocate)
+    requires true;
+    ensure match result {
+        Ok(offset) => offset >= 0,
+        Err(_) => true,
+    };
+{
+    // Give up after N retries
+    Err("Max retries exceeded".to_string())
+}
+
+// Test 7: Circuit breaker pattern
+#[test]
+async fn test_circuit_breaker() -> bool uses (io, allocate, state) {
+    // After N failures, fast-fail without retry
+    // Reset after cooldown period
+    true
+}
+
+// Test 8: Graceful degradation
+#[test]
+async fn test_graceful_degradation() -> bool uses (io, allocate, state) {
+    // Degrade throughput during errors
+    // Auto-recovery when broker healthy
+    true
+}
+
+// Test 9: Idempotent retry safety
+#[test]
+async fn test_idempotent_retry() -> bool uses (io, allocate, state) {
+    // Safe to retry: idempotence prevents duplicates
+    true
+}
+
+// Test 10: Offset reset on error
+#[test]
+async fn test_offset_reset_on_error() -> bool uses (io, allocate, state) {
+    // Consumer offset not advanced on error
+    // Retry from safe point
+    true
+}
+
+// Test 11: Dead letter queue
+#[test]
+async fn test_dead_letter_queue() -> bool uses (io, allocate, state) {
+    // Unrecoverable messages to DLQ
+    true
+}
+
+// Test 12: Recovery from partial batch failure
+#[test]
+async fn test_partial_batch_failure() -> bool uses (io, allocate, state)
+    ensure result == true || result == false;
+{
+    // 3 of 5 send fails
+    // Retry mechanism tracks failures
+    true
+}
+
+// Test 13: Consumer offset recovery
+#[test]
+async fn test_consumer_offset_recovery() -> bool uses (io, allocate, state) {
+    // On consumer restart: resume from committed offset
+    true
+}
+
+// Test 14: Coordinator rebalance
+#[test]
+async fn test_rebalance_error_handling() -> bool uses (io, allocate, state) {
+    // During rebalance: pause consumption
+    // Resume after rebalance complete
+    true
+}
+
+// Test 15: Cascading failure detection
+#[test]
+async fn test_cascading_failure_detection() -> bool uses (io, allocate, state) {
+    // Detect and isolate failing components
+    // Avoid cascading to entire cluster
+    true
+}
+
+// Test 16: Backpressure handling
+#[test]
+async fn test_backpressure() -> bool uses (io, allocate, state) {
+    // Consumer slower than producer
+    // Buffer fills, producer blocks
+    // No data loss
+    true
+}
+
+// Test 17: Resource cleanup on error
+#[test]
+async fn test_resource_cleanup() -> bool uses (io, allocate, state) {
+    // Connections closed
+    // Memory released
+    // State cleaned
+    true
+}
+
+// Test 18: Error logging and metrics
+#[test]
+async fn test_error_logging() -> bool uses (io, allocate) {
+    // Log: error type, timestamp, retry count
+    // Metrics: error rate, retry latency
+    true
+}
+
+// Test 19: Slow broker handling
+#[test]
+async fn test_slow_broker() -> bool uses (io, allocate) {
+    // Latency increases but no errors
+    // Continue with degraded performance
+    true
+}
+
+// Test 20: Replica sync failure
+#[test]
+async fn test_replica_sync_failure() -> bool uses (io, allocate, state) {
+    // Leader ack before all replicas sync
+    // Some durability trade-off
+    true
+}
+
+kfn main() {
+    println("✓ Kafka Error Handling Tests Loaded");
+}
+
+

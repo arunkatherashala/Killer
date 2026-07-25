@@ -1,0 +1,30 @@
+print("=== Decorator + Debug Controls ===")
+
+@logCalls
+@time
+kfn add(a, b) {
+    return a + b
+}
+
+print("add result:", add(5, 7))
+
+@memoized
+@logCalls
+kfn square(n) {
+    return n * n
+}
+
+print("square(9):", square(9))
+print("square(9) cached:", square(9))
+
+debugOff()
+debug(123)
+trace("hidden", 9)
+
+debugOn()
+debug(456)
+trace("shown", 10)
+
+print("=== Decorator + Debug Controls Done ===")
+
+

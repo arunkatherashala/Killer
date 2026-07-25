@@ -1,0 +1,57 @@
+// Week 4: Simple Async Tasks (v3.0 - Event Loop Ready)
+// Demonstrates basic async task creation and completion
+// Curriculum: Asynchronous programming, event loops, futures, promises
+// Status: Ready for advanced Week 22 patterns (scalable data processing)
+
+kfn asyncTask(taskId, delayMs) {
+    print(`Async task ${taskId} starting (delay: ${delayMs}ms)`);
+    
+    var before = system_time_ms();
+    thread_sleep_ms(delayMs);
+    var after = system_time_ms();
+    
+    print(`Async task ${taskId} completed (actual: ${after - before}ms)`);
+    return taskId;
+}
+
+kfn main() {
+    print("=== Week 4: Simple Async Tasks ===");
+    print("");
+    
+    // Spawn multiple async tasks
+    print("Spawning 5 async tasks...");
+    var futures = [];
+    var delays = [100, 200, 150, 250, 120];
+    
+    for (var i = 0; i < 5; i = i + 1) {
+        // Create async task closure
+        var task = fn() {
+            asyncTask(i + 1, delays[i]);
+        };
+        
+        // Spawn as async task (Week 4 API)
+        var future = async_spawn(task);
+        futures.push(future);
+        print(`Spawned async task: ${future["id"]}`);
+    }
+    
+    print("");
+    print("Waiting for all async tasks to complete...");
+    
+    // Wait for all futures to complete
+    var completionTimes = [];
+    for (var i = 0; i < futures.length; i = i + 1) {
+        var result = async_await(futures[i]);
+        completionTimes.push(result);
+        print(`Async task ${future["id"]} completed`);
+    }
+    
+    print("");
+    print("All async tasks completed!");
+    print("=== Summary ===");
+    print(`Total async tasks: ${futures.length}`);
+}
+
+main();
+
+

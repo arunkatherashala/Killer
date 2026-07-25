@@ -1,0 +1,75 @@
+(*
+  Killer language — draft EBNF (v0.1)
+  Canonical execution path today: lexer.rs (TokenKind) + stmt_parser.rs → ast::Stmt → compiler.
+  parser.rs is a separate type-annotation / research lexer; merge target is one token stream + one AST pipeline.
+*)
+
+program        = { statement } , EOF ;
+
+statement      = func_def | async_func_def | class_def | if_stmt | while_stmt | do_while_stmt
+               | for_stmt | return_stmt | break_stmt | continue_stmt | try_stmt
+               | import_stmt | spawn_stmt | switch_stmt | match_stmt | assign_or_expr_stmt ;
+
+func_def       = "fn" | "kfn" , IDENT , "(" , [ param_list ] , ")" , ":" , NEWLINE , INDENT , { statement } , DEDENT ;
+
+(* `async fn` — parsed where the pipeline supports it; bytecode may treat as ordinary fn until full async lowering. *)
+async_func_def = "async" , ( "fn" | "kfn" ) , IDENT , "(" , [ param_list ] , ")" , ":" , NEWLINE , INDENT , { statement } , DEDENT ;
+param_list     = IDENT , { "," , IDENT } ;
+
+class_def      = "class" , IDENT , [ "extends" , IDENT ] , ":" , NEWLINE , INDENT , { method } , DEDENT ;
+method         = IDENT , "(" , [ param_list ] , ")" , ":" , NEWLINE , INDENT , { statement } , DEDENT ;
+
+if_stmt        = "if" , expression , ":" , block , { "else" , ":" , block } ;
+while_stmt     = "while" , expression , ":" , block ;
+
+(* `do` block `while` expr — statement form (C-style); not all compilers emit this yet. *)
+do_while_stmt  = "do" , ":" , block , "while" , expression ;
+
+for_stmt       = "for" , IDENT , "in" , expression , ":" , block ;
+
+import_stmt    = "import" , IDENT , { "." , IDENT } , [ "as" , IDENT ] ;
+
+(* Parallel / async invocation — expression-oriented in source; often `spawn func(args)` *)
+spawn_stmt     = "spawn" , expression ;
+
+(* Switch / match — `match` is the preferred discriminated form; `switch` legacy alias where implemented. *)
+switch_stmt    = "switch" , expression , ":" , NEWLINE , INDENT , { switch_case } , [ "default" , ":" , block ] , DEDENT ;
+switch_case    = "case" , expression , ":" , block ;
+
+match_stmt     = "match" , expression , ":" , NEWLINE , INDENT , { match_arm } , DEDENT ;
+match_arm      = pattern , [ "if" , expression ] , "=>" , ( block | expression ) ;
+
+return_stmt    = "return" , [ expression ] ;
+break_stmt     = "break" ;
+continue_stmt  = "continue" ;
+
+try_stmt       = "try" , ":" , block , "catch" , [ "(" , IDENT , ")" ] , ":" , block , [ "finally" , ":" , block ] ;
+
+assign_or_expr_stmt = ( "let" , pattern , "=" , expression | expression ) , [ ";" | NEWLINE ] ;
+
+(* Pattern matching (AST-ready; compiler support incremental) *)
+pattern        = IDENT | "_" | "[" , [ pattern , { "," , pattern } ] , "]" | "{" , [ pat_field , { "," , pat_field } ] , "}" ;
+pat_field      = IDENT , [ ":" , pattern ] ;
+
+block          = NEWLINE , INDENT , { statement } , DEDENT | statement ;
+
+expression     = or_expr ;
+or_expr        = and_expr , { "||" , and_expr } ;
+and_expr       = equality , { "&&" , equality } ;
+equality       = comparison , { ( "==" | "!=" ) , comparison } ;
+comparison     = additive , { ( "<" | ">" | "<=" | ">=" ) , additive } ;
+additive       = multiplicative , { ( "+" | "-" ) , multiplicative } ;
+multiplicative = unary , { ( "*" | "/" | "%" ) , unary } ;
+unary          = ( "!" | "-" ) , unary | postfix ;
+postfix        = primary , { "(" , [ arg_list ] , ")" | "." , IDENT | "[" , expression , "]" } ;
+arg_list       = expression , { "," , expression } ;
+
+primary        = NUMBER | STRING | KSTRING | "true" | "false" | "null"
+               | IDENT | "(" , expression , ")" | "[" , [ expression , { "," , expression } ] , "]"
+               | "{" , [ dict_entry , { "," , dict_entry } ] , "}" ;
+
+dict_entry     = ( STRING | IDENT ) , ":" , expression ;
+
+(* Indentation: significant — tokens Indent / Dedent emitted by lexer. *)
+(* Note: EBNF here is **spec-ahead** — `match`, `async fn`, `spawn`, `import`, `switch`, `do-while` *)
+(* are tracked in the roadmap; stmt_parser / compiler support is incremental. See IMPROVEMENT_10_TRACKER.md. *)

@@ -1,0 +1,30 @@
+# KILLER Q&A AGENT - DEMO MODE
+print("=== KILLER ACTIVE Q&A AGENT ===");
+print("");
+
+q_count = 0;
+
+q_count = q_count + 1;
+print("Q1: What is Killer?");
+print("A1: Killer is a high-performance language with actors and JIT compilation.");
+print("");
+
+q_count = q_count + 1;
+print("Q2: What is an agent?");
+print("A2: An agent is an autonomous entity that reasons, remembers, and takes actions.");
+print("");
+
+q_count = q_count + 1;
+print("Q3: How fast is Killer?");
+print("A3: Killer achieves 1-2M operations per second on single-threaded workloads.");
+print("");
+
+q_count = q_count + 1;
+print("Q4: How do actors work?");
+print("A4: Actors use spawn(), send(), and await. Concurrency is managed automatically.");
+print("");
+
+print("=== AGENT DEMO COMPLETE ===");
+print("Total questions answered: " + str(q_count));
+
+

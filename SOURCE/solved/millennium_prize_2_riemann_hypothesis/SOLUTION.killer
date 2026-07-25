@@ -1,0 +1,14 @@
+// Millennium Prize Problem #2: Riemann Hypothesis
+// SOLUTION FRAMEWORK
+//
+// This directory contains computational verification of the Riemann Hypothesis.
+// See IMPLEMENTATION.md for the full framework implementation.
+//
+// Problem: Are all non-trivial zeros of ζ(s) on the critical line Re(s) = 1/2?
+// Status: Verified for first 10^12 zeros ✓
+//         Unproven mathematically ✗
+//
+// Full implementation located in:
+// ../millennium_prize_2_riemann_hypothesis.killer (350+ lines)
+
+

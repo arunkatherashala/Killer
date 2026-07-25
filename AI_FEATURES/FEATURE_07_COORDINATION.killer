@@ -1,0 +1,390 @@
+// ============================================================================
+// KILLER v2.0 - FEATURE #7: COORDINATION
+// Multi-agent teams with consensus and voting
+// ============================================================================
+
+// Proposal for consensus
+record Proposal {
+  id: String,
+  proposer: String,
+  title: String,
+  description: String,
+  votes: Map<String, Bool>,  // agent_id -> yes/no
+  created_at: Int,
+  expires_at: Int
+}
+
+// Voting result
+record VotingResult {
+  proposal_id: String,
+  total_votes: Int,
+  yes_votes: Int,
+  no_votes: Int,
+  consensus_reached: Bool,
+  result: String
+}
+
+// ============================================================================
+// CONSENSUS MANAGER
+// ============================================================================
+
+actor ConsensusManager {
+  proposals: Map<String, Proposal> = {}
+  completed_votes: List<VotingResult> = []
+  threshold: Float = 0.66  // 2/3 majority
+  voting_deadline_ms: Int = 30000
+  
+  handle propose(
+    id: String,
+    proposer: String,
+    title: String,
+    description: String
+  ) {
+    proposal = Proposal {
+      id: id,
+      proposer: proposer,
+      title: title,
+      description: description,
+      votes: {},
+      created_at: time_ms() as Int,
+      expires_at: (time_ms() + this.voting_deadline_ms) as Int
+    }
+    
+    this.proposals[id] = proposal
+  }
+  
+  handle vote(proposal_id: String, agent_id: String, vote: Bool) {
+    proposal = this.proposals[proposal_id]
+    if proposal != nil {
+      proposal.votes[agent_id] = vote
+    }
+  }
+  
+  handle check_consensus(proposal_id: String) -> VotingResult {
+    proposal = this.proposals[proposal_id]
+    
+    if proposal == nil {
+      return VotingResult {
+        proposal_id: proposal_id,
+        total_votes: 0,
+        yes_votes: 0,
+        no_votes: 0,
+        consensus_reached: false,
+        result: "Proposal not found"
+      }
+    }
+    
+    total = proposal.votes.len() as Float
+    yes_count = 0
+    no_count = 0
+    
+    for agent_id, vote in proposal.votes {
+      if vote {
+        yes_count = yes_count + 1
+      } else {
+        no_count = no_count + 1
+      }
+    }
+    
+    yes_votes_f = yes_count as Float
+    consensus = if total > 0.0 {yes_votes_f / total >= this.threshold} else {false}
+    
+    result_str = if total == 0.0 {
+      "No votes yet"
+    } else if consensus {
+      K"✓ CONSENSUS REACHED: {yes_count}/{yes_count + no_count} voted yes ({(yes_votes_f * 100.0 / total) as Int}%)"
+    } else {
+      K"✗ NO CONSENSUS: {yes_count}/{yes_count + no_count} voted yes ({(yes_votes_f * 100.0 / total) as Int}%)"
+    }
+    
+    voting_result = VotingResult {
+      proposal_id: proposal_id,
+      total_votes: (yes_count + no_count) as Int,
+      yes_votes: yes_count as Int,
+      no_votes: no_count as Int,
+      consensus_reached: consensus,
+      result: result_str
+    }
+    
+    this.completed_votes.push(voting_result)
+    voting_result
+  }
+  
+  handle get_proposal(proposal_id: String) -> Proposal {
+    this.proposals[proposal_id]
+  }
+  
+  handle list_active_proposals() -> List<String> {
+    proposals_list = []
+    for id, proposal in this.proposals {
+      proposals_list.push(K"{id}: {proposal.title} ({proposal.votes.len()} votes)")
+    }
+    proposals_list
+  }
+}
+
+// ============================================================================
+// TEAM AGENT (Votes autonomously)
+// ============================================================================
+
+actor TeamAgent {
+  agent_id: String,
+  role: String,
+  decision_model: String = "logical",
+  confidence: Float = 0.8
+  
+  handle initialize(id: String, role: String) {
+    this.agent_id = id
+    this.role = role
+  }
+  
+  handle vote_on_proposal(proposal: Proposal, context: String) -> Bool {
+    // Agent reasoning: should I vote yes or no?
+    
+    // Simple heuristic voting based on proposal title
+    title_lower = proposal.title.to_lower()
+    
+    vote = if title_lower.contains("deploy") {
+      true  // Yes to deployments
+    } else if title_lower.contains("urgent") {
+      true  // Yes to urgent matters
+    } else if title_lower.contains("remove") {
+      false  // No to removals
+    } else if title_lower.contains("risk") {
+      false  // No to risks
+    } else {
+      true  // Default: yes
+    }
+    
+    vote
+  }
+  
+  handle get_agent_info() -> String {
+    K"Agent: {this.agent_id}, Role: {this.role}, Confidence: {(this.confidence * 100.0) as Int}%"
+  }
+}
+
+// ============================================================================
+// MULTI-AGENT TEAM
+// ============================================================================
+
+actor AgentTeam {
+  team_id: String,
+  agents: List<TeamAgent> = []
+  consensus_manager: ConsensusManager = nil
+  
+  handle initialize(id: String) {
+    this.team_id = id
+    this.consensus_manager = ConsensusManager::spawn()
+  }
+  
+  handle add_agent(agent: TeamAgent) {
+    this.agents.push(agent)
+  }
+  
+  handle request_consensus(
+    proposal_id: String,
+    proposer: String,
+    title: String,
+    description: String
+  ) -> VotingResult {
+    // Create proposal
+    await this.consensus_manager.propose(
+      proposal_id,
+      proposer,
+      title,
+      description
+    )
+    
+    // All agents vote
+    for agent in this.agents {
+      proposal = await this.consensus_manager.get_proposal(proposal_id)
+      if proposal != nil {
+        vote = await agent.vote_on_proposal(proposal, "")
+        await this.consensus_manager.vote(proposal_id, agent.agent_id, vote)
+      }
+    }
+    
+    // Check if consensus reached
+    result = await this.consensus_manager.check_consensus(proposal_id)
+    result
+  }
+  
+  handle show_team_status() -> String {
+    status = K"Team: {this.team_id}, Agents: {this.agents.len()}\n"
+    for agent in this.agents {
+      info = await agent.get_agent_info()
+      status = status + K"  {info}\n"
+    }
+    status
+  }
+}
+
+// ============================================================================
+// PROOF-BASED VOTING (More formal verification)
+// ============================================================================
+
+record ProofClaim {
+  proposal_id: String,
+  claim: String,
+  evidence: List<String>,
+  confidence: Float
+}
+
+actor ProofValidator {
+  handle validate_proof(claim: ProofClaim) -> Bool {
+    // Accept claim if:
+    // 1. Has evidence
+    // 2. High confidence
+    
+    has_evidence = claim.evidence.len() > 0
+    high_confidence = claim.confidence >= 0.8
+    
+    has_evidence && high_confidence
+  }
+  
+  handle require_proof(proposal_id: String, agent_id: String, claim: String) -> ProofClaim {
+    evidence = [
+      K"Claim from agent {agent_id}",
+      "Verified through analysis",
+      "Consistent with past data"
+    ]
+    
+    ProofClaim {
+      proposal_id: proposal_id,
+      claim: claim,
+      evidence: evidence,
+      confidence: 0.92
+    }
+  }
+}
+
+// ============================================================================
+// FAULT TOLERANCE: Byzantine Fault Tolerance Pattern
+// ============================================================================
+
+actor ByzantineMajority {
+  quorum_size: Int = 7
+  max_faults: Int = 2  // Can tolerate (N-1)/3 faults = 2 for N=7
+  
+  handle reach_agreement(
+    agent_decisions: Map<String, Bool>
+  ) -> Bool {
+    // Majority vote (more than half)
+    yes_count = 0
+    for agent_id, vote in agent_decisions {
+      if vote {
+        yes_count = yes_count + 1
+      }
+    }
+    
+    total = agent_decisions.len() as Float
+    yes_count as Float > total / 2.0
+  }
+  
+  handle byzantine_agreement(
+    proposals: List<String>,
+    agent_votes: List<Map<String, Bool>>
+  ) -> String {
+    // Multiple rounds of voting to reach Byzantine agreement
+    // (Simplified - real BFT is more complex: PBFT, etc.)
+    
+    round = 1
+    consensus_item = ""
+    
+    for i in 0..proposals.len() {
+      votes = agent_votes[i]
+      
+      agreement = await this.reach_agreement(votes)
+      
+      if agreement {
+        consensus_item = proposals[i]
+        break
+      }
+      
+      round = round + 1
+    }
+    
+    K"Byzantine agreement reached on: {consensus_item} (rounds: {round})"
+  }
+}
+
+// ============================================================================
+// MAIN EXAMPLE
+// ============================================================================
+
+kfn main() {
+  println("=== KILLER v2.0 Feature #7: Coordination ===")
+  
+  println("\n👥 Creating agent team...")
+  
+  // Create team
+  team = AgentTeam::spawn()
+  await team.initialize("team_001")
+  
+  // Add agents with different roles
+  for i in 0..5 {
+    agent = TeamAgent::spawn()
+    agent.initialize(K"agent_{i}", K"role_{i}").await
+    team.add_agent(agent).await
+  }
+  
+  println("✓ Team created with 5 agents")
+  
+  // Show team status
+  println("\n📋 Team Status:")
+  status = team.show_team_status().await
+  println(status)
+  
+  // Proposal 1: Deploy to Production
+  println("\n🗳️  PROPOSAL #1: Deploy to Production")
+  result1 = team.request_consensus(
+    "prop_001",
+    "Engineering Lead",
+    "Deploy version 2.0 to production",
+    "All tests pass, ready for production"
+  ).await
+  println(result1.result)
+  println(K"Decision: {if result1.consensus_reached {"✓ APPROVED"} else {"✗ REJECTED"}}")
+  
+  // Proposal 2: Increase budget (no consensus likely)
+  println("\n🗳️  PROPOSAL #2: Increase Budget")
+  result2 = team.request_consensus(
+    "prop_002",
+    "Manager",
+    "Remove legacy systems",
+    "Old systems use 40% resources"
+  ).await
+  println(result2.result)
+  println(K"Decision: {if result2.consensus_reached {"✓ APPROVED"} else {"✗ REJECTED"}}")
+  
+  // Proof-based voting
+  println("\n🔐 Proof-Based Verification:")
+  validator = ProofValidator::spawn()
+  
+  proof = validator.require_proof("prop_001", "agent_0", "Version 2.0 is stable").await
+  is_valid = validator.validate_proof(proof).await
+  
+  println(K"Proof Validation: {if is_valid {"✓ VALID"} else {"✗ INVALID"}}")
+  println(K"Confidence: {(proof.confidence * 100.0) as Int}%")
+  println(K"Evidence: {proof.evidence.len()} items")
+  
+  // Byzantine tolerance
+  println("\n🛡️  Byzantine Fault Tolerance:")
+  byzantine = ByzantineMajority::spawn()
+  
+  agent_votes = {
+    "agent_0": true,
+    "agent_1": true,
+    "agent_2": true,
+    "agent_3": false,
+    "agent_4": true,
+    "agent_5": true,
+    "agent_6": true
+  }
+  
+  agreement = byzantine.reach_agreement(agent_votes).await
+  println(K"Consensus with 1 dissenting vote: {if agreement {"✓ REACHED"} else {"✗ NOT REACHED"}}")
+  
+  println("\n✅ Feature #7 (Coordination) Complete!")
+}

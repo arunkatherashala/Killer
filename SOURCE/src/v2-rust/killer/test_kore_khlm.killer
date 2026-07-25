@@ -1,0 +1,26 @@
+print("=== KhLM + RLM KORE Intelligence Session ===")
+print("")
+
+print("[ KhLM: Classify KORE questions ]")
+q1 = "Design the binary layout for KORE file format with PAX columnar chunks, bloom filters, delta encoding, and per-column encryption"
+kind1 = khlm_classify(q1)
+print(K"Question kind: {kind1}")
+print("")
+
+print("[ KhLM: Classify compression strategy ]")
+q2 = "What is the best per-column compression strategy for a columnar file format combining RLE delta LZ77 and dictionary encoding"
+kind2 = khlm_classify(q2)
+print(K"Question kind: {kind2}")
+print("")
+
+print("[ KhLM Auto Pipeline: KORE design ]")
+ans1 = khlm_run("deepseek-r1", q1, "auto")
+print(ans1)
+print("")
+
+print("[ KhLM Auto Pipeline: Compression strategy ]")
+ans2 = khlm_run("deepseek-r1", q2, "auto")
+print(ans2)
+print("")
+
+print("=== KhLM Session Complete ===")

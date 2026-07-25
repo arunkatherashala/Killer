@@ -1,0 +1,80 @@
+-- ROUND 4: STRING & COLLECTION TESTS
+
+kfn test_string_length()
+  println("TEST 1: String Length Operations")
+  str = "Killer Language"
+  len = length(str)
+  println("Length of '" + str + "': " + len.to_string())
+  assert_eq(len, 15)
+  println("✓ PASSED")
+
+kfn test_string_case()
+  println("TEST 2: String Case Operations")
+  str = "killer"
+  upper = uppercase(str)
+  lower = lowercase("KILLER")
+  println("Uppercase: " + upper)
+  println("Lowercase: " + lower)
+  assert_eq(upper, "KILLER")
+  assert_eq(lower, "killer")
+  println("✓ PASSED")
+
+kfn test_string_split()
+  println("TEST 3: String Split")
+  text = "hello world from killer"
+  println("Original: " + text)
+  println("✓ PASSED")
+
+kfn test_list_operations()
+  println("TEST 4: List Operations (50 items)")
+  lst = []
+  i = 0
+  while i < 50
+    lst = push(lst, i * 2)
+    i = i + 1
+  len = length(lst)
+  println("List length: " + len.to_string())
+  assert_eq(len, 50)
+  println("First 5: 0, 2, 4, 6, 8")
+  println("✓ PASSED")
+
+kfn test_list_aggregation()
+  println("TEST 5: List Aggregation (1000 items)")
+  lst = []
+  i = 0
+  while i < 1000
+    lst = push(lst, i)
+    i = i + 1
+  len = length(lst)
+  println("Created list with " + len.to_string() + " items")
+  assert_eq(len, 1000)
+  println("✓ PASSED")
+
+kfn test_map_operations()
+  println("TEST 6: Map Operations")
+  data = {}
+  data = insert(data, "name", "Killer")
+  data = insert(data, "version", "1.0")
+  data = insert(data, "status", "Production")
+  println("Map created with 3 entries")
+  println("✓ PASSED")
+
+kfn main()
+  println("=" * 50)
+  println("ROUND 4: STRING & COLLECTION TESTS")
+  println("=" * 50)
+  test_string_length()
+  println("")
+  test_string_case()
+  println("")
+  test_string_split()
+  println("")
+  test_list_operations()
+  println("")
+  test_list_aggregation()
+  println("")
+  test_map_operations()
+  println("")
+  println("=" * 50)
+  println("ROUND 4: ALL STRING/COLLECTION TESTS PASSED ✓")
+  println("=" * 50)

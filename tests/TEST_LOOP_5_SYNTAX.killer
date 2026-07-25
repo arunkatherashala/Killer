@@ -1,0 +1,198 @@
+#!/usr/bin/env killer
+// TEST: Simplified Loop Syntax "for i in 5" (loop 5 times)
+// All edge cases with comprehensive testing
+
+// ============================================================
+// TEST 1: Basic - Loop 5 times
+// ============================================================
+kfn test_loop_5() {
+  print("TEST 1: for i in 5 (loop 5 times)")
+  for i in 5 {
+    print(i)
+    print(" ")
+  }
+  print("\n")
+}
+
+// ============================================================
+// TEST 2: Edge Case - Loop 0 times
+// ============================================================
+kfn test_loop_0() {
+  print("TEST 2: for i in 0 (loop 0 times)")
+  for i in 0 {
+    print(i)
+    print(" ")
+  }
+  print("(empty output expected)\n")
+}
+
+// ============================================================
+// TEST 3: Edge Case - Loop 1 time
+// ============================================================
+kfn test_loop_1() {
+  print("TEST 3: for i in 1 (loop 1 time)")
+  for i in 1 {
+    print(i)
+    print(" ")
+  }
+  print("\n")
+}
+
+// ============================================================
+// TEST 4: Edge Case - Negative loop (should be 0 iterations)
+// ============================================================
+kfn test_loop_negative() {
+  print("TEST 4: for i in -5 (negative - should loop 0 times)")
+  for i in -5 {
+    print(i)
+    print(" ")
+  }
+  print("(empty output expected)\n")
+}
+
+// ============================================================
+// TEST 5: Edge Case - Large loop
+// ============================================================
+kfn test_loop_large() {
+  print("TEST 5: for i in 1000 (large loop - 1000 iterations)")
+  count = 0
+  for i in 1000 {
+    count = count + 1
+  }
+  print(count)
+  print(" iterations completed\n")
+}
+
+// ============================================================
+// TEST 6: Edge Case - Loop with variable
+// ============================================================
+kfn test_loop_variable() {
+  print("TEST 6: for i in n (loop with variable)")
+  n = 3
+  for i in n {
+    print(i)
+    print(" ")
+  }
+  print("\n")
+}
+
+// ============================================================
+// TEST 7: Edge Case - Nested loops
+// ============================================================
+kfn test_loop_nested() {
+  print("TEST 7: Nested loops (2x3)")
+  for i in 2 {
+    for j in 3 {
+      print(i)
+      print(",")
+      print(j)
+      print(" ")
+    }
+  }
+  print("\n")
+}
+
+// ============================================================
+// TEST 8: What values does i take?
+// ============================================================
+kfn test_loop_values() {
+  print("TEST 8: What are the actual values of i?")
+  print("for i in 5: ")
+  values = []
+  for i in 5 {
+    values.push(i)
+  }
+  print(values.to_string())
+  print("\n")
+}
+
+// ============================================================
+// TEST 9: Comparison with range syntax
+// ============================================================
+kfn test_comparison() {
+  print("TEST 9: Comparison - for i in 5 vs for i in 0..5\n")
+  
+  print("for i in 5: ")
+  for i in 5 {
+    print(i)
+    print(" ")
+  }
+  print("\n")
+  
+  print("for i in 0..5: ")
+  for i in 0..5 {
+    print(i)
+    print(" ")
+  }
+  print("\n")
+}
+
+// ============================================================
+// TEST 10: Break/continue behavior
+// ============================================================
+kfn test_loop_break() {
+  print("TEST 10: Break in loop (break when i == 2)")
+  for i in 5 {
+    if i == 2 {
+      break
+    }
+    print(i)
+    print(" ")
+  }
+  print("(break executed)\n")
+}
+
+// ============================================================
+// TEST 11: Continue behavior
+// ============================================================
+kfn test_loop_continue() {
+  print("TEST 11: Continue in loop (skip when i == 2)")
+  for i in 5 {
+    if i == 2 {
+      continue
+    }
+    print(i)
+    print(" ")
+  }
+  print("(continue executed)\n")
+}
+
+// ============================================================
+// TEST 12: Complex calculation in loop
+// ============================================================
+kfn test_loop_calculation() {
+  print("TEST 12: Sum of 0 to 4 using for i in 5")
+  sum = 0
+  for i in 5 {
+    sum = sum + i
+  }
+  print("Sum: ")
+  print(sum)
+  print("\n")
+}
+
+// ============================================================
+// MAIN - Run all tests
+// ============================================================
+kfn main() {
+  print("=== KILLER SIMPLIFIED LOOP SYNTAX TEST ===\n")
+  print("Testing: for i in N (loop N times)\n\n")
+  
+  test_loop_5()
+  test_loop_0()
+  test_loop_1()
+  test_loop_negative()
+  test_loop_large()
+  test_loop_variable()
+  test_loop_nested()
+  test_loop_values()
+  test_comparison()
+  test_loop_break()
+  test_loop_continue()
+  test_loop_calculation()
+  
+  print("\n=== ALL TESTS COMPLETED ===\n")
+}
+
+// Run main
+main()

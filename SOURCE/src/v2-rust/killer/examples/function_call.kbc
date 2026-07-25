@@ -1,0 +1,12 @@
+# Main body
+CONST_STR "before call"
+PRINT
+CALL 6
+CONST_STR "after call"
+PRINT
+HALT
+
+# Function body starts at instruction index 6
+CONST_STR "inside function"
+PRINT
+RET

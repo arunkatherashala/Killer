@@ -1,0 +1,6 @@
+i = 0
+while i < 1000 {
+  s = K"val={i}"
+  i = i + 1
+}
+print(K"done i={i}")

@@ -1,0 +1,87 @@
+// Killer v3.0 Performance Benchmark Suite
+// DateTime API Performance Tests
+// Measures: parsing, formatting, timestamp accuracy
+
+// Test 1: DateTime performance isolation
+println("=== DateTime API Benchmarking ===")
+println("")
+
+// Benchmark: now() function call (10,000 iterations)
+println("Benchmark 1: now() function")
+let iterations = 10000
+let start = now()
+let i = 0
+while i < iterations {
+    let _ = now()
+    let i = i + 1
+}
+let end = now()
+let elapsed = end - start
+let avg_per_call = elapsed / iterations
+println("Total time: " + str(elapsed) + " seconds")
+println("Calls: " + str(iterations))
+println("Average per call: " + str(avg_per_call) + " seconds")
+println("Throughput: " + str(iterations / elapsed) + " calls/sec")
+println("")
+
+// Benchmark: parse_datetime() function (1,000 iterations)
+println("Benchmark 2: parse_datetime()")
+let parse_iterations = 1000
+let iso_string = "2026-03-14T10:30:45"
+let parse_start = now()
+let j = 0
+while j < parse_iterations {
+    let _ = parse_datetime(iso_string)
+    let j = j + 1
+}
+let parse_end = now()
+let parse_elapsed = parse_end - parse_start
+let parse_avg = parse_elapsed / parse_iterations
+println("Total time: " + str(parse_elapsed) + " seconds")
+println("Parses: " + str(parse_iterations))
+println("Average per parse: " + str(parse_avg) + " seconds")
+println("Throughput: " + str(parse_iterations / parse_elapsed) + " parses/sec")
+println("")
+
+// Benchmark: format_datetime() function (1,000 iterations)
+println("Benchmark 3: format_datetime()")
+let dt = now()
+let format_iterations = 1000
+let format_start = now()
+let k = 0
+while k < format_iterations {
+    let _ = format_datetime(dt, "%Y-%m-%d %H:%M:%S")
+    let k = k + 1
+}
+let format_end = now()
+let format_elapsed = format_end - format_start
+let format_avg = format_elapsed / format_iterations
+println("Total time: " + str(format_elapsed) + " seconds")
+println("Formats: " + str(format_iterations))
+println("Average per format: " + str(format_avg) + " seconds")
+println("Throughput: " + str(format_iterations / format_elapsed) + " formats/sec")
+println("")
+
+// Benchmark: format patterns (8 pattern types)
+println("Benchmark 4: Format Pattern Performance")
+let patterns = ["%Y", "%m", "%d", "%H", "%M", "%S", "%A", "%B"]
+let pattern_iterations = 500
+let p = 0
+while p < len(patterns) {
+    let pattern = patterns[p]
+    let pattern_start = now()
+    let l = 0
+    while l < pattern_iterations {
+        let _ = format_datetime(dt, pattern)
+        let l = l + 1
+    }
+    let pattern_end = now()
+    let pattern_time = pattern_end - pattern_start
+    println("  " + pattern + ": " + str(pattern_time) + "s (" + str(pattern_iterations / pattern_time) + "/sec)")
+    let p = p + 1
+}
+
+println("")
+println("✓ DateTime benchmarking complete")
+
+

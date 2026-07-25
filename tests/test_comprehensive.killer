@@ -1,0 +1,38 @@
+kfn test_basic_math()
+  a = 10
+  b = 20
+  c = a + b
+  d = a * b
+  e = c - a
+  print(c)
+  print(d)
+  print(e)
+
+kfn test_strings()
+  str1 = "Hello"
+  str2 = " World"
+  msg = str1 + str2
+  print(msg)
+
+kfn test_conditionals()
+  x = 42
+  if x > 40
+    print("Greater")
+  else
+    print("Lesser")
+
+kfn test_loops()
+  i = 0
+  while i < 5
+    print(i)
+    i = i + 1
+
+kfn main()
+  print("=== Basic Math ===")
+  test_basic_math()
+  print("\n=== Strings ===")
+  test_strings()
+  print("\n=== Conditionals ===")
+  test_conditionals()
+  print("\n=== Loops ===")
+  test_loops()

@@ -1,0 +1,59 @@
+# ACTIVE KILLER Q&A AGENT
+print("=== KILLER ACTIVE Q&A AGENT ===")
+print("Ask me anything! Type 'exit' to quit")
+print("")
+
+kfn answer_question(question) {
+    lower = question.to_lower();
+    
+    if (lower.contains("killer")) {
+        return "Killer is a high-performance programming language with actors, pattern matching, and JIT compilation.";
+    }
+    
+    if (lower.contains("agent")) {
+        return "An agent is an autonomous entity that can reason, remember facts, and take actions.";
+    }
+    
+    if (lower.contains("performance")) {
+        return "Killer achieves 1-2M ops/sec on single-threaded workloads and 1000+ req/sec via actor concurrency.";
+    }
+    
+    if (lower.contains("how")) {
+        return "Follow these steps: 1) prepare, 2) initialize, 3) execute, 4) monitor, 5) complete.";
+    }
+    
+    if (lower.contains("why")) {
+        return "The reason is: This demonstrates important principles of distributed systems design.";
+    }
+    
+    if (lower.contains("what")) {
+        return "This is a fundamental concept with distinct properties and behaviors in the system.";
+    }
+    
+    return "That is interesting! Based on reasoning: This shows important design principles.";
+}
+
+count = 0;
+
+loop {
+    print("You: ");
+    msg = input();
+    
+    if (msg == "exit" || msg == "quit") {
+        print("Agent: Goodbye!");
+        break;
+    }
+    
+    if (msg == "") {
+        continue;
+    }
+    
+    count = count + 1;
+    answer = answer_question(msg);
+    print("Agent: " + answer);
+    print("");
+}
+
+print("Chat ended. Total: " + str(count) + " questions answered.");
+
+

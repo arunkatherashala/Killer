@@ -1,0 +1,11 @@
+kfn fib(n) {
+  if n < 2 {
+    return n
+  }
+  a = fib(n - 1)
+  b = fib(n - 2)
+  c = a + b
+  return c
+}
+result = fib(25)
+print(K"fib25={result}")

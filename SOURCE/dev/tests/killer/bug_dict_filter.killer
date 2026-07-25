@@ -1,0 +1,25 @@
+// TEST: Bug #1 - Dict filter with string keys
+
+kfn assert(condition, message) {
+    if(condition == false) {
+        print("[FAIL] " + message);
+        return;
+    }
+    print("[PASS] " + message);
+}
+
+// The actual test case from the bug report
+dicts = [{a: 1, b: 2}, {a: 3, b: 4}, {a: 5, b: 6}];
+print("Original array:", dicts);
+
+filtered = dicts.filter(fn(x) { 
+    return x.a > 2;
+});
+
+print("Filtered (x.a > 2):", filtered);
+print("Filtered length:", filtered.length);
+assert(filtered.length == 2, "Filtered dict array length should be 2");
+
+print("BUG #1 TEST COMPLETE");
+
+

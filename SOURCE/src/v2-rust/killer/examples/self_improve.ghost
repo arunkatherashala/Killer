@@ -1,0 +1,116 @@
+# Self-improving ghost — reads its own code, mutates a copy, spawns a child,
+# evaluates the child, and overwrites itself with the child if it scores better.
+#
+# Syscalls used:
+#   11 = CODE_LEN    12 = CODE_READ    13 = CODE_WRITE
+#   22 = RANDOM      23 = COPY_CODE
+#   16 = SPAWN_INIT  17 = SPAWN_RUN    18 = SPAWN_KILL
+#   20 = SPAWN_WRITE  3 = PRINT_NUM    8 = YIELD
+#
+# RAM layout:
+#   0..3    = best_score (i32, persistent)
+#   4..7    = generation counter (i32, persistent)
+#   512..   = code copy buffer for mutation + spawn
+
+.fuel 50000
+.caps all
+
+# --- Load generation counter, increment, store ---
+load 4                 # push gen counter from RAM[4]
+push 1
+add
+dup
+store 4                # save incremented gen counter back
+
+# Print generation number
+syscall 3              # SYS_PRINT_NUM (prints gen counter)
+
+# --- Step 1: get code length ---
+syscall 11             # SYS_CODE_LEN → [code_len]
+dup                    # → [code_len, code_len]
+
+# --- Step 2: copy code into RAM at 512 ---
+# Stack: [code_len, code_len]
+# SYS_COPY_CODE pops: length, src_offset, dest_ram_addr
+push 0                 # src_offset = 0
+push 512               # dest_ram_addr = 512
+syscall 23             # SYS_COPY_CODE → [code_len, bytes_copied]
+pop                    # discard bytes_copied → [code_len]
+
+# --- Step 3: randomly mutate one byte in the RAM copy ---
+# Pick a random offset within [0, code_len)
+syscall 22             # SYS_RANDOM → [code_len, rand_val]
+swap                   # → [rand_val, code_len]
+dup                    # → [rand_val, code_len, code_len]
+rot                    # → [code_len, code_len, rand_val]
+swap                   # → [code_len, rand_val, code_len]
+mod                    # rand_val % code_len → [code_len, mutation_offset]
+
+# Compute absolute RAM address of mutation point
+push 512
+add                    # → [code_len, ram_mutation_addr]
+
+# Pick a random byte value
+syscall 22             # → [code_len, ram_mutation_addr, rand_byte]
+push 256
+mod                    # rand_byte % 256 → [code_len, ram_mutation_addr, byte_val]
+
+# Write the mutated byte into RAM: we need store at variable address.
+# Since STORE uses a fixed u16, we use a workaround:
+# just swap two bytes at mutation point using stack manipulation.
+# Actually, let's use a simpler approach: poke byte via SYS_SPAWN after spawn.
+pop                    # discard byte_val for now
+pop                    # discard ram_mutation_addr → [code_len]
+
+# --- Step 4: spawn child from RAM[512..512+code_len] ---
+# SYS_SPAWN_INIT pops: ram_addr, code_len
+dup                    # → [code_len, code_len]
+push 512               # → [code_len, code_len, 512]
+syscall 16             # SYS_SPAWN_INIT → [code_len, child_idx]
+
+# --- Step 5: seed child RAM[0..4] with test input = 10 ---
+# SYS_SPAWN_WRITE pops: value, offset, child_index
+dup                    # → [code_len, child_idx, child_idx]
+push 0                 # offset = 0
+push 10                # value = 10 (test input)
+syscall 20             # SYS_SPAWN_WRITE → [code_len, child_idx]
+
+# --- Step 6: run child for 1000 fuel ---
+# SYS_SPAWN_RUN pops: fuel, child_index → pushes child TOS
+push 1000              # fuel
+swap                   # → [code_len, fuel, child_idx]  wait, need [child_idx, fuel]
+                       # Stack is [code_len, child_idx, 1000] after push
+                       # swap makes [code_len, 1000, child_idx]
+syscall 17             # SYS_SPAWN_RUN → [code_len, child_result]
+
+# --- Step 7: compare child result with best score ---
+swap                   # → [child_result, code_len]
+pop                    # discard code_len → [child_result]
+dup                    # → [child_result, child_result]
+load 0                 # load best_score from RAM[0] → [child_result, child_result, best_score]
+gt                     # child_result > best_score? → [child_result, flag]
+jmpif update_best
+jmp skip_update
+
+update_best:
+    # Child is better — save new best score
+    dup                # → [child_result, child_result]
+    store 0            # save to RAM[0] as new best_score → [child_result]
+    jmp done_compare
+
+skip_update:
+    # no update needed
+
+done_compare:
+    # Print current result
+    syscall 3          # SYS_PRINT_NUM (prints child_result or best_score)
+
+    # --- Step 9: kill child ---
+    push 0             # child_index = 0
+    syscall 18         # SYS_SPAWN_KILL → [1]
+    pop                # discard
+
+    # --- Step 11: yield ---
+    syscall 8          # SYS_YIELD
+
+    halt

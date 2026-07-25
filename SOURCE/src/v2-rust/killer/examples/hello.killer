@@ -1,0 +1,11 @@
+// Example 1: Hello World in Killer
+// Demonstrates basic I/O and simple program structure
+
+kfn main() {
+    println("Hello, Killer World!");
+    let x: Int = 42;
+    let y: Int = x + 8;
+    println("Answer: " + y.to_string());
+}
+
+

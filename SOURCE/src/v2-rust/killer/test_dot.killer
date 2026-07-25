@@ -1,0 +1,23 @@
+nova_write("sample.csv","dot.kore")
+f = "dot.kore"
+f.to("dot.json")
+g = "dot.json"
+g.to("dot2.kore")
+nova_to_csv("dot2.kore","dot2.csv")
+print("dot JSON OK")
+f.to("dot.avro")
+g = "dot.avro"
+g.to("dot3.kore")
+nova_to_csv("dot3.kore","dot3.csv")
+print("dot Avro OK")
+f.to("dot.parquet")
+g = "dot.parquet"
+g.to("dot4.kore")
+nova_to_csv("dot4.kore","dot4.csv")
+print("dot Parquet OK")
+f.to("dot.ndjson")
+g = "dot.ndjson"
+g.to("dot5.kore")
+nova_to_csv("dot5.kore","dot5.csv")
+print("dot NDJSON OK")
+print("=== dot notation all OK ===")

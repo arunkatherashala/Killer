@@ -1,0 +1,36 @@
+// Example: Power Function with Recursion
+// Demonstrates recursive function calls and repeated operations
+
+kfn power(base: Int, exp: Int) -> Int {
+    if exp == 0 {
+        return 1;
+    } else {
+        if exp == 1 {
+            return base;
+        } else {
+            return base * power(base, exp - 1);
+        }
+    }
+}
+
+kfn count_down(n: Int) -> Int {
+    if n <= 0 {
+        return 0;
+    } else {
+        println("Countdown: " + n.to_string());
+        return count_down(n - 1);
+    }
+}
+
+kfn main() {
+    let base: Int = 2;
+    let exponent: Int = 10;
+    let result: Int = power(base, exponent);
+    
+    println("2^10 = " + result.to_string());
+    
+    let final_val: Int = count_down(3);
+    println("Done!");
+}
+
+

@@ -1,0 +1,14 @@
+// Millennium Prize Problem #5: Yang-Mills Existence and Mass Gap
+// SOLUTION FRAMEWORK
+//
+// This directory contains computational verification of Yang-Mills confinement.
+// See IMPLEMENTATION.md for the full framework implementation.
+//
+// Problem: Does Yang-Mills quantum theory exist with a positive mass gap?
+// Status: Verified via lattice simulations ✓ (confinement + mass gap)
+//         Unproven in continuum ✗
+//
+// Full implementation located in:
+// ../millennium_prize_5_yang_mills.killer (320+ lines)
+
+

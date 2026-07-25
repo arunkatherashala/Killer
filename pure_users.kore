@@ -1,0 +1,8 @@
+KORE-K
+SCHEMA user_id:int:delta username:str:dict country:str:dict tier:str:dict
+ROWS 5
+COL user_id 1,1,1,1,1
+COL username alice^bob^charlie^diana^eve*0,1,2,3,4
+COL country India^USA^UK^Germany*0,1,2,0,3
+COL tier premium^free^enterprise*0,1,0,2,1
+END

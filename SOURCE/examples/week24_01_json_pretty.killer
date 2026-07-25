@@ -1,0 +1,44 @@
+// week24_01_json_pretty.killer
+// Pretty-printing JSON for readable output
+
+println("=== JSON Pretty Printing ===\n")
+
+// Compact JSON
+compact_json = "{\"name\":\"Alice\",\"age\":30,\"email\":\"alice@example.com\",\"roles\":[\"engineer\",\"manager\"]}"
+println("Compact JSON:")
+println(compact_json)
+
+// Pretty-printed with 2-space indent
+pretty = json_pretty(compact_json)
+println("\nPretty-printed JSON (2-space indent):")
+println(pretty)
+
+// Pretty-print with larger indent
+pretty_4 = json_pretty(compact_json, 4)
+println("\nPretty-printed JSON (4-space indent):")
+println(pretty_4)
+
+// API response formatting
+api_response = "{\"status\":\"success\",\"code\":200,\"data\":{\"id\":42,\"user\":\"bob\",\"created\":\"2026-03-14\"}, \"meta\":{\"duration\":\"125ms\"}}"
+formatted = json_pretty(api_response)
+println("\nFormatted API Response:")
+println(formatted)
+
+// Validating JSON before pretty-printing
+println("\n=== Validating JSON ===")
+valid_json = "{\"key\": \"value\"}"
+println("Valid JSON formatted:")
+println(json_pretty(valid_json))
+
+// Multiple objects
+data_array = "[{\"id\":1,\"name\":\"Item1\"},{\"id\":2,\"name\":\"Item2\"},{\"id\":3,\"name\":\"Item3\"}]"
+println("\nFormatted array of objects:")
+println(json_pretty(data_array))
+
+// Complex nested structure
+complex = "{\"app\":{\"name\":\"Killer\",\"version\":\"3.0\",\"features\":{\"threading\":true,\"async\":true,\"http\":true}},\"author\":{\"name\":\"Team\",\"email\":\"team@killer.io\"}}"
+formatted_complex = json_pretty(complex, 3)
+println("\nComplex nested structure (3-space indent):")
+println(formatted_complex)
+
+

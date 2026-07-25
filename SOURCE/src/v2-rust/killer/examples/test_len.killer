@@ -1,0 +1,10 @@
+len_arr = len([1, 2, 3, 4, 5])
+print(len_arr)
+
+len_dict = len({"a": 1, "b": 2, "c": 3})
+print(len_dict)
+
+len_str = len("hello")
+print(len_str)
+
+

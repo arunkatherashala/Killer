@@ -1,0 +1,6 @@
+print("=== Alias Import Test ===")
+import { A as alpha, B as beta } from "./legacy-modules/alias_mod"
+print(alpha + beta)
+print("Alias import test complete")
+
+

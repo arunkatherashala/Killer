@@ -1,0 +1,52 @@
+#!/usr/bin/env killer
+
+import time
+import file
+
+print("=== KILLER TUPLE SYNTAX TEST ===")
+print("")
+
+// Test 1: Basic tuple
+print("TEST 1: for i in (1, 5)")
+for i in (1, 5) {
+  print(i)
+  print(" ")
+}
+print("")
+print("")
+
+// Test 2: Three values
+print("TEST 2: for i in (10, 20, 30)")
+for i in (10, 20, 30) {
+  print(i)
+  print(" ")
+}
+print("")
+print("")
+
+// Test 3: Strings
+print("TEST 3: for i in (\"a\", \"b\", \"c\")")
+for i in ("a", "b", "c") {
+  print(i)
+  print(" ")
+}
+print("")
+print("")
+
+// Test 4: Comparison with range
+print("TEST 4: Comparison - Range vs Tuple")
+print("Range (1..5): ")
+for i in 1..5 {
+  print(i)
+  print(" ")
+}
+print("")
+
+print("Tuple (1, 2, 3, 4, 5): ")
+for i in (1, 2, 3, 4, 5) {
+  print(i)
+  print(" ")
+}
+print("")
+print("")
+print("=== TESTS COMPLETED ===")

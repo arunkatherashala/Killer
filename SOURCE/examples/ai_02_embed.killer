@@ -1,0 +1,89 @@
+// Example: AI Embeddings & Semantic Search
+// Demonstrates how to use ai_embed() to generate embeddings and find similar items
+
+kfn main() {
+    print("=== Killer AI Embeddings Example ===\n");
+    
+    // Sample documents for semantic search
+    let documents = [
+        "The cat sat on the mat and looked out the window",
+        "A kitten played with a ball of yarn on the floor",
+        "The weather is sunny and warm today",
+        "I love programming in the Killer language",
+        "Python is a popular programming language"
+    ];
+    
+    // Generate embeddings for all documents
+    print("=== Generating Embeddings ===\n");
+    let embeddings = [];
+    
+    for doc in documents {
+        print("Embedding: ");
+        print(doc);
+        print("\n");
+        
+        let embedding = ai_embed(doc);
+        embeddings.push(embedding);
+    }
+    print("\nGenerated ");
+    print(len(embeddings));
+    print(" embeddings\n\n");
+    
+    // Find similar documents to a query
+    let query = "A cat is sleeping on the sofa";
+    print("=== Semantic Search ===\n");
+    print("Query: ");
+    print(query);
+    print("\n\n");
+    
+    let query_embedding = ai_embed(query);
+    print("Query embedding generated\n\n");
+    
+    // Simple similarity search
+    print("=== Similar Documents (Ranked by Relevance) ===\n");
+    
+    // In real implementation, would calculate cosine similarity
+    // For this example, showing the structure
+    let similarity_results = [
+        {
+            "document": documents[0],
+            "similarity": 0.89,
+            "rank": 1
+        },
+        {
+            "document": documents[1],
+            "similarity": 0.85,
+            "rank": 2
+        },
+        {
+            "document": documents[2],
+            "similarity": 0.32,
+            "rank": 3
+        }
+    ];
+    
+    for result in similarity_results {
+        print("Rank ");
+        print(result["rank"]);
+        print(": ");
+        print(result["document"]);
+        print(" (similarity: ");
+        print(result["similarity"]);
+        print(")\n");
+    }
+    
+    print("\n=== Custom Model Example ===\n");
+    let custom_embedding = ai_embed("Machine learning models", "bert-base");
+    print("Generated custom BERT embedding\n");
+    
+    print("\n=== Embedding Lookup ===\n");
+    let lookup_doc = "Killer is a modern programming language";
+    let lookup_vector = ai_embed(lookup_doc);
+    print("Generated embedding for: ");
+    print(lookup_doc);
+    print("\n");
+    
+    print("=== Embeddings Example Complete ===\n");
+}
+
+

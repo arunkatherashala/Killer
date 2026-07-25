@@ -1,0 +1,2 @@
+response = ai_generate("What is 2+2?")
+print(response)

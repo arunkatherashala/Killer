@@ -1,0 +1,41 @@
+# Test 3: Classes & Objects
+print("=== CLASSES TEST ===")
+print("")
+
+class Calculator {
+    constructor(name) {
+        this.name = name
+        this.result = 0
+    }
+    
+    add(a, b) {
+        this.result = a + b
+        return this.result
+    }
+    
+    multiply(a, b) {
+        this.result = a * b
+        return this.result
+    }
+    
+    show_result() {
+        print(this.name, "result:", this.result)
+    }
+}
+
+calc = new Calculator("MyCalc")
+print("Adding 5 + 3...")
+calc.add(5, 3)
+calc.show_result()
+
+print("Multiplying 4 * 7...")
+calc.multiply(4, 7)
+calc.show_result()
+
+print("")
+print("Creating another calculator...")
+calc2 = new Calculator("SecondCalc")
+calc2.add(100, 50)
+calc2.show_result()
+
+

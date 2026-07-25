@@ -1,0 +1,11 @@
+kfn add(a,b){
+  c=a+b
+  return c
+}
+i=0
+r=0
+while i<100000{
+  r=add(r,i)
+  i=i+1
+}
+print(K"r={r}")

@@ -1,0 +1,31 @@
+print("=== KhLM — Killer Hybrid Language Model ===")
+print("")
+
+print("Tier 1: Math (deterministic, instant)")
+r1 = khlm_ask("What is 247 * 13")
+print(r1)
+print("")
+
+print("Tier 1: Percentage")
+r2 = khlm_ask("What is 15 percent of 480")
+print(r2)
+print("")
+
+print("Tier 1: Unit conversion")
+r3 = khlm_ask("convert 100 miles to km")
+print(r3)
+print("")
+
+print("Tier 1: Speed problem")
+r4 = khlm_ask("How long to drive 300km at 90 km/h")
+print(r4)
+print("")
+
+print("Tier 2: Live web fact")
+r5 = khlm_ask("What is the capital of Japan")
+print(r5)
+print("")
+
+print("Tier 2: Person search")
+r6 = khlm_ask("Who is Alan Turing")
+print(r6)

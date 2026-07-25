@@ -1,0 +1,8 @@
+# Stress: String operations -- 100k K-string interpolations
+s = ""
+i = 0
+while i < 100000 {
+  s = K"{i}"
+  i = i + 1
+}
+print(K"last_str={s}")

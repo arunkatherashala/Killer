@@ -1,0 +1,49 @@
+// Phase 11: Quality Operators Test
+print "=== Phase 11: Quality Operators ==="
+print ""
+
+// Test 1: Quality addition (weighted average)
+print "Test 1: Quality + Quality"
+quality q1 = 85
+quality q2 = 90
+let score1 = q1.quality()
+let score2 = q2.quality()
+print "q1 score: " + score1
+print "q2 score: " + score2
+quality q3 = q1 + q2
+let score3 = q3.quality()
+print "q1 + q2 score: " + score3  // Should be ~85.5 (average)
+print ""
+
+// Test 2: Quality + Number (auto-unwrap)
+print "Test 2: Quality + Number (auto-unwrap)"
+quality q4 = 50
+let num_result = q4 + 25
+print "quality(50) + 25 = " + num_result  // Should be ~50.25
+print ""
+
+// Test 3: Number + Quality (auto-unwrap)
+print "Test 3: Number + Quality"
+quality q5 = 60
+let num_result2 = 40 + q5
+print "40 + quality(60) = " + num_result2  // Should be ~60.4
+print ""
+
+// Test 4: Comparisons with Quality
+print "Test 4: Quality Comparisons"
+quality high = 95
+quality low = 70
+if high > low
+    print "high > low: True"
+else
+    print "high > low: False"
+
+if high > 0.9
+    print "high > 0.9: True"
+else
+    print "high > 0.9: False"
+
+print ""
+print "Phase 11 tests complete!"
+
+

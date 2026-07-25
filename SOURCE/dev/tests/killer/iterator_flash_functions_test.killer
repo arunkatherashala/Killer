@@ -1,0 +1,23 @@
+print("=== Iterator Flash Functions ===")
+
+arr = [10, 20, 30]
+it = iter(arr)
+print("next #1:", next(it))
+print("next #2:", next(it))
+print("next #3:", next(it))
+print("next exhausted with default:", next(it, "done"))
+
+text = "ab"
+sit = iter(text)
+print("string next #1:", next(sit))
+print("string next #2:", next(sit))
+print("string exhausted with default:", next(sit, "end"))
+
+d = {name: "killer", version: 3}
+dit = iter(d)
+print("dict key #1:", next(dit))
+print("dict key #2:", next(dit))
+
+print("=== Iterator Flash Functions Done ===")
+
+

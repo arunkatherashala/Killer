@@ -1,0 +1,31 @@
+print("=== Context + Debug Flash Functions ===")
+
+path = "tests/killer/_tmp_context_debug.txt"
+
+kfn build(existing) {
+    return "alpha"
+}
+
+kfn add_more(existing) {
+    return " + beta"
+}
+
+print("withFile write:", withFile(path, "write", build))
+print("withFile append:", withFile(path, "append", add_more))
+print("withFile read:", withFile(path, "read"))
+
+kfn consume(content) {
+    print("consumed:", content)
+    return content.length
+}
+
+print("withFile read callback result:", withFile(path, "read", consume))
+
+value = debug(42)
+print("debug returned:", value)
+value2 = trace("calc", 12 + 8)
+print("trace returned:", value2)
+
+print("=== Context + Debug Flash Functions Done ===")
+
+

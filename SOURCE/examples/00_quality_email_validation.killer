@@ -1,0 +1,32 @@
+// example_01_quality_email_validation.killer
+// Basic email validation with quality tracking
+// Demonstrates: String validators, quality metrics, decision logic
+
+print "=== Email Validation Example ==="
+
+// Single email validation
+quality user_email = "alice@example.com"
+user_email.validate_email()
+
+if user_email.is_valid():
+    print "✅ Valid email"
+    print "   Quality: " + user_email.quality()
+    print "   Level: " + user_email.get_level_str()
+else:
+    print "❌ Invalid email"
+    print "   Errors: " + user_email.get_errors()
+
+print ""
+
+// Multiple email validation
+emails = ["bob@test.com", "invalid-email", "charlie@domain.org"]
+
+for email in emails:
+    quality current = email
+    current.validate_email()
+    if current.is_valid():
+        print "✅ " + email
+    else:
+        print "❌ " + email
+
+

@@ -1,0 +1,11 @@
+x = 5;
+switch(x) {
+    case 5:
+        print("five");
+    case 10:
+        print("ten");
+    default:
+        print("other");
+}
+
+

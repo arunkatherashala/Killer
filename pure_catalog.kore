@@ -1,0 +1,8 @@
+KORE-K
+SCHEMA prod_id:int:delta name:str:dict category:str:dict price:float:plain
+ROWS 4
+COL prod_id 101,1,1,1
+COL name Killer-Pro^KORE-Studio^Ghost-Agent^RLM-Engine*0,1,2,3
+COL category Software^Tools^AI*0,1,2,2
+COL price 49.99,29.99,99.99,199.99
+END

@@ -1,0 +1,24 @@
+kfn check_prefix(n) {
+  i = 42
+  s = K"v={i}"
+  return s
+}
+
+kfn check_suffix(n) {
+  i = 42
+  s = K"{i} done"
+  return s
+}
+
+kfn check_both(n) {
+  i = 42
+  s = K"item={i}/end"
+  return s
+}
+
+r1 = check_prefix(1)
+r2 = check_suffix(1)
+r3 = check_both(1)
+print(K"prefix: {r1}")
+print(K"suffix: {r2}")
+print(K"both: {r3}")

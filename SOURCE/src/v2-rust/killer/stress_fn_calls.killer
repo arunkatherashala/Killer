@@ -1,0 +1,8 @@
+kfn add(a, b) { a + b }
+total = 0
+i = 0
+while i < 500000 {
+  total = add(total, i)
+  i = i + 1
+}
+print(K"fn_total={total}")

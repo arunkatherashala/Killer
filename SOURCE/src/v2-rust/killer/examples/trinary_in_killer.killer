@@ -1,0 +1,41 @@
+# Trinary in Killer (.killer) for the VM: use `#` line comments at top level (`//` is for killer_super-style parsers).
+# Compose T_POS / T_ZERO / T_NEG and trit_* builtins; put your logic here.
+
+print("=== trinary_in_killer.killer (VM-oriented demo) ===")
+
+kfn both(a, b) {
+    trit_and(a, b)
+}
+
+kfn either(a, b) {
+    trit_or(a, b)
+}
+
+kfn flip(a) {
+    trit_not(a)
+}
+
+# Policy-style: unknown (maybe) does not collapse to boolean
+jwt_ok = T_POS()
+session_ok = T_ZERO()
+access = both(jwt_ok, session_ok)
+print("access (jwt & session) as word -> " + trit_word(access))
+
+fallback = either(jwt_ok, session_ok)
+print("either(jwt, session) as word -> " + trit_word(fallback))
+
+denied = flip(jwt_ok)
+print("flip(yes) as word -> " + trit_word(denied))
+
+# Raw numbers clamp to {-1,0,+1} in Killer
+raw_signal = 999
+t_signal = int_to_trit(raw_signal)
+print("int_to_trit(large int) as word -> " + trit_word(t_signal))
+
+print("trit_add(T_POS, T_ZERO) as int:")
+print(trit_to_int(trit_add(T_POS(), T_ZERO())))
+
+print("trit_mul(T_NEG, T_POS) as int:")
+print(trit_to_int(trit_mul(T_NEG(), T_POS())))
+
+print("=== end .killer trinary demo ===")

@@ -1,0 +1,7 @@
+khlm_prefetch("who is Deepthi Sudha Katherasala")
+khlm_prefetch("what is the capital of France")
+print("prefetch fired...")
+r = khlm_ask("what is the capital of France")
+print(r)
+r2 = khlm_ask("who is Deepthi Sudha Katherasala")
+print(r2)

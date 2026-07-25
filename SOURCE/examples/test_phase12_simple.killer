@@ -1,0 +1,25 @@
+// Phase 12: Simple class test
+class Point
+{
+    init(x, y)
+    {
+        this.x = x;
+        this.y = y;
+    }
+    
+    display()
+    {
+        print("Point(");
+        print(this.x);
+        print(", ");
+        print(this.y);
+        print(")");
+    }
+}
+
+let p1 = new Point(3, 4);
+p1.display();
+print("");
+print("Basic class creation works!");
+
+

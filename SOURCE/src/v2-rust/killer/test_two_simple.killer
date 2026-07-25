@@ -1,0 +1,14 @@
+kfn double(x) {
+  return x + x
+}
+
+h1 = spawn double(5)
+r1 = await h1
+print(K"double(5)={r1}")
+
+kfn triple(x) {
+  return x + x + x
+}
+h2 = spawn triple(5)
+r2 = await h2
+print(K"triple(5)={r2}")

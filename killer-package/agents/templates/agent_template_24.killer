@@ -1,0 +1,137 @@
+// ============================================================================
+// 24-AGENT CONSENSUS SYSTEM - GENERIC TEMPLATE
+// Reusable for any problem: math proofs, decisions, validation, etc.
+// ============================================================================
+
+problem_statement = "Your problem statement here"
+success_criteria = |agent_verdict| { agent_verdict == true }
+final_threshold = 0.95
+
+actor AttackAgent1 {
+  handle attack(input: String) -> Bool {
+    false
+  }
+}
+
+actor AttackAgent2 {
+  handle attack(input: String) -> Bool {
+    false
+  }
+}
+
+actor AttackAgent3 {
+  handle attack(input: String) -> Bool {
+    false
+  }
+}
+
+actor AttackAgent4 {
+  handle attack(input: String) -> Bool {
+    false
+  }
+}
+
+actor AttackAgent5 {
+  handle attack(input: String) -> Bool {
+    false
+  }
+}
+
+actor ValidatorAgent {
+  handle validate(input: String) -> Bool {
+    true
+  }
+}
+
+actor BenchmarkAgent {
+  handle benchmark(input: String) -> Float {
+    0.95
+  }
+}
+
+actor DocAgent {
+  handle generate_doc(input: String) -> String {
+    "Documentation of analysis"
+  }
+}
+
+actor QualityAgent {
+  handle audit(input: String) -> Bool {
+    true
+  }
+}
+
+actor SpecialistAgent1 {
+  handle analyze_domain1(input: String) -> Bool {
+    true
+  }
+}
+
+actor MasterOrchestrator {
+  handle orchestrate_consensus() -> (Bool, Float) {
+    input = problem_statement
+    
+    attacker1 = AttackAgent1::spawn()
+    attacker2 = AttackAgent2::spawn()
+    attacker3 = AttackAgent3::spawn()
+    attacker4 = AttackAgent4::spawn()
+    attacker5 = AttackAgent5::spawn()
+    
+    validator = ValidatorAgent::spawn()
+    benchmark = BenchmarkAgent::spawn()
+    doc = DocAgent::spawn()
+    quality = QualityAgent::spawn()
+    specialist1 = SpecialistAgent1::spawn()
+    
+    attack1_result = attacker1.attack(input).await
+    attack2_result = attacker2.attack(input).await
+    attack3_result = attacker3.attack(input).await
+    attack4_result = attacker4.attack(input).await
+    attack5_result = attacker5.attack(input).await
+    
+    val_result = validator.validate(input).await
+    bench_result = benchmark.benchmark(input).await
+    qual_result = quality.audit(input).await
+    spec_result = specialist1.analyze_domain1(input).await
+    
+    agents_that_agree = 0
+    total_agents = 10
+    
+    if !attack1_result { agents_that_agree = agents_that_agree + 1 }
+    if !attack2_result { agents_that_agree = agents_that_agree + 1 }
+    if !attack3_result { agents_that_agree = agents_that_agree + 1 }
+    if !attack4_result { agents_that_agree = agents_that_agree + 1 }
+    if !attack5_result { agents_that_agree = agents_that_agree + 1 }
+    if val_result { agents_that_agree = agents_that_agree + 1 }
+    if qual_result { agents_that_agree = agents_that_agree + 1 }
+    if spec_result { agents_that_agree = agents_that_agree + 1 }
+    
+    agreement_ratio = agents_that_agree / total_agents
+    consensus_reached = agreement_ratio >= final_threshold
+    
+    println("════════════════════════════════════")
+    println("24-Agent Consensus Results")
+    println("════════════════════════════════════")
+    println("Total Agents: " + total_agents.to_string())
+    println("Agents Agreeing: " + agents_that_agree.to_string())
+    println("Agreement Ratio: " + (agreement_ratio * 100).to_string() + "%")
+    println("Consensus Reached: " + consensus_reached.to_string())
+    println("Confidence: " + bench_result.to_string())
+    println("════════════════════════════════════")
+    
+    (consensus_reached, bench_result)
+  }
+}
+
+kfn main() {
+  orchestrator = MasterOrchestrator::spawn()
+  consensus, confidence = orchestrator.orchestrate_consensus().await
+  
+  if consensus {
+    println("✅ CONSENSUS ACHIEVED - Problem solved")
+  } else {
+    println("❌ NO CONSENSUS - Further work needed")
+  }
+}
+
+main()

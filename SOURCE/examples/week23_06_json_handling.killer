@@ -1,0 +1,73 @@
+// week23_06_json_handling.killer
+// Advanced JSON parsing and stringification
+
+println("=== JSON Parsing ===\n")
+
+// Parse different JSON structures
+json_user = "{\"id\": 1, \"name\": \"Alice\", \"active\": true}"
+user = parse_json(json_user)
+println("User name: " + user.name)
+println("User active: " + str(user.active))
+
+json_config = "{\"host\": \"localhost\", \"port\": 8080, \"debug\": false}"
+config = parse_json(json_config)
+println("\nConfig host: " + config.host)
+println("Config port: " + str(config.port))
+
+// Complex object parsing
+println("\n=== Complex Objects ===")
+api_response = "{\"status\": \"success\", \"data\": \"Check nested parsing\", \"code\": 200}"
+response = parse_json(api_response)
+println("Response status: " + response.status)
+println("Response code: " + str(response.code))
+
+// JSON construction
+println("\n=== Building JSON ===")
+
+// Create user object
+user_obj = {
+    "username": "alice",
+    "email": "alice@example.com",
+    "is_admin": "true",
+    "created": "2026-03-14",
+}
+user_json = json_stringify(user_obj)
+println("User JSON: " + user_json)
+
+// Create API request
+request_obj = {
+    "method": "POST",
+    "endpoint": "/api/users",
+    "data": "user_data_here",
+}
+request_json = json_stringify(request_obj)
+println("Request JSON: " + request_json)
+
+// Real API workflow example
+println("\n=== Real API Workflow ===")
+
+// 1. Fetch data
+response = http_get("https://api.example.com/user/42")
+user_data = parse_json(response.body)
+println("Fetched user: " + user_data.name)
+
+// 2. Modify data
+modified_user = {
+    "id": "42",
+    "name": "Alice Updated",
+    "status": "active",
+}
+
+// 3. Submit changes
+updated_json = json_stringify(modified_user)
+submit_response = http_post("https://api.example.com/user/42", updated_json)
+println("Update result: " + str(submit_response.status))
+
+// 4. Handle result
+if submit_response.status == 200 {
+    result = parse_json(submit_response.body)
+    println("Updated successfully")
+    println("New name: " + result.name)
+}
+
+

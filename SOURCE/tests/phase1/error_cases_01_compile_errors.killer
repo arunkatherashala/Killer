@@ -1,0 +1,67 @@
+// ERROR CASES & EDGE CASES TEST SUITE
+// Tests that demonstrate error conditions and edge cases
+
+// Test 1: Invalid index access (should compile error)
+// fn bad_access[n: nat](v: Vector[n], i: i32) -> i32 {
+//     v.data[i]  // ERROR: i not proven < n
+// }
+
+// Test 2: Pure function calling impure (compile error)
+// fn bad_pure() -> i32 pure {
+//     read_config("file")  // ERROR: io not allowed in pure
+// }
+
+// Test 3: Violating precondition (compile error hoped for)
+// fn test_divide() {
+//     safe_divide(10, 0)  // ERROR: b != 0 violated
+// }
+
+// Test 4: Await outside async context (compile error)
+// fn not_async() {
+//     let result = fetch("url").await;  // ERROR: await not in async
+// }
+
+// Test 5: Type mismatch in dependent types
+// fn wrong_size() {
+//     let v5: Vector[5] = create_vector(10);  // ERROR: Vector[10] != Vector[5]
+// }
+
+// Test 6: Valid edge case - empty vector
+// fn handle_empty[n: nat](v: Vector[n]) {
+//     if n == 0 {
+//         // Handle empty vector
+//     }
+// }
+
+// Test 7: Effect mismatch - calling requires more effects
+// fn needs_io() -> String uses io {
+//     add(1, 2)  // OK - pure is subtype of io
+// }
+
+// Test 8: Async error handling
+async fn fetch_with_error(url: String) -> Result<String> uses io {
+    try {
+        fetch(url).await
+    } catch (e) {
+        Err("Network error")
+    }
+}
+
+// Test 9: Contract violation at runtime
+// #[checked]
+kfn divide_checked(a: i32, b: i32) -> i32
+    requires b != 0;
+{
+    a / b  // Runtime panic if b == 0
+}
+
+// Test 10: Empty effect set
+kfn no_effects() -> i32 {
+    42  // Implicit pure
+}
+
+kfn main() {
+    println("✓ Error and Edge Case Tests Loaded");
+}
+
+

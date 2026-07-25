@@ -1,0 +1,29 @@
+# Test arrow functions
+add = (x, y) => x + y;
+print(add(5, 3));
+
+# Single parameter arrow function
+double = x => x * 2;
+print(double(4));
+
+# Arrow function with block body
+greet = (name) => {
+    print("Hello, ");
+    print(name);
+};
+greet("World");
+
+# Template literal
+name = "Killer";
+msg = `Welcome to ${name} language!`;
+print(msg);
+
+# Default parameters
+kfn power(x, exp = 2) {
+    return x ** exp;
+}
+
+print(power(3));
+print(power(3, 3));
+
+

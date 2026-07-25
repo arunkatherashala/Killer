@@ -1,0 +1,33 @@
+print("=== Killer Core Demo: Math + Physics ===")
+
+print("-- Math core --")
+print("factorial(6):", factorial(6))
+print("gcd(84, 30):", gcd(84, 30))
+print("lcm(12, 18):", lcm(12, 18))
+print("sum(10):", sum(10))
+
+print("-- Physics core --")
+print("force(10, 2):", force(10, 2))
+print("acceleration(20, 0, 4):", acceleration(20, 0, 4))
+print("velocity(5, 3, 4):", velocity(5, 3, 4))
+print("kineticEnergy(2, 3):", kineticEnergy(2, 3))
+print("potentialEnergy(2, 10):", potentialEnergy(2, 10))
+print("ohms current (12V, 6Ω):", ohmsLawCurrent(12, 6))
+print("gravity constant:", gravity)
+
+print("-- Explain all --")
+explain factorial(6)
+explain gcd(84, 30)
+explain lcm(12, 18)
+explain sum(10)
+explain force(10, 2)
+explain acceleration(20, 0, 4)
+explain velocity(5, 3, 4)
+explain kineticEnergy(2, 3)
+explain potentialEnergy(2, 10)
+explain ohmsLawCurrent(12, 6)
+explain gravity
+
+print("=== Core Demo Complete ===")
+
+

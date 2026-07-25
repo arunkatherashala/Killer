@@ -1,0 +1,49 @@
+# Test 2: Functions
+print("=== FUNCTIONS TEST ===")
+print("")
+
+# Test 1: Simple function
+kfn add(a, b) {
+    return a + b
+}
+
+result = add(10, 5)
+print("add(10, 5) =", result)
+print("")
+
+# Test 2: String functions
+kfn greet(name) {
+    return "Welcome, " + name + "!"
+}
+
+print(greet("Alice"))
+print(greet("Bob"))
+print("")
+
+# Test 3: Recursive function
+kfn factorial(n) {
+    if (n <= 1) {
+        return 1
+    }
+    return n * factorial(n - 1)
+}
+
+print("factorial(5) =", factorial(5))
+print("factorial(10) =", factorial(10))
+print("")
+
+# Test 4: Function with loops
+kfn sum_range(n) {
+    total = 0
+    i = 1
+    while (i <= n) {
+        total = total + i
+        i = i + 1
+    }
+    return total
+}
+
+print("Sum 1-10 =", sum_range(10))
+print("Sum 1-100 =", sum_range(100))
+
+

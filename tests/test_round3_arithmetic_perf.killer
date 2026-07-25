@@ -1,0 +1,79 @@
+-- ROUND 3: ARITHMETIC PERFORMANCE TEST
+
+kfn test_addition_performance()
+  println("TEST 1: Addition Performance (1000 ops)")
+  x = 0
+  i = 0
+  while i < 1000
+    x = x + 1
+    i = i + 1
+  println("Result: " + x.to_string())
+  assert_eq(x, 1000)
+  println("✓ PASSED")
+
+kfn test_multiplication_performance()
+  println("TEST 2: Multiplication Performance (1000 ops)")
+  x = 1
+  i = 0
+  while i < 1000
+    x = x * 2
+    if x > 10000000
+      x = 1
+    i = i + 1
+  println("Result: " + x.to_string())
+  println("✓ PASSED")
+
+kfn test_mixed_arithmetic()
+  println("TEST 3: Mixed Arithmetic (5000 ops)")
+  result = 0
+  i = 0
+  while i < 5000
+    result = result + i
+    result = result - (i / 2)
+    result = result * 1
+    i = i + 1
+  println("Result: " + result.to_string())
+  println("✓ PASSED")
+
+kfn test_numerical_operations()
+  println("TEST 4: Numerical Operations")
+  sqrt_val = sqrt(16.0)
+  println("sqrt(16) = " + sqrt_val.to_string())
+  assert_eq(sqrt_val, 4.0)
+  
+  abs_val = abs(-42)
+  println("abs(-42) = " + abs_val.to_string())
+  assert_eq(abs_val, 42)
+  
+  pow_val = pow(2.0, 10.0)
+  println("pow(2, 10) = " + pow_val.to_string())
+  assert_eq(pow_val, 1024.0)
+  println("✓ PASSED")
+
+kfn test_division_and_modulo()
+  println("TEST 5: Division and Modulo (1000 ops)")
+  sum = 0
+  i = 1
+  while i <= 1000
+    sum = sum + (i / 2)
+    i = i + 1
+  println("Sum of i/2: " + sum.to_string())
+  println("✓ PASSED")
+
+kfn main()
+  println("=" * 50)
+  println("ROUND 3: ARITHMETIC PERFORMANCE TEST")
+  println("=" * 50)
+  test_addition_performance()
+  println("")
+  test_multiplication_performance()
+  println("")
+  test_mixed_arithmetic()
+  println("")
+  test_numerical_operations()
+  println("")
+  test_division_and_modulo()
+  println("")
+  println("=" * 50)
+  println("ROUND 3: ALL ARITHMETIC TESTS PASSED ✓")
+  println("=" * 50)

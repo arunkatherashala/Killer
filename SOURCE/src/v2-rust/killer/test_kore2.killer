@@ -1,0 +1,16 @@
+print("=== Ghost-108 KORE Deep Research ===")
+print("")
+
+print("-- PAX + DuckDB Architecture --")
+a = ghost_108("PAX columnar format DuckDB Arrow memory mapped parallel reads explained")
+print(a)
+print("")
+
+print("-- Compression Comparison --")
+b = ghost_108("zstd vs snappy vs lz4 compression speed ratio benchmark result 2024")
+print(b)
+print("")
+
+print("-- Unique File Format Features --")
+c = ghost_108("unique features modern file formats like Lance KORE encrypted columnar AI native")
+print(c)

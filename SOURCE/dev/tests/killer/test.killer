@@ -1,0 +1,67 @@
+# Simple test program
+print("=== Killer Test Program ===");
+print("");
+
+# Test 1: Variables
+x = 10;
+y = 20;
+print("Test 1 - Variables:");
+print("x = ", x);
+print("y = ", y);
+print("");
+
+# Test 2: Arithmetic
+print("Test 2 - Arithmetic:");
+print("x + y = ", x + y);
+print("x - y = ", x - y);
+print("x * y = ", x * y);
+print("y / x = ", y / x);
+print("");
+
+# Test 3: Strings
+print("Test 3 - Strings:");
+name = "Killer";
+version = 3.0;
+print("Language: ", name);
+print("Version: ", version);
+print("");
+
+# Test 4: Arrays
+print("Test 4 - Arrays:");
+numbers = [1, 2, 3, 4, 5];
+print("Array: ", numbers);
+print("First element: ", numbers[0]);
+print("Last element: ", numbers[4]);
+print("");
+
+# Test 5: Conditionals
+print("Test 5 - Conditionals:");
+if (x < y) {
+    print("x is less than y");
+} else {
+    print("x is greater than or equal to y");
+}
+print("");
+
+# Test 6: Loops
+print("Test 6 - Loops:");
+print("Counting from 1 to 5:");
+i = 1;
+while (i <= 5) {
+    print(i);
+    i = i + 1;
+}
+print("");
+
+# Test 7: Functions
+print("Test 7 - Functions:");
+kfn square(n) {
+    return n * n;
+}
+result = square(7);
+print("Square of 7 = ", result);
+print("");
+
+print("=== All Tests Passed! ===");
+
+

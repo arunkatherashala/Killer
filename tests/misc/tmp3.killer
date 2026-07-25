@@ -1,0 +1,9 @@
+﻿limit = 100
+limit = limit * 1000
+x = 0
+i = 0
+while i < limit {
+  x = x + i
+  i = i + 1
+}
+print(K"sum={x}")

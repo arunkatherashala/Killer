@@ -1,0 +1,15 @@
+// Week 5 Arithmetic Benchmark
+// Tests native code generation performance for hot loops
+
+sum = 0
+i = 0
+
+while (i < 20000000) {
+  sum = sum + i
+  sum = sum - (i / 2)
+  i = i + 1
+}
+
+print(sum)
+
+

@@ -1,0 +1,49 @@
+// Week 3: Dependent Types Parser Integration - Test 1
+// Demonstrates dependent type syntax recognition
+
+// Function with dependent types
+kfn process[n: nat](arr: Vector[n]) {
+    println("Processing vector of size:", n);
+    if (len(arr) > 0) {
+        println("First element:", arr[0]);
+    }
+}
+
+// Another dependent type function
+kfn matrix_op[m: nat, n: nat](matrix: Matrix[m][n]) {
+    println("Matrix dimensions:", m, "x", n);
+}
+
+// Regular function (no dependent types)
+kfn regular_func(x, y) {
+    return x + y;
+}
+
+kfn main() {
+    println("=== Dependent Types Integration Test ===");
+    
+    // Create a test vector
+    let v = [1, 2, 3, 4, 5];
+    println("Vector:", v);
+    
+    // Call dependent type function
+    // NOTE: Type parameters are parsed but not yet enforced
+    process(v);
+    
+    // Create a test matrix
+    let m = [[1, 2], [3, 4], [5,6]];
+    println("Matrix:", m);
+    
+    // Call dependent type function
+    matrix_op(m);
+    
+    // Regular function still works
+    let result = regular_func(10, 20);
+    println("Regular function result:", result);
+    
+    println("=== Test Complete ===");
+}
+
+main();
+
+

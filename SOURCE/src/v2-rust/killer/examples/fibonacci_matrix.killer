@@ -1,0 +1,58 @@
+// Matrix Exponentiation Fibonacci without array returns
+// Binary exponentiation with inline 2x2 matrix operations  
+// [[1,1],[1,0]]^n to compute fib(n) in O(log n) time
+
+kfn fib_matrix(n: Int) -> Int {
+    if n <= 1 { return n; }
+    
+    // Result matrix (identity at start): [[1,0],[0,1]]
+    let mut r0 = 1;  // result[0,0]
+    let mut r1 = 0;  // result[0,1]
+    let mut r2 = 0;  // result[1,0]
+    let mut r3 = 1;  // result[1,1]
+    
+    // Base matrix: [[1,1],[1,0]]
+    let mut b0 = 1;  // base[0,0]
+    let mut b1 = 1;  // base[0,1]
+    let mut b2 = 1;  // base[1,0]
+    let mut b3 = 0;  // base[1,1]
+    
+    let mut exp = n;
+    
+    while exp > 0 {
+        // If exp is odd, multiply result by base
+        if exp % 2 == 1 {
+            let t0 = r0 * b0 + r1 * b2;
+            let t1 = r0 * b1 + r1 * b3;
+            let t2 = r2 * b0 + r3 * b2;
+            let t3 = r2 * b1 + r3 * b3;
+            r0 = t0;
+            r1 = t1;
+            r2 = t2;
+            r3 = t3;
+        }
+        
+        // Square the base matrix
+        let s0 = b0 * b0 + b1 * b2;
+        let s1 = b0 * b1 + b1 * b3;
+        let s2 = b2 * b0 + b3 * b2;
+        let s3 = b2 * b1 + b3 * b3;
+        b0 = s0;
+        b1 = s1;
+        b2 = s2;
+        b3 = s3;
+        
+        // Halve the exponent
+        exp = exp / 2;
+    }
+    
+    // Result[0,1] is fib(n)
+    return r1;
+}
+
+kfn main() {
+    let result = fib_matrix(1000000);
+    println(result.to_string());
+}
+
+

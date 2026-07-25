@@ -1,0 +1,67 @@
+// week24_03_csv_generation.killer
+// Creating and exporting CSV data from Killer dicts
+
+println("=== CSV Generation Examples ===\n")
+
+// Create data
+user1 = {"id": "1", "name": "Alice", "department": "Engineering", "salary": "120000"}
+user2 = {"id": "2", "name": "Bob", "department": "Sales", "salary": "95000"}
+user3 = {"id": "3", "name": "Charlie", "department": "Engineering", "salary": "115000"}
+user4 = {"id": "4", "name": "Diana", "department": "Marketing", "salary": "85000"}
+
+users = [user1, user2, user3, user4]
+
+// Generate CSV
+csv_output = to_csv(users)
+println("Generated CSV:")
+println(csv_output)
+
+// CSV with custom delimiter (semicolon)
+println("=== Custom Delimiter ===")
+csv_semicolon = to_csv(users, ";")
+println("CSV with semicolon delimiter:")
+println(csv_semicolon)
+
+// Generate inventory CSV
+println("=== Inventory Export ===")
+item1 = {"sku": "ITEM001", "description": "Widget A", "quantity": "100", "unit_cost": "10.50"}
+item2 = {"sku": "ITEM002", "description": "Widget B", "quantity": "75", "unit_cost": "15.75"}
+item3 = {"sku": "ITEM003", "description": "Gadget C", "quantity": "200", "unit_cost": "5.25"}
+
+inventory = [item1, item2, item3]
+inventory_csv = to_csv(inventory)
+println(inventory_csv)
+
+// Generate sales report
+println("=== Sales Report ===")
+sale1 = {"date": "2026-03-01", "product": "Killer License", "amount": "2000", "customer": "Acme Corp"}
+sale2 = {"date": "2026-03-05", "product": "Training Session", "amount": "500", "customer": "Tech Startup"}
+sale3 = {"date": "2026-03-10", "product": "Consulting", "amount": "2500", "customer": "Enterprise Inc"}
+sale4 = {"date": "2026-03-14", "product": "Killer License", "amount": "2000", "customer": "Dev Team"}
+
+sales = [sale1, sale2, sale3, sale4]
+sales_csv = to_csv(sales)
+println("Sales report (CSV format):")
+println(sales_csv)
+
+// Round-trip: Create → Export → Parse → Display
+println("=== Round-trip Example ===")
+original = [
+    {"id": "101", "name": "Product X", "price": "49.99"},
+    {"id": "102", "name": "Product Y", "price": "79.99"},
+    {"id": "103", "name": "Product Z", "price": "199.99"},
+]
+
+// Export to CSV
+csv_export = to_csv(original)
+println("Exported:")
+println(csv_export)
+
+// Parse back
+reimported = parse_csv(csv_export)
+println("Re-imported and displayed:")
+for item in reimported {
+    println("  " + item.id + ": " + item.name + " @ $" + item.price)
+}
+
+

@@ -1,0 +1,50 @@
+// EFFECT SYSTEM - TEST SUITE 2: Effect Propagation and Inference
+// Tests that effect requirements propagate through call graphs
+
+// Test 2.1: Effect propagation - calling io function requires io
+kfn read_and_process(path: String) -> String uses io {
+    let config = read_config(path);  // read_config uses io
+    config  // So this function must use io
+}
+
+// Test 2.2: Multiple effects combine
+kfn complex_operation(path: String) -> [i32] uses (io, allocate, random) {
+    let data = read_config(path);      // requires io
+    let arr = create_array(10);         // requires allocate
+    let val = roll_dice();              // requires random
+    arr  // Needs all three effects
+}
+
+// Test 2.3: Type tracks effect requirements
+kfn process_with_effect[E](
+    f: fn() -> i32 uses E
+) -> i32 uses E {
+    f()
+}
+
+// Test 2.4: Error when calling pure on impure context
+// fn bad_pure() -> i32 pure {
+//     read_config("file")  // ERROR: io not allowed in pure
+// }
+
+// Test 2.5: Pure function is subtype of any effect
+kfn call_pure_in_io() -> i32 uses io {
+    add(1, 2)  // pure function OK in io context
+}
+
+// Test 2.6: Effect union in multiple calls
+kfn batch_read(paths: [String]) -> [String] uses io {
+    let mut results = [];
+    for path in paths {
+        // Each call to read_config requires io
+        // Batch effect is union of all individual effects
+        results.push(read_config(path));
+    }
+    results
+}
+
+kfn main() {
+    println("✓ Effect Propagation Tests Loaded");
+}
+
+

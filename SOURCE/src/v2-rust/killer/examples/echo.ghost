@@ -1,0 +1,46 @@
+# Echo Bot — Ghost VM interactive example
+# Assemble: ghost_vm assemble examples/echo.ghost echo.ghst
+# Run:      ghost_vm live echo.ghst
+
+.fuel 100000
+.data 0 "Hello! I am Ghost. Type something:\n"
+.data 100 "You said: "
+
+# Print greeting (addr=0, len=35)
+push 0
+push 35
+syscall 4       # SYS_PRINT_STR
+
+loop:
+    # Prompt and read input into RAM[256]
+    push 256
+    syscall 7   # SYS_PROMPT: prints "ghost> ", reads line → RAM[256], pushes len
+
+    # If length == 0, halt
+    dup
+    push 0
+    eq
+    jmpif done
+
+    # Print "You said: " (addr=100, len=10)
+    push 100
+    push 10
+    syscall 4   # SYS_PRINT_STR
+
+    # Print the user's input (addr=256, len on stack)
+    push 256
+    swap
+    syscall 4   # SYS_PRINT_STR
+
+    # Newline
+    push 10
+    syscall 6   # SYS_PRINT_CHAR '\n'
+
+    # Yield to host
+    syscall 8   # SYS_YIELD
+
+    jmp loop
+
+done:
+    pop         # discard the 0 length
+    halt

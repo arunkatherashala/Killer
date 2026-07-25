@@ -1,0 +1,7 @@
+# Stress: Fibonacci recursive (depth 30)
+kfn fib(n) {
+  if n <= 1 { n }
+  else { fib(n - 1) + fib(n - 2) }
+}
+result = fib(30)
+print(K"fib30={result}")

@@ -1,0 +1,6 @@
+kfn main() {
+    let x = 42
+    println(x.to_string())
+}
+
+

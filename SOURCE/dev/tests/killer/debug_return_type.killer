@@ -1,0 +1,11 @@
+kfn getProductName(id: number): string {
+    if id == 1 {
+        return "Laptop";
+    }
+    return "Unknown";
+}
+
+product = getProductName(1);
+print(product);
+
+

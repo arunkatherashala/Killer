@@ -1,0 +1,7 @@
+# Labels + jmp (forward and back). Run with: ghost_vm assemble programs/loop.ghost x.ghst && ghost_vm run x.ghst --fuel 500
+.ram 8
+    jmp forward
+backward:
+    halt
+forward:
+    jmp backward

@@ -1,0 +1,80 @@
+// Advanced Type Annotation and Decorator Examples
+print("=== Advanced Type System Features ===\n");
+
+// Feature 1: Type Annotations with Multiple Parameter Types
+print("Feature 1: Type Annotations");
+kfn calculateArea(length: number, width: number): number {
+    return length * width;
+}
+
+area = calculateArea(5, 10);
+print("calculateArea(5, 10) = " + area);
+
+// Feature 2: Multiple Decorators
+print("Feature 2: Multiple Decorators");
+@deprecated("Use fastSort instead")
+@readonly
+kfn oldSort(arr: any) {
+    return arr;
+}
+
+print("oldSort called (shows deprecation warning)\n");
+result = oldSort([3, 1, 2]);
+
+// Feature 3: Return Type Validation
+print("Feature 3: Return Type Validation");
+kfn getString(): string {
+    return "Hello, Killer!";
+}
+
+str = getString();
+print("getString() returned: " + str);
+
+// Feature 4: Boolean Type Validation
+print("Feature 4: Boolean Type Validation");
+kfn validateEmail(email: string): boolean {
+    return email.indexOf("@") >= 0;
+}
+
+valid = validateEmail("user@example.com");
+invalid = validateEmail("userexample");
+print("Email validation: user@example.com = " + valid);
+print("Email validation: userexample = " + invalid);
+
+// Feature 5: Type Annotations with Void Return
+print("Feature 5: Void Return Type");
+kfn logMessage(msg: string): void {
+    print("LOG: " + msg);
+}
+
+logMessage("This is a log message");
+
+// Feature 6: Default Parameters with Types
+print("Feature 6: Default Parameters with Types");
+kfn greetPerson(name: string, greeting: string = "Hello") {
+    return greeting + ", " + name + "!";
+}
+
+print(greetPerson("Alice"));
+print(greetPerson("Bob", "Hi"));
+
+// Feature 7: Type Validation at Call Time
+print("\nFeature 7: Mixed Type Operations");
+kfn processData(value: number): number {
+    return value * 2;
+}
+
+print("processData(21) = " + processData(21));
+
+// Feature 8: Decorator Information
+print("\nFeature 8: Function Metadata");
+kfn calculateSum(a: number, b: number): number {
+    return a + b;
+}
+
+sum_result = calculateSum(10, 20);
+print("calculateSum(10, 20) = " + sum_result);
+
+print("\n=== All Advanced Features Demonstrated Successfully ===");
+
+

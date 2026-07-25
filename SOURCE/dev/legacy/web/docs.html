@@ -1,0 +1,1308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Killer Programming Language - Complete Documentation</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #FF6B6B;
+            --secondary: #4ECDC4;
+            --dark: #0d1117;
+            --darker: #010409;
+            --light: #f5f5f5;
+            --text: #c9d1d9;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: var(--dark);
+            color: var(--text);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 250px 1fr;
+            min-height: 100vh;
+        }
+
+        /* Sidebar */
+        aside {
+            background: var(--darker);
+            border-right: 1px solid #30363d;
+            padding: 30px 20px;
+            overflow-y: auto;
+            max-height: 100vh;
+            position: sticky;
+            top: 0;
+        }
+
+        aside h3 {
+            color: var(--secondary);
+            font-size: 0.9em;
+            margin: 20px 0 10px 0;
+            text-transform: uppercase;
+            font-weight: 600;
+        }
+
+        aside ul {
+            list-style: none;
+        }
+
+        aside li {
+            margin: 5px 0;
+        }
+
+        aside a {
+            color: var(--text);
+            text-decoration: none;
+            font-size: 0.9em;
+            display: block;
+            padding: 5px 10px;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+
+        aside a:hover {
+            background: #30363d;
+            color: var(--secondary);
+            padding-left: 15px;
+        }
+
+        /* Main content */
+        main {
+            padding: 50px;
+            overflow-y: auto;
+        }
+
+        header {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            padding: 40px;
+            border-radius: 8px;
+            margin-bottom: 50px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+            color: white;
+        }
+
+        header p {
+            font-size: 1.1em;
+            color: rgba(255, 255, 255, 0.9);
+        }
+
+        .info-bar {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .info-item {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 10px 15px;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+
+        .info-item strong {
+            color: white;
+            display: block;
+            margin-bottom: 3px;
+        }
+
+        h2 {
+            color: var(--primary);
+            font-size: 2em;
+            margin: 40px 0 20px 0;
+            padding-bottom: 10px;
+            border-bottom: 2px solid var(--primary);
+        }
+
+        h3 {
+            color: var(--secondary);
+            font-size: 1.5em;
+            margin: 30px 0 15px 0;
+        }
+
+        h4 {
+            color: var(--text);
+            font-size: 1.2em;
+            margin: 20px 0 10px 0;
+        }
+
+        p {
+            margin: 15px 0;
+            text-align: justify;
+        }
+
+        code {
+            background: #1a1a1a;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            color: #79c0ff;
+        }
+
+        pre {
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            padding: 15px;
+            margin: 15px 0;
+            overflow-x: auto;
+        }
+
+        pre code {
+            background: transparent;
+            padding: 0;
+            border-radius: 0;
+            color: inherit;
+        }
+
+        ul, ol {
+            margin: 15px 0 15px 30px;
+        }
+
+        li {
+            margin: 8px 0;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            border: 1px solid #30363d;
+        }
+
+        th {
+            background: #161b22;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            color: var(--secondary);
+            border: 1px solid #30363d;
+        }
+
+        td {
+            padding: 10px 12px;
+            border: 1px solid #30363d;
+        }
+
+        tr:hover {
+            background: #0d1117;
+        }
+
+        .info-box {
+            background: #161b22;
+            border-left: 4px solid var(--secondary);
+            padding: 15px 20px;
+            margin: 20px 0;
+            border-radius: 4px;
+            line-height: 1.8;
+        }
+
+        .info-box strong {
+            color: var(--secondary);
+        }
+
+        .code-example {
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+
+        .code-example-title {
+            color: var(--secondary);
+            font-weight: bold;
+            margin-bottom: 10px;
+            font-size: 0.9em;
+        }
+
+        .code-example code {
+            background: transparent;
+            padding: 0;
+            color: #e8f5e9;
+            font-size: 0.95em;
+        }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .feature-card {
+            background: #161b22;
+            border: 1px solid #30363d;
+            padding: 15px;
+            border-radius: 6px;
+            border-left: 3px solid var(--secondary);
+        }
+
+        .feature-card strong {
+            color: var(--secondary);
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .stat-card {
+            background: #161b22;
+            border: 1px solid #30363d;
+            padding: 15px;
+            border-radius: 6px;
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 2em;
+            color: var(--primary);
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 0.9em;
+            color: #8b949e;
+        }
+
+        .toc {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            padding: 20px;
+            margin: 30px 0;
+        }
+
+        .toc h3 {
+            margin-top: 0;
+            color: var(--secondary);
+        }
+
+        .toc ol {
+            columns: 2;
+            margin-left: 20px;
+        }
+
+        .toc a {
+            color: #79c0ff;
+            text-decoration: none;
+        }
+
+        .toc a:hover {
+            text-decoration: underline;
+        }
+
+        .breadcrumb {
+            color: #8b949e;
+            font-size: 0.9em;
+            margin-bottom: 20px;
+        }
+
+        .back-to-top {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            background: var(--primary);
+            color: white;
+            padding: 12px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            display: none;
+            z-index: 1000;
+            transition: all 0.2s;
+        }
+
+        .back-to-top:hover {
+            background: #ff5252;
+            transform: translateY(-2px);
+        }
+
+        .back-to-top.show {
+            display: block;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                grid-template-columns: 1fr;
+            }
+
+            aside {
+                display: none;
+            }
+
+            main {
+                padding: 30px 20px;
+            }
+
+            header h1 {
+                font-size: 1.8em;
+            }
+
+            .feature-grid, .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .toc ol {
+                columns: 1;
+            }
+        }
+
+        hr {
+            border: none;
+            border-top: 1px solid #30363d;
+            margin: 40px 0;
+        }
+
+        a {
+            color: #79c0ff;
+            text-decoration: none;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+
+        .highlight {
+            background: rgba(255, 107, 107, 0.1);
+            padding: 2px 6px;
+            border-radius: 3px;
+            color: var(--primary);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Sidebar Navigation -->
+        <aside id="sidebar">
+            <h3>Documentation</h3>
+            <ul>
+                <li><a href="#introduction">Introduction</a></li>
+                <li><a href="#installation">Installation</a></li>
+                <li><a href="#quick-start">Quick Start</a></li>
+            </ul>
+
+            <h3>Learn</h3>
+            <ul>
+                <li><a href="#core-syntax">Core Syntax</a></li>
+                <li><a href="#variables">Variables & Types</a></li>
+                <li><a href="#operators">Operators</a></li>
+                <li><a href="#control-flow">Control Flow</a></li>
+                <li><a href="#functions">Functions</a></li>
+                <li><a href="#oop">OOP</a></li>
+            </ul>
+
+            <h3>Reference</h3>
+            <ul>
+                <li><a href="#built-ins">Built-in Objects</a></li>
+                <li><a href="#string-methods">String Methods</a></li>
+                <li><a href="#array-methods">Array Methods</a></li>
+                <li><a href="#advanced">Advanced Features</a></li>
+                <li><a href="#error-handling">Error Handling</a></li>
+                <li><a href="#regex">Regular Expressions</a></li>
+            </ul>
+
+            <h3>Guide</h3>
+            <ul>
+                <li><a href="#examples">Examples</a></li>
+                <li><a href="#transpilation">Transpilation</a></li>
+                <li><a href="#testing">Testing</a></li>
+                <li><a href="#troubleshooting">Troubleshooting</a></li>
+            </ul>
+
+            <h3>Architecture</h3>
+            <ul>
+                <li><a href="#architecture">Design</a></li>
+                <li><a href="#file-structure">File Structure</a></li>
+                <li><a href="#components">Components</a></li>
+                <li><a href="#pipeline">Pipeline</a></li>
+            </ul>
+        </aside>
+
+        <!-- Main Content -->
+        <main id="main-content">
+            <header>
+                <h1>⚡ Killer Programming Language</h1>
+                <p>A modern, feature-rich programming language with classes, arrow functions, and template literals</p>
+                <div class="info-bar">
+                    <div class="info-item">
+                        <strong>Version</strong>
+                        2.0
+                    </div>
+                    <div class="info-item">
+                        <strong>Status</strong>
+                        Production Ready
+                    </div>
+                    <div class="info-item">
+                        <strong>Tests</strong>
+                        48/48 (100%)
+                    </div>
+                    <div class="info-item">
+                        <strong>Lines</strong>
+                        9000+
+                    </div>
+                </div>
+            </header>
+
+            <section id="introduction">
+                <h2>Introduction</h2>
+                <p><span class="highlight">Killer</span> is a modern programming language designed from scratch with focus on <strong>simplicity, readability, and modern syntax</strong>. It combines features from JavaScript, Python, and other modern languages.</p>
+                
+                <h3>Key Features</h3>
+                <div class="feature-grid">
+                    <div class="feature-card">
+                        <strong>Modern Syntax</strong>
+                        Arrow functions, template literals, classes
+                    </div>
+                    <div class="feature-card">
+                        <strong>Full OOP</strong>
+                        Classes, inheritance, static methods, getters/setters
+                    </div>
+                    <div class="feature-card">
+                        <strong>Powerful Built-ins</strong>
+                        Math object, 14+ String methods, 9+ Array methods
+                    </div>
+                    <div class="feature-card">
+                        <strong>Multi-target</strong>
+                        Execute or transpile to Python/JavaScript
+                    </div>
+                </div>
+            </section>
+
+            <hr>
+
+            <section id="installation">
+                <h2>Installation & Setup</h2>
+                
+                <h3>Requirements</h3>
+                <ul>
+                    <li>Python 3.6 or higher</li>
+                    <li>No external dependencies required</li>
+                </ul>
+
+                <h3>Setup</h3>
+                <pre><code class="language-bash">git clone &lt;killer-repo&gt;
+cd killer
+python main.py examples/01_hello.killer</code></pre>
+            </section>
+
+            <hr>
+
+            <section id="quick-start">
+                <h2>Quick Start</h2>
+                
+                <h3>Your First Program</h3>
+                <p>Create a file <code>hello.killer</code>:</p>
+                
+                <div class="code-example">
+                    <div class="code-example-title">hello.killer</div>
+                    <pre><code class="language-javascript">print("Hello, World!");
+x = 10;
+y = 20;
+print(`Sum: ${x + y}`);</code></pre>
+                </div>
+
+                <p>Run it:</p>
+                <pre><code class="language-bash">python main.py hello.killer</code></pre>
+
+                <h3>Three Execution Modes</h3>
+                <pre><code class="language-bash"># Direct Interpretation
+python main.py script.killer
+
+# Transpile to Python
+python main.py --python script.killer
+
+# Transpile to JavaScript
+python main.py --js script.killer</code></pre>
+            </section>
+
+            <hr>
+
+            <section id="core-syntax">
+                <h2>Core Syntax</h2>
+                
+                <h3>Comments</h3>
+                <div class="code-example">
+                    <pre><code class="language-javascript"># Single line comment
+x = 10;  # Comment after code</code></pre>
+                </div>
+
+                <h3>Variables</h3>
+                <div class="code-example">
+                    <pre><code class="language-javascript">x = 10;                # Number
+name = "Alice";        # String
+is_active = true;      # Boolean</code></pre>
+                </div>
+            </section>
+
+            <hr>
+
+            <section id="variables">
+                <h2>Variables & Data Types</h2>
+                
+                <table>
+                    <tr>
+                        <th>Type</th>
+                        <th>Example</th>
+                        <th>typeof</th>
+                    </tr>
+                    <tr>
+                        <td>Number</td>
+                        <td><code>42</code>, <code>3.14</code></td>
+                        <td><code>"number"</code></td>
+                    </tr>
+                    <tr>
+                        <td>String</td>
+                        <td><code>"hello"</code></td>
+                        <td><code>"string"</code></td>
+                    </tr>
+                    <tr>
+                        <td>Boolean</td>
+                        <td><code>true</code>, <code>false</code></td>
+                        <td><code>"boolean"</code></td>
+                    </tr>
+                    <tr>
+                        <td>Array</td>
+                        <td><code>[1, 2, 3]</code></td>
+                        <td><code>"array"</code></td>
+                    </tr>
+                    <tr>
+                        <td>Object</td>
+                        <td><code>{x: 10, y: 20}</code></td>
+                        <td><code>"object"</code></td>
+                    </tr>
+                </table>
+            </section>
+
+            <hr>
+
+            <section id="operators">
+                <h2>Operators</h2>
+                
+                <h3>Arithmetic</h3>
+                <div class="code-example">
+                    <pre><code class="language-javascript">a = 10;
+b = 3;
+print(a + b);      # 13
+print(a - b);      # 7
+print(a * b);      # 30
+print(a / b);      # 3.333...
+print(a % b);      # 1
+print(a ** b);     # 1000 (Power)</code></pre>
+                </div>
+
+                <h3>Comparison</h3>
+                <div class="code-example">
+                    <pre><code class="language-javascript">x = 10;
+y = 20;
+print(x == y);     # false
+print(x != y);     # true
+print(x < y);      # true
+print(x <= y);     # true</code></pre>
+                </div>
+
+                <h3>Compound Assignment</h3>
+                <div class="code-example">
+                    <pre><code class="language-javascript">x = 10;
+x += 5;    # 15
+x -= 3;    # 12
+x *= 2;    # 24
+x /= 4;    # 6</code></pre>
+                </div>
+            </section>
+
+            <hr>
+
+            <section id="control-flow">
+                <h2>Control Flow</h2>
+                
+                <h3>if/else</h3>
+                <div class="code-example">
+                    <pre><code class="language-javascript">age = 20;
+if age >= 18 {
+    print("Adult");
+} else {
+    print("Minor");
+}</code></pre>
+                </div>
+
+                <h3>for Loops</h3>
+                <div class="code-example">
+                    <pre><code class="language-javascript">for i in 0..5 {
+    print(i);
+}
+
+for item in [10, 20, 30] {
+    print(item);
+}</code></pre>
+                </div>
+
+                <h3>while Loops</h3>
+                <div class="code-example">
+                    <pre><code class="language-javascript">x = 0;
+while x < 5 {
+    print(x);
+    x = x + 1;
+}</code></pre>
+                </div>
+            </section>
+
+            <hr>
+
+            <section id="functions">
+                <h2>Functions</h2>
+                
+                <h3>Function Declaration</h3>
+                <div class="code-example">
+                    <pre><code class="language-javascript">function add(a, b) {
+    return a + b;
+}
+print(add(5, 3));   # 8</code></pre>
+                </div>
+
+                <h3>Arrow Functions</h3>
+                <div class="code-example">
+                    <pre><code class="language-javascript">square = x => x * x;
+add = (a, b) => a + b;
+greet = () => "Hello!";
+
+print(square(5));    # 25
+print(add(10, 5));   # 15</code></pre>
+                </div>
+
+                <h3>Default Parameters</h3>
+                <div class="code-example">
+                    <pre><code class="language-javascript">function introduce(name = "Guest", age = 18) {
+    print(`${name} is ${age}`);
+}
+
+introduce("Bob", 25);   # Bob is 25
+introduce("Alice");     # Alice is 18</code></pre>
+                </div>
+            </section>
+
+            <hr>
+
+            <section id="oop">
+                <h2>Object-Oriented Programming</h2>
+                
+                <h3>Classes</h3>
+                <div class="code-example">
+                    <pre><code class="language-javascript">class Animal {
+    constructor(name) {
+        this.name = name;
+    }
+    
+    speak() {
+        return `${this.name} speaks`;
+    }
+}
+
+dog = new Animal("Buddy");
+print(dog.speak());   # Buddy speaks</code></pre>
+                </div>
+
+                <h3>Inheritance</h3>
+                <div class="code-example">
+                    <pre><code class="language-javascript">class Dog extends Animal {
+    speak() {
+        return `${this.name} barks!`;
+    }
+}
+
+dog = new Dog("Rex");
+print(dog.speak());   # Rex barks!</code></pre>
+                </div>
+
+                <h3>Static Methods</h3>
+                <div class="code-example">
+                    <pre><code class="language-javascript">class Math {
+    static add(a, b) {
+        return a + b;
+    }
+}
+
+print(Math.add(5, 3));  # 8</code></pre>
+                </div>
+
+                <h3>Getters</h3>
+                <div class="code-example">
+                    <pre><code class="language-javascript">class Rectangle {
+    constructor(w, h) {
+        this.width = w;
+        this.height = h;
+    }
+    
+    get area() {
+        return this.width * this.height;
+    }
+}
+
+rect = new Rectangle(5, 10);
+print(rect.area);   # 50</code></pre>
+                </div>
+            </section>
+
+            <hr>
+
+            <section id="built-ins">
+                <h2>Built-in Objects</h2>
+                
+                <h3>Math Object</h3>
+                <div class="code-example">
+                    <pre><code class="language-javascript">print(Math.PI);           # 3.14159...
+print(Math.sqrt(16));      # 4
+print(Math.max(5, 3, 9));  # 9
+print(Math.abs(-10));      # 10</code></pre>
+                </div>
+            </section>
+
+            <hr>
+
+            <section id="string-methods">
+                <h2>String Methods (14 Methods)</h2>
+                
+                <table>
+                    <tr>
+                        <th>Method</th>
+                        <th>Example</th>
+                        <th>Result</th>
+                    </tr>
+                    <tr>
+                        <td>toUpperCase()</td>
+                        <td><code>"hello".toUpperCase()</code></td>
+                        <td><code>"HELLO"</code></td>
+                    </tr>
+                    <tr>
+                        <td>toLowerCase()</td>
+                        <td><code>"HELLO".toLowerCase()</code></td>
+                        <td><code>"hello"</code></td>
+                    </tr>
+                    <tr>
+                        <td>slice()</td>
+                        <td><code>"hello".slice(0, 3)</code></td>
+                        <td><code>"hel"</code></td>
+                    </tr>
+                    <tr>
+                        <td>indexOf()</td>
+                        <td><code>"hello".indexOf("l")</code></td>
+                        <td><code>2</code></td>
+                    </tr>
+                    <tr>
+                        <td>includes()</td>
+                        <td><code>"hello".includes("ell")</code></td>
+                        <td><code>true</code></td>
+                    </tr>
+                    <tr>
+                        <td>split()</td>
+                        <td><code>"a,b,c".split(",")</code></td>
+                        <td><code>["a", "b", "c"]</code></td>
+                    </tr>
+                    <tr>
+                        <td>replace()</td>
+                        <td><code>"hello".replace("l", "L")</code></td>
+                        <td><code>"heLlo"</code></td>
+                    </tr>
+                    <tr>
+                        <td>trim()</td>
+                        <td><code>"  hello  ".trim()</code></td>
+                        <td><code>"hello"</code></td>
+                    </tr>
+                </table>
+            </section>
+
+            <hr>
+
+            <section id="array-methods">
+                <h2>Array Methods (9 Methods)</h2>
+                
+                <h3>Transformation</h3>
+                <div class="code-example">
+                    <pre><code class="language-javascript">arr = [1, 2, 3, 4, 5];
+doubled = arr.map(x => x * 2);
+print(doubled);    # [2, 4, 6, 8, 10]</code></pre>
+                </div>
+
+                <h3>Filtering</h3>
+                <div class="code-example">
+                    <pre><code class="language-javascript">evens = arr.filter(x => x % 2 == 0);
+print(evens);      # [2, 4]</code></pre>
+                </div>
+
+                <h3>Reduction</h3>
+                <div class="code-example">
+                    <pre><code class="language-javascript">sum = arr.reduce((a, b) => a + b, 0);
+print(sum);        # 15</code></pre>
+                </div>
+
+                <h3>Search</h3>
+                <div class="code-example">
+                    <pre><code class="language-javascript">first = arr.find(x => x > 3);
+print(first);      # 4
+
+has_even = arr.some(x => x % 2 == 0);
+print(has_even);   # true</code></pre>
+                </div>
+            </section>
+
+            <hr>
+
+            <section id="advanced">
+                <h2>Advanced Features</h2>
+                
+                <h3>Template Literals</h3>
+                <div class="code-example">
+                    <pre><code class="language-javascript">name = "Alice";
+age = 30;
+greeting = `Hello, ${name}! You are ${age} years old.`;
+print(greeting);</code></pre>
+                </div>
+
+                <h3>Type System</h3>
+                <div class="code-example">
+                    <pre><code class="language-javascript">print(typeof 42);           # "number"
+print(typeof "hello");      # "string"
+print(Array.isArray([1,2])); # true
+print([1,2] instanceof Array); # true</code></pre>
+                </div>
+            </section>
+
+            <hr>
+
+            <section id="error-handling">
+                <h2>Error Handling</h2>
+                
+                <div class="code-example">
+                    <pre><code class="language-javascript">try {
+    x = 10;
+    print(x / 2);
+} catch e {
+    print(`Error: ${e}`);
+} finally {
+    print("Done");
+}</code></pre>
+                </div>
+            </section>
+
+            <hr>
+
+            <section id="regex">
+                <h2>Regular Expressions</h2>
+                
+                <div class="code-example">
+                    <pre><code class="language-javascript">pattern = /hello/i;
+print(pattern.test("HELLO"));      # true
+
+text = "I am 25 years old";
+numbers = text.match(/\d+/);
+print(numbers);                    # ["25"]</code></pre>
+                </div>
+            </section>
+
+            <hr>
+
+            <section id="examples">
+                <h2>Examples</h2>
+                
+                <h3>Array Chaining</h3>
+                <div class="code-example">
+                    <pre><code class="language-javascript">arr = [1, 2, 3, 4, 5];
+result = arr
+    .filter(x => x > 2)
+    .map(x => x * 2);
+print(result);  # [6, 8, 10]</code></pre>
+                </div>
+
+                <h3>Class with Methods</h3>
+                <div class="code-example">
+                    <pre><code class="language-javascript">class Counter {
+    constructor(start = 0) {
+        this.count = start;
+    }
+    
+    increment() {
+        this.count = this.count + 1;
+        return this.count;
+    }
+}
+
+c = new Counter(10);
+print(c.increment());  # 11
+print(c.increment());  # 12</code></pre>
+                </div>
+            </section>
+
+            <hr>
+
+            <section id="transpilation">
+                <h2>Transpilation</h2>
+                
+                <h3>To Python</h3>
+                <pre><code class="language-bash">python main.py --python script.killer > script.py
+python script.py</code></pre>
+
+                <h3>To JavaScript</h3>
+                <pre><code class="language-bash">python main.py --js script.killer > script.js
+node script.js</code></pre>
+            </section>
+
+            <hr>
+
+            <section id="testing">
+                <h2>Testing</h2>
+                
+                <pre><code class="language-bash">python test_all_phases.py</code></pre>
+
+                <div class="info-box">
+                    <strong>Results:</strong> 48/48 PASS (100%) ✅<br>
+                    <strong>Test Coverage:</strong> All 16 examples, 3 execution modes<br>
+                    <strong>Status:</strong> Production Ready
+                </div>
+            </section>
+
+            <hr>
+
+            <section id="troubleshooting">
+                <h2>Troubleshooting</h2>
+                
+                <h3>Common Issues</h3>
+                <div class="info-box">
+                    <strong>Undefined variable:</strong> Check spelling and ensure variable is declared
+                </div>
+                <div class="info-box">
+                    <strong>Type error:</strong> Use typeof to verify types, use explicit conversion
+                </div>
+                <div class="info-box">
+                    <strong>Parser error:</strong> Check bracket/brace matching
+                </div>
+            </section>
+
+            <hr>
+
+            <section id="architecture">
+                <h2>Architecture & Design</h2>
+                
+                <p>The Killer language is built on a <span class="highlight">three-stage compilation architecture</span>: Lexical Analysis → Parsing → Execution (or Transpilation).</p>
+
+                <h3>Design Philosophy</h3>
+                <ul>
+                    <li><strong>Simplicity First:</strong> Clean, readable syntax inspired by Python and JavaScript</li>
+                    <li><strong>Modern Features:</strong> Arrow functions, classes, template literals out of the box</li>
+                    <li><strong>Multi-Target:</strong> Execute directly or transpile to Python/JavaScript</li>
+                    <li><strong>Extensible:</strong> Modular design allows adding new features easily</li>
+                </ul>
+
+                <h3>Compilation Pipeline</h3>
+                <div class="code-example">
+                    <pre><code class="language-text">Source Code (.killer)
+        ↓
+   [LEXER] → Tokenization (70+ token types)
+        ↓
+   [PARSER] → AST Building (25+ AST node types)
+        ↓
+      ┌─────────────────────────┬───────────────┐
+      ↓                         ↓               ↓
+ [INTERPRETER]  [PYTHON TRANSPILER]  [JS TRANSPILER]
+    Direct         Python Code          JavaScript
+ Execution          (.py)                   (.js)
+      ↓                         ↓               ↓
+   Output          Python Execution   Node.js Execution</code></pre>
+                </div>
+            </section>
+
+            <hr>
+
+            <section id="file-structure">
+                <h2>File Structure</h2>
+                
+                <pre><code class="language-text">killer/
+├── main.py                    # Entry point CLI
+├── src/
+│   ├── lexer.py              # Tokenization (555 lines)
+│   ├── parser.py             # AST generation (1085 lines)
+│   ├── interpreter.py        # Execution engine (1304 lines)
+│   ├── transpilers/
+│   │   ├── python_transpiler.py  # Python output (759 lines)
+│   │   └── js_transpiler.py      # JavaScript output (535 lines)
+│   └── ast_nodes.py          # AST node definitions
+├── examples/
+│   ├── 01_hello.killer
+│   ├── 02_variables.killer
+│   ├── ...
+│   └── 16_advanced.killer
+├── index.killer              # Showcase program (272 lines)
+├── view.killer               # Info viewer (106 lines)
+├── test_all_phases.py        # Test suite (48 tests)
+├── DOCUMENTATION.md          # Full reference
+├── docs.html                 # This file
+└── README.md                 # Quick start</code></pre>
+            </section>
+
+            <hr>
+
+            <section id="components">
+                <h2>Core Components</h2>
+                
+                <h3>1. Lexer (555 lines)</h3>
+                <div class="info-box">
+                    <strong>Responsibility:</strong> Convert source code into tokens<br>
+                    <strong>Token Types:</strong> 70+ (keywords, operators, identifiers, literals, etc.)<br>
+                    <strong>Key Features:</strong> String interpolation support, regex patterns, number parsing
+                </div>
+
+                <h3>2. Parser (1085 lines)</h3>
+                <div class="info-box">
+                    <strong>Responsibility:</strong> Build Abstract Syntax Tree (AST) from tokens<br>
+                    <strong>AST Nodes:</strong> 25+ node types (expressions, statements, declarations)<br>
+                    <strong>Key Features:</strong> Recursive descent, operator precedence, error recovery
+                </div>
+
+                <h3>3. Interpreter (1304 lines)</h3>
+                <div class="info-box">
+                    <strong>Responsibility:</strong> Execute AST directly<br>
+                    <strong>Features:</strong> Variable scoping, function calls, class instantiation, OOP inheritance<br>
+                    <strong>Built-ins:</strong> Math object, String methods (14), Array methods (9)
+                </div>
+
+                <h3>4. Python Transpiler (759 lines)</h3>
+                <div class="info-box">
+                    <strong>Responsibility:</strong> Convert AST to Python code<br>
+                    <strong>Output:</strong> Valid, executable Python 3 code<br>
+                    <strong>Mappings:</strong> Classes → Classes, arrow functions → lambda/def, template literals → f-strings
+                </div>
+
+                <h3>5. JavaScript Transpiler (535 lines)</h3>
+                <div class="info-box">
+                    <strong>Responsibility:</strong> Convert AST to JavaScript code<br>
+                    <strong>Output:</strong> Valid ES6 JavaScript<br>
+                    <strong>Direct Mapping:</strong> Most Killer syntax translates 1:1 to JS
+                </div>
+            </section>
+
+            <hr>
+
+            <section id="pipeline">
+                <h2>Execution Pipeline Details</h2>
+                
+                <h3>Direct Interpretation Flow</h3>
+                <div class="code-example">
+                    <pre><code class="language-bash">$ python main.py script.killer
+1. Read script.killer
+2. Lexer: text → tokens
+3. Parser: tokens → AST
+4. Interpreter: execute AST
+5. Output results</code></pre>
+                </div>
+
+                <h3>Python Transpilation Flow</h3>
+                <div class="code-example">
+                    <pre><code class="language-bash">$ python main.py --python script.killer
+1. Read script.killer
+2. Lexer: text → tokens
+3. Parser: tokens → AST
+4. Python Transpiler: AST → Python source
+5. Write to stdout (or file)
+6. User runs: python output.py</code></pre>
+                </div>
+
+                <h3>JavaScript Transpilation Flow</h3>
+                <div class="code-example">
+                    <pre><code class="language-bash">$ python main.py --js script.killer
+1. Read script.killer
+2. Lexer: text → tokens
+3. Parser: tokens → AST
+4. JS Transpiler: AST → JavaScript source
+5. Write to stdout (or file)
+6. User runs: node output.js</code></pre>
+                </div>
+
+                <h3>Data Structures</h3>
+                <table>
+                    <tr>
+                        <th>Component</th>
+                        <th>Produces</th>
+                        <th>Output Type</th>
+                    </tr>
+                    <tr>
+                        <td>Lexer</td>
+                        <td>Token Stream</td>
+                        <td>List of dictionaries</td>
+                    </tr>
+                    <tr>
+                        <td>Parser</td>
+                        <td>Abstract Syntax Tree</td>
+                        <td>Nested node objects</td>
+                    </tr>
+                    <tr>
+                        <td>Interpreter</td>
+                        <td>Execution Results</td>
+                        <td>Values + stdout</td>
+                    </tr>
+                    <tr>
+                        <td>Transpilers</td>
+                        <td>Source Code</td>
+                        <td>Python/JavaScript string</td>
+                    </tr>
+                </table>
+            </section>
+
+            <hr>
+
+            <section id="design-patterns">
+                <h2>Design Patterns Used</h2>
+                
+                <h3>Visitor Pattern</h3>
+                <p>The interpreter uses a visitor pattern to traverse and execute the AST. Each node type has a corresponding evaluation method.</p>
+
+                <h3>Symbol Table</h3>
+                <p>Variables and functions are stored in scope-based symbol tables. Each function creates a new scope, supporting closures.</p>
+
+                <h3>Recursive Descent Parsing</h3>
+                <p>The parser uses recursive descent to handle operator precedence and nested expressions elegantly.</p>
+
+                <h3>Code Generation</h3>
+                <p>Transpilers walk the AST and generate target language code string by string, maintaining proper indentation and structure.</p>
+            </section>
+
+            <hr>
+
+            <section id="extensibility">
+                <h2>Extensibility</h2>
+                
+                <h3>Adding a Built-in Function</h3>
+                <div class="code-example">
+                    <div class="code-example-title">In interpreter.py</div>
+                    <pre><code class="language-python">def global_toFixed(num, digits):
+    return round(num, digits)
+
+# In global scope setup:
+self.global_scope['toFixed'] = global_toFixed</code></pre>
+                </div>
+
+                <h3>Adding a New Token Type</h3>
+                <div class="code-example">
+                    <div class="code-example-title">In lexer.py</div>
+                    <pre><code class="language-python">TOKENS = {
+    'MATCH': r'match',        # Add new keyword
+    'CASE': r'case',
+    # ... more tokens
+}</code></pre>
+                </div>
+
+                <h3>Adding a New AST Node</h3>
+                <div class="code-example">
+                    <div class="code-example-title">In ast_nodes.py</div>
+                    <pre><code class="language-python">class MatchExpression(ASTNode):
+    def __init__(self, expr, cases):
+        self.expr = expr
+        self.cases = cases  # List of (pattern, body) tuples</code></pre>
+                </div>
+            </section>
+
+            <hr>
+
+            <section id="performance">
+                <h2>Performance Characteristics</h2>
+                
+                <table>
+                    <tr>
+                        <th>Operation</th>
+                        <th>Time Complexity</th>
+                        <th>Notes</th>
+                    </tr>
+                    <tr>
+                        <td>Lexical Analysis</td>
+                        <td>O(n)</td>
+                        <td>Single pass through source code</td>
+                    </tr>
+                    <tr>
+                        <td>Parsing</td>
+                        <td>O(n)</td>
+                        <td>Single pass, recursive descent</td>
+                    </tr>
+                    <tr>
+                        <td>Variable Lookup</td>
+                        <td>O(d)</td>
+                        <td>d = scope depth (usually small)</td>
+                    </tr>
+                    <tr>
+                        <td>Array Operations</td>
+                        <td>O(n)</td>
+                        <td>Same as native Python/JS</td>
+                    </tr>
+                </table>
+
+                <div class="info-box">
+                    <strong>Optimization Tips:</strong><br>
+                    • Use transpilation for production (Python/JS execution is faster)<br>
+                    • Direct interpretation is best for quick testing and prototyping<br>
+                    • Array methods are optimized and as fast as native implementations
+                </div>
+            </section>
+
+            <hr>
+
+            <div style="text-align: center; padding: 40px 0; border-top: 1px solid #30363d;">
+                <p><strong>Killer Programming Language v2.0</strong></p>
+                <p style="color: #8b949e; font-size: 0.9em;">Production Ready • 100% Test Coverage • 9000+ Lines</p>
+            </div>
+        </main>
+    </div>
+
+    <div class="back-to-top" id="backToTop" onclick="window.scrollTo({top: 0, behavior: 'smooth'})">↑ Top</div>
+
+    <script>
+        // Back to top button
+        window.addEventListener('scroll', function() {
+            const btn = document.getElementById('backToTop');
+            if (window.pageYOffset > 300) {
+                btn.classList.add('show');
+            } else {
+                btn.classList.remove('show');
+            }
+        });
+
+        // Smooth scrolling for sidebar links
+        document.querySelectorAll('aside a').forEach(link => {
+            link.addEventListener('click', function(e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({ behavior: 'smooth' });
+                }
+            });
+        });
+
+        // Highlight code blocks
+        document.querySelectorAll('pre code').forEach(block => {
+            hljs.highlightElement(block);
+        });
+    </script>
+</body>
+</html>

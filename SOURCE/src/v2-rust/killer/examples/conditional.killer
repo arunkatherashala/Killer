@@ -1,0 +1,33 @@
+// Example: Simple Conditional Logic
+// Demonstrates branching logic with integers only
+
+kfn max(a: Int, b: Int) -> Int {
+    if a > b {
+        return a;
+    } else {
+        return b;
+    }
+}
+
+kfn is_even(n: Int) -> Int {
+    if n % 2 == 0 {
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+kfn main() {
+    let num1: Int = 42;
+    let num2: Int = 37;
+    let result: Int = max(num1, num2);
+    
+    println("Maximum of 42 and 37");
+    println("Result: " + result.to_string());
+    
+    let test: Int = is_even(16);
+    println("Is 16 even?");
+    println("Result: " + test.to_string());
+}
+
+

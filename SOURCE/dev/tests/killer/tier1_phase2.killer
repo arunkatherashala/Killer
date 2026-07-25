@@ -1,0 +1,83 @@
+// TEST SUITE: Phase 2 - HOF, Exceptions, OOP
+kfn assert(condition, message) {
+    if(condition == false) {
+        print("[ERROR] " + message);
+        throw message;
+    }
+}
+
+// Array map
+numbers = [1, 2, 3, 4, 5];
+double = fn(x) { return x * 2; };
+doubled = numbers.map(double);
+assert(doubled[0] == 2, "map failed");
+assert(doubled.length == 5, "map length failed");
+print("TEST 1: Array map - PASS");
+
+// Array filter
+isEven = fn(x) { return x % 2 == 0; };
+evens = numbers.filter(isEven);
+assert(evens.length == 2, "filter failed");
+assert(evens[0] == 2, "filter value failed");
+print("TEST 2: Array filter - PASS");
+
+// Array reduce
+add = fn(acc, x) { return acc + x; };
+sum = numbers.reduce(add);
+assert(sum == 15, "reduce failed");
+print("TEST 3: Array reduce - PASS");
+
+// Try/Catch
+caught = false;
+try {
+    throw "test error";
+} catch(e) {
+    caught = true;
+}
+assert(caught == true, "try/catch failed");
+print("TEST 4: Try/Catch - PASS");
+
+// Finally
+finally_ran = false;
+try {
+    x = 5;
+} finally {
+    finally_ran = true;
+}
+assert(finally_ran == true, "finally failed");
+print("TEST 5: Finally - PASS");
+
+// Basic class
+class Animal {
+    init(name) {
+        this.name = name;
+    }
+    speak() {
+        return this.name + " speaks";
+    }
+}
+dog = new Animal("Dog");
+assert(dog.name == "Dog", "class name failed");
+assert(dog.speak() == "Dog speaks", "method failed");
+print("TEST 6: Basic Class - PASS");
+
+// Class inheritance
+class Vehicle {
+    init(type) {
+        this.type = type;
+    }
+}
+class Car extends Vehicle {
+    init(type, brand) {
+        this.type = type;
+        this.brand = brand;
+    }
+}
+car = new Car("Sedan", "Toyota");
+assert(car.type == "Sedan", "inherit type failed");
+assert(car.brand == "Toyota", "car brand failed");
+print("TEST 7: Inheritance - PASS");
+
+print("PHASE 2: COMPLETE");
+
+

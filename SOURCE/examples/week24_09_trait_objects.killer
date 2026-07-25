@@ -1,0 +1,136 @@
+// Trait Objects & Dynamic Dispatch - Advanced Polymorphism
+// Week 24C: Trait System Support
+// Demonstrates: trait objects, dynamic method dispatch, polymorphic containers
+
+println("=== Trait Objects & Dynamic Dispatch ===")
+println("")
+
+// Create a collection of different types that all implement Display
+let displayables = [
+    dict("type", "String", "value", "hello world"),
+    dict("type", "Number", "value", 42),
+    dict("type", "Bool", "value", true),
+]
+
+println("Polymorphic collection - all implement Display trait:")
+println("")
+
+let i = 0
+while i < len(displayables) {
+    let item = displayables[i]
+    let item_type = item["type"]
+    
+    // Dynamic dispatch: call appropriate method based on type
+    let has_display = trait_check(item_type, "Display")
+    
+    if has_display {
+        let method = trait_resolve(item_type, "to_string")
+        println("[" + item_type + "] Value: " + item["value"])
+        println("  Trait: " + method["trait"])
+        println("  Method: " + method["method"])
+    }
+    
+    let i = i + 1
+}
+
+println("")
+println("=== Multi-Trait Polymorphism ===")
+println("")
+
+// Define what traits each type implements
+let type_capabilities = dict(
+    "String", ["Display", "Cloneable"],
+    "Number", ["Display", "Comparable"],
+    "Array", ["Iterable", "Cloneable"],
+    "Dict", ["Cloneable"]
+)
+
+println("Type capabilities matrix:")
+println("")
+println("Type    | Display | Comparable | Iterable | Cloneable")
+println("--------|---------|------------|----------|----------")
+
+let types = ["String", "Number", "Array", "Dict"]
+let j = 0
+while j < len(types) {
+    let t = types[j]
+    let caps = type_capabilities[t]
+    
+    let display = trait_check(t, "Display")
+    let comparable = trait_check(t, "Comparable")
+    let iterable = trait_check(t, "Iterable")
+    let cloneable = trait_check(t, "Cloneable")
+    
+    let disp = if display { "✓" } else { "✗" }
+    let comp = if comparable { "✓" } else { "✗" }
+    let iter = if iterable { "✓" } else { "✗" }
+    let clon = if cloneable { "✓" } else { "✗" }
+    
+    println(t + "      | " + disp + "       | " + comp + "          | " + iter + "        | " + clon)
+    
+    let j = j + 1
+}
+
+println("")
+println("=== Using Traits to Create Safe Abstractions ===")
+println("")
+
+// Abstract function that only works with Iterable types
+let iterate_unsafe = fn(container_type) {
+    let is_iterable = trait_check(container_type, "Iterable")
+    
+    if is_iterable {
+        println("[OK] Type " + container_type + " is Iterable")
+        println("  Can safely iterate over this type")
+        println("  Methods available:")
+        
+        let iter_method = trait_resolve(container_type, "iterator")
+        println("    - " + iter_method["method"] + " (from " + iter_method["trait"] + ")")
+        
+        let next_method = trait_resolve(container_type, "has_next")
+        println("    - " + next_method["method"] + " (from " + next_method["trait"] + ")")
+    } else {
+        println("[ERROR] Type " + container_type + " is NOT Iterable")
+        println("  Cannot safely iterate over this type")
+    }
+}
+
+println("Attempting iteration with trait safety:")
+iterate_unsafe("Array")
+println("")
+iterate_unsafe("String")
+
+println("")
+println("=== Trait Bounds for Generic Functions ===")
+println("")
+
+// Function that requires a type to be both Display and Cloneable
+let process_with_clone_and_display = fn(obj_type) {
+    let has_display = trait_check(obj_type, "Display")
+    let has_cloneable = trait_check(obj_type, "Cloneable")
+    
+    if has_display && has_cloneable {
+        println("[ACCEPT] Type " + obj_type + " meets trait bounds:")
+        println("  ✓ Implements Display: can convert to string")
+        println("  ✓ Implements Cloneable: can be duplicated")
+        println("  → Can process this type safely")
+    } else {
+        println("[REJECT] Type " + obj_type + " does NOT meet trait bounds:")
+        if !has_display {
+            println("  ✗ Missing Display trait")
+        }
+        if !has_cloneable {
+            println("  ✗ Missing Cloneable trait")
+        }
+    }
+}
+
+println("Processing with trait bounds (requires Display + Cloneable):")
+process_with_clone_and_display("String")
+println("")
+process_with_clone_and_display("Number")
+
+println("")
+println("✓ Advanced trait polymorphism demo complete")
+
+

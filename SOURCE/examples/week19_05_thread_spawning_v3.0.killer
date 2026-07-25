@@ -1,0 +1,53 @@
+// Week 19: Simple Thread Spawning (v3.0 - Real Threading)
+// Demonstrates basic thread creation and joining
+// Curriculum: Concurrency, Actor Patterns, Thread Pools
+// Status: Ready for Week 19 (Actor Pools & Concurrency)
+
+kfn worker(worker_id, task_id) {
+    var start = system_time_ms();
+    print(`Worker ${worker_id} started task ${task_id}`);
+    
+    // Simulate work with sleep
+    thread_sleep_ms(100 * worker_id);
+    
+    var end = system_time_ms();
+    var duration = end - start;
+    print(`Worker ${worker_id} completed task ${task_id} in ${duration}ms`);
+}
+
+kfn main() {
+    print("=== Week 19: Basic Thread Spawning ===");
+    print("");
+    
+    // Spawn multiple threads
+    print("Spawning 5 worker threads...");
+    var threads = [];
+    
+    for (var i = 1; i <= 5; i = i + 1) {
+        // Create a closure that captures the worker_id
+        var worker_closure = fn() {
+            worker(i, 100 + i);
+        };
+        
+        // Spawn thread using Week 3 API
+        var handle = spawn_thread(worker_closure);
+        threads.push(handle);
+        print(`Spawned thread: ${handle["id"]}`);
+    }
+    
+    print("");
+    print("Waiting for all threads to complete...");
+    
+    // Join all threads
+    for (var i = 0; i < threads.length; i = i + 1) {
+        var result = join_thread(threads[i]);
+        print(`Thread ${threads[i]["id"]} joined`);
+    }
+    
+    print("");
+    print("All threads completed!");
+}
+
+main();
+
+

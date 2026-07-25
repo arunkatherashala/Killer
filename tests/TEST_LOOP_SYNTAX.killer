@@ -1,0 +1,49 @@
+#!/usr/bin/env killer
+
+// TEST 1: Simplified loop (for i in 5)
+kfn test_simple_loop() {
+  print("TEST 1: for i in 5")
+  for i in 5 {
+    print(i)
+    print(" ")
+  }
+  print("\n")
+}
+
+// TEST 2: Current loop (for i in 1..5)
+kfn test_range_loop() {
+  print("TEST 2: for i in 1..5")
+  for i in 1..5 {
+    print(i)
+    print(" ")
+  }
+  print("\n")
+}
+
+// TEST 3: Shorthand p() function
+kfn test_shorthand_p() {
+  print("TEST 3: using p() instead of print()")
+  p(1)
+  p(" ")
+  p(2)
+  p(" ")
+  p(3)
+  print("\n")
+}
+
+// TEST 4: Using both
+kfn test_both_simplified() {
+  print("TEST 4: Combined (for i in 5 + p())")
+  for i in 5 {
+    p(i)
+    p(" ")
+  }
+  print("\n")
+}
+
+kfn main() {
+  test_simple_loop()
+  test_range_loop()
+  test_shorthand_p()
+  test_both_simplified()
+}

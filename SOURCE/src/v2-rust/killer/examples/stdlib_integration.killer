@@ -1,0 +1,22 @@
+numbers = range(1, 6)
+print(numbers)
+
+dict = {"red": 255, "green": 128, "blue": 64}
+print(len(dict))
+
+dict_keys = keys(dict)
+print(dict_keys)
+
+arr = [1, "2", 3.5]
+print(type(arr))
+
+first = arr[0]
+print(type(first))
+
+str_v = str(42)
+print(str_v)
+
+int_v = int("99")
+print(int_v)
+
+

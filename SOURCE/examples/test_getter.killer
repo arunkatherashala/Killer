@@ -1,0 +1,16 @@
+// Phase 10: Test simple getter
+print "=== Test Getter Methods ==="
+print ""
+
+quality x = "test"
+let score = x.quality()
+print "Score getter worked: " + score
+print ""
+
+let is_v = x.is_valid()
+print "is_valid getter worked: " + is_v
+print ""
+
+print "Done"
+
+

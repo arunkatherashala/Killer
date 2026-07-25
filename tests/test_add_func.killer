@@ -1,0 +1,8 @@
+kfn add(a, b)
+  result = a + b
+  print(result)
+
+kfn main()
+  x = 10
+  y = 32
+  add(x, y)

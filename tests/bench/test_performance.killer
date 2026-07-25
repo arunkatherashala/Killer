@@ -1,0 +1,156 @@
+-- test_performance.killer — Benchmark core operations
+-- Measures: loop speed, function calls, array ops, string ops, recursion, math
+
+print("=== KILLER PERFORMANCE BENCHMARK ===")
+print("")
+
+-- Bench 1: Counter loop (1M iterations)
+t0 = time_ms()
+i = 0
+while i < 1000000 {
+    i = i + 1
+}
+t1 = time_ms()
+loop_ms = t1 - t0
+print(K"  1M counter loop:       {loop_ms}ms")
+
+-- Bench 2: Arithmetic sum (1M iterations)
+t0 = time_ms()
+total = 0
+i = 0
+while i < 1000000 {
+    total = total + i
+    i = i + 1
+}
+t1 = time_ms()
+arith_ms = t1 - t0
+print(K"  1M arithmetic sum:     {arith_ms}ms  (sum={total})")
+
+-- Bench 3: Function call overhead (100K calls)
+kfn add_one(x) {
+    return x + 1
+}
+
+t0 = time_ms()
+val = 0
+i = 0
+while i < 100000 {
+    val = add_one(val)
+    i = i + 1
+}
+t1 = time_ms()
+call_ms = t1 - t0
+print(K"  100K function calls:   {call_ms}ms  (val={val})")
+
+-- Bench 4: Array push + access (100K elements)
+t0 = time_ms()
+arr = []
+i = 0
+while i < 100000 {
+    push(arr, i)
+    i = i + 1
+}
+last = arr[99999]
+t1 = time_ms()
+arr_ms = t1 - t0
+print(K"  100K array push:       {arr_ms}ms  (last={last})")
+
+-- Bench 5: String concatenation (10K)
+t0 = time_ms()
+s = ""
+i = 0
+while i < 10000 {
+    s = s + "x"
+    i = i + 1
+}
+t1 = time_ms()
+str_ms = t1 - t0
+slen = len(s)
+print(K"  10K string concat:     {str_ms}ms  (len={slen})")
+
+-- Bench 6: Recursive fibonacci (fib 25)
+kfn fib(n) {
+    if n <= 1 {
+        return n
+    }
+    return fib(n - 1) + fib(n - 2)
+}
+
+t0 = time_ms()
+f25 = fib(25)
+t1 = time_ms()
+fib_ms = t1 - t0
+print(K"  fib(25) recursive:     {fib_ms}ms  (result={f25})")
+
+-- Bench 7: Math operations (100K iterations of sin/cos/sqrt)
+t0 = time_ms()
+i = 0
+acc = 0
+while i < 100000 {
+    acc = acc + sin(i) + cos(i)
+    i = i + 1
+}
+t1 = time_ms()
+math_ms = t1 - t0
+print(K"  100K math (sin+cos):   {math_ms}ms")
+
+-- Bench 8: Integer division chain (1M)
+t0 = time_ms()
+v = 1000000000
+i = 0
+while i < 1000000 {
+    v = v // 2
+    if v < 1 {
+        v = 1000000000
+    }
+    i = i + 1
+}
+t1 = time_ms()
+idiv_ms = t1 - t0
+print(K"  1M integer division:   {idiv_ms}ms")
+
+-- Bench 9: Dict operations (10K insert + lookup)
+t0 = time_ms()
+d = {}
+i = 0
+while i < 10000 {
+    key = K"{i}"
+    d[key] = i * 2
+    i = i + 1
+}
+lookup = d["5000"]
+t1 = time_ms()
+dict_ms = t1 - t0
+print(K"  10K dict insert+get:   {dict_ms}ms  (d[5000]={lookup})")
+
+-- Bench 10: Compression roundtrip (10KB)
+big_str = ""
+i = 0
+while i < 1000 {
+    big_str = big_str + "abcdefghij"
+    i = i + 1
+}
+t0 = time_ms()
+compressed = compress(big_str, "rle")
+decompressed = decompress(compressed, "rle")
+t1 = time_ms()
+cmp_ms = t1 - t0
+print(K"  10KB compress+decomp:  {cmp_ms}ms")
+
+print("")
+print("=== SUMMARY ===")
+total_ms = loop_ms + arith_ms + call_ms + arr_ms + str_ms + fib_ms + math_ms + idiv_ms + dict_ms + cmp_ms
+print(K"  Total benchmark time:  {total_ms}ms")
+
+-- Ops/sec calculations
+if loop_ms > 0 {
+    loop_ops = 1000000000 // loop_ms
+    print(K"  Counter loop:          {loop_ops}K ops/sec")
+}
+if call_ms > 0 {
+    call_ops = 100000000 // call_ms
+    print(K"  Function calls:        {call_ops}K calls/sec")
+}
+if fib_ms > 0 {
+    print(K"  fib(25):               {fib_ms}ms ({f25})")
+}

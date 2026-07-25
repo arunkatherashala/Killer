@@ -1,0 +1,38 @@
+// Example 1: Simple Hello World HTTP Server
+// Usage: killer examples/01_hello_http.killer
+// Then in another terminal: curl http://localhost:8080/
+
+let server = http::Server::new("127.0.0.1", 8080);
+
+server::on("GET", "/", fn(request) {
+    http::Response::ok("Hello, World! Welcome to Killer HTTP Server");
+});
+
+server::on("GET", "/api/users", fn(request) {
+    let users = [
+        { "id": 1, "name": "Alice" },
+        { "id": 2, "name": "Bob" },
+        { "id": 3, "name": "Charlie" }
+    ];
+    http::Response::json(users | str::format);
+});
+
+server::on("POST", "/api/echo", fn(request) {
+    http::Response::json({
+        "echo": request.body,
+        "method": request.method,
+        "path": request.path
+    });
+});
+
+print("HTTP Server starting on http://127.0.0.1:8080");
+print("Press Ctrl+C to stop");
+print("");
+print("Try these URLs:");
+print("  curl http://localhost:8080/");
+print("  curl http://localhost:8080/api/users");
+print("  curl -X POST -d 'hello' http://localhost:8080/api/echo");
+
+server::listen(server);
+
+

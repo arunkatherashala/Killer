@@ -1,0 +1,82 @@
+// Comprehensive Decorator Test
+print("=== Comprehensive Decorator System Test ===\n");
+
+// Test 1: @deprecated decorator
+@deprecated("Use newGreet() instead")
+kfn oldGreet(name: string): string {
+    return "Hello, " + name;
+}
+
+print("Test 1 - @deprecated Decorator:");
+msg = oldGreet("Alice");
+print("Result: " + msg + "\n");
+
+// Test 2: @memoized decorator for expensive calculations
+@memoized
+kfn fibonacci(n: number): number {
+    if (n <= 1) {
+        return n;
+    }
+    return fibonacci(n - 1) + fibonacci(n - 2);
+}
+
+print("Test 2 - @memoized Decorator:");
+print("fibonacci(10) first call (with memoization):");
+fib10 = fibonacci(10);
+print("Result: " + fib10);
+print("fibonacci(10) second call (cached):");
+fib10_again = fibonacci(10);
+print("Result: " + fib10_again + "\n");
+
+// Test 3: @readonly decorator
+@readonly
+kfn calculateTax(amount: number): number {
+    return amount * 0.1;
+}
+
+print("Test 3 - @readonly Decorator:");
+tax = calculateTax(100);
+print("Tax on 100: " + tax + "\n");
+
+// Test 4: Multiple decorators
+@deprecated("Use newCalculate instead")
+@memoized
+kfn oldCalculate(x: number, y: number): number {
+    return x + y;
+}
+
+print("Test 4 - Multiple Decorators:");
+print("oldCalculate(5, 3) first call:");
+result1 = oldCalculate(5, 3);
+print("Result: " + result1);
+print("oldCalculate(5, 3) second call (cached):");
+result2 = oldCalculate(5, 3);
+print("Result: " + result2 + "\n");
+
+// Test 5: Type annotations with decorators
+@memoized
+kfn square(n: number): number {
+    print("  [Computing square of " + n + "]");
+    return n * n;
+}
+
+print("Test 5 - Type Annotations + @memoized:");
+print("square(5) first call:");
+sq1 = square(5);
+print("Result: " + sq1);
+print("square(5) second call (should use cache, no computation message):");
+sq2 = square(5);
+print("Result: " + sq2 + "\n");
+
+// Test 6: New function without decorators
+kfn newGreet(name: string): string {
+    return "Greetings, " + name + "!";
+}
+
+print("Test 6 - Regular Function (no decorators):");
+greeting = newGreet("Bob");
+print("Result: " + greeting + "\n");
+
+print("=== All Decorator Tests Completed Successfully ===");
+
+

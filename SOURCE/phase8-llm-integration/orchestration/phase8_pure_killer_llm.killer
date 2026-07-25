@@ -1,0 +1,308 @@
+// PHASE 8 - KILLER + OLLAMA LLM INTEGRATION
+// Pure Killer orchestration with Ollama HTTP calls
+// Measures latency: Killer tests + AI reasoning
+// Date: March 18, 2026
+
+// ============================================================================
+// PHASE 8 TEST FUNCTIONS (from Phase 7, unchanged)
+// ============================================================================
+
+kfn test_round_1_arithmetic() {
+    count = 0;
+    i = 0;
+    while (i < 1000000) {
+        count = count + 1;
+        i = i + 1;
+    }
+    return count;
+}
+
+kfn test_round_2_nested_loops() {
+    count = 0;
+    i = 0;
+    while (i < 100000) {
+        j = 0;
+        while (j < 10) {
+            count = count + 1;
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return count;
+}
+
+kfn fibonacci(n) {
+    if (n <= 1) {
+        return n;
+    }
+    return fibonacci(n - 1) + fibonacci(n - 2);
+}
+
+kfn test_round_3_fibonacci() {
+    sum = 0;
+    i = 0;
+    while (i < 100) {
+        sum = sum + fibonacci(15);
+        i = i + 1;
+    }
+    return sum;
+}
+
+kfn test_round_4_modulo_full_load() {
+    result = 0;
+    i = 0;
+    while (i < 100000) {
+        j = 0;
+        while (j < 100) {
+            result = (i * j + 17) % 1000000;
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return result;
+}
+
+kfn test_round_5_division_full_load() {
+    result = 0;
+    i = 0;
+    while (i < 100000) {
+        j = 1;
+        while (j < 101) {
+            result = (i * 1000 + 500) / j;
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return result;
+}
+
+kfn test_round_6_conditional_branching() {
+    true_count = 0;
+    false_count = 0;
+    i = 0;
+    while (i < 100000) {
+        if (i % 2 == 0) {
+            true_count = true_count + 1;
+        } else {
+            false_count = false_count + 1;
+        }
+        i = i + 1;
+    }
+    return true_count + false_count;
+}
+
+kfn power(base, exp) {
+    if (exp == 0) {
+        return 1;
+    }
+    result = base;
+    i = 1;
+    while (i < exp) {
+        result = result * base;
+        i = i + 1;
+    }
+    return result;
+}
+
+kfn test_round_7_power_operations() {
+    result = 0;
+    i = 0;
+    while (i < 10000) {
+        result = power(2, 10);
+        i = i + 1;
+    }
+    return result;
+}
+
+// ============================================================================
+// PHASE 8 NEW: OLLAMA INTEGRATION
+// ============================================================================
+
+// Simulated Ollama HTTP call (returns latency + response)
+// In real implementation, this would use HTTP library
+kfn query_ollama(prompt) {
+    // This is a placeholder that simulates Ollama latency
+    // Real implementation would use HTTP client to call:
+    // POST http://localhost:11434/api/generate
+    // {
+    //   "model": "mistral",
+    //   "prompt": prompt,
+    //   "stream": false
+    // }
+    
+    // For now, return simulated response
+    simulation_delay = 2000;  // Simulate 2s Ollama latency
+    response = "AI: Optimized algorithm reduces complexity";
+    
+    return response;
+}
+
+// ============================================================================
+// PHASE 8 ORCHESTRATION - WITH TIMING + OLLAMA
+// ============================================================================
+
+print("=== PHASE 8 - KILLER + OLLAMA LLM INTEGRATION ===");
+print("Status: Ready for Ollama (localhost:11434)");
+print("");
+
+// Timing infrastructure
+start_total = time::now_milliseconds();
+
+// CSV header
+csv_rows = "timestamp,round,test_name,killer_ms,ollama_response,status,total_ms";
+
+// ============================================================================
+// ROUND 1: Baseline Arithmetic
+// ============================================================================
+print("ROUND 1: Baseline Arithmetic (1M iterations)");
+
+start_killer_1 = time::now_milliseconds();
+r1 = test_round_1_arithmetic();
+end_killer_1 = time::now_milliseconds();
+killer_time_1 = end_killer_1 - start_killer_1;
+
+// Note: Ollama query disabled until service running
+// ollama_resp_1 = query_ollama("Analyze arithmetic performance");
+ollama_resp_1 = "Pending Ollama connection";
+
+total_1 = killer_time_1;
+csv_rows = csv_rows + "\n" + "2026-03-18T00:00:00,1,Baseline Arithmetic (1M)," + killer_time_1 + "," + ollama_resp_1 + ",COMPLETE," + total_1;
+
+print("  Killer time: " + killer_time_1 + "ms");
+print("  Status: COMPLETE");
+print("");
+
+// ============================================================================
+// ROUND 2: Nested Loops
+// ============================================================================
+print("ROUND 2: Nested Loops (100K x 10)");
+
+start_killer_2 = time::now_milliseconds();
+r2 = test_round_2_nested_loops();
+end_killer_2 = time::now_milliseconds();
+killer_time_2 = end_killer_2 - start_killer_2;
+
+ollama_resp_2 = "Pending Ollama connection";
+total_2 = killer_time_2;
+csv_rows = csv_rows + "\n" + "2026-03-18T00:00:00,2,Nested Loops (100K x 10)," + killer_time_2 + "," + ollama_resp_2 + ",COMPLETE," + total_2;
+
+print("  Killer time: " + killer_time_2 + "ms");
+print("  Status: COMPLETE");
+print("");
+
+// ============================================================================
+// ROUND 3: Fibonacci
+// ============================================================================
+print("ROUND 3: Fibonacci O(log n) (100 computations)");
+
+start_killer_3 = time::now_milliseconds();
+r3 = test_round_3_fibonacci();
+end_killer_3 = time::now_milliseconds();
+killer_time_3 = end_killer_3 - start_killer_3;
+
+ollama_resp_3 = "Pending Ollama connection";
+total_3 = killer_time_3;
+csv_rows = csv_rows + "\n" + "2026-03-18T00:00:00,3,Fibonacci (100 comps)," + killer_time_3 + "," + ollama_resp_3 + ",COMPLETE," + total_3;
+
+print("  Killer time: " + killer_time_3 + "ms");
+print("  Status: COMPLETE");
+print("");
+
+// ============================================================================
+// ROUND 4: Modulo (FULL LOAD)
+// ============================================================================
+print("ROUND 4: Modulo Operations (100K x 100 - FULL LOAD)");
+
+start_killer_4 = time::now_milliseconds();
+r4 = test_round_4_modulo_full_load();
+end_killer_4 = time::now_milliseconds();
+killer_time_4 = end_killer_4 - start_killer_4;
+
+ollama_resp_4 = "Pending Ollama connection";
+total_4 = killer_time_4;
+csv_rows = csv_rows + "\n" + "2026-03-18T00:00:00,4,Modulo (100K x 100)," + killer_time_4 + "," + ollama_resp_4 + ",COMPLETE," + total_4;
+
+print("  Killer time: " + killer_time_4 + "ms");
+print("  Status: COMPLETE");
+print("");
+
+// ============================================================================
+// ROUND 5: Division (FULL LOAD)
+// ============================================================================
+print("ROUND 5: Division Operations (100K x 100 - FULL LOAD)");
+
+start_killer_5 = time::now_milliseconds();
+r5 = test_round_5_division_full_load();
+end_killer_5 = time::now_milliseconds();
+killer_time_5 = end_killer_5 - start_killer_5;
+
+ollama_resp_5 = "Pending Ollama connection";
+total_5 = killer_time_5;
+csv_rows = csv_rows + "\n" + "2026-03-18T00:00:00,5,Division (100K x 100)," + killer_time_5 + "," + ollama_resp_5 + ",COMPLETE," + total_5;
+
+print("  Killer time: " + killer_time_5 + "ms");
+print("  Status: COMPLETE");
+print("");
+
+// ============================================================================
+// ROUND 6: Conditional Branching
+// ============================================================================
+print("ROUND 6: Conditional Branching (100K)");
+
+start_killer_6 = time::now_milliseconds();
+r6 = test_round_6_conditional_branching();
+end_killer_6 = time::now_milliseconds();
+killer_time_6 = end_killer_6 - start_killer_6;
+
+ollama_resp_6 = "Pending Ollama connection";
+total_6 = killer_time_6;
+csv_rows = csv_rows + "\n" + "2026-03-18T00:00:00,6,Conditional Branching (100K)," + killer_time_6 + "," + ollama_resp_6 + ",COMPLETE," + total_6;
+
+print("  Killer time: " + killer_time_6 + "ms");
+print("  Status: COMPLETE");
+print("");
+
+// ============================================================================
+// ROUND 7: Power Operations
+// ============================================================================
+print("ROUND 7: Power Operations (10K)");
+
+start_killer_7 = time::now_milliseconds();
+r7 = test_round_7_power_operations();
+end_killer_7 = time::now_milliseconds();
+killer_time_7 = end_killer_7 - start_killer_7;
+
+ollama_resp_7 = "Pending Ollama connection";
+total_7 = killer_time_7;
+csv_rows = csv_rows + "\n" + "2026-03-18T00:00:00,7,Power Operations (10K)," + killer_time_7 + "," + ollama_resp_7 + ",COMPLETE," + total_7;
+
+print("  Killer time: " + killer_time_7 + "ms");
+print("  Status: COMPLETE");
+print("");
+
+// ============================================================================
+// SUMMARY & CSV OUTPUT
+// ============================================================================
+
+end_total = time::now_milliseconds();
+total_time = end_total - start_total;
+
+print("=== PHASE 8 SUMMARY ===");
+print("Total Execution Time: " + total_time + "ms (" + (total_time / 1000) + "s)");
+print("Tests Completed: 7/7");
+print("Status: READY FOR OLLAMA");
+print("");
+
+// Save CSV
+fs::write_file("phase8_llm_results.csv", csv_rows);
+print("✓ Results saved to: phase8_llm_results.csv");
+print("");
+
+// Final status
+print("=== NEXT STEPS ===");
+print("1. Install Ollama from https://ollama.ai/");
+print("2. Run: ollama serve");
+print("3. Download model: ollama pull mistral");
+print("4. Re-run this orchestration for full LLM integration");
+
+

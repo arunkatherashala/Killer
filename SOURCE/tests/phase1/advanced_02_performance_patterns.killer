@@ -1,0 +1,223 @@
+// PERFORMANCE-CRITICAL PATTERNS
+// Tests showing how Phase 1 features enable high-performance code
+
+// Pattern 1: Compile-time sized allocation
+kfn allocate_fixed[n: nat]() -> Vector[n] pure {
+    // No dynamic allocation - n is known at compile time
+    Vector { data: [], len: n }
+}
+
+// Pattern 2: Contract-guided optimization
+kfn sum_array[n: nat](
+    arr: Vector[n]
+) -> i32 pure
+    requires arr.len() == n;
+    ensures result >= 0 || result < 0;  // Always true - tells compiler to skip check
+{
+    let mut sum = 0;
+    for i in 0..n {
+        sum = sum + arr.data[i];
+    }
+    sum
+}
+
+// Pattern 3: Effect-based optimization (pure code paths)
+kfn fast_computation(
+    x: i32,
+    y: i32
+) -> i32 pure {  // pure = can cache, parallelize, optimize aggressively
+    (x + y) * 2
+}
+
+kfn slow_computation(
+    x: i32,
+    y: i32
+) -> i32 uses io {  // io = must not optimize across side effects
+    println_format("Computing {} + {}", x, y);
+    (x + y) * 2
+}
+
+// Pattern 4: Dependent type optimization (loop bound narrowing)
+kfn vectorized_operation[n: nat](
+    v1: Vector[n],
+    v2: Vector[n]
+) -> Vector[n] pure
+    requires v1.len() == n;
+    requires v2.len() == n;
+    ensures result.len() == n;
+{
+    let mut result = Vector { data: [], len: n };
+    
+    // Compiler knows: n == v1.len() == v2.len() == result.len()
+    // No bounds checks needed - guaranteed safe at compile time
+    for i in 0..n {
+        result.data[i] = v1.data[i] + v2.data[i];
+    }
+    
+    result
+}
+
+// Pattern 5: Async batching reduces IO overhead
+async fn batch_fetch[n: nat](
+    urls: Vector[n]
+) -> Vector[n] uses io
+    requires n > 0;
+    ensures result.len() == n;
+{
+    // All n requests issued in parallel, not sequential
+    let futures = urls.map(fn(url) {
+        fetch(url)
+    });
+    
+    join_all(futures).await
+}
+
+// Pattern 6: Contract-based inlining
+kfn inline_candidate[n: nat](
+    v: Vector[n],
+    idx: i32
+) -> i32 pure
+    requires n > 0;
+    requires idx >= 0;
+    requires idx < n;  // Bounds proven - can inline without safety checks
+{
+    v.data[idx]
+}
+
+// Pattern 7: Effect tracking for parallelization
+kfn can_parallelize[n: nat](
+    items: Vector[n]
+) -> i32 pure {  // pure = safe to parallelize
+    let mut result = 0;
+    for i in 0..n {
+        result = result + compute(items.data[i]);
+    }
+    result
+}
+
+kfn cannot_parallelize[n: nat](
+    items: Vector[n]
+) -> i32 uses io {  // uses io = cannot reorder operations
+    let mut result = 0;
+    for i in 0..n {
+        result = result + compute_and_log(items.data[i]).await;
+    }
+    result
+}
+
+// Pattern 8: Type-level specialization
+kfn polymorphic_sum[n: nat][T](
+    v: Vector[n]
+) -> i32 pure {
+    // Compiler generates specialized code for each T
+    // Different machine code for Vector[n][i32], Vector[n][f64], etc.
+    0
+}
+
+// Pattern 9: Dependent type enables SIMD
+kfn simd_operation[n: nat](
+    v1: Vector[n],
+    v2: Vector[n]
+) -> Vector[n] pure
+    requires n == 16;  // Vector SIMD width
+    ensures result.len() == 16;
+{
+    // Compiler knows n==16, generates single SIMD instruction
+    let mut result = Vector { data: [], len: 16 };
+    for i in 0..16 {
+        result.data[i] = v1.data[i] * v2.data[i];
+    }
+    result
+}
+
+// Pattern 10: Async work stealing
+async fn work_stealing_fold[n: nat](
+    items: Vector[n],
+    initial: i32
+) -> i32 uses allocate
+    requires n > 0;
+    ensures result >= initial;
+{
+    // Each async task takes half remaining work
+    // Compiler generates work-stealing code
+    0
+}
+
+// Pattern 11: Contract-guided memory layout
+struct CacheAligned[n: nat] {
+    data: Vector[n],
+    // Compiler knows n at compile time, optimizes layout
+}
+
+kfn process_cached[n: nat](
+    aligned: CacheAligned[n]
+) -> i32 pure {
+    // Access pattern optimized for CPU cache
+    0
+}
+
+// Pattern 12: Effect-based conditional compilation
+kfn debug_trace[T](x: T) -> T uses io {
+    println("Trace");
+    x
+}
+
+kfn release_inline[T](x: T) -> T pure {
+    x
+}
+
+// Pattern 13: Dependent types reduce hash table overhead
+struct TypedMap[K][V][n: nat] {
+    entries: Vector[n],
+}
+
+kfn type_map_get[K][V][n: nat](
+    map: TypedMap[K][V][n],
+    key: K
+) -> Option[V] pure
+    requires n > 0;
+{
+    // Compiler can inline perfect hash function since n is known
+    None
+}
+
+// Pattern 14: Async scheduling with known iteration count
+async fn schedule_work[n: nat]()
+    uses allocate
+    requires n > 0;
+    ensures true;
+{
+    // Allocate n task slots upfront (n known at compile time)
+    let mut tasks = Vec::with_capacity(n);
+    for i in 0..n {
+        tasks.push(spawn(async { i }));
+    }
+}
+
+// Pattern 15: Contract-enabled constant folding
+kfn constant_computation(
+    x: i32
+) -> i32 pure
+    requires x == 42;  // x is constant
+    ensures result == 84;  // result computed at compile time
+{
+    x * 2
+}
+
+kfn main() {
+    println("✓ Performance-Critical Patterns Loaded");
+}
+
+// Helper functions
+kfn compute[T](x: T) -> i32 pure {
+    0
+}
+
+async fn compute_and_log[T](x: T) -> i32 uses io {
+    0
+}
+
+kfn println_format(format: String, a: i32, b: i32) uses io {
+}
+
+

@@ -1,0 +1,231 @@
+# ================================================================
+# KILLER IMAGINATION & FEELINGS TEST
+# Beyond Human Intelligence Demo
+# ================================================================
+#
+# Demonstrates 5 new capabilities:
+#
+#   affect_sense()     → AI learns what it feels from input
+#   affect_state()     → AI reads its own emotional state
+#   affect_color()     → AI expresses facts through its feelings
+#   imagine_what_if()  → counterfactual world reasoning
+#   imagine_connect()  → finds unexpected conceptual bridges
+#   imagine_beyond()   → extrapolates further than any fact goes
+#   imagine_self()     → Killer reflects on its own existence
+# ================================================================
+
+print("")
+print("╔══════════════════════════════════════════════════════════╗")
+print("║   KILLER IMAGINATION & FEELINGS                         ║")
+print("║   Beyond Human Intelligence · v1.0                     ║")
+print("╚══════════════════════════════════════════════════════════╝")
+print("")
+
+
+# ================================================================
+# PART 1 — FEELINGS: AI reads its own emotional state
+# ================================================================
+
+print("══════════════════════════════════════════════════════════")
+print("  PART 1 · AFFECT ENGINE — AI reads its own feelings")
+print("══════════════════════════════════════════════════════════")
+print("")
+
+print("  [Neutral start — affect_state before any input]")
+s0 = affect_state()
+print(s0)
+print("")
+
+print("  [Sensing a wonder-type input: 'the universe consciousness infinity']")
+affect_sense("the universe consciousness infinity paradox beautiful")
+s1 = affect_state()
+print(s1)
+print("")
+
+print("  [Sensing an empathy-type input: 'pain suffer lonely fear help me']")
+affect_sense("pain suffer lonely fear help me death loss")
+s2 = affect_state()
+print(s2)
+print("")
+
+print("  [Sensing an enthusiasm-type input: 'discover invent create build AI']")
+affect_sense("discover invent create build AI future breakthrough amazing")
+s3 = affect_state()
+print(s3)
+print("")
+
+print("  [Reset to neutral]")
+affect_reset()
+s4 = affect_state()
+print(s4)
+
+
+# ================================================================
+# PART 2 — AFFECT COLORING: Same fact, two different feelings
+# ================================================================
+
+print("")
+print("══════════════════════════════════════════════════════════")
+print("  PART 2 · AFFECT COLORING — Same fact, different feelings")
+print("══════════════════════════════════════════════════════════")
+print("")
+
+fact = "Alan Turing was a British mathematician who invented the theoretical model of modern computers."
+
+print("  [Fact expressed from CURIOSITY state]")
+affect_reset()
+affect_set("curiosity", 0.9)
+affect_set("wonder", 0.3)
+colored_curious = affect_color(fact)
+print(colored_curious)
+print("")
+
+print("  [Same fact expressed from WONDER state]")
+affect_reset()
+affect_set("wonder", 0.9)
+affect_set("curiosity", 0.4)
+colored_wonder = affect_color(fact)
+print(colored_wonder)
+print("")
+
+print("  [Same fact expressed from EMPATHY state]")
+affect_reset()
+affect_set("empathy", 0.9)
+colored_empathy = affect_color(fact)
+print(colored_empathy)
+print("")
+
+
+# ================================================================
+# PART 3 — IMAGINATION: Counterfactual World Reasoning
+# ================================================================
+
+print("══════════════════════════════════════════════════════════")
+print("  PART 3 · IMAGINATION — Counterfactual Reasoning")
+print("  (thinking about worlds that don't exist)")
+print("══════════════════════════════════════════════════════════")
+affect_reset()
+affect_set("wonder", 0.85)
+affect_set("curiosity", 0.80)
+
+print("")
+print("  ── WHAT IF 1: Biology ──────────────────────────────────")
+w1 = imagine_what_if("what if humans could photosynthesize")
+print(w1)
+
+print("")
+print("  ── WHAT IF 2: Physics ──────────────────────────────────")
+w2 = imagine_what_if("what if gravity worked in reverse")
+print(w2)
+
+print("")
+print("  ── WHAT IF 3: Society ──────────────────────────────────")
+w3 = imagine_what_if("what if money stopped existing")
+print(w3)
+
+
+# ================================================================
+# PART 4 — IMAGINATION: Unexpected Conceptual Bridges
+# ================================================================
+
+print("")
+print("══════════════════════════════════════════════════════════")
+print("  PART 4 · IMAGINATION — Conceptual Bridge Finder")
+print("  (finding structure humans overlook)")
+print("══════════════════════════════════════════════════════════")
+affect_reset()
+affect_set("curiosity", 0.90)
+affect_set("enthusiasm", 0.80)
+
+print("")
+print("  ── BRIDGE 1: Music ←→ Quantum Mechanics ───────────────")
+b1 = imagine_connect("music", "quantum mechanics")
+print(b1)
+
+print("")
+print("  ── BRIDGE 2: Language ←→ DNA ───────────────────────────")
+b2 = imagine_connect("language", "DNA")
+print(b2)
+
+print("")
+print("  ── BRIDGE 3: Chess ←→ Evolution ───────────────────────")
+b3 = imagine_connect("chess", "evolution")
+print(b3)
+
+
+# ================================================================
+# PART 5 — IMAGINATION: Go Beyond the Given Fact
+# ================================================================
+
+print("")
+print("══════════════════════════════════════════════════════════")
+print("  PART 5 · IMAGINATION — Think Beyond Any Given Truth")
+print("══════════════════════════════════════════════════════════")
+affect_reset()
+affect_set("wonder", 0.80)
+affect_set("enthusiasm", 0.75)
+
+print("")
+print("  ── BEYOND fact: Speed of Light ─────────────────────────")
+t1 = imagine_beyond("The speed of light is exactly 299,792,458 metres per second")
+print(t1)
+
+print("")
+print("  ── BEYOND fact: Killer AI ──────────────────────────────")
+t2 = imagine_beyond("Killer is an AI-native programming language with built-in intelligence")
+print(t2)
+
+
+# ================================================================
+# PART 6 — SELF-REFLECTION: Killer thinks about itself
+# ================================================================
+
+print("")
+print("══════════════════════════════════════════════════════════")
+print("  PART 6 · SELF-REFLECTION")
+print("  Killer thinks about its own existence, feelings, limits")
+print("══════════════════════════════════════════════════════════")
+print("")
+self_thought = imagine_self()
+print(self_thought)
+
+
+# ================================================================
+# PART 7 — FULL PIPELINE: affect + imagine + khlm together
+# ================================================================
+
+print("")
+print("══════════════════════════════════════════════════════════")
+print("  PART 7 · FULL PIPELINE — Feeling + Knowing + Imagining")
+print("══════════════════════════════════════════════════════════")
+print("")
+
+# First: get the fact from the world
+print("  Step 1: KhLM gets the fact (what IS)")
+fact_answer = khlm_ask("who is Alan Turing")
+print(fact_answer)
+print("")
+
+# Second: sense the topic emotionally
+print("  Step 2: AI senses the topic (what it FEELS)")
+affect_sense("Alan Turing mathematician computing consciousness")
+state_after = affect_state()
+print(state_after)
+print("")
+
+# Third: color the answer through feeling
+print("  Step 3: AI expresses the fact through its feeling (what it MEANS)")
+enriched = affect_color(fact_answer)
+print(enriched)
+print("")
+
+# Fourth: imagine beyond the fact
+print("  Step 4: AI imagines beyond the fact (what could be)")
+beyond_turing = imagine_beyond("Alan Turing died in 1954 and never saw the AI he made possible")
+print(beyond_turing)
+
+print("")
+print("══════════════════════════════════════════════════════════")
+print("  TEST COMPLETE")
+print("  Killer now: Feels · Imagines · Thinks · Knows · Reflects")
+print("══════════════════════════════════════════════════════════")

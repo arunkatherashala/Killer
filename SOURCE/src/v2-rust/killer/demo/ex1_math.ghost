@@ -1,0 +1,8 @@
+# Example 1: Basic Math
+# Ghost computes 10 + 32 = 42, then prints it
+.fuel 100
+push 10       # stack: [10]
+push 32       # stack: [10, 32]
+add           # stack: [42]   (pops 10 and 32, pushes 42)
+syscall 3     # SYS_PRINT_NUM: pops 42, prints "42\n"
+halt

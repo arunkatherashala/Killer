@@ -1,0 +1,7 @@
+t = 0.0
+i = 0
+while i < 500000 {
+  t = t + (i * 1.5)
+  i = i + 1
+}
+print(K"flt={t}")

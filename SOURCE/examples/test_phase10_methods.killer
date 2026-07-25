@@ -1,0 +1,59 @@
+// Phase 10: Quality Method Dispatch Test
+// Test calling methods on quality variables
+
+print "=== Phase 10: Quality Method Dispatch ==="
+print ""
+
+// Test 1: Email validation
+print "Test 1: Email validation"
+quality email = "alice@example.com"
+email.validate_email()
+print "Email: " + email
+print "Valid: " + email.is_valid()
+print "Score: " + email.get_quality_score()
+print ""
+
+// Test 2: Invalid email
+print "Test 2: Invalid email"
+quality bad_email = "not-an-email"
+bad_email.validate_email()
+print "Bad email: " + bad_email
+print "Valid: " + bad_email.is_valid()
+print "Status: " + bad_email.get_status()
+print ""
+
+// Test 3: Numeric validation
+print "Test 3: Numeric validation"
+quality number = 42
+number.validate_positive()
+print "Number: " + number
+print "Valid: " + number.is_valid()
+print "Level: " + number.get_level()
+print ""
+
+// Test 4: Range validation
+print "Test 4: Range validation"
+quality age = 25
+age.validate_range(0, 150)
+print "Age: " + age
+print "Valid: " + age.is_valid()
+print ""
+
+// Test 5: Quality metrics
+print "Test 5: All metrics"
+quality data = "hello"
+data.validate_not_null()
+let metrics = data.get_all_metrics()
+print "Metrics: " + metrics
+print ""
+
+// Test 6: TRIM metrics
+print "Test 6: TRIM metrics"
+let trim = data.get_trim_metrics()
+print "TRIM Metrics: " + trim
+print "TRIM Score: " + data.get_trim_score()
+print ""
+
+print "=== All Phase 10 tests passed! ==="
+
+

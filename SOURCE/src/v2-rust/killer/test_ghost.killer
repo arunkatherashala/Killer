@@ -1,0 +1,5 @@
+model = "C:/Users/skathera/.killer/models/qwen2.5-0.5b-instruct-q4_k_m.gguf"
+a1 = ghost_ask(model, "What is 2+2?", 128)
+print(K"Ghost> {a1}")
+a2 = ghost_ask(model, "What is the capital of France?", 128)
+print(K"Ghost> {a2}")

@@ -1,0 +1,115 @@
+// Week 20: GC-Free Memory Patterns (Real-Time Gap #2)
+// Demonstrates garbage-collection-free memory management
+// Curriculum: Memory pools, pre-allocation, static allocation
+// Status: Week 20 completion (+5%)
+
+kfn objectPool(poolSize) {
+    // Pre-allocate pool to avoid GC during runtime
+    var pool = {
+        "available": [],
+        "in_use": [],
+        "size": poolSize,
+        "allocations": 0,
+        "deallocations": 0
+    };
+    
+    // Initialize pool
+    for (var i = 0; i < poolSize; i = i + 1) {
+        var obj = {
+            "id": i,
+            "data": null,
+            "state": "available"
+        };
+        pool["available"].push(obj);
+    }
+    
+    return pool;
+}
+
+kfn acquireObject(pool) {
+    if (pool["available"].length == 0) {
+        print("ERROR: Object pool exhausted!");
+        return null;
+    }
+    
+    var obj = pool["available"].pop();
+    obj["state"] = "in_use";
+    pool["in_use"].push(obj);
+    pool["allocations"] = pool["allocations"] + 1;
+    
+    return obj;
+}
+
+kfn releaseObject(pool, obj) {
+    if (obj == null) return;
+    
+    obj["state"] = "available";
+    obj["data"] = null;
+    
+    // Remove from in_use
+    var in_use_new = [];
+    for (var i = 0; i < pool["in_use"].length; i = i + 1) {
+        if (pool["in_use"][i]["id"] != obj["id"]) {
+            in_use_new.push(pool["in_use"][i]);
+        }
+    }
+    pool["in_use"] = in_use_new;
+    
+    // Add back to available
+    pool["available"].push(obj);
+    pool["deallocations"] = pool["deallocations"] + 1;
+}
+
+kfn main() {
+    print("Week 20: GC-Free Memory Patterns");
+    print("================================");
+    print("");
+    
+    // Create object pool
+    var pool = objectPool(10);
+    print(`Created object pool with ${pool["size"]} pre-allocated objects`);
+    print("");
+    
+    // Simulate acquiring and releasing objects
+    print("Scenario: Event processing without GC pauses");
+    var events = [];
+    
+    print("1. Acquiring objects from pool...");
+    var obj1 = acquireObject(pool);
+    var obj2 = acquireObject(pool);
+    var obj3 = acquireObject(pool);
+    
+    print(`   Acquired 3 objects: ${obj1["id"]}, ${obj2["id"]}, ${obj3["id"]}`);
+    print(`   Available: ${pool["available"].length}, In use: ${pool["in_use"].length}`);
+    print("");
+    
+    print("2. Using objects (processing events)");
+    obj1["data"] = "event_1";
+    obj2["data"] = "event_2";
+    obj3["data"] = "event_3";
+    print("   Objects populated with data");
+    print("");
+    
+    print("3. Releasing objects back to pool");
+    releaseObject(pool, obj1);
+    releaseObject(pool, obj2);
+    releaseObject(pool, obj3);
+    print(`   Released 3 objects`);
+    print(`   Available: ${pool["available"].length}, In use: ${pool["in_use"].length}`);
+    print("");
+    
+    print("Statistics:");
+    print(`  Total allocations: ${pool["allocations"]}`);
+    print(`  Total deallocations: ${pool["deallocations"]}`);
+    print(`  Peak usage: ${pool["allocations"] - pool["deallocations"] + pool["in_use"].length}`);
+    print("");
+    print("Benefits:");
+    print("- No garbage collection pauses");
+    print("- Predictable latency");
+    print("- Bounded memory usage");
+    print("- Real-time safe!");
+}
+
+main();
+
+

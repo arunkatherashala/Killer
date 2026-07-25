@@ -1,0 +1,43 @@
+# KILLER INTERACTIVE Q&A AGENT
+print("=== KILLER Q&A AGENT ===")
+print("Ask me anything. Type 'exit' to quit.")
+print("")
+
+count = 0
+
+loop {
+    print("You: ")
+    msg = input()
+    
+    if (msg == "exit") {
+        break
+    }
+    
+    if (msg == "") {
+        continue
+    }
+    
+    count = count + 1
+    
+    # Simple pattern matching
+    answer = "I see: " + msg
+    
+    if (msg.contains("killer")) {
+        answer = "Killer is a high-performance language with actors and concurrency."
+    }
+    
+    if (msg.contains("agent")) {
+        answer = "An agent autonomously reasons, remembers, and takes actions."
+    }
+    
+    if (msg.contains("speed")) {
+        answer = "Killer achieves 1-2M ops/sec on single-threaded workloads."
+    }
+    
+    print("Agent: " + answer)
+    print("")
+}
+
+print("Chat ended. Answered " + str(count) + " questions.")
+
+

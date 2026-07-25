@@ -1,0 +1,50 @@
+// Test try/catch error handling
+
+// Test 1: Division by zero handling
+try
+{
+    x = 10 / 0;
+    print("This should not print");
+}
+catch(error)
+{
+    print("Caught error:");
+    print(error);
+}
+
+print("---");
+
+// Test 2: Code continues after catch
+print("Program continues after error");
+
+print("---");
+
+// Test 3: Array access error
+try
+{
+    arr = [1, 2, 3];
+    print(arr[10]);
+}
+catch(err)
+{
+    print("Array error:");
+    print(err);
+}
+
+print("---");
+
+// Test 4: No error case - try block succeeds
+try
+{
+    y = 10 / 2;
+    print("y =");
+    print(y);
+}
+catch
+{
+    print("This catch should not execute");
+}
+
+print("Done");
+
+

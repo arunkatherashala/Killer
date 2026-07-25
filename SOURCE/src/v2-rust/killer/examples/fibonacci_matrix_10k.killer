@@ -1,0 +1,48 @@
+kfn fib_matrix(n: Int) -> Int {
+    if n <= 1 { return n; }
+    
+    let mut r0 = 1;
+    let mut r1 = 0;
+    let mut r2 = 0;
+    let mut r3 = 1;
+    
+    let mut b0 = 1;
+    let mut b1 = 1;
+    let mut b2 = 1;
+    let mut b3 = 0;
+    
+    let mut exp = n;
+    
+    while exp > 0 {
+        if exp % 2 == 1 {
+            let t0 = r0 * b0 + r1 * b2;
+            let t1 = r0 * b1 + r1 * b3;
+            let t2 = r2 * b0 + r3 * b2;
+            let t3 = r2 * b1 + r3 * b3;
+            r0 = t0;
+            r1 = t1;
+            r2 = t2;
+            r3 = t3;
+        }
+        
+        let s0 = b0 * b0 + b1 * b2;
+        let s1 = b0 * b1 + b1 * b3;
+        let s2 = b2 * b0 + b3 * b2;
+        let s3 = b2 * b1 + b3 * b3;
+        b0 = s0;
+        b1 = s1;
+        b2 = s2;
+        b3 = s3;
+        
+        exp = exp / 2;
+    }
+    
+    return r1;
+}
+
+kfn main() {
+    let result = fib_matrix(10000);
+    println(result.to_string());
+}
+
+

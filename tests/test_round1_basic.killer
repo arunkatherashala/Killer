@@ -1,0 +1,63 @@
+-- ROUND 1: BASIC FUNCTIONALITY TESTS
+
+kfn test_simple_arithmetic()
+  x = 10
+  y = 20
+  z = x + y
+  println("TEST 1: Simple Arithmetic")
+  println("10 + 20 = " + z.to_string())
+  assert_eq(z, 30)
+  println("✓ PASSED")
+
+kfn test_variables()
+  name = "Killer"
+  version = 1.0
+  println("TEST 2: Variables")
+  println("Language: " + name)
+  assert_eq(name, "Killer")
+  println("✓ PASSED")
+
+kfn test_string_operations()
+  str1 = "Hello"
+  str2 = " World"
+  result = str1 + str2
+  println("TEST 3: String Operations")
+  println("Concat: " + result)
+  assert_eq(result, "Hello World")
+  println("✓ PASSED")
+
+kfn test_control_flow()
+  println("TEST 4: Control Flow")
+  x = 5
+  if x > 3
+    println("x is greater than 3")
+  println("✓ PASSED")
+
+kfn test_loops()
+  println("TEST 5: Loops")
+  sum = 0
+  i = 1
+  while i <= 10
+    sum = sum + i
+    i = i + 1
+  println("Sum 1 to 10: " + sum.to_string())
+  assert_eq(sum, 55)
+  println("✓ PASSED")
+
+kfn main()
+  println("=" * 40)
+  println("ROUND 1: BASIC FUNCTIONALITY TESTS")
+  println("=" * 40)
+  test_simple_arithmetic()
+  println("")
+  test_variables()
+  println("")
+  test_string_operations()
+  println("")
+  test_control_flow()
+  println("")
+  test_loops()
+  println("")
+  println("=" * 40)
+  println("ROUND 1: ALL TESTS PASSED ✓")
+  println("=" * 40)

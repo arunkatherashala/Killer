@@ -1,0 +1,3 @@
+﻿question = "Design KORE file format: best compression, layout, features to beat Parquet+Snappy"
+result = khlm_classify(question)
+print(K"Classification: {result}")

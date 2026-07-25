@@ -1,0 +1,148 @@
+// PROBLEM BANK: WEEK 20 - REAL-TIME SYSTEMS (100 Problems)
+
+===== CATEGORY 20.1: GC METRICS & MEASUREMENT (30 Problems) =====
+
+[20.1.1] Measure GC pause time - Track pause duration when collection triggers
+[20.1.2] Track heap statistics - Monitor used/total memory before/after GC
+[20.1.3] Monitor allocation rate - bytes/sec and predict GC triggers
+[20.1.4] Measure collection frequency - How often does GC run?
+[20.1.5] Latency histogram - Bucket pauses: 0-1ms, 1-10ms, 10-100ms, 100ms+
+[20.1.6] Correlation: allocation vs GC - Heavy allocation causes pauses?
+[20.1.7] Request latency with GC - Measure added latency when GC occurs
+[20.1.8] Memory fragmentation - Track free blocks, largest contiguous
+[20.1.9] Generational efficiency - Track young object lifetime vs pause
+[20.1.10] Full collection cost - Time and frequency of major collections
+
+[20.1.11] Measure pause variability - std deviation of pause times
+[20.1.12] Identify pause outliers - Detect GC spikes vs normal pauses
+[20.1.13] Predict next pause - Use history to forecast GC event
+[20.1.14] Pause impact on throughput - Miss deadline when GC happens?
+[20.1.15] Maximum pause tracking - P99.9 worst case
+[20.1.16] Pause frequency - GC every 10s? every 100s?
+[20.1.17] Heap size vs pause - Does bigger heap = longer pauses?
+[20.1.18] Collection efficiency - pause_time / bytes_reclaimed
+[20.1.19] Young vs full pause - Compare minor/major collection times
+[20.1.20] Pause budget tracking - Enforce max pause per second
+
+[20.1.21] Define real-time constraint - Deadline < X microseconds
+[20.1.22] Deadline success rate - % of requests meeting deadline
+[20.1.23] Model GC incompatibility - Show why GC breaks hard real-time
+[20.1.24] Worst-case latency - Design for max possible pause
+[20.1.25] Jitter budget - Allowed p99-p50 deviation
+[20.1.26] Deadline miss analysis - Which requests fail? correlation with GC?
+[20.1.27] Safety margin - Deadline 500µs, process in 400µs = 100µs buffer
+[20.1.28] Admission control - Can we process this request in time?
+[20.1.29] Graceful degradation - Drop low priority under load
+[20.1.30] End-to-end latency breakdown - Receive + validate + process + send
+
+===== CATEGORY 20.2: POOLING & ALLOCATION (30 Problems) =====
+
+[20.2.1] Fixed-size object pool - Pre-allocate 100 items, reuse (10 problems)
+[20.2.2-20.2.10] Pool variants - dynamic sizing, bounded, factory functions
+
+[20.2.11] Arena allocator - Single 1MB block, bump pointer allocation
+[20.2.12] Request-scoped arena - Create per-request, free at end
+[20.2.13] Arena statistics - Track usage, fragmentation, peak
+[20.2.14] Nested pools - Pool of vectors with capacity
+[20.2.15] Pool reuse metrics - Track allocation savings
+
+[20.2.16] Cache-line aligned structs - Prevent false sharing
+[20.2.17] Memory layout optimization - Field ordering for cache
+[20.2.18] SIMD-friendly layout - Aligned arrays for vectorization
+[20.2.19] Prefetching patterns - Improve cache hits
+[20.2.20] Page-aligned buffers - Pre-fault pages to avoid page faults
+
+[20.2.21] String pool - Deduplicate strings
+[20.2.22] Number pool - Pre-allocated numbers for arithmetic
+[20.2.23] Buffer pool - Reusable byte buffers
+[20.2.24] Connection pool - Pre-created sockets
+[20.2.25] Thread pool integration - Use pools with actor pool from Week 19
+
+[20.2.26] Stack allocation - Use stack not heap
+[20.2.27] Static allocation - Compile-time constants
+[20.2.28] Custom allocators - Implement simple allocator
+[20.2.29] Zero-allocation patterns - No new allocations in hot path
+[20.2.30] Allocation budgeting - Track bytes allocated per request
+
+===== CATEGORY 20.3: LATENCY ANALYSIS (25 Problems) =====
+
+[20.3.1-20.3.10] Measure end-to-end latency breakdown (10 problems)
+[20.3.11-20.3.20] Percentile calculation (p50, p95, p99, p99.9) - 10 problems
+[20.3.21-20.3.25] Jitter measurement & analysis - 5 problems
+
+===== CATEGORY 20.4: JITTER ELIMINATION (15 Problems) =====
+
+[20.4.1] Identify jitter sources - GC vs locks vs cache
+[20.4.2] Cache optimization - Align data for locality
+[20.4.3] CPU affinity - Pin threads to cores
+[20.4.4] Disable frequency scaling - Fixed CPU frequency
+[20.4.5] NUMA awareness - Keep data on same node
+[20.4.6] Lock-free operations - Atomics instead of mutex
+[20.4.7] Predictable memory allocation - Pre-allocate everything
+[20.4.8] Avoid context switches - Use actor model not threads
+[20.4.9] Warm-up runs - Prime caches before measurement
+[20.4.10] Statistical filtering - Remove outliers from measurement
+[20.4.11] Latency SLA - Verify 99% meet deadline
+[20.4.12] Outlier compensation - What if we must accept some jitter?
+[20.4.13] Deadline guarantees - Proof that design meets deadline
+[20.4.14] Graceful degradation - Lower latency p50 when p99 threatened
+[20.4.15] Real-time quality - Measure actual system (not benchmark)
+
+---
+
+// PROBLEM BANK: WEEK 21 - NETWORK SERVICES (100 Problems)
+
+===== CATEGORY 21.1: SOCKETS & TCP (30 Problems) =====
+
+[21.1.1-21.1.10] TCP socket operations - listen, accept, send, receive (10 problems)
+[21.1.11-21.1.20] Connection lifecycle - connect, read all, close, keep-alive (10 problems)
+[21.1.21-21.1.30] Error handling - timeouts, partial sends, close detection (10 problems)
+
+===== CATEGORY 21.2: HTTP PROTOCOL (30 Problems) =====
+
+[21.2.1-21.2.10] HTTP parsing - requests, headers, body (10 problems)
+[21.2.11-21.2.20] HTTP responses - status codes, headers, body formatting (10 problems)
+[21.2.21-21.2.30] HTTP features - routing, cookies, compression, caching (10 problems)
+
+===== CATEGORY 21.3: WEBSOCKETS (20 Problems) =====
+
+[21.3.1-21.3.10] WebSocket upgrade & frames - handshake, text/binary (10 problems)
+[21.3.11-21.3.20] Bidirectional communication - chat, broadcast patterns (10 problems)
+
+===== CATEGORY 21.4: MICROSERVICES (20 Problems) =====
+
+[21.4.1-21.4.10] Service-to-service communication - HTTP calls, routing (10 problems)
+[21.4.11-21.4.20] Distributed patterns - health checks, circuit breakers, discovery (10 problems)
+
+---
+
+// PROBLEM BANK: WEEK 22 - DATA PROCESSING (100 Problems)
+
+===== CATEGORY 22.1: PARTITIONING & SHARDING (30 Problems) =====
+
+[22.1.1-22.1.10] Partition strategies - hash, range, consistent hashing (10 problems)
+[22.1.11-22.1.20] Rebalancing - move partitions, no data loss (10 problems)
+[22.1.21-22.1.30] Hot-spot detection - find overloaded partitions (10 problems)
+
+===== CATEGORY 22.2: MAPREDUCE & AGGREGATION (30 Problems) =====
+
+[22.2.1-22.2.10] Map phase - emit key-value pairs per partition (10 problems)
+[22.2.11-22.2.20] Reduce phase - combine values for each key (10 problems)
+[22.2.21-22.2.30] Combine operations - sum, count, avg, top-N (10 problems)
+
+===== CATEGORY 22.3: STREAM PROCESSING (20 Problems) =====
+
+[22.3.1-22.3.10] Windowing - tumbling, sliding, session windows (10 problems)
+[22.3.11-22.3.20] Late data & watermarks - semantics, exactly-once (10 problems)
+
+===== CATEGORY 22.4: DISTRIBUTED SYSTEMS (20 Problems) =====
+
+[22.4.1-22.4.10] Replication & failover - leader-follower, recovery (10 problems)
+[22.4.11-22.4.20] Consistency models - eventual, strong, causal (10 problems)
+
+---
+
+Total: 300 new problems across Weeks 20-22
+
+
+

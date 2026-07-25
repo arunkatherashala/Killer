@@ -1,0 +1,387 @@
+// ============================================================================
+// KILLER v2.0 - FEATURE #6: MEMORY
+// Three-tier memory system (working, episodic, semantic)
+// ============================================================================
+
+// Memory Entry
+record MemoryEntry {
+  id: String,
+  content: String,
+  timestamp: Int,
+  importance: Float,  // 0.0-1.0
+  access_count: Int,
+  tags: List<String>
+}
+
+// ============================================================================
+// WORKING MEMORY (Immediate/Short-term)
+// ============================================================================
+
+actor WorkingMemory {
+  entries: List<MemoryEntry> = []
+  capacity: Int = 50
+  
+  handle add(content: String, importance: Float, tags: List<String>) {
+    // Evict least important if at capacity
+    if this.entries.len() >= this.capacity {
+      min_idx = 0
+      min_importance = this.entries[0].importance
+      
+      for i in 1..this.entries.len() {
+        if this.entries[i].importance < min_importance {
+          min_idx = i
+          min_importance = this.entries[i].importance
+        }
+      }
+      
+      this.entries.remove(min_idx)
+    }
+    
+    entry = MemoryEntry {
+      id: K"wmem_{time_ms()}_{this.entries.len()}",
+      content: content,
+      timestamp: time_ms() as Int,
+      importance: importance,
+      access_count: 0,
+      tags: tags
+    }
+    
+    this.entries.push(entry)
+  }
+  
+  handle recall_top(n: Int) -> List<String> {
+    // Sort by importance
+    sorted = this.entries.sort_by(|a, b| {
+      if a.importance > b.importance { -1 } else { 1 }
+    })
+    
+    result = []
+    for i in 0..(if n < sorted.len() {n} else {sorted.len()}) {
+      entry = sorted[i]
+      entry.access_count = entry.access_count + 1
+      result.push(entry.content)
+    }
+    result
+  }
+  
+  handle recall_by_tag(tag: String) -> List<String> {
+    results = []
+    for entry in this.entries {
+      for t in entry.tags {
+        if t == tag {
+          results.push(entry.content)
+          break
+        }
+      }
+    }
+    results
+  }
+  
+  handle clear() {
+    this.entries = []
+  }
+  
+  handle size() -> Int {
+    this.entries.len()
+  }
+}
+
+// ============================================================================
+// EPISODIC MEMORY (Event-based/Long-term)
+// ============================================================================
+
+actor EpisodicMemory {
+  events: List<MemoryEntry> = []
+  
+  handle store_event(content: String, tags: List<String>) {
+    event = MemoryEntry {
+      id: K"emem_{time_ms()}_{this.events.len()}",
+      content: content,
+      timestamp: time_ms() as Int,
+      importance: 1.0,
+      access_count: 0,
+      tags: tags
+    }
+    
+    this.events.push(event)
+  }
+  
+  handle recall_by_time(start_ms: Int, end_ms: Int) -> List<String> {
+    results = []
+    for event in this.events {
+      if event.timestamp >= start_ms && event.timestamp <= end_ms {
+        results.push(event.content)
+      }
+    }
+    results
+  }
+  
+  handle recall_recent(n: Int) -> List<String> {
+    if this.events.len() == 0 {
+      return []
+    }
+    
+    start_idx = if n < this.events.len() {this.events.len() - n} else {0}
+    
+    results = []
+    for i in start_idx..this.events.len() {
+      results.push(this.events[i].content)
+    }
+    results
+  }
+  
+  handle search_events(query: String) -> List<String> {
+    query_lower = query.to_lower()
+    results = []
+    
+    for event in this.events {
+      if event.content.to_lower().contains(query_lower) {
+        results.push(event.content)
+      }
+    }
+    results
+  }
+  
+  handle get_event_count() -> Int {
+    this.events.len()
+  }
+}
+
+// ============================================================================
+// SEMANTIC MEMORY (Fact-based/Abstract Knowledge)
+// ============================================================================
+
+actor SemanticMemory {
+  facts: Map<String, MemoryEntry> = {}
+  concepts: List<(String, List<String>)> = []  // (concept, related_concepts)
+  
+  handle store_fact(concept: String, fact: String) {
+    entry = MemoryEntry {
+      id: K"smem_{concept}",
+      content: fact,
+      timestamp: time_ms() as Int,
+      importance: 1.0,
+      access_count: 0,
+      tags: ["fact"]
+    }
+    
+    this.facts[concept] = entry
+  }
+  
+  handle relate_concepts(concept1: String, concept2: String) {
+    // Simple concept graph
+    found = false
+    for i in 0..this.concepts.len() {
+      if this.concepts[i].0 == concept1 {
+        this.concepts[i].1.push(concept2)
+        found = true
+        break
+      }
+    }
+    
+    if !found {
+      this.concepts.push((concept1, [concept2]))
+    }
+  }
+  
+  handle get_fact(concept: String) -> String {
+    entry = this.facts[concept]
+    if entry != nil {
+      entry.content
+    } else {
+      ""
+    }
+  }
+  
+  handle get_related_concepts(concept: String) -> List<String> {
+    for c, related in this.concepts {
+      if c == concept {
+        return related
+      }
+    }
+    []
+  }
+  
+  handle concept_count() -> Int {
+    this.facts.len()
+  }
+}
+
+// ============================================================================
+// LEARNING AGENT WITH MEMORY
+// ============================================================================
+
+actor LearningAgent {
+  working_memory: WorkingMemory
+  episodic_memory: EpisodicMemory
+  semantic_memory: SemanticMemory
+  agent_id: String
+  
+  handle initialize(id: String) {
+    this.agent_id = id
+    this.working_memory = WorkingMemory::spawn()
+    this.episodic_memory = EpisodicMemory::spawn()
+    this.semantic_memory = SemanticMemory::spawn()
+  }
+  
+  handle learn_from_conversation(speaker: String, message: String) {
+    // Working memory: immediate context
+    await this.working_memory.add(
+      K"{speaker}: {message}",
+      0.8,
+      ["conversation", "recent"]
+    )
+    
+    // Episodic memory: historical event
+    await this.episodic_memory.store_event(
+      K"Message from {speaker} at {time_ms()}: {message}",
+      ["message", speaker]
+    )
+    
+    // Semantic memory: extract facts (simple: first 3 words as concept)
+    words = message.split(" ")
+    if words.len() > 0 {
+      concept = if words.len() >= 3 {
+        words[0] + "_" + words[1] + "_" + words[2]
+      } else {
+        words[0]
+      }
+      
+      await this.semantic_memory.store_fact(
+        concept,
+        K"Learned: {message}"
+      )
+    }
+  }
+  
+  handle recall_and_respond(query: String) -> String {
+    // Multitiered recall strategy
+    
+    // 1. Check working memory
+    working_recall = await this.working_memory.recall_top(3)
+    
+    // 2. Check episodic memory
+    episodic_recall = await this.episodic_memory.search_events(query)
+    
+    // 3. Check semantic memory
+    semantic_recall_content = []
+    if query.len() > 0 {
+      first_word = query.split(" ")[0]
+      fact = await this.semantic_memory.get_fact(first_word)
+      if fact.len() > 0 {
+        semantic_recall_content.push(fact)
+      }
+    }
+    
+    // Combine and generate response
+    response = K"Query: {query}\n"
+    response = response + K"Working Memory ({working_recall.len()} items):\n"
+    for item in working_recall {
+      response = response + K"  • {item}\n"
+    }
+    
+    response = response + K"Episodic Memory ({episodic_recall.len()} events):\n"
+    for item in episodic_recall {
+      response = response + K"  • {item}\n"
+    }
+    
+    response = response + K"Semantic Memory ({semantic_recall_content.len()} facts):\n"
+    for item in semantic_recall_content {
+      response = response + K"  • {item}\n"
+    }
+    
+    response
+  }
+  
+  handle show_memory_state() -> String {
+    working_size = await this.working_memory.size()
+    episodic_count = await this.episodic_memory.get_event_count()
+    semantic_count = await this.semantic_memory.concept_count()
+    
+    K"Agent {this.agent_id}:\n  Working: {working_size} items\n  Episodic: {episodic_count} events\n  Semantic: {semantic_count} facts"
+  }
+}
+
+// ============================================================================
+// CONVERSATION WITH LEARNING
+// ============================================================================
+
+record ConversationMessage {
+  speaker: String,
+  content: String,
+  timestamp: Int
+}
+
+actor ConversationalDebugger {
+  agent: LearningAgent
+  conversation_history: List<ConversationMessage> = []
+  
+  handle initialize(agent_id: String) {
+    this.agent = LearningAgent::spawn()
+    await this.agent.initialize(agent_id)
+  }
+  
+  handle add_message(speaker: String, content: String) {
+    msg = ConversationMessage {
+      speaker: speaker,
+      content: content,
+      timestamp: time_ms() as Int
+    }
+    
+    this.conversation_history.push(msg)
+    
+    // Agent learns from message
+    await this.agent.learn_from_conversation(speaker, content)
+  }
+  
+  handle get_response(query: String) -> String {
+    await this.agent.recall_and_respond(query)
+  }
+  
+  handle show_debug_info() -> String {
+    state = await this.agent.show_memory_state()
+    conv_count = this.conversation_history.len()
+    
+    K"Debug Info:\n{state}\nConversation Messages: {conv_count}"
+  }
+}
+
+// ============================================================================
+// MAIN EXAMPLE
+// ============================================================================
+
+kfn main() {
+  println("=== KILLER v2.0 Feature #6: Memory ===")
+  
+  println("\n🧠 Learning Agent with Three-Tier Memory:")
+  
+  debugger = ConversationalDebugger::spawn()
+  await debugger.initialize("agent_001")
+  
+  // Simulate conversation
+  println("\n📝 Conversation:")
+  
+  await debugger.add_message("User", "Tell me about Killer language")
+  println("✓ User: Tell me about Killer language")
+  
+  await debugger.add_message("Assistant", "Killer is an AI-first programming language with agents")
+  println("✓ Assistant: Killer is an AI-first programming language")
+  
+  await debugger.add_message("User", "What are its features?")
+  println("✓ User: What are its features?")
+  
+  await debugger.add_message("Assistant", "Features include async/await, generics, vectors, memory, coordination")
+  println("✓ Assistant: Features include...")
+  
+  // Show current memory state
+  println("\n💾 Memory State:")
+  state = debugger.show_debug_info().await
+  println(state)
+  
+  // Query with memory recall
+  println("\n🔍 Query with Memory Recall:")
+  query_result = debugger.get_response("Killer language features").await
+  println(query_result)
+  
+  println("\n✅ Feature #6 (Memory) Complete!")
+}

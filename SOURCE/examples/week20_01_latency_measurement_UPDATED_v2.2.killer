@@ -1,0 +1,104 @@
+// Week 20: Real-Time Systems - Example 1 UPDATED
+// Latency Measurement with Real System Timing (v2.2+)
+
+kfn measure_operation(operation_name, operation_fn) {
+    let start = system_time_ms()
+    
+    // Execute operation
+    operation_fn()
+    
+    let end = system_time_ms()
+    let latency = end - start
+    
+    return {
+        operation: operation_name,
+        latency_ms: latency,
+        start_time: start,
+        end_time: end
+    }
+}
+
+kfn aggregate_latencies(measurements) {
+    let min = 99999999
+    let max = 0
+    let sum = 0
+    
+    for i in 0..length(measurements) {
+        let lat = measurements[i].latency_ms
+        if lat < min {
+            min = lat
+        }
+        if lat > max {
+            max = lat
+        }
+        sum = sum + lat
+    }
+    
+    let avg = sum / length(measurements)
+    
+    return {
+        min: min,
+        max: max,
+        avg: avg,
+        sum: sum,
+        count: length(measurements)
+    }
+}
+
+// Test with real sleep-based timing
+let measurements = []
+
+kfn slow_work() {
+    thread_sleep_ms(50)
+    let x = 0
+    for i in 0..1000 {
+        x = x + i
+    }
+}
+
+kfn fast_work() {
+    let x = 0
+    for i in 0..100 {
+        x = x + i
+    }
+}
+
+print("Testing with REAL system timing (v2.2+):")
+print("")
+
+// Measure slow work (should be ~50ms)
+for i in 0..3 {
+    let m = measure_operation("slow_work", slow_work)
+    measurements.push(m)
+    print("Slow work iteration " + str(i + 1) + ": " + str(m.latency_ms) + " ms")
+}
+
+print("")
+
+// Measure fast work (should be <1ms)
+let fast_measurements = []
+for i in 0..5 {
+    let m = measure_operation("fast_work", fast_work)
+    fast_measurements.push(m)
+    print("Fast work iteration " + str(i + 1) + ": " + str(m.latency_ms) + " ms")
+}
+
+// Aggregate statistics
+let slow_stats = aggregate_latencies(measurements)
+let fast_stats = aggregate_latencies(fast_measurements)
+
+print("")
+print("SLOW WORK STATISTICS:")
+print("  Min: " + str(slow_stats.min) + " ms")
+print("  Max: " + str(slow_stats.max) + " ms")
+print("  Avg: " + str(slow_stats.avg) + " ms")
+print("  Count: " + str(slow_stats.count))
+
+print("")
+print("FAST WORK STATISTICS:")
+print("  Min: " + str(fast_stats.min) + " ms")
+print("  Max: " + str(fast_stats.max) + " ms")
+print("  Avg: " + str(fast_stats.avg) + " ms")
+print("  Count: " + str(fast_stats.count))
+
+

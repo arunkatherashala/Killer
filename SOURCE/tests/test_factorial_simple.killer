@@ -1,0 +1,4 @@
+result = factorial(50)
+println(result.to_string())
+
+

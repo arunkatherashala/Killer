@@ -1,0 +1,156 @@
+// KILLER ORCHESTRATION PHASE 7 - WORKING VERSION
+// Module-level output (not in main), using print() function
+// Works with Python wrapper for timing + CSV
+
+kfn test_round_1_arithmetic() {
+    count = 0;
+    i = 0;
+    while (i < 1000000) {
+        count = count + 1;
+        i = i + 1;
+    }
+    return count;
+}
+
+kfn test_round_2_nested_loops() {
+    count = 0;
+    i = 0;
+    while (i < 100000) {
+        j = 0;
+        while (j < 10) {
+            count = count + 1;
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return count;
+}
+
+kfn fibonacci(n) {
+    if (n <= 1) {
+        return n;
+    }
+    return fibonacci(n - 1) + fibonacci(n - 2);
+}
+
+kfn test_round_3_fibonacci() {
+    sum = 0;
+    i = 0;
+    while (i < 100) {
+        sum = sum + fibonacci(15);
+        i = i + 1;
+    }
+    return sum;
+}
+
+kfn test_round_4_modulo_full_load() {
+    result = 0;
+    i = 0;
+    while (i < 100000) {
+        j = 0;
+        while (j < 100) {
+            result = (i * j + 17) % 1000000;
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return result;
+}
+
+kfn test_round_5_division_full_load() {
+    result = 0;
+    i = 0;
+    while (i < 100000) {
+        j = 1;
+        while (j < 101) {
+            result = (i * 1000 + 500) / j;
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return result;
+}
+
+kfn test_round_6_conditional_branching() {
+    true_count = 0;
+    false_count = 0;
+    i = 0;
+    while (i < 100000) {
+        if (i % 2 == 0) {
+            true_count = true_count + 1;
+        } else {
+            false_count = false_count + 1;
+        }
+        i = i + 1;
+    }
+    return true_count + false_count;
+}
+
+kfn power(base, exp) {
+    if (exp == 0) {
+        return 1;
+    }
+    result = base;
+    i = 1;
+    while (i < exp) {
+        result = result * base;
+        i = i + 1;
+    }
+    return result;
+}
+
+kfn test_round_7_power_operations() {
+    result = 0;
+    i = 0;
+    while (i < 10000) {
+        result = power(2, 10);
+        i = i + 1;
+    }
+    return result;
+}
+
+// ============================================================================
+// MODULE-LEVEL EXECUTION (executed when file runs)
+// ============================================================================
+
+print("ORCHESTRATION_START");
+print("");
+
+print("ROUND_START,1,Baseline Arithmetic (1M iterations)");
+r1 = test_round_1_arithmetic();
+print("ROUND_END,1,Baseline Arithmetic (1M iterations)");
+print("");
+
+print("ROUND_START,2,Nested Loops (100K x 10)");
+r2 = test_round_2_nested_loops();
+print("ROUND_END,2,Nested Loops (100K x 10)");
+print("");
+
+print("ROUND_START,3,Fibonacci O(log n) (100 computations)");
+r3 = test_round_3_fibonacci();
+print("ROUND_END,3,Fibonacci O(log n) (100 computations)");
+print("");
+
+print("ROUND_START,4,Modulo Operations (100K x 100 - FULL LOAD)");
+r4 = test_round_4_modulo_full_load();
+print("ROUND_END,4,Modulo Operations (100K x 100 - FULL LOAD)");
+print("");
+
+print("ROUND_START,5,Division Operations (100K x 100 - FULL LOAD)");
+r5 = test_round_5_division_full_load();
+print("ROUND_END,5,Division Operations (100K x 100 - FULL LOAD)");
+print("");
+
+print("ROUND_START,6,Conditional Branching (100K)");
+r6 = test_round_6_conditional_branching();
+print("ROUND_END,6,Conditional Branching (100K)");
+print("");
+
+print("ROUND_START,7,Power Operations (10K)");
+r7 = test_round_7_power_operations();
+print("ROUND_END,7,Power Operations (10K)");
+print("");
+
+print("ORCHESTRATION_END");
+
+

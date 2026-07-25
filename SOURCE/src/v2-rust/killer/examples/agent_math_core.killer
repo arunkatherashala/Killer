@@ -1,0 +1,11 @@
+# Agent core math — no LLM required (math_eval / math_eval_subst).
+# For traced reasoning + % / units / KB / web use native_think when LLM policy allows.
+
+a = math_eval("What is 144 / 12?")
+b = math_eval("2^10")
+c = math_eval_subst("3 * n + 7", "n", 5)
+d = math_eval("240 * 15 / 100")
+print(K"math_eval: {a}")
+print(K"power: {b}")
+print(K"linear in n: {c}")
+print(K"fractional percent as multiply: {d}")

@@ -1,0 +1,5 @@
+kfn fact(n) {
+  if n <= 1 { 1 }
+  else { n * fact(n - 1) }
+}
+print(K"fact={fact(20)}")

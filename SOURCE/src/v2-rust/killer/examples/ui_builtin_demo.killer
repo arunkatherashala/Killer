@@ -1,0 +1,20 @@
+# Minimal demo: call native UI builtins from .killer (full VM).
+# Run: cargo run --bin killer-native -- examples/ui_builtin_demo.killer
+# (killer_super transpiles a *subset* to Rust — use killer-native for ui_* builtins.)
+# The UI model lives in Rust (killer_ui); builtins bridge into headless tick + stub window.
+
+kfn main() {
+  v = ui_core_version()
+  println("killer_ui version major = " + get(v, "major").to_string())
+  println("label = " + get(v, "label"))
+
+  frame = ui_headless_tick()
+  cooked = get(frame, "cooked")
+  println("demo graph sum = " + get(cooked, "sum").to_string())
+
+  snap = ui_headless_snapshot_json()
+  println("JSON snapshot (head): " + substring(snap, 0, 120) + "...")
+
+  println("ui_native_window() prints a stub line to stderr (no real window yet)")
+  ui_native_window()
+}

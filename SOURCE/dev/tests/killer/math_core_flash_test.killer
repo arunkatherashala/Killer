@@ -1,0 +1,10 @@
+print("=== Math Core Flash Test ===")
+print(Math.factorial(5))
+print(Math.gcd(24, 36))
+print(Math.lcm(12, 18))
+print(Math.factorial(0))
+print(Math.gcd(7, 3))
+print(Math.lcm(0, 9))
+print("Math Core Flash Test complete")
+
+

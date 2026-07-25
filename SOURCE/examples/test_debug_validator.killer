@@ -1,0 +1,26 @@
+// Phase 10: Debug validator
+print "=== Debug Validator Call ==="
+print ""
+
+quality num = 25  
+print "Created quality num: " + num
+print "Type before: " + type(num)
+print ""
+
+// Call validator
+quality validated = num.validate_positive()
+print "Type after: " + type(validated)
+print "Returned status: " + validated.get_status()
+print "Returned accuracy: " + validated.get_all_metrics().accuracy
+print ""
+
+// Try with invalid value
+quality neg = -5
+quality neg_result = neg.validate_positive()
+print "Negative number status: " + neg_result.get_status()
+print "Negative errors: " + neg_result.get_errors()
+print ""
+
+print "Done"
+
+

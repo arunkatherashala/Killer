@@ -1,0 +1,359 @@
+// ============================================================================
+// KILLER v2.0 - FEATURE #9: STREAMING
+// Real-time data pipelines with backpressure
+// ============================================================================
+
+// Stream item (data flowing through pipeline)
+record StreamItem {
+  id: String,
+  data: Any,
+  timestamp: Int
+}
+
+// Stream processor result
+record ProcessResult {
+  success: Bool,
+  output: Any,
+  error: String,
+  processing_time_ms: Int
+}
+
+// ============================================================================
+// DATA STREAM
+// ============================================================================
+
+actor DataStream {
+  items: List<StreamItem> = []
+  capacity: Int = 1000
+  paused: Bool = false
+  
+  handle push(data: Any) -> Bool {
+    if this.paused { return false }
+    
+    if this.items.len() >= this.capacity {
+      return false  // Buffer full
+    }
+    
+    item = StreamItem {
+      id: K"item_{time_ms()}_{this.items.len()}",
+      data: data,
+      timestamp: time_ms() as Int
+    }
+    
+    this.items.push(item)
+    true
+  }
+  
+  handle pop() -> StreamItem {
+    if this.items.len() > 0 {
+      this.items.remove(0)
+    } else {
+      nil
+    }
+  }
+  
+  handle peek() -> StreamItem {
+    if this.items.len() > 0 {
+      this.items[0]
+    } else {
+      nil
+    }
+  }
+  
+  handle pause() {
+    this.paused = true
+  }
+  
+  handle resume() {
+    this.paused = false
+  }
+  
+  handle size() -> Int {
+    this.items.len()
+  }
+  
+  handle is_paused() -> Bool {
+    this.paused
+  }
+}
+
+// ============================================================================
+// STREAMING PROCESSOR
+// ============================================================================
+
+actor StreamProcessor {
+  input_stream: DataStream
+  output_stream: DataStream
+  buffer_max: Int = 100
+  
+  handle initialize() {
+    this.input_stream = DataStream::spawn()
+    this.output_stream = DataStream::spawn()
+  }
+  
+  handle process_stream<T>(
+    processor: fn(Any) -> T,
+    limit: Int
+  ) -> List<ProcessResult> {
+    results = []
+    processed = 0
+    
+    loop {
+      if processed >= limit {
+        break
+      }
+      
+      // Check buffer for backpressure
+      if this.output_stream.size() >= this.buffer_max {
+        await this.input_stream.pause()
+      } else if this.input_stream.is_paused() {
+        await this.input_stream.resume()
+      }
+      
+      // Process item
+      item = await this.input_stream.pop()
+      if item == nil {
+        break
+      }
+      
+      start_time = time_ms()
+      
+      try {
+        output = processor(item.data)
+        processing_time = (time_ms() - start_time) as Int
+        
+        result = ProcessResult {
+          success: true,
+          output: output,
+          error: "",
+          processing_time_ms: processing_time
+        }
+        
+        results.push(result)
+        
+        // Push to output stream
+        await this.output_stream.push(output)
+        
+        processed = processed + 1
+      } catch error {
+        processing_time = (time_ms() - start_time) as Int
+        
+        result = ProcessResult {
+          success: false,
+          output: nil,
+          error: error.to_string(),
+          processing_time_ms: processing_time
+        }
+        
+        results.push(result)
+      }
+    }
+    
+    results
+  }
+}
+
+// ============================================================================
+// AGGREGATION WINDOWS
+// ============================================================================
+
+record WindowAggregation {
+  window_id: String,
+  start_time: Int,
+  end_time: Int,
+  items: List<Any>,
+  aggregate_value: Any
+}
+
+actor WindowedAggregator {
+  window_size_ms: Int = 1000
+  current_window: WindowAggregation = nil
+  completed_windows: List<WindowAggregation> = []
+  
+  handle initialize(size_ms: Int) {
+    this.window_size_ms = size_ms
+  }
+  
+  handle add_item_to_window(data: Any) -> String {
+    current_time = time_ms() as Int
+    
+    if this.current_window == nil {
+      window_start = current_time / this.window_size_ms * this.window_size_ms
+      this.current_window = WindowAggregation {
+        window_id: K"window_{window_start}",
+        start_time: window_start,
+        end_time: window_start + this.window_size_ms,
+        items: [],
+        aggregate_value: 0
+      }
+    }
+    
+    // Check if item belongs to new window
+    window_start = current_time / this.window_size_ms * this.window_size_ms
+    
+    if window_start > this.current_window.start_time {
+      // Close current window
+      this.completed_windows.push(this.current_window)
+      
+      // Start new window
+      this.current_window = WindowAggregation {
+        window_id: K"window_{window_start}",
+        start_time: window_start,
+        end_time: window_start + this.window_size_ms,
+        items: [],
+        aggregate_value: 0
+      }
+    }
+    
+    // Add item to current window
+    this.current_window.items.push(data)
+    
+    K"Added {data} to {this.current_window.window_id}"
+  }
+  
+  handle aggregate_current_window(aggregator_fn: fn(List<Any>) -> Any) -> Any {
+    if this.current_window == nil {
+      return nil
+    }
+    
+    result = aggregator_fn(this.current_window.items)
+    this.current_window.aggregate_value = result
+    result
+  }
+  
+  handle get_completed_windows() -> List<String> {
+    windows = []
+    for window in this.completed_windows {
+      info = K"{window.window_id}: {window.items.len()} items, value={window.aggregate_value}"
+      windows.push(info)
+    }
+    windows
+  }
+}
+
+// ============================================================================
+// RATE LIMITER (Backpressure mechanism)
+// ============================================================================
+
+actor RateLimiter {
+  max_rate: Int = 100  // items per second
+  tokens: Int = 0
+  last_refill: Int = 0
+  
+  handle can_process() -> Bool {
+    current_time = time_ms() as Int
+    elapsed = current_time - this.last_refill
+    
+    new_tokens = (elapsed / 10) as Int  // Simplified rate calculation
+    this.tokens = this.tokens + new_tokens
+    
+    if this.tokens > this.max_rate {
+      this.tokens = this.max_rate
+    }
+    
+    this.last_refill = current_time
+    
+    if this.tokens > 0 {
+      this.tokens = this.tokens - 1
+      true
+    } else {
+      false
+    }
+  }
+  
+  handle set_rate(rate: Int) {
+    this.max_rate = rate
+  }
+  
+  handle get_permit_wait_time_ms() -> Int {
+    if this.tokens > 0 {
+      return 0
+    }
+    
+    10  // Simple estimate
+  }
+}
+
+// ============================================================================
+// MAIN EXAMPLE
+// ============================================================================
+
+kfn main() {
+  println("=== KILLER v2.0 Feature #9: Streaming ===")
+  
+  println("\n📊 Stream Processing with Backpressure:")
+  
+  // Create processor
+  processor = StreamProcessor::spawn()
+  await processor.initialize()
+  
+  // Add items to input stream
+  println("📤 Adding items to stream...")
+  for i in 0..10 {
+    ok = processor.input_stream.push(K"item_{i}").await
+    println(K"  Added item_{i}: {if ok {"✓"} else {"✗"}}")
+  }
+  
+  println(K"Stream size: {processor.input_stream.size().await} items")
+  
+  // Process stream
+  println("\n⚙️  Processing stream...")
+  kfn simple_processor(data: Any) {
+    data.to_string() + "_processed"
+  }
+  
+  results = processor.process_stream(kfn { simple_processor(nil) }, 5).await
+  
+  for result in results {
+    if result.success {
+      println(K"  ✓ {result.output} ({result.processing_time_ms}ms)")
+    } else {
+      println(K"  ✗ Error: {result.error}")
+    }
+  }
+  
+  println("\n📈 Windowed Aggregation:")
+  
+  aggregator = WindowedAggregator::spawn()
+  aggregator.initialize(1000).await
+  
+  // Simulate data points
+  for i in 0..15 {
+    msg = aggregator.add_item_to_window(i).await
+    println(K"  {msg}")
+  }
+  
+  // Aggregate sum
+  kfn sum_aggregator(items: List<Any>) {
+    sum = 0
+    for item in items {
+      sum = sum + (item as Int)
+    }
+    sum
+  }
+  
+  aggregated = aggregator.aggregate_current_window(kfn { sum_aggregator(nil) }).await
+  println(K"Current window aggregate: {aggregated}")
+  
+  windows_info = aggregator.get_completed_windows().await
+  for window_str in windows_info {
+    println(K"  Completed: {window_str}")
+  }
+  
+  println("\n🚦 Rate Limiting (Backpressure):")
+  
+  limiter = RateLimiter::spawn()
+  limiter.set_rate(10).await
+  
+  for i in 0..15 {
+    can_process = limiter.can_process().await
+    if can_process {
+      println(K"  ✓ Process item {i}")
+    } else {
+      wait_time = limiter.get_permit_wait_time_ms().await
+      println(K"  ⏳ Backpressure: wait {wait_time}ms")
+    }
+  }
+  
+  println("\n✅ Feature #9 (Streaming) Complete!")
+}

@@ -1,0 +1,39 @@
+# Curated checks for killer-native (default features; no killer_rcore).
+name: killer-native
+
+on:
+  push:
+    paths:
+      - "SOURCE/src/v2-rust/killer/**"
+      - "SOURCE/docs/**"
+      - ".github/workflows/killer-native.yml"
+  pull_request:
+    paths:
+      - "SOURCE/src/v2-rust/killer/**"
+      - "SOURCE/docs/**"
+      - ".github/workflows/killer-native.yml"
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: SOURCE/src/v2-rust/killer
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build
+        run: cargo build
+      - name: Unit tests
+        run: cargo test --lib
+      - name: Pipeline conformance
+        run: cargo test --test pipeline_conformance
+      - name: Trit / three-valued semantics
+        run: cargo test --test trit_three_valued
+      - name: AI integration (selected)
+        run: cargo test --test ai_integration_tests --test ai_annotations_tests
+      - name: Builtin / parser smoke (language surface)
+        run: cargo test --test builtin_pythonic --test parser_tests

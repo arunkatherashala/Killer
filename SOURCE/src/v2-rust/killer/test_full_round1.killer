@@ -1,0 +1,177 @@
+# Killer Full Round-1 Test Suite
+
+print("=== Killer Full Round-1 Test Suite ===")
+print("")
+
+print("1. Arithmetic")
+x = 10 + 20
+assert_eq(x, 30)
+y = 100 - 37
+assert_eq(y, 63)
+z = 6 * 7
+assert_eq(z, 42)
+d = 20 / 4
+assert_eq(d, 5)
+print("   PASS")
+
+print("2. Boolean logic")
+assert_true(5 > 3)
+assert_false(2 > 9)
+assert_true(10 == 10)
+assert_true(10 != 11)
+assert_true(3 >= 3)
+assert_true(4 <= 5)
+print("   PASS")
+
+print("3. Floats")
+f = 3.14 * 2.0
+assert_true(f > 6.0)
+assert_true(f < 7.0)
+print("   PASS")
+
+print("4. Strings")
+s = "Hello" + " " + "Killer"
+assert_eq(s, "Hello Killer")
+assert_contains(s, "Killer")
+assert_true(len(s) == 12)
+u = upper(s)
+assert_contains(u, "KILLER")
+lo = lower(s)
+assert_contains(lo, "hello")
+print("   PASS")
+
+print("5. While loop")
+i = 0
+total = 0
+while i < 100 {
+  total = total + i
+  i = i + 1
+}
+assert_eq(total, 4950)
+print("   PASS")
+
+print("6. Nested loops")
+s2 = 0
+a = 0
+while a < 50 {
+  b = 0
+  while b < 50 {
+    s2 = s2 + 1
+    b = b + 1
+  }
+  a = a + 1
+}
+assert_eq(s2, 2500)
+print("   PASS")
+
+print("7. Conditionals")
+score = 95
+if score >= 90 { grade = "A" }
+else if score >= 80 { grade = "B" }
+else { grade = "C" }
+assert_eq(grade, "A")
+score2 = 82
+if score2 >= 90 { grade2 = "A" }
+else if score2 >= 80 { grade2 = "B" }
+else { grade2 = "C" }
+assert_eq(grade2, "B")
+print("   PASS")
+
+print("8. K-strings")
+val = 42
+msg = K"answer is {val}"
+assert_contains(msg, "42")
+name = "Killer"
+msg2 = K"Hello {name}!"
+assert_eq(msg2, "Hello Killer!")
+print("   PASS")
+
+print("9. Assert builtins")
+assert_eq(assert_eq(1, 1), "OK")
+assert_eq(assert_ne(1, 2), "OK")
+assert_eq(assert_true(true), "OK")
+assert_eq(assert_false(false), "OK")
+assert_eq(assert_contains("abc", "b"), "OK")
+print("   PASS")
+
+print("10. String builtins")
+sp = split("a,b,c", ",")
+assert_eq(len(sp), 3)
+j = join(sp, "-")
+assert_eq(j, "a-b-c")
+t = trim("  hello  ")
+assert_eq(t, "hello")
+rep = replace("hello world", "world", "killer")
+assert_eq(rep, "hello killer")
+assert_true(starts_with("hello", "he"))
+assert_true(ends_with("hello", "lo"))
+print("   PASS")
+
+print("11. Polyglot check")
+py = polyglot_check("python")
+pws = polyglot_check("powershell")
+print(K"    python={py}  powershell={pws}")
+print("   PASS")
+
+print("12. Polyglot list")
+rts = polyglot_list()
+assert_contains(rts, "python")
+print("   PASS")
+
+print("13. Python execution")
+out = polyglot_exec("python", "print(6 * 7)")
+assert_contains(out, "42")
+print("   PASS")
+
+print("14. PowerShell execution")
+ps_out = polyglot_exec("ps", "Write-Output (3 + 4)")
+assert_contains(ps_out, "7")
+print("   PASS")
+
+print("15. Vector Memory")
+vmem_clear()
+vmem_store("lang1", "Killer is a fast compiled language")
+vmem_store("lang2", "Python is a dynamic scripting language")
+r = vmem_recall("lang1")
+assert_contains(r, "Killer")
+kl = vmem_list()
+assert_contains(kl, "lang1")
+assert_contains(kl, "lang2")
+sr = vmem_search("compiled fast", 2)
+assert_contains(sr, "lang1")
+vmem_forget("lang2")
+st = vmem_stats()
+assert_contains(st, "Entries")
+print("   PASS")
+
+print("16. HTTP security (HTTPS-only)")
+bad = http_get("http://plain.example.com")
+assert_contains(bad, "HTTPS")
+print("   PASS")
+
+print("17. HTTP live status")
+code = http_status("https://httpbin.org/status/200")
+assert_eq(code, 200)
+print("   PASS")
+
+print("18. Tool calling registry")
+tl = tool_list()
+assert_contains(tl, "http_get")
+assert_contains(tl, "vmem_search")
+cr = khlm_tool_clear()
+assert_contains(cr, "cleared")
+print("   PASS")
+
+print("19. KhLM status")
+ks = khlm_status()
+assert_contains(ks, "Tier")
+print("   PASS")
+
+print("20. Streaming polyglot")
+so = polyglot_stream("python", "for i in range(1,4):\n    print(i)")
+assert_contains(so, "1")
+assert_contains(so, "3")
+print("   PASS")
+
+print("")
+print("=== ALL 20 TESTS PASSED ===")

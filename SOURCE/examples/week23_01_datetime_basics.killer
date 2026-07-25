@@ -1,0 +1,40 @@
+// week23_01_datetime_basics.killer
+// Basic DateTime operations - getting current time, extracting date/time components
+
+// Get current system time
+now = now()
+println("Current time object:")
+println(now)
+
+// Access individual components
+println("\n=== Date Components ===")
+println("Year: " + str(now.year))
+println("Month: " + str(now.month))
+println("Day: " + str(now.day))
+println("Weekday (0=Mon, 6=Sun): " + str(now.weekday))
+
+println("\n=== Time Components ===")
+println("Hour: " + str(now.hour))
+println("Minute: " + str(now.minute))
+println("Second: " + str(now.second))
+println("Millisecond: " + str(now.millisecond))
+
+// ISO 8601 format
+println("\n=== Formatted Output ===")
+println("ISO 8601: " + now.iso_string)
+
+// Parse datetime from string
+println("\n=== Parsing Datetime ===")
+parsed_date = parse_datetime("2026-03-14 15:30:45")
+println("Parsed: " + str(parsed_date))
+println("Parsed year: " + str(parsed_date.year))
+println("Parsed weekday: " + str(parsed_date.weekday))
+
+// Format with custom patterns
+println("\n=== Custom Formatting ===")
+println("Date: " + format_datetime(now, "%Y-%m-%d"))
+println("Time: " + format_datetime(now, "%H:%M:%S"))
+println("Full: " + format_datetime(now, "%Y-%m-%d %H:%M:%S"))
+println("Day Name: " + format_datetime(now, "%A %B %d, %Y"))
+
+

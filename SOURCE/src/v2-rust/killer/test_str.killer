@@ -1,0 +1,4 @@
+schema_line = "TEST_SCHEMA"
+nrows = 5
+content = "KORE-K\n" + schema_line + "\nROWS " + str(nrows)
+print(content)

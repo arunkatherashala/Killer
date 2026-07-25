@@ -1,0 +1,11 @@
+# if 4 > 2 then print "yes" else print "no"
+CONST_NUM 4
+CONST_NUM 2
+GT
+JUMP_IF_FALSE 7
+CONST_STR "yes"
+PRINT
+JUMP 9
+CONST_STR "no"
+PRINT
+HALT

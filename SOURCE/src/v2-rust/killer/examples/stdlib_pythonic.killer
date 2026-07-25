@@ -1,0 +1,26 @@
+# Python-style builtins: lists + dicts (sorted, sum, get, setdefault, copy, …)
+
+kfn main() {
+  a = [3, 1, 4, 1, 5]
+  println(sorted(a))
+  println(sorted(a, true))
+  println(sum(a))
+  println(reversed(a))
+  println(copy(a))
+  words = ["z", "a", "m"]
+  println(sorted(words))
+  xy = ["x", "y"]
+  println(enumerate(xy))
+  ones = [1, 2, 3]
+  println(all(ones))
+  zeros = [0, 0, 1]
+  println(any(zeros))
+  left = [1, 2]
+  right = [10, 20]
+  println(zip(left, right))
+  d = hash_map_insert(hash_map_new(), "k", 1)
+  println(get(d, "k"))
+  println(get(d, "missing", "def"))
+  pair = setdefault(d, "newk", 42)
+  println(pair)
+}

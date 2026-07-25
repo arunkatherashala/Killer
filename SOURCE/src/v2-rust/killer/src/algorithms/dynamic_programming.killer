@@ -1,0 +1,216 @@
+// Dynamic Programming Algorithms for Killer v1.2
+// Author: Killer Dev Team
+// Date: March 28, 2026
+// Coverage: Memoized Fibonacci, 0/1 Knapsack, Longest Common Subsequence
+
+// ─────────────── Memoized Fibonacci ───────────────────────────────────────
+
+// Native hash map ensures O(1) memo lookup
+kfn fib_memo(n: Int, memo: HashMap) -> Int {
+  if n <= 1 { return n }
+
+  let cached = memo.get(n.to_string())
+  match cached {
+    Some(v) => v,
+    None => {
+      let result = fib_memo(n - 1, memo) + fib_memo(n - 2, memo)
+      memo.insert(n.to_string(), result)
+      result
+    }
+  }
+}
+
+kfn fibonacci_dp(n: Int) -> Int {
+  if n <= 1 { return n }
+  let mut memo = HashMap::new(256)
+  fib_memo(n, memo)
+}
+
+// ─────────────── 0/1 Knapsack ─────────────────────────────────────────────
+
+struct Item {
+  weight: Int,
+  value: Int
+}
+
+// dp[i][w] = max value using items 0..i with capacity w
+kfn knapsack(items: List<Item>, capacity: Int) -> Int {
+  let n = items.len()
+
+  // Build dp table: (n+1) × (capacity+1), init to 0
+  let mut dp = List::new()
+  let mut i = 0
+  while i <= n {
+    let mut row = List::new()
+    let mut w = 0
+    while w <= capacity {
+      row.push(0)
+      w = w + 1
+    }
+    dp.push(row)
+    i = i + 1
+  }
+
+  // Fill table
+  let mut i = 1
+  while i <= n {
+    let item = items[i - 1]
+    let mut w = 0
+    while w <= capacity {
+      if item.weight <= w {
+        let take    = item.value + dp[i-1][w - item.weight]
+        let skip    = dp[i-1][w]
+        dp[i][w] = if take > skip { take } else { skip }
+      } else {
+        dp[i][w] = dp[i-1][w]
+      }
+      w = w + 1
+    }
+    i = i + 1
+  }
+
+  dp[n][capacity]
+}
+
+// ─────────────── Longest Common Subsequence ───────────────────────────────
+
+kfn lcs(a: String, b: String) -> Int {
+  let m = a.len()
+  let n = b.len()
+
+  // dp[i][j] = LCS length of a[0..i] and b[0..j]
+  let mut dp = List::new()
+  let mut i = 0
+  while i <= m {
+    let mut row = List::new()
+    let mut j = 0
+    while j <= n {
+      row.push(0)
+      j = j + 1
+    }
+    dp.push(row)
+    i = i + 1
+  }
+
+  let mut i = 1
+  while i <= m {
+    let mut j = 1
+    while j <= n {
+      if a.charAt(i - 1) == b.charAt(j - 1) {
+        dp[i][j] = dp[i-1][j-1] + 1
+      } else {
+        let up   = dp[i-1][j]
+        let left = dp[i][j-1]
+        dp[i][j] = if up > left { up } else { left }
+      }
+      j = j + 1
+    }
+    i = i + 1
+  }
+
+  dp[m][n]
+}
+
+// ─────────────── Coin Change (minimum coins) ──────────────────────────────
+
+kfn coin_change(coins: List<Int>, amount: Int) -> Int {
+  // dp[i] = minimum coins to make amount i
+  let mut dp = List::new()
+  let mut i = 0
+  while i <= amount {
+    dp.push(amount + 1)  // large number = infinity
+    i = i + 1
+  }
+  dp[0] = 0
+
+  let mut i = 1
+  while i <= amount {
+    let mut j = 0
+    while j < coins.len() {
+      let coin = coins[j]
+      if coin <= i {
+        let candidate = dp[i - coin] + 1
+        if candidate < dp[i] {
+          dp[i] = candidate
+        }
+      }
+      j = j + 1
+    }
+    i = i + 1
+  }
+
+  if dp[amount] > amount { -1 } else { dp[amount] }
+}
+
+// ============ TEST SUITE ============
+
+#[test]
+kfn test_fibonacci_dp() {
+  assert_eq(fibonacci_dp(0), 0)
+  assert_eq(fibonacci_dp(1), 1)
+  assert_eq(fibonacci_dp(10), 55)
+  assert_eq(fibonacci_dp(20), 6765)
+  assert_eq(fibonacci_dp(30), 832040)
+}
+
+#[test]
+kfn test_knapsack() {
+  let items = [
+    Item { weight: 2, value: 6 },
+    Item { weight: 2, value: 10 },
+    Item { weight: 3, value: 12 }
+  ]
+  // capacity=5: take items 2+3 = weight 5, value 22
+  assert_eq(knapsack(items, 5), 22)
+  // capacity=0: nothing
+  assert_eq(knapsack(items, 0), 0)
+  // capacity=2: best single item = 10
+  assert_eq(knapsack(items, 2), 10)
+}
+
+#[test]
+kfn test_lcs() {
+  assert_eq(lcs("ABCBDAB", "BDCAB"), 4)   // BCAB
+  assert_eq(lcs("AGGTAB",  "GXTXAYB"), 4) // GTAB
+  assert_eq(lcs("", "ABC"), 0)
+  assert_eq(lcs("ABC", ""), 0)
+  assert_eq(lcs("ABC", "ABC"), 3)
+}
+
+#[test]
+kfn test_coin_change() {
+  let coins = [1, 5, 10, 25]
+  assert_eq(coin_change(coins, 11), 2)   // 10 + 1
+  assert_eq(coin_change(coins, 30), 2)   // 25 + 5
+  assert_eq(coin_change(coins, 0), 0)
+
+  let impossible = [2]
+  assert_eq(coin_change(impossible, 3), -1)
+}
+
+// Performance benchmark
+kfn bench_dp() {
+  let t0 = system_time_ms()
+
+  // Fibonacci DP: compute fib(40)
+  let fib40 = fibonacci_dp(40)
+
+  // Knapsack: 20 items, capacity 50
+  let mut items = List::new()
+  let mut i = 0
+  while i < 20 {
+    items.push(Item { weight: (i % 10) + 1, value: (i % 15) + 5 })
+    i = i + 1
+  }
+  let kval = knapsack(items, 50)
+
+  // LCS: two 50-char strings
+  let lcs_len = lcs("ABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGHIJKLMNOPQRSTUVWX",
+                    "XWVUTSRQPONMLKJIHGFEDCBAZYXWVUTSRQPONMLKJIHGFEDCB")
+
+  let t1 = system_time_ms()
+  K"DP: fib(40)={fib40}, knapsack={kval}, lcs={lcs_len} — {t1-t0}ms"
+}
+
+let result = bench_dp()
+print(result)

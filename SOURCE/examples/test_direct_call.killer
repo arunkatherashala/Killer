@@ -1,0 +1,20 @@
+// Test validator call directly
+print "=== Direct Validator Call ==="
+
+quality x = "hello"
+x.validate_not_null()
+let status = x.get_status()
+print "Status after validate on x: " + status
+
+print ""
+
+// Test with assignment
+quality y = "test"  
+quality z = y.validate_not_null()
+let z_status = z.get_status()
+print "Status of z (assigned result): " + z_status
+
+print ""
+print "Done"
+
+

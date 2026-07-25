@@ -1,0 +1,7 @@
+# Killer subset demo for native runtime
+let x = 20;
+let y = 22;
+print("Killer subset on native VM");
+print(x + y);
+
+
