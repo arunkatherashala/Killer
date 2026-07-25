@@ -117,6 +117,10 @@ pub enum Instruction {
     TryteOr,    // pop b, pop a, push element-wise max Tryte
     TryteNot,   // pop a, push element-wise negated Tryte
     TryteAdd,   // pop b, pop a, push balanced-ternary sum Tryte
+    // -- Nova Galaxy: Phase F — GPU/SIMD TritTensor ops -------------------------
+    /// Pop dst_row (usize), pop dst_col (usize), pop b_tensor, pop a_tensor
+    /// Compute a.dot_row_col(dst_row, b_tensor, dst_col) → push result (i32)
+    TritTensorMatMul,
     Call { target: usize, arg_count: usize },
     /// Tail-call (same stack frame): pop args, reuse current `call_stack` entry, jump to `target`.
     TailCall { target: usize, arg_count: usize },

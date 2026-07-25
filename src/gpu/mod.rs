@@ -18,3 +18,6 @@ pub fn trit_tensor_dot(a: &[i8], b: &[i8]) -> i32 {
 pub mod trit_tensor;
 
 pub use trit_tensor::TritTensor;
+pub fn run_trit_bench() {
+    crate::gpu::bench_trit_tensor::run_bench();
+}
