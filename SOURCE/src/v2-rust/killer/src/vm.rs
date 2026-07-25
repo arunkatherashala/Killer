@@ -52,10 +52,10 @@ struct ClassInfo {
 
 #[allow(dead_code)]
 pub struct VirtualMachine {
-    stack: Vec<Value>,
-    scopes: Vec<HashMap<String, Value>>,
-    call_stack: Vec<usize>,
-    ip: usize,
+    pub stack: Vec<Value>,
+    pub scopes: Vec<HashMap<String, Value>>,
+    pub call_stack: Vec<usize>,
+    pub ip: usize,
     // Integer-indexed local variable frames for fast O(1) slot access.
     // Each function call pushes a new frame; top frame is the current locals.
     // Global (top-level) code uses frame 0.
@@ -607,6 +607,12 @@ impl VirtualMachine {
                     self.scope_var_cache.access(name, self.scopes.len());
                     
                     self.store_var(name, value)?;
+                }
+                Instruction::StoreLocal(name) => {
+                    let value = self.stack.pop().ok_or_else(|| {
+                        VmError::runtime_error("STORE_LOCAL requires one value on stack".to_string())
+                    })?;
+                    self.store_local(name, value);
                 }
                 Instruction::Load(name) => {
                     // OPTIMIZATION: Record variable load for hot variable tracking

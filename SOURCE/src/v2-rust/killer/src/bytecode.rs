@@ -11,6 +11,7 @@ pub enum Instruction {
     EnterScope,
     ExitScope,
     Store(String),
+    StoreLocal(String),
     Load(String),
     // Fast-path variable access using compile-time integer slot index.
     // Avoids string hashing on every Load/Store in hot loops.

@@ -220,6 +220,7 @@ fn collect_expr_vars(expr: &crate::ast::Expr, vars: &mut HashSet<String>) {
 struct LoopContext {
     loop_start: usize,
     break_jumps: Vec<usize>,
+    scope_depth_at_start: usize,
 }
 
 #[derive(Debug, Default)]
@@ -270,6 +271,7 @@ struct CompileContext {
     /// Names of variables from an enclosing scope (e.g. top-level vars visible to functions).
     /// Assignment to these emits `Store(name)` so the VM updates the outer named scope.
     outer_vars: std::collections::HashSet<String>,
+    runtime_scope_depth: usize,
 }
 
 pub fn compile_killer_subset(source: &str) -> Result<Program, VmError> {
@@ -287,7 +289,7 @@ pub fn compile_killer_subset(source: &str) -> Result<Program, VmError> {
     let lines = normalize_lines(&preprocessed);
     let mut cursor = 0usize;
     let mut context = CompileContext::default();
-    compile_block(&lines, &mut cursor, &mut state, &mut context, false)?;
+    compile_block(&lines, &mut cursor, &mut state, &mut context, false, false)?;
 
     // Auto-invoke `main()` if it was defined and nothing in the top-level code
     // already called it explicitly.  This matches the common pattern of Killer
@@ -834,6 +836,7 @@ fn compile_stmt(
             context.loop_stack.push(LoopContext {
                 loop_start,
                 break_jumps: Vec::new(),
+                scope_depth_at_start: context.runtime_scope_depth,
             });
 
             for stmt in body {
@@ -856,6 +859,7 @@ fn compile_stmt(
             context.loop_stack.push(LoopContext {
                 loop_start,
                 break_jumps: Vec::new(),
+                scope_depth_at_start: context.runtime_scope_depth,
             });
 
             for stmt in body {
@@ -925,6 +929,7 @@ fn compile_stmt(
             context.loop_stack.push(LoopContext {
                 loop_start,
                 break_jumps: Vec::new(),
+                scope_depth_at_start: context.runtime_scope_depth,
             });
             
             // Get current element: x = __iter[__idx]
@@ -990,6 +995,7 @@ fn compile_stmt(
             context.loop_stack.push(LoopContext {
                 loop_start,
                 break_jumps: Vec::new(),
+                scope_depth_at_start: context.runtime_scope_depth,
             });
             
             // Compile body
@@ -1733,6 +1739,7 @@ fn compile_expr(
                 slot_map: HashMap::new(),
                 next_slot: 0,
                 outer_vars: std::collections::HashSet::new(),
+                runtime_scope_depth: 0,
             };
             
             // Compile function body
@@ -2055,7 +2062,18 @@ fn compile_block(
     state: &mut CompilerState,
     context: &mut CompileContext,
     stop_on_closing_brace: bool,
+    needs_runtime_scope: bool,
 ) -> Result<(), VmError> {
+    // Save slot map and next_slot to implement block scoping (shadowing)
+    let saved_slot_map = context.slot_map.clone();
+    let saved_next_slot = context.next_slot;
+
+    // Push runtime scope barrier for true blocks
+    if needs_runtime_scope {
+        context.runtime_scope_depth += 1;
+        state.instructions.push(Instruction::EnterScope);
+    }
+
     while *cursor < lines.len() {
         let (line_no, raw_line) = &lines[*cursor];
         let line_no = *line_no;
@@ -2064,6 +2082,14 @@ fn compile_block(
         if line == "}" {
             if stop_on_closing_brace {
                 *cursor += 1;
+                // Pop runtime scope barrier
+                if needs_runtime_scope {
+                    state.instructions.push(Instruction::ExitScope);
+                    context.runtime_scope_depth -= 1;
+                }
+                // Restore slot map and next_slot
+                context.slot_map = saved_slot_map;
+                context.next_slot = saved_next_slot;
                 return Ok(());
             }
             return Err(VmError::parse_error_simple(format!(
@@ -2073,10 +2099,9 @@ fn compile_block(
         }
 
         if line == "{" {
-            return Err(VmError::parse_error_simple(format!(
-                "Line {}: unexpected `{{`",
-                line_no
-            )));
+            *cursor += 1;
+            compile_block(lines, cursor, state, context, true, true)?;
+            continue;
         }
 
         if line.starts_with("fn ") || line.starts_with("kfn ")
@@ -2226,6 +2251,10 @@ fn compile_block(
         ));
     }
 
+    // Restore slot map and next_slot
+    context.slot_map = saved_slot_map;
+    context.next_slot = saved_next_slot;
+
     Ok(())
 }
 
@@ -2247,7 +2276,7 @@ fn compile_if_statement(
     let jump_false_index = state.instructions.len();
     state.instructions.push(Instruction::JumpIfFalse(usize::MAX));
 
-    compile_block(lines, cursor, state, context, true)?;
+    compile_block(lines, cursor, state, context, true, true)?;
 
     let mut has_else = false;
     let mut jump_end_index = 0usize;
@@ -2265,7 +2294,7 @@ fn compile_if_statement(
             let else_target = state.instructions.len();
             state.instructions[jump_false_index] = Instruction::JumpIfFalse(else_target);
 
-            compile_block(lines, cursor, state, context, true)?;
+            compile_block(lines, cursor, state, context, true, true)?;
         } else if trimmed.starts_with("else if ") || trimmed.starts_with("else if(") {
             // else if: rewrite as "if ..." and recurse
             has_else = true;
@@ -2314,9 +2343,10 @@ fn compile_while_statement(
     context.loop_stack.push(LoopContext {
         loop_start,
         break_jumps: Vec::new(),
+        scope_depth_at_start: context.runtime_scope_depth,
     });
 
-    compile_block(lines, cursor, state, context, true)?;
+    compile_block(lines, cursor, state, context, true, true)?;
     state.instructions.push(Instruction::Jump(loop_start));
 
     let loop_end = state.instructions.len();
@@ -2395,6 +2425,7 @@ fn compile_for_each_line_statement(
     context.loop_stack.push(LoopContext {
         loop_start,
         break_jumps: Vec::new(),
+        scope_depth_at_start: context.runtime_scope_depth,
     });
 
     // var = iter[idx]
@@ -2404,7 +2435,7 @@ fn compile_for_each_line_statement(
     state.instructions.push(Instruction::Store(var_name.to_string()));
 
     // body
-    compile_block(lines, cursor, state, context, true)?;
+    compile_block(lines, cursor, state, context, true, true)?;
 
     // idx = idx + 1
     state.instructions.push(Instruction::Load(idx_var.clone()));
@@ -2489,6 +2520,12 @@ fn compile_simple_statement(
         if !expr.is_empty() {
             compile_expr_str(expr, line_no, state, context)?;
         }
+        
+        // Before returning, pop all runtime scopes active in this function
+        for _ in 0..context.runtime_scope_depth {
+            state.instructions.push(Instruction::ExitScope);
+        }
+        
         state.instructions.push(Instruction::Ret);
         return Ok(());
     }
@@ -2497,6 +2534,11 @@ fn compile_simple_statement(
         let loop_context = context.loop_stack.last_mut().ok_or_else(|| {
             VmError::parse_error_simple(format!("Line {}: `break` is only valid inside a loop", line_no))
         })?;
+
+        // Pop runtime scopes pushed since the loop started
+        for _ in 0..(context.runtime_scope_depth - loop_context.scope_depth_at_start) {
+            state.instructions.push(Instruction::ExitScope);
+        }
 
         let jump_index = state.instructions.len();
         state.instructions.push(Instruction::Jump(usize::MAX));
@@ -2511,6 +2553,12 @@ fn compile_simple_statement(
                 line_no
             ))
         })?;
+
+        // Pop runtime scopes pushed since the loop started
+        for _ in 0..(context.runtime_scope_depth - loop_context.scope_depth_at_start) {
+            state.instructions.push(Instruction::ExitScope);
+        }
+
         state.instructions.push(Instruction::Jump(loop_context.loop_start));
         return Ok(());
     }
@@ -2619,6 +2667,13 @@ fn compile_simple_statement(
         return Ok(());
     }
 
+    // Fallback: try compiling as a bare expression.
+    // If it's a valid expression, emit it. In a script, the last expression's
+    // value stays on the stack as the "return value".
+    if compile_expr_str(stmt, line_no, state, context).is_ok() {
+        return Ok(());
+    }
+
     Err(VmError::parse_error_simple(format!(
         "Line {}: unsupported Killer subset statement `{}`",
         line_no, stmt
@@ -2671,7 +2726,7 @@ fn compile_let(
         };
         state.instructions.push(Instruction::StoreSlot(slot));
     } else {
-        state.instructions.push(Instruction::Store(name.to_string()));
+        state.instructions.push(Instruction::StoreLocal(name.to_string()));
         // Track top-level variable names so functions can reference them
         state.known_top_level_vars.insert(name.to_string());
     }
@@ -3974,12 +4029,13 @@ fn compile_fn_definition(
         // Collect parent scope variable names so function body can reference them
         // via named Store/Load (instead of creating new local slots).
         outer_vars: state.known_top_level_vars.iter().cloned().collect(),
+        runtime_scope_depth: 0,
     };
     for (index, param) in params.into_iter().enumerate() {
         fn_context.params.insert(param, index);
     }
 
-    compile_block(lines, cursor, state, &mut fn_context, true)?;
+    compile_block(lines, cursor, state, &mut fn_context, true, false)?;
 
     if !matches!(state.instructions.last(), Some(Instruction::Ret)) {
         state.instructions.push(Instruction::Ret);
@@ -4065,12 +4121,13 @@ fn compile_class_definition(
                 slot_map: HashMap::new(),
                 next_slot: 0,
                 outer_vars: state.known_top_level_vars.iter().cloned().collect(),
+                runtime_scope_depth: 0,
             };
             for (index, param) in params.iter().enumerate() {
                 method_context.params.insert(param.clone(), index);
             }
 
-            compile_block(lines, cursor, state, &mut method_context, true)?;
+            compile_block(lines, cursor, state, &mut method_context, true, false)?;
 
             // Implicit return: init returns "this", other methods return null
             if !matches!(state.instructions.last(), Some(Instruction::Ret)) {

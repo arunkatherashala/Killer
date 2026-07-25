@@ -320,8 +320,8 @@ pub mod repl {
                 "let" if parts.len() >= 3 => {
                     let var = parts[1];
                     let val = parts[2..].join(" ");
-                    self.variables.insert(var.to_string(), val);
-                    println!("{} = {}", var, self.variables.get(var).unwrap());
+                    self.variables.insert(var.to_string(), val.clone());
+                    println!("{} = {}", var, val);
                 }
                 var if self.variables.contains_key(var) => {
                     println!("{}", self.variables[var]);
