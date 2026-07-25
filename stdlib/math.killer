@@ -1,0 +1,147 @@
+/// Killer Standard Library: Math Module
+/// Mathematical functions and constants
+
+PI = 3.14159265358979323846
+E = 2.71828182845904523536
+TAU = 6.28318530717958647692
+
+def abs(x) {
+  if x < 0 {
+    return -x
+  }
+  return x
+}
+
+def sign(x) {
+  if x > 0 {
+    return 1
+  }
+  if x < 0 {
+    return -1
+  }
+  return 0
+}
+
+def floor(x) {
+  native_floor(x)
+}
+
+def ceil(x) {
+  native_ceil(x)
+}
+
+def round(x, decimals) {
+  if decimals == null {
+    decimals = 0
+  }
+  factor = 10 ^ decimals
+  return floor(x * factor + 0.5) / factor
+}
+
+def sqrt(x) {
+  native_sqrt(x)
+}
+
+def pow(x, y) {
+  native_pow(x, y)
+}
+
+def exp(x) {
+  native_exp(x)
+}
+
+def log(x) {
+  native_log(x)
+}
+
+def log10(x) {
+  native_log10(x)
+}
+
+def sin(x) {
+  native_sin(x)
+}
+
+def cos(x) {
+  native_cos(x)
+}
+
+def tan(x) {
+  native_tan(x)
+}
+
+def asin(x) {
+  native_asin(x)
+}
+
+def acos(x) {
+  native_acos(x)
+}
+
+def atan(x) {
+  native_atan(x)
+}
+
+def atan2(y, x) {
+  native_atan2(y, x)
+}
+
+def min(a, b) {
+  if a < b {
+    return a
+  }
+  return b
+}
+
+def max(a, b) {
+  if a > b {
+    return a
+  }
+  return b
+}
+
+def clamp(x, min_val, max_val) {
+  if x < min_val {
+    return min_val
+  }
+  if x > max_val {
+    return max_val
+  }
+  return x
+}
+
+def lerp(a, b, t) {
+  return a + (b - a) * t
+}
+
+def random() {
+  native_random()
+}
+
+def random_range(min_val, max_val) {
+  return min_val + random() * (max_val - min_val)
+}
+
+def random_int(min_val, max_val) {
+  return floor(random_range(min_val, max_val + 1))
+}
+
+def gcd(a, b) {
+  while b != 0 {
+    temp = b
+    b = a % b
+    a = temp
+  }
+  return a
+}
+
+def lcm(a, b) {
+  return abs(a * b) / gcd(a, b)
+}
+
+def factorial(n) {
+  if n <= 1 {
+    return 1
+  }
+  return n * factorial(n - 1)
+}

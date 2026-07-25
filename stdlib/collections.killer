@@ -1,0 +1,190 @@
+/// Killer Standard Library: Collections Module
+/// Array and dictionary utilities
+
+// Array operations
+def array() {
+  return []
+}
+
+def push(arr, item) {
+  native_array_push(arr, item)
+  return arr
+}
+
+def pop(arr) {
+  native_array_pop(arr)
+}
+
+def shift(arr) {
+  native_array_shift(arr)
+}
+
+def unshift(arr, item) {
+  native_array_unshift(arr, item)
+  return arr
+}
+
+def length(col) {
+  native_length(col)
+}
+
+def is_empty(col) {
+  return length(col) == 0
+}
+
+def map(arr, fn) {
+  result = []
+  for item in arr {
+    push(result, fn(item))
+  }
+  return result
+}
+
+def filter(arr, predicate) {
+  result = []
+  for item in arr {
+    if predicate(item) {
+      push(result, item)
+    }
+  }
+  return result
+}
+
+def reduce(arr, fn, initial) {
+  acc = initial
+  for item in arr {
+    acc = fn(acc, item)
+  }
+  return acc
+}
+
+def find(arr, predicate) {
+  for item in arr {
+    if predicate(item) {
+      return item
+    }
+  }
+  return null
+}
+
+def includes(arr, item) {
+  for x in arr {
+    if x == item {
+      return true
+    }
+  }
+  return false
+}
+
+def index_of(arr, item) {
+  for i in range(length(arr)) {
+    if arr[i] == item {
+      return i
+    }
+  }
+  return -1
+}
+
+def reverse(arr) {
+  native_array_reverse(arr)
+  return arr
+}
+
+def slice(arr, start, end) {
+  native_array_slice(arr, start, end)
+}
+
+def join(arr, sep) {
+  if is_empty(arr) {
+    return ""
+  }
+  result = str(arr[0])
+  for i in range(1, length(arr)) {
+    result = result + sep + str(arr[i])
+  }
+  return result
+}
+
+def sort(arr, comparator) {
+  native_array_sort(arr, comparator)
+  return arr
+}
+
+def unique(arr) {
+  result = []
+  for item in arr {
+    if not includes(result, item) {
+      push(result, item)
+    }
+  }
+  return result
+}
+
+def flatten(arr) {
+  result = []
+  for item in arr {
+    if type(item) == "array" {
+      for x in flatten(item) {
+        push(result, x)
+      }
+    } else {
+      push(result, item)
+    }
+  }
+  return result
+}
+
+// Dictionary operations
+def dict() {
+  return {}
+}
+
+def set(d, key, value) {
+  d[key] = value
+  return d
+}
+
+def get(d, key, default_value) {
+  native_dict_get(d, key, default_value)
+}
+
+def remove(d, key) {
+  native_dict_remove(d, key)
+  return d
+}
+
+def keys(d) {
+  native_dict_keys(d)
+}
+
+def values(d) {
+  native_dict_values(d)
+}
+
+def entries(d) {
+  native_dict_entries(d)
+}
+
+def has_key(d, key) {
+  native_dict_has_key(d, key)
+}
+
+def clear(col) {
+  native_clear(col)
+  return col
+}
+
+// Utility: Range generator
+def range(start, end) {
+  if end == null {
+    end = start
+    start = 0
+  }
+  result = []
+  i = start
+  while i < end {
+    push(result, i)
+    i = i + 1
+  }
+  return result
+}

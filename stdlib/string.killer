@@ -1,0 +1,141 @@
+/// Killer Standard Library: String Module
+/// String manipulation and utilities
+
+def length(s) {
+  native_length(s)
+}
+
+def is_empty(s) {
+  return length(s) == 0
+}
+
+def uppercase(s) {
+  native_string_uppercase(s)
+}
+
+def lowercase(s) {
+  native_string_lowercase(s)
+}
+
+def capitalize(s) {
+  if is_empty(s) {
+    return s
+  }
+  first = native_substring(s, 0, 1)
+  rest = native_substring(s, 1, length(s))
+  return uppercase(first) + rest
+}
+
+def trim(s) {
+  native_string_trim(s)
+}
+
+def ltrim(s) {
+  native_string_ltrim(s)
+}
+
+def rtrim(s) {
+  native_string_rtrim(s)
+}
+
+def split(s, delimiter) {
+  native_string_split(s, delimiter)
+}
+
+def join(arr, delimiter) {
+  if native_length(arr) == 0 {
+    return ""
+  }
+  result = str(arr[0])
+  for i in range(1, native_length(arr)) {
+    result = result + delimiter + str(arr[i])
+  }
+  return result
+}
+
+def substring(s, start, end) {
+  native_substring(s, start, end)
+}
+
+def char_at(s, index) {
+  native_substring(s, index, index + 1)
+}
+
+def index_of(s, needle) {
+  native_string_index_of(s, needle)
+}
+
+def last_index_of(s, needle) {
+  native_string_last_index_of(s, needle)
+}
+
+def starts_with(s, prefix) {
+  native_string_starts_with(s, prefix)
+}
+
+def ends_with(s, suffix) {
+  native_string_ends_with(s, suffix)
+}
+
+def contains(s, needle) {
+  return index_of(s, needle) >= 0
+}
+
+def replace(s, old, new) {
+  native_string_replace(s, old, new)
+}
+
+def replace_all(s, old, new) {
+  native_string_replace_all(s, old, new)
+}
+
+def repeat(s, count) {
+  result = ""
+  for i in range(count) {
+    result = result + s
+  }
+  return result
+}
+
+def reverse(s) {
+  chars = split(s, "")
+  native_array_reverse(chars)
+  return join(chars, "")
+}
+
+def pad_start(s, length, pad_char) {
+  if pad_char == null {
+    pad_char = " "
+  }
+  while native_length(s) < length {
+    s = pad_char + s
+  }
+  return s
+}
+
+def pad_end(s, length, pad_char) {
+  if pad_char == null {
+    pad_char = " "
+  }
+  while native_length(s) < length {
+    s = s + pad_char
+  }
+  return s
+}
+
+def to_number(s) {
+  native_to_number(s)
+}
+
+def to_string(val) {
+  str(val)
+}
+
+def format(template, values) {
+  result = template
+  for key in native_dict_keys(values) {
+    placeholder = "{" + key + "}"
+    result = replace_all(result, placeholder, str(values[key]))
+  }
+  return result
+}

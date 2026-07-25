@@ -1,0 +1,80 @@
+/// Killer Standard Library: JSON Module
+/// Parse and serialize JSON data
+
+def parse(json_string) {
+  // Placeholder: parses JSON string into Killer value
+  // Implementation: calls native JsonParse opcode
+  native_json_parse(json_string)
+}
+
+def stringify(value) {
+  // Placeholder: serializes Killer value to JSON string
+  // Implementation: calls native JsonStringify opcode
+  native_json_stringify(value)
+}
+
+def parse_file(path) {
+  // Read and parse JSON from file
+  content = native_read_file(path)
+  parse(content)
+}
+
+def write_file(path, value) {
+  // Serialize value to JSON and write to file
+  json_str = stringify(value)
+  native_write_file(path, json_str)
+}
+
+// Shallow clone of object/array
+def clone(obj) {
+  if type(obj) == "dict" {
+    result = {}
+    for k in keys(obj) {
+      result[k] = obj[k]
+    }
+    return result
+  }
+  if type(obj) == "array" {
+    return native_array_copy(obj)
+  }
+  return obj
+}
+
+// Deep clone (recursive)
+def deep_clone(obj) {
+  if type(obj) == "dict" {
+    result = {}
+    for k in keys(obj) {
+      result[k] = deep_clone(obj[k])
+    }
+    return result
+  }
+  if type(obj) == "array" {
+    return native_array_map(obj, def(x) { return deep_clone(x) })
+  }
+  return obj
+}
+
+def keys(obj) {
+  native_dict_keys(obj)
+}
+
+def values(obj) {
+  native_dict_values(obj)
+}
+
+def entries(obj) {
+  native_dict_entries(obj)
+}
+
+def has_key(obj, key) {
+  native_dict_has_key(obj, key)
+}
+
+def merge(obj1, obj2) {
+  result = clone(obj1)
+  for k in keys(obj2) {
+    result[k] = obj2[k]
+  }
+  return result
+}

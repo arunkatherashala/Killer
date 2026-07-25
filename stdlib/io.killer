@@ -1,0 +1,48 @@
+/// Killer Standard Library: I/O Module
+/// Provides file and console I/O operations
+
+def read_file(path) {
+  // Placeholder: reads file content as string
+  // Implementation: calls native FileRead opcode
+  native_read_file(path)
+}
+
+def write_file(path, content) {
+  // Placeholder: writes string content to file
+  native_write_file(path, content)
+}
+
+def read_line() {
+  // Placeholder: reads a line from stdin
+  native_read_line()
+}
+
+def read_lines(path) {
+  // Placeholder: reads all lines from file
+  // Returns array of strings
+  lines = []
+  content = read_file(path)
+  // Split by newline
+  native_split(content, "\n")
+}
+
+def write_line(text) {
+  print(text)
+}
+
+// Open file for reading/writing (returns file handle)
+def open(path, mode) {
+  native_open(path, mode)
+}
+
+def close(handle) {
+  native_close(handle)
+}
+
+def write(handle, content) {
+  native_write(handle, content)
+}
+
+def read(handle, bytes) {
+  native_read(handle, bytes)
+}
