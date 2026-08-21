@@ -454,8 +454,8 @@ impl Validatable for User {
 
 ## Code Location
 
-**File**: [src/v2-rust/killer_vm/src/orm_helpers.rs](../../src/v2-rust/killer_vm/src/orm_helpers.rs)
-**Module registration**: [src/v2-rust/killer_vm/src/lib.rs](../../src/v2-rust/killer_vm/src/lib.rs) (line 67)
+**File**: [src/v2-rust/killer/src/orm_helpers.rs](../../src/v2-rust/killer/src/orm_helpers.rs)
+**Module registration**: [src/v2-rust/killer/src/lib.rs](../../src/v2-rust/killer/src/lib.rs) (line 67)
 **Tests**: Lines 400-550 (9 test cases)
 
 ## Summary

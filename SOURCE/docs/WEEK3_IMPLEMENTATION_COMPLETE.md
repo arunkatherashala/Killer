@@ -45,7 +45,7 @@ Thread handles are dictionaries with the following structure:
 
 ### 3. **Module Integration**
 
-**File modified**: `src/v2-rust/killer_vm/src/builtin.rs`
+**File modified**: `src/v2-rust/killer/src/builtin.rs`
 - Added 2 threading functions to match statement (lines 99-101)
 - Implemented `spawn_thread()` handler (90+ lines)
 - Implemented `join_thread()` handler (40+ lines)
@@ -276,7 +276,7 @@ print(result);  // Prints: null
 
 ## Files Modified
 
-### src/v2-rust/killer_vm/src/builtin.rs
+### src/v2-rust/killer/src/builtin.rs
 ```diff
   // Threading functions (Week 3: Curriculum Support)
   "spawn_thread" => Self::spawn_thread(args),
@@ -344,7 +344,7 @@ After Weeks 1-3:
 
 ## References
 
-- **Threading API Spec**: builtin.rs (src/v2-rust/killer_vm/src/builtin.rs, lines 1268-1337)
+- **Threading API Spec**: builtin.rs (src/v2-rust/killer/src/builtin.rs, lines 1268-1337)
 - **Basic Thread Example**: [week19_05_thread_spawning_v3.0.killer](examples/week19_05_thread_spawning_v3.0.killer)
 - **Concurrent HTTP Example**: [week21_03_concurrent_http_server_v3.0.killer](examples/week21_03_concurrent_http_server_v3.0.killer)
 - **Previous Implementation**: [WEEK2_IMPLEMENTATION_COMPLETE.md](WEEK2_IMPLEMENTATION_COMPLETE.md)

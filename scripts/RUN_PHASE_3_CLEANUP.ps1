@@ -3,7 +3,7 @@ param(
     [switch]$CreateBackup = $true
 )
 
-$ScriptPath = "c:\Users\skathera\Downloads\killer"
+$ScriptPath = "<windows-user>\\skathera\Downloads\killer"
 $BackupFolder = "$ScriptPath\_CLEANUP_BACKUP_$(Get-Date -Format 'yyyyMMdd_HHmmss')"
 
 Write-Host ""

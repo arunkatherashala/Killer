@@ -22,27 +22,27 @@ These blockers stop many files from parsing at all.
 
 1. Add ternary/operator token support (at least `?` path used by advanced examples)
 - Symptoms: `12_advanced_features.killer` fails with lexer `unexpected character: '?'`
-- Likely hotspot: `src/v2-rust/killer_vm/src/lexer.rs`
+- Likely hotspot: `src/v2-rust/killer/src/lexer.rs`
 - Acceptance: `12_advanced_features.killer` parses and reaches runtime.
 
 2. Fix function-call parsing edge cases for comma/complex args
 - Symptoms: `15_phase1.killer` fails with `expected RParen, got Comma`; `13_complete_features.killer` fails with `expected RParen, got Identifier("x")`
-- Likely hotspot: `src/v2-rust/killer_vm/src/parser.rs` in `parse_call`
+- Likely hotspot: `src/v2-rust/killer/src/parser.rs` in `parse_call`
 - Acceptance: both files parse; no `RParen`/comma parser failures.
 
 3. Support try/catch syntax variants used in examples
 - Symptoms: `10_try_catch.killer` fails `expected LBrace, got LParen`
-- Likely hotspot: `src/v2-rust/killer_vm/src/parser.rs` in `parse_try`
+- Likely hotspot: `src/v2-rust/killer/src/parser.rs` in `parse_try`
 - Acceptance: `10_try_catch.killer` executes successfully.
 
 4. Fix class/object assignment target handling
 - Symptoms: `11_classes.killer` and `16_phase2_oop.killer` fail with `invalid assignment target`
-- Likely hotspot: `src/v2-rust/killer_vm/src/parser.rs` in `parse_expr_statement`
+- Likely hotspot: `src/v2-rust/killer/src/parser.rs` in `parse_expr_statement`
 - Acceptance: class examples parse and run.
 
 5. Function declaration shape compatibility
 - Symptoms: `killer_showcase_examples.killer` fails with `expected '=>', '{', or indented block after function parameters`
-- Likely hotspot: `src/v2-rust/killer_vm/src/parser.rs` in `parse_function_body` and `looks_like_function`
+- Likely hotspot: `src/v2-rust/killer/src/parser.rs` in `parse_function_body` and `looks_like_function`
 - Acceptance: showcase file parses with current documented syntax forms.
 
 ## P1 - Runtime behavior mismatches
@@ -52,13 +52,13 @@ These parse, but behave differently at runtime.
 6. Dict/object key access behavior alignment
 - Symptoms: `07_dicts.killer` runtime error `Undefined variable 'name'`
 - Likely hotspots:
-- `src/v2-rust/killer_vm/src/parser.rs` (`Expr::MethodCall`/property handling)
-- `src/v2-rust/killer_vm/src/vm.rs` (method/property dispatch for dict/object)
+- `src/v2-rust/killer/src/parser.rs` (`Expr::MethodCall`/property handling)
+- `src/v2-rust/killer/src/vm.rs` (method/property dispatch for dict/object)
 - Acceptance: `07_dicts.killer` runs and prints expected outputs.
 
 7. String property/method compatibility (`.length`, method calls)
 - Symptoms: `09_string_methods.killer` runtime error around `length` on string
-- Likely hotspot: `src/v2-rust/killer_vm/src/vm.rs` method dispatch and builtin adaptation
+- Likely hotspot: `src/v2-rust/killer/src/vm.rs` method dispatch and builtin adaptation
 - Acceptance: `09_string_methods.killer` passes without runtime type mismatch.
 
 ## P2 - Syntax broadening and consistency
@@ -67,14 +67,14 @@ These usually represent language-surface mismatches.
 
 8. Colon and literal grammar edge cases in complex files
 - Symptoms: `14_more_features.killer` parse error `expected Colon, got Number(90.0)`
-- Likely hotspot: `src/v2-rust/killer_vm/src/parser.rs` in dict/object literal parsing and surrounding expression precedence
+- Likely hotspot: `src/v2-rust/killer/src/parser.rs` in dict/object literal parsing and surrounding expression precedence
 - Acceptance: `14_more_features.killer` parses and executes.
 
 9. Cross-check parser and compiler assumptions
 - Risk: parser emits AST forms that compiler/vm partially supports, causing runtime regressions after parse fixes
 - Hotspots:
-- `src/v2-rust/killer_vm/src/compiler.rs`
-- `src/v2-rust/killer_vm/src/vm.rs`
+- `src/v2-rust/killer/src/compiler.rs`
+- `src/v2-rust/killer/src/vm.rs`
 - Acceptance: no new runtime regressions on currently passing 7 examples.
 
 ## P3 - Validation and release gate
@@ -102,7 +102,7 @@ These usually represent language-surface mismatches.
 .\dist\v1-standalone\killer-v1.exe examples\01_hello.killer
 
 # V2 run
-.\src\v2-rust\killer_vm\target\release\killer-native.exe examples\01_hello.killer
+.\src\v2-rust\\killer\target\release\killer-native.exe examples\01_hello.killer
 
 # Full parity report command can be reused from previous validation session
 # Output file: docs/arun-imp/V1_V2_VALIDATION_REPORT.json

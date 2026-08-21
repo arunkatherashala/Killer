@@ -15,7 +15,7 @@ import time
 import re
 
 KILLER_FILE = r"SOURCE\orchestration\phase7_orchestration_final.killer"
-KILLER_BAT = r"C:\Users\skathera\Killer\killer.bat"
+KILLER_BAT = r"<repo-root>\\killer.bat"
 CSV_OUTPUT = "phase7_orchestration_results_final.csv"
 
 def run_orchestration():

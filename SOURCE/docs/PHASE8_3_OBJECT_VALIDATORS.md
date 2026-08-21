@@ -380,7 +380,7 @@ Audit Trail: [Product validated and ready]
 
 ## Implementation Summary
 
-**File**: `src/v2-rust/killer_vm/src/data_quality.rs`  
+**File**: `src/v2-rust/killer/src/data_quality.rs`  
 **Phase 8.3 Additions**: 160+ lines (5 validators + 10 tests)
 **Total Module**: 950+ lines
 **Test Count**: 44/44 passing ✅

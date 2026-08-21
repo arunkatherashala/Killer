@@ -7,7 +7,7 @@
 ## 📍 START HERE
 
 ### You Are Here:
-- **Main Directory:** `c:\Users\skathera\Downloads\killer_V2_RS_M11\`
+- **Main Directory:** `<repo-root>\`
 - **New Structure:** `/projects/` (organized by academic field)
 - **Legacy Structure:** `/solved/` (comprehensive archive)
 

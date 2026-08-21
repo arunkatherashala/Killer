@@ -304,7 +304,7 @@ Total Pass: 100% (0 errors, warnings only from legacy code)
 
 ## File Organization
 
-### Source Code (`/src/v2-rust/killer_vm/src/`)
+### Source Code (`/src/v2-rust/killer/src/`)
 ```
 Phase 12:
   └─ vm.rs (operator overloading in executor)

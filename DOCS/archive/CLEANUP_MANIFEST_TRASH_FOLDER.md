@@ -73,7 +73,7 @@
 ## 📁 RECOMMENDED STRUCTURE (After Cleanup)
 
 ```
-killer_V2_RS_M11/
+<repo-root>/
 │
 ├─ ACTIVE DOCUMENTATION (Current)
 │  ├─ MASTER_KILLER_TRACKING.csv

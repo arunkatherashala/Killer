@@ -385,7 +385,7 @@ Result: Your warehouse, 20-40x faster, 80% cheaper ✨
 ## File Locations
 
 ```
-C:\Users\skathera\Downloads\killer\SOURCE\dbt\
+<repo-root>\\SOURCE\dbt\
 
 Core implementations:
 ├── killer_spark.killer                    ← NEW: Spark layer

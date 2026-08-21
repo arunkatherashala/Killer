@@ -8,7 +8,7 @@
 ## 📊 PROJECT ORGANIZATION MAP
 
 ```
-c:\Users\skathera\Downloads\killer\
+<repo-root>\\
 │
 ├── 📁 SOURCE/              ← PRODUCTION SOURCE CODE (active development)
 │   ├── 📁 engines/

@@ -190,7 +190,7 @@ Stress handling:      Perfect
 ### Verify Deployment
 ```powershell
 # File should exist here:
-C:\Users\skathera\Downloads\killer_V2_RS_M11\production\killer.exe
+<repo-root>\production\killer.exe
 
 # Run test:
 .\production\killer.exe your_program.killer

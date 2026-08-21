@@ -1,5 +1,5 @@
-๏ปฟcargo :    Compiling killer-native v3.0.0 (C:\Users\skathera\Downloads\killer_M29\killer\SOURCE\src\v2-rust\killer)
-At C:\Users\skathera\AppData\Local\Temp\ps-script-d3268528-01c9-445a-b210-d5123897b6b9.ps1:87 char:1
+cargo :    Compiling killer-native v3.0.0 (<repo-root>\SOURCE\src\v2-rust\killer)
+At <windows-user>\\skathera\AppData\Local\Temp\ps-script-d3268528-01c9-445a-b210-d5123897b6b9.ps1:87 char:1
 + cargo build 2>&1 | Out-File -Encoding utf8 build_log.txt
 + ~~~~~~~~~~~~~~~~
     + CategoryInfo          : NotSpecified: (   Compiling ki...v2-rust\killer):String) [], RemoteException
@@ -9,14 +9,14 @@ error: unknown start of token: \u{2500}
     --> src\kore_v2.rs:2481:141
      |
 2481 | ...t, &mut all_meta, &mut nchunks, &float_scales)?; 
-ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
      |                                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
      |
      = note: character appears 27 more times
-help: Unicode character 'ฮ“รถร' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+help: Unicode character 'G๖ว' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
      |
 2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+&mut nchunks, &float_scales)?; G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
 2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
 &mut nchunks, &float_scales)?; ----------------------------
      |
@@ -25,431 +25,431 @@ error: unknown start of token: \u{2500}
     --> src\kore_v2.rs:2481:142
      |
 2481 | ...t, &mut all_meta, &mut nchunks, &float_scales)?; 
-ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
      |                                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^
      |
      = note: character appears 26 more times
-help: Unicode character 'ฮ“รถร' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+help: Unicode character 'G๖ว' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
      |
 2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+&mut nchunks, &float_scales)?; G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
 2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถร---------------------------
+&mut nchunks, &float_scales)?; G๖ว---------------------------
      |
 
 error: unknown start of token: \u{2500}
     --> src\kore_v2.rs:2481:143
      |
 2481 | ..., &mut all_meta, &mut nchunks, &float_scales)?; 
-ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
      |                                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^
      |
      = note: character appears 25 more times
-help: Unicode character 'ฮ“รถร' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+help: Unicode character 'G๖ว' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
      |
 2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+&mut nchunks, &float_scales)?; G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
 2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถรฮ“รถร--------------------------
+&mut nchunks, &float_scales)?; G๖วG๖ว--------------------------
      |
 
 error: unknown start of token: \u{2500}
     --> src\kore_v2.rs:2481:144
      |
 2481 | ..., &mut all_meta, &mut nchunks, &float_scales)?; 
-ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
      |                                                       ^^^^^^^^^^^^^^^^^^^^^^^^^
      |
      = note: character appears 24 more times
-help: Unicode character 'ฮ“รถร' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+help: Unicode character 'G๖ว' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
      |
 2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+&mut nchunks, &float_scales)?; G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
 2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถรฮ“รถรฮ“รถร-------------------------
+&mut nchunks, &float_scales)?; G๖วG๖วG๖ว-------------------------
      |
 
 error: unknown start of token: \u{2500}
     --> src\kore_v2.rs:2481:145
      |
 2481 | ... &mut all_meta, &mut nchunks, &float_scales)?; 
-ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
      |                                                       ^^^^^^^^^^^^^^^^^^^^^^^^
      |
      = note: character appears 23 more times
-help: Unicode character 'ฮ“รถร' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+help: Unicode character 'G๖ว' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
      |
 2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+&mut nchunks, &float_scales)?; G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
 2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถรฮ“รถรฮ“รถรฮ“รถร------------------------
+&mut nchunks, &float_scales)?; G๖วG๖วG๖วG๖ว------------------------
      |
 
 error: unknown start of token: \u{2500}
     --> src\kore_v2.rs:2481:146
      |
 2481 | ... &mut all_meta, &mut nchunks, &float_scales)?; 
-ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
      |                                                        ^^^^^^^^^^^^^^^^^^^^^^^
      |
      = note: character appears 22 more times
-help: Unicode character 'ฮ“รถร' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+help: Unicode character 'G๖ว' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
      |
 2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+&mut nchunks, &float_scales)?; G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
 2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร-----------------------
+&mut nchunks, &float_scales)?; G๖วG๖วG๖วG๖วG๖ว-----------------------
      |
 
 error: unknown start of token: \u{2500}
     --> src\kore_v2.rs:2481:147
      |
 2481 | ...&mut all_meta, &mut nchunks, &float_scales)?; 
-ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
      |                                                        ^^^^^^^^^^^^^^^^^^^^^^
      |
      = note: character appears 21 more times
-help: Unicode character 'ฮ“รถร' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+help: Unicode character 'G๖ว' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
      |
 2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+&mut nchunks, &float_scales)?; G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
 2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร----------------------
+&mut nchunks, &float_scales)?; G๖วG๖วG๖วG๖วG๖วG๖ว----------------------
      |
 
 error: unknown start of token: \u{2500}
     --> src\kore_v2.rs:2481:148
      |
 2481 | ...&mut all_meta, &mut nchunks, &float_scales)?; 
-ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
      |                                                         ^^^^^^^^^^^^^^^^^^^^^
      |
      = note: character appears 20 more times
-help: Unicode character 'ฮ“รถร' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+help: Unicode character 'G๖ว' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
      |
 2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+&mut nchunks, &float_scales)?; G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
 2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร---------------------
+&mut nchunks, &float_scales)?; G๖วG๖วG๖วG๖วG๖วG๖วG๖ว---------------------
      |
 
 error: unknown start of token: \u{2500}
     --> src\kore_v2.rs:2481:149
      |
 2481 | ...mut all_meta, &mut nchunks, &float_scales)?; 
-ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
      |                                                         ^^^^^^^^^^^^^^^^^^^^
      |
      = note: character appears 19 more times
-help: Unicode character 'ฮ“รถร' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+help: Unicode character 'G๖ว' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
      |
 2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+&mut nchunks, &float_scales)?; G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
 2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร--------------------
+&mut nchunks, &float_scales)?; G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว--------------------
      |
 
 error: unknown start of token: \u{2500}
     --> src\kore_v2.rs:2481:150
      |
 2481 | ...mut all_meta, &mut nchunks, &float_scales)?; 
-ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
      |                                                          ^^^^^^^^^^^^^^^^^^^
      |
      = note: character appears 18 more times
-help: Unicode character 'ฮ“รถร' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+help: Unicode character 'G๖ว' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
      |
 2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+&mut nchunks, &float_scales)?; G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
 2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร-------------------
+&mut nchunks, &float_scales)?; G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว-------------------
      |
 
 error: unknown start of token: \u{2500}
     --> src\kore_v2.rs:2481:151
      |
 2481 | ...ut all_meta, &mut nchunks, &float_scales)?; 
-ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
      |                                                          ^^^^^^^^^^^^^^^^^^
      |
      = note: character appears 17 more times
-help: Unicode character 'ฮ“รถร' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+help: Unicode character 'G๖ว' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
      |
 2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+&mut nchunks, &float_scales)?; G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
 2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร------------------
+&mut nchunks, &float_scales)?; G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว------------------
      |
 
 error: unknown start of token: \u{2500}
     --> src\kore_v2.rs:2481:152
      |
 2481 | ...ut all_meta, &mut nchunks, &float_scales)?; 
-ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
      |                                                           ^^^^^^^^^^^^^^^^^
      |
      = note: character appears 16 more times
-help: Unicode character 'ฮ“รถร' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+help: Unicode character 'G๖ว' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
      |
 2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+&mut nchunks, &float_scales)?; G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
 2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร-----------------
+&mut nchunks, &float_scales)?; G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว-----------------
      |
 
 error: unknown start of token: \u{2500}
     --> src\kore_v2.rs:2481:153
      |
 2481 | ...t all_meta, &mut nchunks, &float_scales)?; 
-ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
      |                                                           ^^^^^^^^^^^^^^^^
      |
      = note: character appears 15 more times
-help: Unicode character 'ฮ“รถร' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+help: Unicode character 'G๖ว' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
      |
 2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+&mut nchunks, &float_scales)?; G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
 2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร----------------
+&mut nchunks, &float_scales)?; G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว----------------
      |
 
 error: unknown start of token: \u{2500}
     --> src\kore_v2.rs:2481:154
      |
 2481 | ...t all_meta, &mut nchunks, &float_scales)?; 
-ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
      |                                                            ^^^^^^^^^^^^^^^
      |
      = note: character appears 14 more times
-help: Unicode character 'ฮ“รถร' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+help: Unicode character 'G๖ว' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
      |
 2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+&mut nchunks, &float_scales)?; G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
 2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร---------------
+&mut nchunks, &float_scales)?; G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว---------------
      |
 
 error: unknown start of token: \u{2500}
     --> src\kore_v2.rs:2481:155
      |
 2481 | ... all_meta, &mut nchunks, &float_scales)?; 
-ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
      |                                                            ^^^^^^^^^^^^^^
      |
      = note: character appears 13 more times
-help: Unicode character 'ฮ“รถร' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+help: Unicode character 'G๖ว' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
      |
 2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+&mut nchunks, &float_scales)?; G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
 2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร--------------
+&mut nchunks, &float_scales)?; G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว--------------
      |
 
 error: unknown start of token: \u{2500}
     --> src\kore_v2.rs:2481:156
      |
 2481 | ... all_meta, &mut nchunks, &float_scales)?; 
-ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
      |                                                             ^^^^^^^^^^^^^
      |
      = note: character appears 12 more times
-help: Unicode character 'ฮ“รถร' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+help: Unicode character 'G๖ว' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
      |
 2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+&mut nchunks, &float_scales)?; G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
 2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร-------------
+&mut nchunks, &float_scales)?; G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว-------------
      |
 
 error: unknown start of token: \u{2500}
     --> src\kore_v2.rs:2481:157
      |
 2481 | ...all_meta, &mut nchunks, &float_scales)?; 
-ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
      |                                                             ^^^^^^^^^^^^
      |
      = note: character appears 11 more times
-help: Unicode character 'ฮ“รถร' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+help: Unicode character 'G๖ว' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
      |
 2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+&mut nchunks, &float_scales)?; G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
 2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร------------
+&mut nchunks, &float_scales)?; G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว------------
      |
 
 error: unknown start of token: \u{2500}
     --> src\kore_v2.rs:2481:158
      |
 2481 | ...all_meta, &mut nchunks, &float_scales)?; 
-ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
      |                                                              ^^^^^^^^^^^
      |
      = note: character appears 10 more times
-help: Unicode character 'ฮ“รถร' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+help: Unicode character 'G๖ว' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
      |
 2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+&mut nchunks, &float_scales)?; G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
 2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร-----------
+&mut nchunks, &float_scales)?; G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว-----------
      |
 
 error: unknown start of token: \u{2500}
     --> src\kore_v2.rs:2481:159
      |
 2481 | ...ll_meta, &mut nchunks, &float_scales)?; 
-ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
      |                                                              ^^^^^^^^^^
      |
      = note: character appears 9 more times
-help: Unicode character 'ฮ“รถร' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+help: Unicode character 'G๖ว' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
      |
 2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+&mut nchunks, &float_scales)?; G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
 2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร----------
+&mut nchunks, &float_scales)?; G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว----------
      |
 
 error: unknown start of token: \u{2500}
     --> src\kore_v2.rs:2481:160
      |
 2481 | ...ll_meta, &mut nchunks, &float_scales)?; 
-ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
      |                                                               ^^^^^^^^^
      |
      = note: character appears 8 more times
-help: Unicode character 'ฮ“รถร' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+help: Unicode character 'G๖ว' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
      |
 2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+&mut nchunks, &float_scales)?; G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
 2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร---------
+&mut nchunks, &float_scales)?; G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว---------
      |
 
 error: unknown start of token: \u{2500}
     --> src\kore_v2.rs:2481:161
      |
 2481 | ...l_meta, &mut nchunks, &float_scales)?; 
-ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
      |                                                               ^^^^^^^^
      |
      = note: character appears 7 more times
-help: Unicode character 'ฮ“รถร' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+help: Unicode character 'G๖ว' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
      |
 2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+&mut nchunks, &float_scales)?; G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
 2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร--------
+&mut nchunks, &float_scales)?; G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว--------
      |
 
 error: unknown start of token: \u{2500}
     --> src\kore_v2.rs:2481:162
      |
 2481 | ...l_meta, &mut nchunks, &float_scales)?; 
-ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
      |                                                                ^^^^^^^
      |
      = note: character appears 6 more times
-help: Unicode character 'ฮ“รถร' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+help: Unicode character 'G๖ว' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
      |
 2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+&mut nchunks, &float_scales)?; G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
 2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร-------
+&mut nchunks, &float_scales)?; G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว-------
      |
 
 error: unknown start of token: \u{2500}
     --> src\kore_v2.rs:2481:163
      |
 2481 | ..._meta, &mut nchunks, &float_scales)?; 
-ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
      |                                                                ^^^^^^
      |
      = note: character appears 5 more times
-help: Unicode character 'ฮ“รถร' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+help: Unicode character 'G๖ว' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
      |
 2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+&mut nchunks, &float_scales)?; G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
 2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร------
+&mut nchunks, &float_scales)?; G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว------
      |
 
 error: unknown start of token: \u{2500}
     --> src\kore_v2.rs:2481:164
      |
 2481 | ..._meta, &mut nchunks, &float_scales)?; 
-ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
      |                                                                 ^^^^^
      |
      = note: character appears 4 more times
-help: Unicode character 'ฮ“รถร' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+help: Unicode character 'G๖ว' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
      |
 2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+&mut nchunks, &float_scales)?; G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
 2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร-----
+&mut nchunks, &float_scales)?; G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว-----
      |
 
 error: unknown start of token: \u{2500}
     --> src\kore_v2.rs:2481:165
      |
 2481 | ...meta, &mut nchunks, &float_scales)?; 
-ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
      |                                                                 ^^^^
      |
      = note: character appears 3 more times
-help: Unicode character 'ฮ“รถร' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+help: Unicode character 'G๖ว' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
      |
 2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+&mut nchunks, &float_scales)?; G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
 2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร----
+&mut nchunks, &float_scales)?; G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว----
      |
 
 error: unknown start of token: \u{2500}
     --> src\kore_v2.rs:2481:166
      |
 2481 | ...meta, &mut nchunks, &float_scales)?; 
-ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
      |                                                                  ^^^
      |
      = note: character appears 2 more times
-help: Unicode character 'ฮ“รถร' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+help: Unicode character 'G๖ว' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
      |
 2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+&mut nchunks, &float_scales)?; G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
 2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร---
+&mut nchunks, &float_scales)?; G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว---
      |
 
 error: unknown start of token: \u{2500}
     --> src\kore_v2.rs:2481:167
      |
 2481 | ...eta, &mut nchunks, &float_scales)?; 
-ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
      |                                                                  ^^
      |
      = note: character appears once more
-help: Unicode character 'ฮ“รถร' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+help: Unicode character 'G๖ว' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
      |
 2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+&mut nchunks, &float_scales)?; G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
 2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร--
+&mut nchunks, &float_scales)?; G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว--
      |
 
 error: unknown start of token: \u{2500}
     --> src\kore_v2.rs:2481:168
      |
 2481 | ...eta, &mut nchunks, &float_scales)?; 
-ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
      |                                                                   ^
      |
-help: Unicode character 'ฮ“รถร' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
+help: Unicode character 'G๖ว' (Box Drawings Light Horizontal) looks like '-' (Minus/Hyphen), but it is not
      |
 2481 -                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร
+&mut nchunks, &float_scales)?; G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว
 2481 +                 flush_chunk(&schema, &mut chunk_cols, &empty_dict, &mut bw, &mut file_offset, &mut all_meta, 
-&mut nchunks, &float_scales)?; ฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถรฮ“รถร-
+&mut nchunks, &float_scales)?; G๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖วG๖ว-
      |
 
 error: this file contains an unclosed delimiter

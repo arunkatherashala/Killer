@@ -83,7 +83,7 @@ print(format_result(processed))
 }
 
 import os
-os.chdir(r'c:\Users\skathera\Downloads\killer\native\killer_vm')
+os.chdir(r'<repo-root>\\native\killer_vm')
 
 print("=" * 70)
 print("KILLER: Unique Language - Supports BOTH Syntaxes")

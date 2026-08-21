@@ -14,7 +14,7 @@
 - **Filename:** `KILLER_COMPREHENSIVE_LEARNING_MANUAL_v4.2.docx`
 - **Format:** Microsoft Word (.docx)
 - **Status:** ✅ Ready for use
-- **Location:** `c:\Users\skathera\Downloads\killer_V2_RS_M11\`
+- **Location:** `<repo-root>\`
 
 ### Conversion Tools Created ✅
 1. **ConvertToWord.bat** - Windows batch launcher
@@ -92,7 +92,7 @@ The Word document includes:
 
 1. **Navigate to folder:**
    ```
-   c:\Users\skathera\Downloads\killer_V2_RS_M11\
+   <repo-root>\
    ```
 
 2. **Double-click:**

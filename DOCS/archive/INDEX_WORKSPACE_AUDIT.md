@@ -273,7 +273,7 @@ To get started, you have these files ready:
 4. ✅ **AUDIT_COMPLETE_DECISION_NEEDED.md** (Detailed summary)
 5. ✅ **INDEX_WORKSPACE_AUDIT.md** (This file - overview)
 
-**All files are in:** `c:\Users\skathera\Downloads\killer\`
+**All files are in:** `<repo-root>\\`
 
 ---
 

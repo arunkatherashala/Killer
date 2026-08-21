@@ -409,7 +409,7 @@ Marketing Materials:           Competitive data
 ## 📂 FILE STRUCTURE IN WORKSPACE
 
 ```
-c:\Users\skathera\Downloads\killer\
+<repo-root>\\
 ├── AI_FEATURES/                       (Feature implementations)
 │   ├── 001_ASYNC_AWAIT_IMPLEMENTATION.killer
 │   ├── 002_LLM_INTEGRATION.killer

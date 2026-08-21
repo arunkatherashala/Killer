@@ -44,7 +44,7 @@ Successfully designed, implemented, and validated a **comprehensive data quality
 
 **Test Results**: 16/16 PASSING ✅
 
-**Code**: `src/v2-rust/killer_vm/src/data_quality.rs` (Lines 1-450)
+**Code**: `src/v2-rust/killer/src/data_quality.rs` (Lines 1-450)
 
 ---
 
@@ -58,7 +58,7 @@ Successfully designed, implemented, and validated a **comprehensive data quality
 3. ✅ 18 comprehensive unit tests
 4. ✅ Real-world example patterns
 
-**Code**: `src/v2-rust/killer_vm/src/data_quality.rs` (Lines 270-520)
+**Code**: `src/v2-rust/killer/src/data_quality.rs` (Lines 270-520)
 
 **Test Results**: 18/18 PASSING ✅
 
@@ -81,7 +81,7 @@ Successfully designed, implemented, and validated a **comprehensive data quality
 2. ✅ 10 comprehensive unit tests
 3. ✅ Object mutation support
 
-**Code**: `src/v2-rust/killer_vm/src/data_quality.rs` (Lines 520-700)
+**Code**: `src/v2-rust/killer/src/data_quality.rs` (Lines 520-700)
 
 **Test Results**: 10/10 PASSING ✅
 
@@ -336,7 +336,7 @@ Success Rate: 100% ✅
 ### Code Organization
 
 ```
-src/v2-rust/killer_vm/src/data_quality.rs
+src/v2-rust/killer/src/data_quality.rs
 ├── Enums (4)
 │   ├── QualityLevel
 │   ├── Guarantee

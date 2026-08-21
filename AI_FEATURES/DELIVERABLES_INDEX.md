@@ -459,7 +459,7 @@ AI_FEATURES/
 - ✅ Unique capabilities (native AI types, consensus)
 - ✅ Production ready
 
-**All files are in:** `c:\Users\skathera\Downloads\killer\AI_FEATURES\`
+**All files are in:** `<repo-root>\\AI_FEATURES\`
 
 **Ready for:** Immediate production deployment
 

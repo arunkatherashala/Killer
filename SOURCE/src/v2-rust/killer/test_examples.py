@@ -3,7 +3,7 @@ import os
 import subprocess
 import sys
 
-os.chdir(r'c:\Users\skathera\Downloads\killer\native\killer_vm')
+os.chdir(r'<repo-root>\\native\killer_vm')
 
 # Recreate example files with proper encoding
 files = {

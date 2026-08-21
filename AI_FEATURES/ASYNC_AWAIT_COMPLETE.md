@@ -369,7 +369,7 @@ Based on 26-week v2.0 roadmap:
 ## FILES LOCATION
 
 ```
-C:\Users\skathera\Downloads\killer\AI_FEATURES\
+<repo-root>\\AI_FEATURES\
 ├── ASYNC_AWAIT_SPEC.md      (14 KB - complete specification)
 ├── async_await.killer        (8 KB - working implementation)
 └── test_async.killer         (completion summary)

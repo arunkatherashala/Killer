@@ -48,7 +48,7 @@
 ## CURRENT DIRECTORY STRUCTURE
 
 ```
-c:\Users\skathera\Downloads\killer_V2_RS_M11\
+<repo-root>\
 ├── projects/                                    ← NEW ORGANIZED STRUCTURE
 │   ├── computer-science/
 │   │   └── millennium_prize_1_p_vs_np/

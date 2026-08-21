@@ -46,7 +46,7 @@
 ### 4. WEEK 9: HTTP SERVER ✅
 **Files Created**:
 ```
-src/v2-rust/killer_vm/src/
+src/v2-rust/killer/src/
 ├── http_server.rs        (290 lines - Real TCP/HTTP implementation)
 ├── http_bindings.rs      (80 lines - Killer language bindings)
 └── lib.rs                (UPDATED - module declarations)

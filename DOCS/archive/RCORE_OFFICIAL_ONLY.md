@@ -35,7 +35,7 @@ Effective immediately, **Killer language uses rcore exclusively**:
 ## Workspace Structure
 
 ```
-killer_V2_RS_M11/
+<repo-root>/
 ├── SOURCE/src/v2-rust/killer_vm/    ← ONLY compilation target
 ├── _TOOLS/killer_rcore/              ← Runtime & stdlib
 └── (pcore references removed)

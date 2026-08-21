@@ -17,7 +17,7 @@ Successfully implemented and deployed a complete async/await runtime for the Kil
 
 ## What Was Built
 
-### 1. Core Async Runtime (`~/src/v2-rust/killer_vm/src/async_runtime.rs`)
+### 1. Core Async Runtime (`~/src/v2-rust/killer/src/async_runtime.rs`)
 
 **Lines of Code**: 600+  
 **Components**:
@@ -46,7 +46,7 @@ impl Future {
 }
 ```
 
-### 2. Async Database Operations (`~/src/v2-rust/killer_vm/src/async_database.rs`)
+### 2. Async Database Operations (`~/src/v2-rust/killer/src/async_database.rs`)
 
 **Lines of Code**: 350+  
 **Components**:
@@ -74,7 +74,7 @@ pub fn update_async(&self, table_name: &str, values: &str) -> Future
 pub fn delete_async(&self, table_name: &str, conditions: &str) -> Future
 ```
 
-### 3. Async HTTP Handlers (`~/src/v2-rust/killer_vm/src/async_http.rs`)
+### 3. Async HTTP Handlers (`~/src/v2-rust/killer/src/async_http.rs`)
 
 **Lines of Code**: 500+  
 **Components**:

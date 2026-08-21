@@ -157,7 +157,7 @@ pub struct AuditEntry {
 4. Implement validation engine
 5. Add 30+ unit tests
 
-**File**: `src/v2-rust/killer_vm/src/data_quality.rs`
+**File**: `src/v2-rust/killer/src/data_quality.rs`
 
 ### Phase 8.2: Validation Rules (Week 2)
 

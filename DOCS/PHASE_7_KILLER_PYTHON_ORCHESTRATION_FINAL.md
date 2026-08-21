@@ -101,7 +101,7 @@ timestamp,round,test_name,status,elapsed_ms,notes
 ### Run Phase 7 Orchestration
 
 ```bash
-cd c:\Users\skathera\Downloads\killer_V2_RS_M11
+cd <repo-root>
 python run_phase7_killer_orchestration.py
 ```
 

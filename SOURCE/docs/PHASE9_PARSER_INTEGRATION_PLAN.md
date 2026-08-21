@@ -26,7 +26,7 @@ graph LR
 ## Phase 9 Implementation Steps
 
 ### Step 1: Lexer Enhancement
-**File**: `src/v2-rust/killer_vm/src/lexer.rs`
+**File**: `src/v2-rust/killer/src/lexer.rs`
 
 #### 1.1 Add Quality Token to TokenKind enum
 
@@ -53,7 +53,7 @@ match word {
 ```
 
 ### Step 2: AST Enhancement
-**File**: `src/v2-rust/killer_vm/src/ast.rs`
+**File**: `src/v2-rust/killer/src/ast.rs`
 
 #### 2.1 Add Quality variant to Stmt enum
 
@@ -72,7 +72,7 @@ pub enum Stmt {
 ```
 
 ### Step 3: Parser Enhancement
-**File**: `src/v2-rust/killer_vm/src/parser.rs`
+**File**: `src/v2-rust/killer/src/parser.rs`
 
 #### 3.1 Update parse_statement to handle Quality
 
@@ -101,7 +101,7 @@ fn parse_quality(&mut self) -> Result<Stmt, String> {
 ```
 
 ### Step 4: Compiler Enhancement
-**File**: `src/v2-rust/killer_vm/src/compiler.rs`
+**File**: `src/v2-rust/killer/src/compiler.rs`
 
 #### 4.1 Add Quality statement compilation
 
@@ -145,7 +145,7 @@ pub enum Instruction {
 ```
 
 ### Step 5: VM Enhancement
-**File**: `src/v2-rust/killer_vm/src/vm.rs`
+**File**: `src/v2-rust/killer/src/vm.rs`
 
 #### 5.1 Add NewQuality instruction handler
 
@@ -165,7 +165,7 @@ Instruction::NewQuality => {
 
 #### 5.2 Add Quality type to Value enum
 
-Update `src/v2-rust/killer_vm/src/value.rs`:
+Update `src/v2-rust/killer/src/value.rs`:
 ```rust
 pub enum Value {
     Number(f64),
@@ -180,7 +180,7 @@ pub enum Value {
 ```
 
 ### Step 6: Method Call Resolution
-**File**: `src/v2-rust/killer_vm/src/vm.rs`
+**File**: `src/v2-rust/killer/src/vm.rs`
 
 #### 6.1 Add Quality methods to method dispatcher
 
@@ -367,12 +367,12 @@ print array.quality()   // Should print high score
 ## Notes for Developer
 
 ### Key Files to Modify
-1. `src/v2-rust/killer_vm/src/lexer.rs` - Add Quality token
-2. `src/v2-rust/killer_vm/src/ast.rs` - Add Stmt variant
-3. `src/v2-rust/killer_vm/src/parser.rs` - Parse quality syntax
-4. `src/v2-rust/killer_vm/src/value.rs` - Add QualityWrapped
-5. `src/v2-rust/killer_vm/src/compiler.rs` - Compile quality
-6. `src/v2-rust/killer_vm/src/vm.rs` - Execute quality
+1. `src/v2-rust/killer/src/lexer.rs` - Add Quality token
+2. `src/v2-rust/killer/src/ast.rs` - Add Stmt variant
+3. `src/v2-rust/killer/src/parser.rs` - Parse quality syntax
+4. `src/v2-rust/killer/src/value.rs` - Add QualityWrapped
+5. `src/v2-rust/killer/src/compiler.rs` - Compile quality
+6. `src/v2-rust/killer/src/vm.rs` - Execute quality
 
 ### Testing Points
 - After each step, verify compilation succeeds

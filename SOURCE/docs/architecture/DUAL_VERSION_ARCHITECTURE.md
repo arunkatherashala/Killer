@@ -67,7 +67,7 @@ python .\main.py program.killer
 **Developers/Contributors:** Can inspect both:
 - `killer-native.exe` for production use
 - `python main.py` for understanding the interpreter logic
-- `v2-rust/killer_vm/src/` for Rust VM implementation
+- `v2-rust/killer/src/` for Rust VM implementation
 
 ---
 

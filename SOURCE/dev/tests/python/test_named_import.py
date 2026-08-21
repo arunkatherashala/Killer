@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import sys
-sys.path.insert(0, r'c:\Users\skathera\Downloads\killer\src')
+sys.path.insert(0, r'<repo-root>\\src')
 
 from lexer import Lexer
 from parser import Parser, ImportStatement

@@ -157,7 +157,7 @@ Plus: _CLEANUP_BACKUP_20260320_181446/ (backup folder)
 
 ### Backup Information:
 ```
-Location: c:\Users\skathera\Downloads\killer\_CLEANUP_BACKUP_20260320_181446/
+Location: <repo-root>\\_CLEANUP_BACKUP_20260320_181446/
 Contents: 5 deleted files
 Restore Command: xcopy "_CLEANUP_BACKUP_*" "." /E /Y
 ```

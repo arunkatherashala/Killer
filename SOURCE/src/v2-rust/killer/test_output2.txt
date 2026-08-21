@@ -1,5 +1,5 @@
-﻿cargo :    Compiling killer-native v2.1.0 
-(C:\Users\skathera\Downloads\killer_V2_RS_M11\src\v2-rust\killer_vm)
+cargo :    Compiling killer-native v2.1.0 
+(<repo-root>\src\v2-rust\\killer)
 At line:1 char:1
 + cargo test --lib 2>&1 | Out-File test_output2.txt -Encoding UTF8; Get ...
 + ~~~~~~~~~~~~~~~~~~~~~

@@ -309,7 +309,7 @@ PHASE_2_1_SUMMARY.md                    (600+ lines) Phase 2.1 notes
 
 ### Source Code
 ```
-v2-rust/killer_vm/src/
+v2-rust/killer/src/
   ├── vm.rs                            (25+ functions)
   ├── parser.rs                        (updated builtins list)
   ├── lexer.rs                         (dual-syntax support)

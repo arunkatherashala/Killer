@@ -167,7 +167,7 @@ Status:            PRODUCTION READY
 
 ### Check everything works
 ```powershell
-cd c:\Users\skathera\Downloads\killer
+cd <windows-user>\\skathera\Downloads\killer
 cargo build --release   # Should compile fine
 cargo test              # Should pass 5,604+ tests
 ```

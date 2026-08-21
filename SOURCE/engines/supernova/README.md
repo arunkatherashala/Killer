@@ -31,7 +31,7 @@ The engine consists of **8 core actor systems**:
 
 ### Run the Engine
 ```bash
-C:\Users\skathera\Downloads\killer\production\m20\killer.exe SUPERNOVA_FULL_ENGINE.killer
+<repo-root>\\production\m20\killer.exe SUPERNOVA_FULL_ENGINE.killer
 ```
 
 ### Expected Output

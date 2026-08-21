@@ -8,8 +8,8 @@
 
 **Files to Modify**:
 ```
-src/v2-rust/killer_vm/src/runtime_optimization.rs
-src/v2-rust/killer_vm/src/executor.rs
+src/v2-rust/killer/src/runtime_optimization.rs
+src/v2-rust/killer/src/executor.rs
 ```
 
 **Code to Add** (approx 200-300 lines):
@@ -58,9 +58,9 @@ impl BasecodeJITCompiler {
 
 **Testing**:
 ```bash
-cd c:\Users\skathera\Downloads\killer_V2_RS_M11
+cd <repo-root>
 cargo build --release
-.\src\v2-rust\killer_vm\target\release\killer-native.exe .\benchmarks\arithmetic_bench.killer
+.\src\v2-rust\\killer\target\release\killer-native.exe .\benchmarks\arithmetic_bench.killer
 # Should show 3.2-5.4M ops/sec with JIT enabled
 ```
 
@@ -72,7 +72,7 @@ cargo build --release
 
 **Files to Modify**:
 ```
-src/v2-rust/killer_vm/src/runtime_optimization.rs
+src/v2-rust/killer/src/runtime_optimization.rs
 ```
 
 **Code to Add** (approx 150-200 lines):
@@ -116,7 +116,7 @@ impl ConstantFolder {
 
 **Files to Modify**:
 ```
-src/v2-rust/killer_vm/src/runtime_optimization.rs
+src/v2-rust/killer/src/runtime_optimization.rs
 ```
 
 **Code to Add** (approx 200-250 lines):
@@ -176,7 +176,7 @@ TOTAL IMPROVEMENT: 11-14x
 
 ### PHASE 20 BASELINE JIT (3-5 hours)
 ```
-File: src/v2-rust/killer_vm/src/runtime_optimization.rs
+File: src/v2-rust/killer/src/runtime_optimization.rs
 LOC: ~300 lines
 Result: 3-5x speedup (1.07M → 3.2-5.4M ops/sec) = BEATS PYTHON immediately ✅
 ```

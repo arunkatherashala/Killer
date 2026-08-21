@@ -52,7 +52,7 @@ Future handles are dictionaries with the following structure:
 
 ### 3. **Module Integration**
 
-**File modified**: `src/v2-rust/killer_vm/src/builtin.rs`
+**File modified**: `src/v2-rust/killer/src/builtin.rs`
 - Added 2 async functions to match statement (lines 103-105)
 - Implemented `async_spawn()` handler (40+ lines)
 - Implemented `async_await()` handler (40+ lines)

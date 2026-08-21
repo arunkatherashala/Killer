@@ -315,8 +315,8 @@ builder.select_agg(&[("COUNT(*)", "count"), ("SUM(total)", "sum")])
 
 ## Code Location
 
-**File**: [src/v2-rust/killer_vm/src/query_builder.rs](../../src/v2-rust/killer_vm/src/query_builder.rs)
-**Module registration**: [src/v2-rust/killer_vm/src/lib.rs](../../src/v2-rust/killer_vm/src/lib.rs) (line 66)
+**File**: [src/v2-rust/killer/src/query_builder.rs](../../src/v2-rust/killer/src/query_builder.rs)
+**Module registration**: [src/v2-rust/killer/src/lib.rs](../../src/v2-rust/killer/src/lib.rs) (line 66)
 **Tests**: Lines 300-450 (11 test cases)
 
 ## Summary

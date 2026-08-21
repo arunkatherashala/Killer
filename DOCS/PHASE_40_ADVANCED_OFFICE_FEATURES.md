@@ -3,7 +3,7 @@
 **Status:** ✅ **COMPLETE** (All 41 Tests Passing)  
 **Date:** March 19, 2026  
 **Build:** ✅ Clean Compilation  
-**Location:** `SOURCE/src/v2-rust/killer_vm/src/phase_40_advanced_office_features.rs`  
+**Location:** `SOURCE/src/v2-rust/killer/src/phase_40_advanced_office_features.rs`  
 
 ---
 
@@ -467,7 +467,7 @@ match formulas.add_sum("A1", vec![]) {
 
 **Compilation:**
 ```powershell
-cd SOURCE\src\v2-rust\killer_vm
+cd SOURCE\src\v2-rust\\killer
 cargo test phase_40 --lib
 ```
 
@@ -503,7 +503,7 @@ finished in 0.01s
 
 ✅ **Phase 40 is production-ready and fully tested!**
 
-For questions or enhancements, see the test suite in [phase_40_tests](PHASE_40_TESTS.md) or the implementation in [SOURCE/src/v2-rust/killer_vm/src/phase_40_advanced_office_features.rs](../../SOURCE/src/v2-rust/killer_vm/src/phase_40_advanced_office_features.rs).
+For questions or enhancements, see the test suite in [phase_40_tests](PHASE_40_TESTS.md) or the implementation in [SOURCE/src/v2-rust/killer/src/phase_40_advanced_office_features.rs](../../SOURCE/src/v2-rust/killer/src/phase_40_advanced_office_features.rs).
 
 ---
 

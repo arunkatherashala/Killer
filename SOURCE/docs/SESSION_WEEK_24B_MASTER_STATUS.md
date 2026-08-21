@@ -382,16 +382,16 @@ match Value {
 ## Files Modified This Session
 
 **Created (8):**
-- src/v2-rust/killer_vm/src/datetime.rs
-- src/v2-rust/killer_vm/src/http.rs
-- src/v2-rust/killer_vm/src/json_csv.rs
-- src/v2-rust/killer_vm/src/websocket.rs
+- src/v2-rust/killer/src/datetime.rs
+- src/v2-rust/killer/src/http.rs
+- src/v2-rust/killer/src/json_csv.rs
+- src/v2-rust/killer/src/websocket.rs
 - 13 example Killer programs
 - 4 completion documents
 
 **Modified (2):**
-- src/v2-rust/killer_vm/src/lib.rs (4 module declarations)
-- src/v2-rust/killer_vm/src/builtin.rs (19 registrations + implementations)
+- src/v2-rust/killer/src/lib.rs (4 module declarations)
+- src/v2-rust/killer/src/builtin.rs (19 registrations + implementations)
 
 ---
 

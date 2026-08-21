@@ -70,7 +70,7 @@
 
 ```
 KILLER v4.1+ Phase 43-49 Workspace
-├─ Source Code (killer_vm/src/)
+├─ Source Code (killer/src/)
 │  ├─ phase_43_template_caching.rs ................. 1,200 LOC ✅
 │  ├─ phase_44_collaboration.rs ................... Stub 🟡
 │  ├─ phase_45_reporting.rs ....................... Stub 🟡

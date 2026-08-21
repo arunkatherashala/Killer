@@ -21,7 +21,7 @@
 ## Module Quick Reference
 
 ### 1️⃣ Call Site Cache
-**File**: `src/v2-rust/killer_vm/src/call_site_cache.rs`
+**File**: `src/v2-rust/killer/src/call_site_cache.rs`
 
 ```rust
 let mut cache = CallSiteCache::new();
@@ -46,7 +46,7 @@ println!("Hit rate: {:.1}%", stats.overall_hit_rate);
 ---
 
 ### 2️⃣ Allocation Pool  
-**File**: `src/v2-rust/killer_vm/src/allocation_pool.rs`
+**File**: `src/v2-rust/killer/src/allocation_pool.rs`
 
 ```rust
 let mut pool = ValueBufferPool::new(8, 256);
@@ -71,7 +71,7 @@ if scope_cache.is_likely_local("x") {
 ---
 
 ### 3️⃣ Loop Pattern Detection
-**File**: `src/v2-rust/killer_vm/src/loop_pattern_detection.rs`
+**File**: `src/v2-rust/killer/src/loop_pattern_detection.rs`
 
 ```rust
 let mut detector = LoopPatternDetector::new();
@@ -98,7 +98,7 @@ for (id, strategy) in recs {
 ## Files Modified
 
 ### Library Registration
-**File**: `src/v2-rust/killer_vm/src/lib.rs`
+**File**: `src/v2-rust/killer/src/lib.rs`
 
 Added three new module declarations:
 ```rust

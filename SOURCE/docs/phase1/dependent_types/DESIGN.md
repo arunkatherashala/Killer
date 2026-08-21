@@ -331,7 +331,7 @@ docs/phase1/dependent_types/
       ├── arithmetic.killer
       └── error_cases.killer
 
-src/v2-rust/killer_vm/src/
+src/v2-rust/killer/src/
   ├── dependent_types.rs
   ├── constraint_solver.rs
   └── kind_checker.rs

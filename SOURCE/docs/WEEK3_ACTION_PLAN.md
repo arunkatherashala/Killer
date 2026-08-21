@@ -25,7 +25,7 @@ pub fn has_compiled_code(&self, loop_id: usize) -> bool {
 
 ### Step 2: Modify Jump Handler to Check for Compiled Code (30 mins)
 
-In `src/v2-rust/killer_vm/src/vm.rs`, replace the Jump handler:
+In `src/v2-rust/killer/src/vm.rs`, replace the Jump handler:
 
 ```rust
 Instruction::Jump(target) => {
@@ -89,12 +89,12 @@ Position: #2 🥈 (BEATS PYTHON!)
 ## 🔧 EXACT FILE LOCATIONS
 
 ```
-src/v2-rust/killer_vm/src/runtime_optimization.rs
+src/v2-rust/killer/src/runtime_optimization.rs
 ├─ Add to impl BasecodeJITCompiler:
 │  ├─ pub fn get_compiled_code(&self, loop_id: usize) -> Option<Vec<u8>>
 │  └─ pub fn has_compiled_code(&self, loop_id: usize) -> bool
 │
-src/v2-rust/killer_vm/src/vm.rs
+src/v2-rust/killer/src/vm.rs
 ├─ Modify Instruction::Jump handler
 │  └─ Check: self.baseline_jit.get_compiled_code(loop_id)
 │

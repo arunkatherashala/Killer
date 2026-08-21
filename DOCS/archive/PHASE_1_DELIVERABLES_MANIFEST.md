@@ -17,7 +17,7 @@
    ├─ 40+ embedded unit tests
    └─ Full backward compatibility
 
-   Location: c:\...\killer_V2_RS_M11\PARSER_V4_2_WITH_INDENTATION.rs
+   Location: c:\...\<repo-root>\PARSER_V4_2_WITH_INDENTATION.rs
    Status: ✅ Production ready
    Test Coverage: 98.1% (functions)
    Backward Compat: 100% verified
@@ -31,7 +31,7 @@
    ├─ Coverage: 96.2% average
    └─ Duration: 28.5 seconds
 
-   Location: c:\...\killer_V2_RS_M11\test_reports\phase1_batch2_results.json
+   Location: c:\...\<repo-root>\test_reports\phase1_batch2_results.json
    Status: ✅ All passing
 
 ✅ phase1_regression_checkpoint.json (10 tests)
@@ -39,7 +39,7 @@
    ├─ Coverage: representative sampling
    └─ Duration: 12.4 seconds
 
-   Location: c:\...\killer_V2_RS_M11\test_reports\phase1_regression_checkpoint.json
+   Location: c:\...\<repo-root>\test_reports\phase1_regression_checkpoint.json
    Status: ✅ All passing (100% backward compatible)
 
 ✅ phase1_full_regression_results.json (1,903 tests)
@@ -48,7 +48,7 @@
    ├─ Coverage: 99.8% (all categories)
    └─ Duration: 64.1 minutes
 
-   Location: c:\...\killer_V2_RS_M11\test_reports\phase1_full_regression_results.json
+   Location: c:\...\<repo-root>\test_reports\phase1_full_regression_results.json
    Status: ✅ All passing (100% backward compatible)
 ```
 
@@ -60,7 +60,7 @@
    ├─ Grammar rules
    └─ Implementation architecture
 
-   Location: c:\...\killer_V2_RS_M11\KILLER_HYBRID_INDENTATION_SPECIFICATION.md
+   Location: c:\...\<repo-root>\KILLER_HYBRID_INDENTATION_SPECIFICATION.md
    Status: ✅ Complete & approved
 
 ✅ KILLER_V4_2_INDENTATION_ROADMAP.md (300 lines)
@@ -69,7 +69,7 @@
    ├─ Milestones & deliverables
    └─ Success criteria
 
-   Location: c:\...\killer_V2_RS_M11\KILLER_V4_2_INDENTATION_ROADMAP.md
+   Location: c:\...\<repo-root>\KILLER_V4_2_INDENTATION_ROADMAP.md
    Status: ✅ Complete & on schedule
 
 ✅ KILLER_V4_2_COMPLETE_TEST_PLAN.md (600+ lines)
@@ -78,7 +78,7 @@
    ├─ Success metrics
    └─ CI/CD integration specs
 
-   Location: c:\...\killer_V2_RS_M11\KILLER_V4_2_COMPLETE_TEST_PLAN.md
+   Location: c:\...\<repo-root>\KILLER_V4_2_COMPLETE_TEST_PLAN.md
    Status: ✅ All tests implemented & passing
 ```
 
@@ -91,7 +91,7 @@
    ├─ Performance metrics
    └─ Risk assessment
 
-   Location: c:\...\killer_V2_RS_M11\DOCS\phase1_progress_checkpoint_16_30.md
+   Location: c:\...\<repo-root>\DOCS\phase1_progress_checkpoint_16_30.md
    Status: ✅ Detailed checkpoint report
 
 ✅ PHASE_1_CHECKPOINT_SUMMARY.md (800+ lines)
@@ -102,7 +102,7 @@
    ├─ Risk assessment
    └─ Continuation plan
 
-   Location: c:\...\killer_V2_RS_M11\DOCS\PHASE_1_CHECKPOINT_SUMMARY.md
+   Location: c:\...\<repo-root>\DOCS\PHASE_1_CHECKPOINT_SUMMARY.md
    Status: ✅ Major milestone report
 
 ✅ PHASE_1_COMPLETION_REPORT.md (1,000+ lines)
@@ -114,7 +114,7 @@
    ├─ Deployment readiness
    └─ Phase 2 kickoff planning
 
-   Location: c:\...\killer_V2_RS_M11\DOCS\PHASE_1_COMPLETION_REPORT.md
+   Location: c:\...\<repo-root>\DOCS\PHASE_1_COMPLETION_REPORT.md
    Status: ✅ Final completion report
 
 ✅ PHASE_1_FINAL_WRAP_UP.md (600+ lines)
@@ -126,7 +126,7 @@
    ├─ Phase 2 kickoff details
    └─ Sign-off
 
-   Location: c:\...\killer_V2_RS_M11\PHASE_1_FINAL_WRAP_UP.md
+   Location: c:\...\<repo-root>\PHASE_1_FINAL_WRAP_UP.md
    Status: ✅ Final wrap-up document
 
 ✅ PHASE_1_QUICK_REFERENCE.md
@@ -135,7 +135,7 @@
    ├─ Quick links
    └─ Status snapshot
 
-   Location: c:\...\killer_V2_RS_M11\PHASE_1_QUICK_REFERENCE.md
+   Location: c:\...\<repo-root>\PHASE_1_QUICK_REFERENCE.md
    Status: ✅ Quick reference card
 ```
 
@@ -150,7 +150,7 @@
    ├─ Dashboard & reporting
    └─ Performance monitoring
 
-   Location: c:\...\killer_V2_RS_M11\KILLER_V4_2_MERCURI_INTEGRATION.md
+   Location: c:\...\<repo-root>\KILLER_V4_2_MERCURI_INTEGRATION.md
    Status: ✅ Complete integration guide
 
 ✅ V4_2_IMPLEMENTATION_HANDOFF.md (400+ lines)
@@ -161,7 +161,7 @@
    ├─ Deployment strategy
    └─ Support & troubleshooting
 
-   Location: c:\...\killer_V2_RS_M11\V4_2_IMPLEMENTATION_HANDOFF.md
+   Location: c:\...\<repo-root>\V4_2_IMPLEMENTATION_HANDOFF.md
    Status: ✅ Complete handoff documentation
 
 ✅ IMPLEMENTATION_READY_SUMMARY.md (350+ lines)
@@ -172,7 +172,7 @@
    ├─ Next steps
    └─ Success factors
 
-   Location: c:\...\killer_V2_RS_M11\IMPLEMENTATION_READY_SUMMARY.md
+   Location: c:\...\<repo-root>\IMPLEMENTATION_READY_SUMMARY.md
    Status: ✅ Implementation summary
 ```
 
@@ -186,7 +186,7 @@
    ├─ Coverage thresholds
    └─ Report format settings
 
-   Location: c:\...\killer_V2_RS_M11\mercuri.config
+   Location: c:\...\<repo-root>\mercuri.config
    Status: ✅ Active configuration
 
 ✅ tests/mercuri.manifest
@@ -196,7 +196,7 @@
    ├─ Success criteria
    └─ Total test count: 1,943
 
-   Location: c:\...\killer_V2_RS_M11\tests\mercuri.manifest
+   Location: c:\...\<repo-root>\tests\mercuri.manifest
    Status: ✅ Active manifest
 ```
 
@@ -212,7 +212,7 @@
    ├─ Performance: 0.8% regression
    └─ Production Ready: Yes
 
-   Location: c:\...\killer_V2_RS_M11\DOCS\status\MASTER_KILLER_TRACKING.csv
+   Location: c:\...\<repo-root>\DOCS\status\MASTER_KILLER_TRACKING.csv
    Status: ✅ Updated & tracked
 
 ✅ Session Memory (phase_1_launch.md)
@@ -306,7 +306,7 @@ Feature Parity:           100% ✅
 ## 📂 COMPLETE FILE STRUCTURE
 
 ```
-killer_V2_RS_M11/
+<repo-root>/
 ├── PARSER_V4_2_WITH_INDENTATION.rs              ✅ (1,300 lines)
 ├── KILLER_HYBRID_INDENTATION_SPECIFICATION.md   ✅ (400 lines)
 ├── KILLER_V4_2_INDENTATION_ROADMAP.md           ✅ (300 lines)

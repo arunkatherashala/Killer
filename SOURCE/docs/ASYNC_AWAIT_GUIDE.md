@@ -340,7 +340,7 @@ println!("Pending: {}, Completed: {}, Failed: {}",
 ## Module Organization
 
 ```
-src/v2-rust/killer_vm/src/
+src/v2-rust/killer/src/
 ├── async_runtime.rs        # Futures, Promises, TaskScheduler, AsyncTask
 ├── async_database.rs       # Async DB operations, Connection pooling
 ├── async_http.rs          # HTTP Request/Response, Router, Middleware

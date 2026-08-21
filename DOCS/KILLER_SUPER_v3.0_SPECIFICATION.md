@@ -183,7 +183,7 @@ Exiting KILLER_SUPER. Goodbye!
 ## Technical Details
 
 ### File Location
-- **Source:** `SOURCE/src/v2-rust/killer_vm/src/bin/killer_super.rs` (190 lines)
+- **Source:** `SOURCE/src/v2-rust/killer/src/bin/killer_super.rs` (190 lines)
 - **Binary:** `target/debug/killer_super.exe` (225 KB)
 - **Part of:** Cargo workspace (`killer-native` package)
 
@@ -364,7 +364,7 @@ Related files:
 ### Common Issues
 
 **Q: Binary not found?**
-- Location: `c:\Users\skathera\Downloads\killer_V2_RS_M11\target\debug\killer_super.exe`
+- Location: `<repo-root>\target\debug\killer_super.exe`
 
 **Q: Menu not displaying?**
 - Ensure stdin is connected (not piped from /dev/null)

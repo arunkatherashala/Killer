@@ -37,16 +37,16 @@ TcpStream_close(stream: Dict) -> Null
 
 ### 2. **Module Structure**
 
-**File created**: `src/v2-rust/killer_vm/src/net.rs`
+**File created**: `src/v2-rust/killer/src/net.rs`
 - 200+ lines of socket wrapper structs
 - Full Rust implementation of KillerTcpListener and KillerTcpStream
 - Builtin function handlers stub (ready for integration)
 - Thread-safe access patterns using Arc<Mutex>
 
-**File modified**: `src/v2-rust/killer_vm/src/lib.rs`
+**File modified**: `src/v2-rust/killer/src/lib.rs`
 - Added network module declaration: `pub mod net;`
 
-**File modified**: `src/v2-rust/killer_vm/src/builtin.rs`
+**File modified**: `src/v2-rust/killer/src/builtin.rs`
 - Added 5 socket functions to match statement (88-93)
 - Implemented socket handlers (lines 1187-1277)
 
@@ -237,14 +237,14 @@ TcpStream_close(stream);  // Returns null
 
 ## Files Modified
 
-### src/v2-rust/killer_vm/src/lib.rs
+### src/v2-rust/killer/src/lib.rs
 ```diff
   pub mod builtin;
 + pub mod net;  // Network API (Week 2: TCP Sockets for HTTP support)
   pub mod objects;
 ```
 
-### src/v2-rust/killer_vm/src/builtin.rs
+### src/v2-rust/killer/src/builtin.rs
 ```diff
 - Added 5 socket functions to match statement
 - Added ~90 lines of implementation code
@@ -279,7 +279,7 @@ TcpStream_close(stream);  // Returns null
 
 ## References
 
-- **Socket API Spec**: net.rs (src/v2-rust/killer_vm/src/net.rs)
+- **Socket API Spec**: net.rs (src/v2-rust/killer/src/net.rs)
 - **HTTP Server Example**: examples/week21_02_http_server_v2.2.killer
 - **Previous Week 1**: WEEK1_IMPLEMENTATION_COMPLETE.md
 - **Implementation Roadmap**: docs/KILLER_IMPLEMENTATION_ROADMAP.md

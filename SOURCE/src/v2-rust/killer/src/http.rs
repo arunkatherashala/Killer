@@ -1,4 +1,4 @@
-// src/v2-rust/killer_vm/src/http.rs
+// src/v2-rust/killer/src/http.rs
 // HTTP module for Killer language
 // Provides HttpRequest, HttpResponse, and basic HTTP parsing
 

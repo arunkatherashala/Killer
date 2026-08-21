@@ -11,7 +11,7 @@
 ### ✅ IMPLEMENTED COMPONENTS
 
 #### 1. HotCodeDetector (95 lines)
-**Location**: `src/v2-rust/killer_vm/src/runtime_optimization.rs`
+**Location**: `src/v2-rust/killer/src/runtime_optimization.rs`
 
 ```rust
 pub struct HotCodeDetector {
@@ -32,7 +32,7 @@ pub struct HotCodeDetector {
 ---
 
 #### 2. BasecodeJITCompiler (110 lines)
-**Location**: `src/v2-rust/killer_vm/src/runtime_optimization.rs`
+**Location**: `src/v2-rust/killer/src/runtime_optimization.rs`
 
 ```rust
 pub struct BasecodeJITCompiler {
@@ -54,7 +54,7 @@ pub struct BasecodeJITCompiler {
 ---
 
 #### 3. JITEnabledOptimizer (70 lines)
-**Location**: `src/v2-rust/killer_vm/src/runtime_optimization.rs`
+**Location**: `src/v2-rust/killer/src/runtime_optimization.rs`
 
 ```rust
 pub struct JITEnabledOptimizer {
@@ -218,7 +218,7 @@ main loop:
 ## 📁 FILES MODIFIED
 
 ```
-src/v2-rust/killer_vm/src/runtime_optimization.rs
+src/v2-rust/killer/src/runtime_optimization.rs
 ├─ Added: HotCodeDetector struct (95 lines)
 ├─ Added: BasecodeJITCompiler struct (110 lines)
 ├─ Added: JITEnabledOptimizer struct (70 lines)

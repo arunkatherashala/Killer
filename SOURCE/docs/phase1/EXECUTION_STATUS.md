@@ -25,7 +25,7 @@
 | Directory structure | ✓ COMPLETE | All Phase 1 documentation folders created |
 
 **Files Created (Pre-Launch):**
-1. `src/v2-rust/killer_vm/src/phase1_markers.rs` (160+ lines)
+1. `src/v2-rust/killer/src/phase1_markers.rs` (160+ lines)
 2. `tests/phase1/phase1_all_features.killer` (130+ lines)
 
 **Files Created (Today):**
@@ -346,7 +346,7 @@ All design documents available in `docs/phase1/`:
 **Key Files**:
 - Roadmap: `docs/phase1/PHASE_1_ROADMAP.md`
 - Designs: `docs/phase1/{feature}/DESIGN.md`
-- Code: `src/v2-rust/killer_vm/src/phase1_*.rs`
+- Code: `src/v2-rust/killer/src/phase1_*.rs`
 - Tests: `tests/phase1/`
 
 **Team**: 3-4 engineers, 18 weeks

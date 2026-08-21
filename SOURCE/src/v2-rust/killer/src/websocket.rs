@@ -1,4 +1,4 @@
-// src/v2-rust/killer_vm/src/websocket.rs
+// src/v2-rust/killer/src/websocket.rs
 // WebSocket protocol support for Killer language
 // Provides real-time bidirectional communication
 

@@ -1,8 +1,8 @@
 # CSV to KORE-K converter
 # Converts test_data_100records.csv -> 1st_data.kore
 
-$csvPath  = "C:\Users\skathera\Downloads\test_data_100records.csv"
-$korePath = "C:\Users\skathera\Downloads\kore\1st_data.kore"
+$csvPath  = "<windows-user>\\skathera\Downloads\test_data_100records.csv"
+$korePath = "<windows-user>\\skathera\Downloads\kore\1st_data.kore"
 
 $lines  = Get-Content $csvPath -Encoding UTF8
 $header = $lines[0] -split ","

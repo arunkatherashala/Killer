@@ -72,21 +72,21 @@ All documentation for the performance optimization project is organized below. S
 ### For Each Module:
 
 #### 1. Call Site Cache
-**Module**: `src/v2-rust/killer_vm/src/call_site_cache.rs`
+**Module**: `src/v2-rust/killer/src/call_site_cache.rs`
 - 230 lines
 - 6 unit tests
 - Expected: 3-5% improvement
 - Best for: OOP-heavy code
 
 #### 2. Allocation Pool
-**Module**: `src/v2-rust/killer_vm/src/allocation_pool.rs`
+**Module**: `src/v2-rust/killer/src/allocation_pool.rs`
 - 300 lines
 - 8 unit tests
 - Expected: 2-3% improvement
 - Best for: Loop-heavy code
 
 #### 3. Loop Pattern Detection
-**Module**: `src/v2-rust/killer_vm/src/loop_pattern_detection.rs`
+**Module**: `src/v2-rust/killer/src/loop_pattern_detection.rs`
 - 380 lines
 - 7 unit tests
 - Expected: 5-10% improvement
@@ -163,7 +163,7 @@ Time:    118ms → 103ms
 
 ### Optimization Modules (3 files)
 ```
-src/v2-rust/killer_vm/src/
+src/v2-rust/killer/src/
   ├─ call_site_cache.rs           (230 lines, 3-5% gain)
   ├─ allocation_pool.rs           (300 lines, 2-3% gain)
   └─ loop_pattern_detection.rs    (380 lines, 5-10% gain)
@@ -171,7 +171,7 @@ src/v2-rust/killer_vm/src/
 
 ### VirtualMachine Changes (1 file)
 ```
-src/v2-rust/killer_vm/src/
+src/v2-rust/killer/src/
   └─ vm.rs                        (4 fields, 8 methods, ~50 lines)
 ```
 
@@ -212,9 +212,9 @@ cargo test --lib loop_pattern_detection
 ## 🎓 Learning Resources
 
 ### If you want to understand the optimizations:
-1. **Call Site Cache**: [call_site_cache.rs](src/v2-rust/killer_vm/src/call_site_cache.rs) - Read `impl CallSiteCache`
-2. **Allocation Pool**: [allocation_pool.rs](src/v2-rust/killer_vm/src/allocation_pool.rs) - Read `impl ValueBufferPool`
-3. **Loop Patterns**: [loop_pattern_detection.rs](src/v2-rust/killer_vm/src/loop_pattern_detection.rs) - Read `impl LoopPatternDetector`
+1. **Call Site Cache**: [call_site_cache.rs](src/v2-rust/killer/src/call_site_cache.rs) - Read `impl CallSiteCache`
+2. **Allocation Pool**: [allocation_pool.rs](src/v2-rust/killer/src/allocation_pool.rs) - Read `impl ValueBufferPool`
+3. **Loop Patterns**: [loop_pattern_detection.rs](src/v2-rust/killer/src/loop_pattern_detection.rs) - Read `impl LoopPatternDetector`
 
 ### If you want to integrate them:
 Start with [INSTRUCTION_INTEGRATION_ROADMAP.md](INSTRUCTION_INTEGRATION_ROADMAP.md) - it has all the code sketches

@@ -222,7 +222,7 @@ kfn run_mapreduce(data, num_partitions) {
 ### Priority 1: ADD TIMING API (1-2 days)
 **Killer Code Change Needed**:
 ```rust
-// Add to killer_vm/src/lib.rs
+// Add to killer/src/lib.rs
 fn system_time_ms() -> i64 {
     use std::time::SystemTime;
     SystemTime::now()
@@ -254,7 +254,7 @@ print("Elapsed: " + str(elapsed) + " ms")
 ### Priority 2: ADD SOCKET API (3-5 days)
 **Killer Code Change Needed**:
 ```rust
-// Add to killer_vm/src/builtins.rs
+// Add to killer/src/builtins.rs
 struct TcpListener {
     addr: String,
     port: u16,
@@ -295,7 +295,7 @@ connection.write(response)
 ### Priority 3: ADD THREAD SPAWNING (2-3 days)
 **Killer Code Change Needed**:
 ```rust
-// Add to killer_vm/src/builtins.rs
+// Add to killer/src/builtins.rs
 fn spawn_thread(closure_fn) -> ThreadHandle {
     std::thread::spawn(move || {
         // Execute killer function in new thread
@@ -327,7 +327,7 @@ join_thread(handle)
 ### Priority 4: ADD ASYNC/AWAIT RUNTIME (1-2 weeks)
 **Killer Code Change Needed**:
 ```rust
-// Add to killer_vm/src/async_runtime.rs
+// Add to killer/src/async_runtime.rs
 pub struct AsyncRuntime {
     // Tokio-based runtime
 }

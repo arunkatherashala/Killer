@@ -449,7 +449,7 @@ $total_hours = ($csv | Measure-Object -Sum Actual_Hours).Sum
 
 **Status:** ✅ **ALL TRACKING FILES CREATED AND MAINTAINED**
 
-**Location:** `c:\Users\skathera\Downloads\killer_V2_RS_M11\DOCS\status\`
+**Location:** `<repo-root>\DOCS\status\`
 
 **Total Files:** 9 (3 new, 6 existing)  
 **Total Documentation:** ~440 KB  

@@ -6,7 +6,7 @@
 ✅ KILLER_COMPREHENSIVE_LEARNING_MANUAL_v4.2.docx
    Created: March 20, 2026 @ 10:56:57
    Status: Ready for Use
-   Location: c:\Users\skathera\Downloads\killer_V2_RS_M11\
+   Location: <repo-root>\
 ```
 
 ---

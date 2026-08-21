@@ -246,7 +246,7 @@ killer --repl
 
 ### For Language Designers
 - Read [DUAL_SYNTAX_ARCHITECTURE.md](DUAL_SYNTAX_ARCHITECTURE.md)
-- Review Rust source code in `src/v2-rust/killer_vm/src/`
+- Review Rust source code in `src/v2-rust/killer/src/`
 - See how dual-syntax is implemented
 
 ---

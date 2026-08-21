@@ -332,7 +332,7 @@ Currently: Phase 10 (Encryption), Phase 21 (Audit) provide foundation
 - `KILLER_V2_PHASE_43-49_STATUS.csv` - Quick status
 - `KILLER_STATUS_TRACKER.csv` - Master tracker
 
-**Source Code:** `SOURCE\src\v2-rust\killer_vm\src\`
+**Source Code:** `SOURCE\src\v2-rust\\killer\src\`
 
 **Build Commands:**
 ```bash

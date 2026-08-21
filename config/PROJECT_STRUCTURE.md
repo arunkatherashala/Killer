@@ -13,7 +13,7 @@
 1. **Read the overview:** [DOCS/README.md](DOCS/README.md) or any `.md` in `DOCS/`
 2. **Check examples:** Look in `SOURCE/examples/` for `.killer` programs  
 3. **Build it:** `cargo build` (Cargo.toml at root)
-4. **View source:** `SOURCE/src/v2-rust/killer_vm/src/`
+4. **View source:** `SOURCE/src/v2-rust/killer/src/`
 
 ---
 
@@ -30,7 +30,7 @@ Cargo.lock          → Locked dependency versions
 ### **🟢 SOURCE/** (PRODUCTION CODE - All You Need)
 ```
 SOURCE/
-├── src/v2-rust/killer_vm/src/
+├── src/v2-rust/killer/src/
 │   ├── lib.rs                              ← Main library
 │   ├── phase_37_format_conversion.rs        ← Phase 37 implementation
 │   ├── phase_38_hybrid_type_inference.rs    ← Phase 38 implementation
@@ -146,7 +146,7 @@ target/
 ### Clone & Setup
 ```bash
 git clone <killer-repo>
-cd killer_V2_RS_M11
+cd <repo-root>
 cargo build              # Builds everything
 cargo test              # Runs tests
 ```
@@ -162,7 +162,7 @@ cd SOURCE/examples/
 # Check *.killer files for Killer language code
 
 # View source implementation
-cd SOURCE/src/v2-rust/killer_vm/src/
+cd SOURCE/src/v2-rust/killer/src/
 # Read phase_38_hybrid_type_inference.rs, etc.
 ```
 
@@ -189,7 +189,7 @@ python3 run_performance_test_full_load.py  # Any OS
 ## ❓ FAQ
 
 **Q: Where's the main code?**  
-A: `SOURCE/src/v2-rust/killer_vm/src/`
+A: `SOURCE/src/v2-rust/killer/src/`
 
 **Q: How do I build?**  
 A: `cargo build` (works because Cargo.toml is at root)

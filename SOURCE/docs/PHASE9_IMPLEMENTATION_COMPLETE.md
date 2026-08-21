@@ -170,7 +170,7 @@ Runtime (QualityWrapped values with all features)
 ## Files Changed Summary
 
 ```
-src/v2-rust/killer_vm/src/
+src/v2-rust/killer/src/
 ├── lexer.rs        [+2 lines]  - Quality token
 ├── ast.rs          [+4 lines]  - Quality statement
 ├── parser.rs       [+10 lines] - parse_quality()

@@ -2,7 +2,7 @@
 **Your Complete Handbook for Understanding & Using Killer**
 
 **Status:** ✅ Production Ready v4.1 | 42 Phases | 11,000+ Tests | 0 Errors  
-**Last Updated:** March 19, 2026 | **Location:** `c:\Users\skathera\Downloads\killer_V2_RS_M11`
+**Last Updated:** March 19, 2026 | **Location:** Repository root (dynamic path)
 
 ---
 
@@ -63,9 +63,9 @@ Located in `/DOCS/` directory:
 ## 🏗️ PROJECT STRUCTURE
 
 ```
-killer_V2_RS_M11/
+<repo-root>/
 ├── SOURCE/                          ← Source code
-│   └── src/v2-rust/killer_vm/src/   ← Main Rust implementation
+│   └── src/v2-rust/killer/src/      ← Main Rust implementation
 │       ├── lib.rs                   ← Module exports (100+ modules)
 │       ├── lexer.rs                 ← Tokenization (70+ token types)
 │       ├── parser.rs                ← AST construction
@@ -161,7 +161,7 @@ killer_V2_RS_M11/
 **Reading Order:**
 1. Quick Ref: `KILLER_STATUS_TRACKER.csv` (Find phase row)
 2. Phase Doc: `PHASE_42_ADVANCED_TEMPLATES.md` (Comprehensive guide)
-3. Source Code: `SOURCE/src/v2-rust/killer_vm/src/phase_42_*.rs` (Implementation)
+3. Source Code: `SOURCE/src/v2-rust/killer/src/phase_42_*.rs` (Implementation)
 4. Tests: Look in same file for test cases (examples of use)
 
 **Time commitment:** 30-60 minutes depending on complexity
@@ -194,7 +194,7 @@ killer_V2_RS_M11/
 **Reading Order:**
 1. Assassin Layer: `KILLER_COMPLETE_UNDERSTANDING_GUIDE.md` (Section 8)
 2. Security Stack: `KILLER_QUICK_REFERENCE.md` (Part 3: Security Features)
-3. Implementation: `SOURCE/src/v2-rust/killer_vm/src/seccomp.rs`
+3. Implementation: `SOURCE/src/v2-rust/killer/src/seccomp.rs`
 4. Use Cases: `KILLER_QUICK_REFERENCE.md` (Part 3: Use Cases)
 
 **Time commitment:** 30 minutes
@@ -254,7 +254,7 @@ killer_V2_RS_M11/
 ### **Advanced (2+ hours)**
 
 1. Clone/build from source
-2. Review phase implementations in `SOURCE/src/v2-rust/killer_vm/src/`
+2. Review phase implementations in `SOURCE/src/v2-rust/killer/src/`
 3. Study specific modules (actors, JIT, type system, etc.)
 4. Run test suite: `cargo test --lib`
 5. Read comprehensive architecture documentation
@@ -266,7 +266,8 @@ killer_V2_RS_M11/
 ### **Build & Test**
 
 ```powershell
-# From: C:\Users\skathera\Downloads\killer_V2_RS_M11\SOURCE\src\v2-rust\killer_vm
+# From repo root:
+cd SOURCE/src/v2-rust/killer
 
 # Full build
 cargo build --lib
@@ -294,10 +295,10 @@ cargo clippy --lib
 
 ```powershell
 # View status tracker
-Get-Content "c:\Users\skathera\Downloads\killer_V2_RS_M11\DOCS\status\KILLER_STATUS_TRACKER.csv" | head -50
+Get-Content "DOCS/status/KILLER_STATUS_TRACKER.csv" | Select-Object -First 50
 
 # Check recent logs
-Get-Content "c:\Users\skathera\Downloads\killer_V2_RS_M11\build_log.txt" | tail -100
+Get-Content "build_log.txt" | Select-Object -Last 100
 ```
 
 ---
@@ -448,7 +449,7 @@ A: Phase 39-42: XLSX (Excel), DOCX (Word), PDF. Plus 15+ other formats in Phase 
 | Status Tracker (CSV) | `/DOCS/status/KILLER_STATUS_TRACKER.csv` |
 | Status Tracker (Excel) | `/DOCS/status/KILLER_STATUS_TRACKER.xlsx` |
 | Phase 39+ Docs | `/DOCS/PHASE_*.md` |
-| Source Code | `/SOURCE/src/v2-rust/killer_vm/src/` |
+| Source Code | `/SOURCE/src/v2-rust/killer/src/` |
 | Tests | `/tests/` |
 
 ---

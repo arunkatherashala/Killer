@@ -296,14 +296,14 @@ let messages = [msg_1, msg_2, ..., msg_6]
 ## Files Modified/Created
 
 **New Files:**
-- `src/v2-rust/killer_vm/src/websocket.rs` (450+ lines)
+- `src/v2-rust/killer/src/websocket.rs` (450+ lines)
 - `examples/week24_04_websocket_basics.killer` (50 lines)
 - `examples/week24_05_websocket_server.killer` (70 lines)
 - `examples/week24_06_websocket_chat.killer` (110 lines)
 
 **Modified Files:**
-- `src/v2-rust/killer_vm/src/lib.rs` (added module declaration)
-- `src/v2-rust/killer_vm/src/builtin.rs` (added 6 function registrations + implementations)
+- `src/v2-rust/killer/src/lib.rs` (added module declaration)
+- `src/v2-rust/killer/src/builtin.rs` (added 6 function registrations + implementations)
 
 ---
 

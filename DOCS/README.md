@@ -1,4 +1,4 @@
-# Killer V2 - Clean Workspace Structure (March 17, 2026)
+# Killer V2 - Workspace Structure (Repository-Relative)
 
 ## 🎯 Current Project Status
 
@@ -9,7 +9,7 @@
 ## 📁 Workspace Structure
 
 ```
-killer_V2_RS_M11/
+<repo-root>/
 │
 ├── 🟦 _CURRENT_WORK/              [YOUR ACTIVE PROJECT]
 │   └── P_vs_NP_SOLUTION/          ✅ Proof publication
@@ -78,6 +78,8 @@ killer_V2_RS_M11/
 ---
 
 ## 🚀 Quick Start
+
+All paths below are repository-relative (dynamic), not absolute local-machine paths.
 
 ### For Week 1 (Publication Proof Extraction)
 

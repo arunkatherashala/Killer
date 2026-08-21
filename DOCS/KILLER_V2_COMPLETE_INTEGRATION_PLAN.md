@@ -330,7 +330,7 @@ KILLER v2.0 ARCHITECTURE:
 ## FILES & DIRECTORY STRUCTURE
 
 ```
-C:\Users\skathera\Downloads\killer\
+<repo-root>\\
 
 ├── SOURCE\
 │   ├── dbt\                     (Already built - production ready)

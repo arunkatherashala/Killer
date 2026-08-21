@@ -14,7 +14,7 @@
 **Windows:**
 ```powershell
 # Navigate to the Killer directory
-cd C:\Users\skathera\Downloads\killer
+cd <windows-user>\\skathera\Downloads\killer
 
 # Run the installer (no admin needed)
 .\killer-standalone-installer.bat
@@ -367,7 +367,7 @@ If something doesn't work, please provide:
 4. **Your system:**
    - OS: Windows 10/11, macOS, Linux
    - Python version (if relevant): `python --version`
-   - Installation path: `C:\Users\...\Killer` or `/usr/local/bin`
+   - Installation path: `<windows-user>\\...\Killer` or `/usr/local/bin`
 
 ---
 

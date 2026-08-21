@@ -1,7 +1,7 @@
 #!/usr/bin/env powershell
 # KILLER_SUPER v3.0 - Quick Performance Test
 
-$BinaryPath = "c:\Users\skathera\Downloads\killer_V2_RS_M11\target\debug\killer_super.exe"
+$BinaryPath = "<repo-root>\target\debug\killer_super.exe"
 $OutputFile = "KILLER_SUPER_PERF_RESULTS.txt"
 
 if (-not (Test-Path $BinaryPath)) {

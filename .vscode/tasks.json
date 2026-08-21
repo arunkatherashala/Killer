@@ -1,0 +1,16 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "killer-test-release-lib",
+			"type": "shell",
+			"command": "cargo",
+			"args": [
+				"test",
+				"--release",
+				"--lib"
+			],
+			"problemMatcher": []
+		}
+	]
+}

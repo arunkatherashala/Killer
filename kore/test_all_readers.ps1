@@ -1,5 +1,5 @@
 # KORE Reader Test Script — Run in PowerShell
-# cd C:\Users\skathera\Downloads\killer_M29\killer\kore
+# cd <repo-root>\kore
 # .\test_all_readers.ps1
 
 $ErrorActionPreference = "Continue"

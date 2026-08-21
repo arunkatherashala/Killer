@@ -300,7 +300,7 @@ $ curl -X DELETE http://localhost:8080/api/users/3
 
 ### File Structure
 ```
-src/v2-rust/killer_vm/src/
+src/v2-rust/killer/src/
 ├── http_server.rs        (NEW: TCP networking + HTTP protocol)
 ├── http_bindings.rs      (NEW: Killer language bindings)
 ├── web_framework.rs      (ENHANCED: with real networking)

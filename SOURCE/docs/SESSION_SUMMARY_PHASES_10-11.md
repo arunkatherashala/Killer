@@ -219,7 +219,7 @@ examples/
 ├── test_phase11_operators.killer        (operator tests)
 └── [others]
 
-src/v2-rust/killer_vm/src/
+src/v2-rust/killer/src/
 ├── vm.rs                                (Phase 11 additions)
 │   ├── Add instruction: Quality support
 │   ├── pop_number(): Auto-unwrap quality

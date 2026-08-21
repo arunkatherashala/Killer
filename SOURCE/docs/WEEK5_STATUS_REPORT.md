@@ -182,7 +182,7 @@ Day 4-5: Benchmark & Tune
 ```
 Killer V2 Week 5 Additions:
 
-src/v2-rust/killer_vm/src/
+src/v2-rust/killer/src/
 ├── native_codegen.rs              (450+ lines, 2 tests)
 ├── bytecode_specialization.rs      (350+ lines, 4 tests)
 ├── variable_caching.rs             (300+ lines, 6 tests)

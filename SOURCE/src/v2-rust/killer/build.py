@@ -2,11 +2,11 @@
 import subprocess
 import os
 
-os.chdir(r'c:\Users\skathera\Downloads\killer\native\killer_vm')
+os.chdir(r'<repo-root>\\native\killer_vm')
 
 print("Building Killer with dual-syntax support...")
 result = subprocess.run(
-    [r'C:\Users\skathera\.cargo\bin\cargo.exe', 'build', '--release'],
+    [r'<windows-user>\\skathera\.cargo\bin\cargo.exe', 'build', '--release'],
     capture_output=True,
     text=True,
     timeout=300

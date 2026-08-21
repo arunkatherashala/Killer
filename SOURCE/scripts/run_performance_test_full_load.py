@@ -36,7 +36,7 @@ def run_killer_test(test_code, test_name, timeout=KILLER_TIMEOUT):
         
         start_time = time.time()
         result = subprocess.run(
-            [r"C:\Users\skathera\Killer\killer.bat", temp_file],
+            [r"<repo-root>\\killer.bat", temp_file],
             capture_output=True,
             text=True,
             timeout=timeout

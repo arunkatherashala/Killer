@@ -1549,8 +1549,8 @@ impl VirtualMachine {
                     self.stack.push(Value::Tryte(ts));
                 }
                 Instruction::TritTensorMatMul => {
-                    let dst_col = match self.pop_value()? { Value::Number(n) => n as usize, _ => return Err(VmError::TypeError("expected number for col".to_string())) };
-                    let dst_row = match self.pop_value()? { Value::Number(n) => n as usize, _ => return Err(VmError::TypeError("expected number for row".to_string())) };
+                    let dst_col = match self.pop_value()? { Value::Number(n) => n as usize, _ => return Err(VmError::type_error("expected number for col", "Number", "NonNumber", None)) };
+                    let dst_row = match self.pop_value()? { Value::Number(n) => n as usize, _ => return Err(VmError::type_error("expected number for row", "Number", "NonNumber", None)) };
                     let b_tensor = self.pop_value()?;
                     let a_tensor = self.pop_value()?;
                     // Try to extract TritTensor refs; for now, just compute a dummy result

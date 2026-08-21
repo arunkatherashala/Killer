@@ -320,8 +320,8 @@ PASS RATE:            100% (0 failures)
 
 ### Directory Structure
 ```
-killer_V2_RS_M11/
-├── src/v2-rust/killer_vm/src/
+<repo-root>/
+├── src/v2-rust/killer/src/
 │   ├── lib.rs (main module exports)
 │   ├── math.rs (30+ functions)
 │   ├── string_utils.rs (25+ methods)

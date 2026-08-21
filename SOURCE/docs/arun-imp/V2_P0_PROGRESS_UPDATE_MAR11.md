@@ -6,8 +6,8 @@ Implemented first parser/VM patch wave for V2 based on parity failures.
 
 Files changed:
 
-- `src/v2-rust/killer_vm/src/parser.rs`
-- `src/v2-rust/killer_vm/src/vm.rs`
+- `src/v2-rust/killer/src/parser.rs`
+- `src/v2-rust/killer/src/vm.rs`
 
 ## What Was Fixed
 

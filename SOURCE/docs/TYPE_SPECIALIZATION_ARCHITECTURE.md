@@ -675,7 +675,7 @@ To improve type specialization:
 
 - [PERFORMANCE_OPTIMIZATION.md](../PERFORMANCE_OPTIMIZATION.md)
 - [NATIVE_COMPILATION_GUIDE.md](../NATIVE_COMPILATION_GUIDE.md)
-- [Source: rust_generator.rs](../../src/v2-rust/killer_vm/src/rust_generator.rs)
+- [Source: rust_generator.rs](../../src/v2-rust/killer/src/rust_generator.rs)
 
 ---
 

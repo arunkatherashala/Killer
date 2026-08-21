@@ -18,7 +18,7 @@ thread_sleep_ms(100)
 let elapsed = system_time_ms() - now
 ```
 
-**Implementation Location**: `src/v2-rust/killer_vm/src/builtins.rs`
+**Implementation Location**: `src/v2-rust/killer/src/builtins.rs`
 
 **Code to Add**:
 ```rust
@@ -120,11 +120,11 @@ let handle = spawn_thread(fn() {
 join_thread(handle)
 ```
 
-**Implementation Location**: `src/v2-rust/killer_vm/src/thread_runtime.rs` (NEW FILE)
+**Implementation Location**: `src/v2-rust/killer/src/thread_runtime.rs` (NEW FILE)
 
 **Code to Add**:
 ```rust
-// NEW FILE: src/v2-rust/killer_vm/src/thread_runtime.rs
+// NEW FILE: src/v2-rust/killer/src/thread_runtime.rs
 
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
@@ -194,11 +194,11 @@ connection.write(data)
 connection.close()
 ```
 
-**Implementation Location**: `src/v2-rust/killer_vm/src/net.rs` (NEW FILE)
+**Implementation Location**: `src/v2-rust/killer/src/net.rs` (NEW FILE)
 
 **Code to Add**:
 ```rust
-// NEW FILE: src/v2-rust/killer_vm/src/net.rs
+// NEW FILE: src/v2-rust/killer/src/net.rs
 
 use std::net::{TcpListener, TcpStream};
 use std::io::{Read, Write};

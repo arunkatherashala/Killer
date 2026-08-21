@@ -3,7 +3,7 @@
 **Status:** ✅ **COMPLETE** (All 36 Tests Passing)  
 **Date:** March 19, 2026  
 **Build:** ✅ Clean Compilation  
-**Location:** `SOURCE/src/v2-rust/killer_vm/src/phase_41_template_support.rs`  
+**Location:** `SOURCE/src/v2-rust/killer/src/phase_41_template_support.rs`  
 
 ---
 

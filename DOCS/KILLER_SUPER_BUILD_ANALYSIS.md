@@ -35,8 +35,8 @@ The Rust source code has 17 compilation errors requiring significant refactoring
 **1. Module Conflict (E0761)**
 ```
 file for module `type_specialization` found at both:
-  SOURCE\src\v2-rust\killer_vm\src\type_specialization.rs
-  SOURCE\src\v2-rust\killer_vm\src\type_specialization\mod.rs
+  SOURCE\src\v2-rust\\killer\src\type_specialization.rs
+  SOURCE\src\v2-rust\\killer\src\type_specialization\mod.rs
 ```
 **Fix Required**: Remove duplicate or consolidate module definition
 

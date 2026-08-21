@@ -11,13 +11,13 @@
 ### ✅ PHASE 1: VERIFY
 ```powershell
 # 1. Confirm engine source exists
-dir c:\Users\skathera\Downloads\killer\_CURRENT_WORK\SUPERNOVA_FULL_ENGINE.killer
+dir <repo-root>\\_CURRENT_WORK\SUPERNOVA_FULL_ENGINE.killer
 
 # 2. Confirm Killer v4.2 is ready
-dir c:\Users\skathera\Downloads\killer\production\m20\killer.exe
+dir <repo-root>\\production\m20\killer.exe
 
 # 3. Test runtime
-C:\Users\skathera\Downloads\killer\production\m20\killer.exe --version
+<repo-root>\\production\m20\killer.exe --version
 ```
 
 **Expected:** Both files exist, version shows.
@@ -27,8 +27,8 @@ C:\Users\skathera\Downloads\killer\production\m20\killer.exe --version
 ### ✅ PHASE 2: RUN ENGINE
 ```powershell
 # Single execution (test)
-cd c:\Users\skathera\Downloads\killer\_CURRENT_WORK
-C:\Users\skathera\Downloads\killer\production\m20\killer.exe SUPERNOVA_FULL_ENGINE.killer
+cd <repo-root>\\_CURRENT_WORK
+<repo-root>\\production\m20\killer.exe SUPERNOVA_FULL_ENGINE.killer
 ```
 
 **Expected:** Engine boots, shows 8 systems online, enters command loop.
@@ -38,8 +38,8 @@ C:\Users\skathera\Downloads\killer\production\m20\killer.exe SUPERNOVA_FULL_ENGI
 ### ✅ PHASE 3: SCALE TESTING
 ```powershell
 # Twin instance test
-Start-Job { C:\Users\skathera\Downloads\killer\production\m20\killer.exe SUPERNOVA_FULL_ENGINE.killer }
-Start-Job { C:\Users\skathera\Downloads\killer\production\m20\killer.exe SUPERNOVA_FULL_ENGINE.killer }
+Start-Job { <repo-root>\\production\m20\killer.exe SUPERNOVA_FULL_ENGINE.killer }
+Start-Job { <repo-root>\\production\m20\killer.exe SUPERNOVA_FULL_ENGINE.killer }
 
 # Show jobs
 Get-Job
@@ -54,10 +54,10 @@ Get-Job
 ### ✅ PHASE 4: PERFORMANCE VALIDATION
 ```powershell
 # Run benchmark alongside engine
-Start-Job { C:\Users\skathera\Downloads\killer\production\m20\killer.exe KILLER_COMPREHENSIVE_BENCHMARK.killer }
+Start-Job { <repo-root>\\production\m20\killer.exe KILLER_COMPREHENSIVE_BENCHMARK.killer }
 
 # In another terminal
-C:\Users\skathera\Downloads\killer\production\m20\killer.exe SUPERNOVA_FULL_ENGINE.killer
+<repo-root>\\production\m20\killer.exe SUPERNOVA_FULL_ENGINE.killer
 
 # Compare outputs
 ```
@@ -233,10 +233,10 @@ Once running, engine listens for:
 **Engine won't start?**
 ```powershell
 # Check Killer binary
-C:\Users\skathera\Downloads\killer\production\m20\killer.exe --version
+<repo-root>\\production\m20\killer.exe --version
 
 # Check file exists
-Test-Path c:\Users\skathera\Downloads\killer\_CURRENT_WORK\SUPERNOVA_FULL_ENGINE.killer
+Test-Path <repo-root>\\_CURRENT_WORK\SUPERNOVA_FULL_ENGINE.killer
 ```
 
 **Stuck on initialization?**

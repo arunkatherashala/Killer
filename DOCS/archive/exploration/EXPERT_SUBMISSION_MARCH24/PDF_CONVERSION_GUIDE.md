@@ -21,7 +21,7 @@
 
 ### Method 2: Python Conversion (Alt)
 ```powershell
-cd c:\Users\skathera\Downloads\killer_V2_RS_M11
+cd <repo-root>
 python convert_to_pdf.py
 ```
 
@@ -129,7 +129,7 @@ pandoc P_vs_NP_PROOF_FINAL_MARCH2026.md -o P_vs_NP_PROOF_FINAL_MARCH2026.pdf
 
 **Step 1: Open HTML in Browser**
 ```powershell
-cd c:\Users\skathera\Downloads\killer_V2_RS_M11\EXPERT_SUBMISSION_MARCH24
+cd <repo-root>\EXPERT_SUBMISSION_MARCH24
 start P_vs_NP_PROOF_FINAL_MARCH2026.html
 ```
 (File opens in default browser)

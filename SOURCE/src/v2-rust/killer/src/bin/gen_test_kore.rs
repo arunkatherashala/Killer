@@ -1,4 +1,4 @@
-﻿use killer_native::kore_v2::*;
+use killer_native::kore_v2::*;
 
 fn main() {
     let columns = vec![
@@ -14,7 +14,7 @@ fn main() {
         vec![KVal::Int(4), KVal::Str("Carol".into()), KVal::Float(78.9), KVal::Bool(true)],
         vec![KVal::Int(5), KVal::Str("Bob".into()),   KVal::Float(91.0), KVal::Bool(false)],
     ];
-    let path = r"C:\Users\skathera\Downloads\proof\test_v2.kore";
+    let path = r"<windows-user>\\skathera\Downloads\proof\test_v2.kore";
     let writer = KoreWriter::new(columns);
     match writer.write(path, &rows) {
         Ok(sz) => println!("Wrote {} bytes to {}", sz, path),

@@ -181,7 +181,7 @@
 
 ## 📋 BUILD INFORMATION
 
-**Source Directory:** `C:\Users\skathera\Downloads\killer_V2_RS_M11\SOURCE\src\v2-rust\killer_vm`
+**Source Directory:** `<repo-root>\SOURCE\src\v2-rust\\killer`
 
 **New Files Created:**
 - `phase_43_template_caching.rs` (1,200 LOC)

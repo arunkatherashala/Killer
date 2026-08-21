@@ -310,7 +310,7 @@ Next opportunities:
 
 ### In This Repository
 - [/examples/](examples/) - Sample Killer programs (all compile natively!)
-- [/src/v2-rust/killer_vm/src/rust_generator.rs](src/v2-rust/killer_vm/src/rust_generator.rs) - Source code
+- [/src/v2-rust/killer/src/rust_generator.rs](src/v2-rust/killer/src/rust_generator.rs) - Source code
 - [/docs/project/](docs/project/) - Project documentation
 
 ### External Resources

@@ -165,9 +165,6 @@ pub mod killer_improve;
 // AI/ML Engine — native Rust primitives & demos (math, classical ML, NN building blocks, NLP, tabular RL, agents, etc.) — not a full PyTorch-scale stack; AGI/ASI are not here
 pub mod ml_module;
 
-// Nova Galaxy Engine v1 — HTTP Client (http_get, http_post, http_post_json, http_head, http_status, http_download)
-pub mod http_client;
-
 // Nova Galaxy Engine v1 — Vector Memory (TF-IDF embeddings, cosine similarity, KhLM auto-recall)
 pub mod vector_memory;
 

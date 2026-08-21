@@ -183,7 +183,7 @@ def markdown_to_pdf(md_file, pdf_file):
 
 if __name__ == '__main__':
     # Get the paths
-    workspace = Path('c:/Users/skathera/Downloads/killer_V2_RS_M11')
+    workspace = Path('c:/Users/skathera/Downloads/<repo-root>')
     md_file = workspace / 'EXPERT_SUBMISSION_MARCH24' / 'P_vs_NP_PROOF_FINAL_MARCH2026.md'
     pdf_file = workspace / 'EXPERT_SUBMISSION_MARCH24' / 'P_vs_NP_PROOF_FINAL_MARCH2026.pdf'
     

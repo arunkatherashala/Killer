@@ -430,10 +430,10 @@ RESOURCE SUMMARY
 ================================================================================
 
 Workspace Location:
-C:\Users\skathera\Downloads\killer_V2_RS_M11
+<repo-root>
 
 Key Directories:
-- SOURCE/src/v2-rust/killer_vm/src/    (Source code - 100+ modules)
+- SOURCE/src/v2-rust/killer/src/    (Source code - 100+ modules)
 - DOCS/                                  (Documentation)
 - DOCS/status/                           (Status tracking - THIS FILE)
 - tests/                                 (Test suite)

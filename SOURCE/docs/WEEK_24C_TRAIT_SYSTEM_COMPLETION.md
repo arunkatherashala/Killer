@@ -331,14 +331,14 @@ fn generic_process<T: Display + Cloneable>(obj: T) {
 ## Files Modified/Created
 
 **New Files:**
-- `src/v2-rust/killer_vm/src/trait_system.rs` (450+ lines)
+- `src/v2-rust/killer/src/trait_system.rs` (450+ lines)
 - `examples/week24_07_trait_basics.killer` (55 lines)
 - `examples/week24_08_trait_polymorphism.killer` (70 lines)
 - `examples/week24_09_trait_objects.killer` (110 lines)
 
 **Modified Files:**
-- `src/v2-rust/killer_vm/src/lib.rs` (added module declaration)
-- `src/v2-rust/killer_vm/src/builtin.rs` (added 4 function registrations + implementations)
+- `src/v2-rust/killer/src/lib.rs` (added module declaration)
+- `src/v2-rust/killer/src/builtin.rs` (added 4 function registrations + implementations)
 
 ---
 

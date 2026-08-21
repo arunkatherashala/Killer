@@ -11,7 +11,7 @@
 ### ✅ INTEGRATION COMPLETE
 
 #### 1. VirtualMachine JIT Integration
-**Files Modified**: `src/v2-rust/killer_vm/src/vm.rs`
+**Files Modified**: `src/v2-rust/killer/src/vm.rs`
 
 **Changes Made**:
 ```
@@ -25,7 +25,7 @@
 ```
 
 #### 2. Default Implementations
-**Files Modified**: `src/v2-rust/killer_vm/src/runtime_optimization.rs`
+**Files Modified**: `src/v2-rust/killer/src/runtime_optimization.rs`
 
 **Changes Made**:
 ```
@@ -212,7 +212,7 @@ Hot Detection Implementation:
 **Expected Gain**: 3-5x speedup immediately
 
 **Code Location**:
-- File: `src/v2-rust/killer_vm/src/vm.rs`
+- File: `src/v2-rust/killer/src/vm.rs`
 - Modify: Jump and JumpIfFalse handlers
 - Add: Compiled code execution logic
 - Time: 2-3 hours

@@ -16,7 +16,7 @@ Three complementary performance optimization modules have been integrated into t
 
 ## 1. Instruction Caching (~5x speedup)
 
-**File**: `src/v2-rust/killer_vm/src/instruction_cache.rs` (140 lines)
+**File**: `src/v2-rust/killer/src/instruction_cache.rs` (140 lines)
 
 ### Purpose
 Pre-decodes and caches frequently used bytecode instructions into optimized form, eliminating dispatch overhead during execution.
@@ -56,7 +56,7 @@ pub enum CachedInstruction {
 
 ## 2. JIT Compilation (~10x speedup)
 
-**File**: `src/v2-rust/killer_vm/src/jit_compiler.rs` (180 lines)
+**File**: `src/v2-rust/killer/src/jit_compiler.rs` (180 lines)
 
 ### Purpose
 Compiles hot bytecode paths to native Rust closures, eliminating interpreter overhead for frequently executed code sections.
@@ -104,7 +104,7 @@ Math:         ConstNum(a) -> ConstNum(b) -> Mul -> Pop
 
 ## 3. SIMD Array Operations (~2-4x speedup)
 
-**File**: `src/v2-rust/killer_vm/src/simd_ops.rs` (280 lines)
+**File**: `src/v2-rust/killer/src/simd_ops.rs` (280 lines)
 
 ### Purpose
 Auto-vectorizable implementations of array operations that allow LLVM to generate SIMD instructions.

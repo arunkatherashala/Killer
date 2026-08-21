@@ -108,7 +108,7 @@ Output displayed to console
 # Linux: apt-get install build-essential
 
 # Step 2: Compile killer to native executable
-cd c:\Users\skathera\Downloads\killer
+cd <windows-user>\\skathera\Downloads\killer
 python killer_bootstrap.py killer.killer -o killer.exe
 
 # Step 3: Verify

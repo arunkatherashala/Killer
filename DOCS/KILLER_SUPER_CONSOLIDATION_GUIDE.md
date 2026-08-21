@@ -124,7 +124,7 @@ Alternative names considered (not used):
 
 ### Run Immediately
 ```powershell
-cd "c:\Users\skathera\Downloads\killer_V2_RS_M11"
+cd "<repo-root>"
 .\target\debug\killer_super.exe
 ```
 

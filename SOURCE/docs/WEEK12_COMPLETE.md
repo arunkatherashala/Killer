@@ -33,7 +33,7 @@
 ## Component 1: Database Abstraction Layer
 
 ### File Info
-- **Path**: [src/v2-rust/killer_vm/src/database.rs](../../src/v2-rust/killer_vm/src/database.rs)
+- **Path**: [src/v2-rust/killer/src/database.rs](../../src/v2-rust/killer/src/database.rs)
 - **Size**: 600+ lines
 - **Tests**: 10+ unit tests
 - **Build**: ✅ Compiles cleanly (9.25s)
@@ -132,7 +132,7 @@ conn.delete(&table, "id = :id", &params)?;
 ## Component 2: Query Builder
 
 ### File Info
-- **Path**: [src/v2-rust/killer_vm/src/query_builder.rs](../../src/v2-rust/killer_vm/src/query_builder.rs)
+- **Path**: [src/v2-rust/killer/src/query_builder.rs](../../src/v2-rust/killer/src/query_builder.rs)
 - **Size**: 450+ lines
 - **Tests**: 11 unit tests
 - **Build**: ✅ Compiles cleanly (9.25s)
@@ -203,7 +203,7 @@ DELETE FROM users WHERE id = :user_id AND created_at < :before
 ## Component 3: ORM Helpers
 
 ### File Info
-- **Path**: [src/v2-rust/killer_vm/src/orm_helpers.rs](../../src/v2-rust/killer_vm/src/orm_helpers.rs)
+- **Path**: [src/v2-rust/killer/src/orm_helpers.rs](../../src/v2-rust/killer/src/orm_helpers.rs)
 - **Size**: 500+ lines
 - **Tests**: 9 unit tests
 - **Build**: ✅ Compiles cleanly (11.05s)
@@ -410,7 +410,7 @@ let delete = DeleteBuilder::from("users")
 ## Code Organization
 
 ```
-src/v2-rust/killer_vm/src/
+src/v2-rust/killer/src/
 ├── database.rs          (600 lines) - CRUD abstraction layer
 ├── query_builder.rs     (450 lines) - Fluent SQL builder
 ├── orm_helpers.rs       (500 lines) - Entity mapping & repositories

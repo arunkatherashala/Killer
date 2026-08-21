@@ -18,7 +18,7 @@ param(
 )
 
 # Configuration
-$BinaryPath = "c:\Users\skathera\Downloads\killer_V2_RS_M11\target\debug\killer_super.exe"
+$BinaryPath = "<repo-root>\target\debug\killer_super.exe"
 $OutputFile = "KILLER_SUPER_PERFORMANCE_RESULTS_$(Get-Date -Format 'yyyyMMdd_HHmmss').txt"
 $Modes = @(1, 2, 3, 4, 5, 6)  # All 6 agent modes
 

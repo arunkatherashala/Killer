@@ -12,7 +12,7 @@
 - **KILLER_SUPER_BENCHMARK_RESULTS.md** — Performance validation with measured metrics
 
 ### 2. Implementation Files
-- **SOURCE/src/v2-rust/killer_vm/src/super_processor.rs** — Core SuperProcessor (500+ lines, fully optimized)
+- **SOURCE/src/v2-rust/killer/src/super_processor.rs** — Core SuperProcessor (500+ lines, fully optimized)
 - **SOURCE/src/v2-rust/killer_vm/tests/superprocessor_real_world_tests.rs** — 6 comprehensive test scenarios
 - **_TOOLS/killer_rcore/src/bin/killer_super.rs** — CLI compiler integration
 

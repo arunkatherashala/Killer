@@ -22,9 +22,9 @@ Layout:
 import struct, os, re, gzip, lzma
 import pandas as pd
 
-CSV_PATH   = r"C:\Users\skathera\Downloads\test_data_100records.csv"
-KOREB_PATH = r"C:\Users\skathera\Downloads\kore\1st_data_bin.kore"
-KOREBZ_PATH= r"C:\Users\skathera\Downloads\kore\1st_data_bin.kore.gz"
+CSV_PATH   = r"<windows-user>\\skathera\Downloads\test_data_100records.csv"
+KOREB_PATH = r"<windows-user>\\skathera\Downloads\kore\1st_data_bin.kore"
+KOREBZ_PATH= r"<windows-user>\\skathera\Downloads\kore\1st_data_bin.kore.gz"
 
 MAGIC = b'KORE'
 MODE  = b'B'   # 'B' = binary mode  (text mode files start with 'KORE-K')
@@ -245,16 +245,16 @@ with gzip.open(KOREBZ_PATH, 'wb', compresslevel=9) as f:
     f.write(out)
 
 # Also write lzma on text v2
-v2_text = open(r'C:\Users\skathera\Downloads\kore\1st_data_v2.kore','rb').read()
-lzma_path = r'C:\Users\skathera\Downloads\kore\1st_data_v2.kore.xz'
+v2_text = open(r'<windows-user>\\skathera\Downloads\kore\1st_data_v2.kore','rb').read()
+lzma_path = r'<windows-user>\\skathera\Downloads\kore\1st_data_v2.kore.xz'
 with lzma.open(lzma_path, 'wb', preset=6) as f:
     f.write(v2_text)
 
 # Stats
 csv_sz  = os.path.getsize(CSV_PATH)
-v1_sz   = os.path.getsize(r'C:\Users\skathera\Downloads\kore\1st_data.kore')
-v2_sz   = os.path.getsize(r'C:\Users\skathera\Downloads\kore\1st_data_v2.kore')
-pq_sz   = os.path.getsize(r'C:\Users\skathera\Downloads\kore\1st_data.parquet')
+v1_sz   = os.path.getsize(r'<windows-user>\\skathera\Downloads\kore\1st_data.kore')
+v2_sz   = os.path.getsize(r'<windows-user>\\skathera\Downloads\kore\1st_data_v2.kore')
+pq_sz   = os.path.getsize(r'<windows-user>\\skathera\Downloads\kore\1st_data.parquet')
 koreb_sz = os.path.getsize(KOREB_PATH)
 korebz_sz= os.path.getsize(KOREBZ_PATH)
 v2xz_sz  = os.path.getsize(lzma_path)

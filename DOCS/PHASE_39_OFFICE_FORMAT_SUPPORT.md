@@ -116,7 +116,7 @@ run (webpage.html).to.(webpage.docx)
 
 ### File Location:
 ```
-SOURCE/src/v2-rust/killer_vm/src/phase_39_office_format_support.rs
+SOURCE/src/v2-rust/killer/src/phase_39_office_format_support.rs
 ```
 
 ### Module Exports:

@@ -276,7 +276,7 @@ Next Version:            v1.1 (when needed)
 
 ## 📂 FILE ORGANIZATION
 
-### Location: C:\Users\skathera\Downloads\killer_V2_RS_M11\
+### Location: <repo-root>\
 
 ### Test Programs
 ```
@@ -332,7 +332,7 @@ Status:                  ✅ PRODUCTION READY
 .\production\killer.exe program.killer
 
 # Or with full path:
-C:\Users\skathera\Downloads\killer_V2_RS_M11\production\killer.exe program.killer
+<repo-root>\production\killer.exe program.killer
 ```
 
 ### What to Check

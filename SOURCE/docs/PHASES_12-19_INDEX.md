@@ -11,7 +11,7 @@
 ---
 
 ## Phase 12: Operator Overloading
-**Path**: `/src/v2-rust/killer_vm/src/vm.rs` (operator methods section)
+**Path**: `/src/v2-rust/killer/src/vm.rs` (operator methods section)
 **Documentation**: Inline in source code
 **Tests**: `test_phase12_overloads.killer`
 
@@ -25,7 +25,7 @@
 ---
 
 ## Phase 16: Ghost Layer - Hot Paths, Type Specialization, JIT
-**Path**: `/src/v2-rust/killer_vm/src/`
+**Path**: `/src/v2-rust/killer/src/`
 - `hot_path_detector.rs` (150 lines)
 - `type_specializer.rs` (160 lines)
 - `jit_engine.rs` (190 lines)
@@ -47,7 +47,7 @@
 ---
 
 ## Phase 17: Adaptive Compilation + Memoization
-**Path**: `/src/v2-rust/killer_vm/src/`
+**Path**: `/src/v2-rust/killer/src/`
 - `memoization.rs` (200 lines)
 - `adaptive_compiler.rs` (180 lines)
 
@@ -68,7 +68,7 @@
 ---
 
 ## Phase 18: Profile-Guided Optimization (PGO)
-**Path**: `/src/v2-rust/killer_vm/src/pgo_engine.rs` (220 lines)
+**Path**: `/src/v2-rust/killer/src/pgo_engine.rs` (220 lines)
 
 **Documentation**: [PHASE_18_PGO.md](PHASE_18_PGO.md)
 **Tests**: `test_phase18_pgo.killer` - ✅ All passing
@@ -88,7 +88,7 @@
 ---
 
 ## Phase 19: Assassin Layer - Complete Security ✨
-**Path**: `/src/v2-rust/killer_vm/src/`
+**Path**: `/src/v2-rust/killer/src/`
 - `seccomp.rs` (270 lines) - Syscall filtering
 - `cgroups.rs` (240 lines) - Resource limiting
 - `ptrace_audit.rs` (250 lines) - Syscall auditing
@@ -182,7 +182,7 @@ Release Build:  42.82 seconds ✅
 
 ### Module Registration
 ```rust
-// In src/v2-rust/killer_vm/src/lib.rs
+// In src/v2-rust/killer/src/lib.rs
 pub mod hot_path_detector;    // Phase 16
 pub mod type_specializer;     // Phase 16
 pub mod jit_engine;           // Phase 16
@@ -211,7 +211,7 @@ pub mod ptrace_audit;         // Phase 19
 
 ### Source Code
 ```
-/src/v2-rust/killer_vm/src/
+/src/v2-rust/killer/src/
 ├── hot_path_detector.rs    (150 lines, Phase 16)
 ├── type_specializer.rs     (160 lines, Phase 16)
 ├── jit_engine.rs           (190 lines, Phase 16)

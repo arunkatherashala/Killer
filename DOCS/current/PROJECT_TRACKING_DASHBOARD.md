@@ -203,7 +203,7 @@ Goal: April 15, 2026:     🎯 v2.0 with additional features
 
 **Primary Tracking File:**
 ```
-c:\Users\skathera\Downloads\killer\MASTER_KILLER_TRACKING_ENHANCED.csv
+<repo-root>\\MASTER_KILLER_TRACKING_ENHANCED.csv
 ```
 
 **Columns to Track:**

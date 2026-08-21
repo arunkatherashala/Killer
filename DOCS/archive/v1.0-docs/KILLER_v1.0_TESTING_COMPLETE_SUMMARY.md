@@ -370,7 +370,7 @@ Reports:        8 comprehensive documentation files - FOR REFERENCE
 .\production\killer.exe my_program.killer
 
 # Or with full path:
-C:\Users\skathera\Downloads\killer_V2_RS_M11\production\killer.exe program.killer
+<repo-root>\production\killer.exe program.killer
 ```
 
 ### Distribution

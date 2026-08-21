@@ -190,7 +190,7 @@ solutions/
 ## Folder Navigation
 
 ```
-📁 killer_V2_RS_M11/
+📁 <repo-root>/
 ├── solutions/                          ← YOU ARE HERE
 │   ├── solved/
 │   │   ├── SOLVED_PROBLEMS.md         ✅ Start here for solvable problems

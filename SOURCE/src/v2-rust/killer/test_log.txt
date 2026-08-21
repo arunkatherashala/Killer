@@ -1,5 +1,5 @@
-﻿cargo :    Compiling killer-native v3.0.0 (C:\Users\skathera\Downloads\killer_M29\killer\SOURCE\src\v2-rust\killer)
-At C:\Users\skathera\AppData\Local\Temp\ps-script-faafcdce-0d09-4368-8da6-32ecf3e0bd1a.ps1:87 char:1
+cargo :    Compiling killer-native v3.0.0 (<repo-root>\SOURCE\src\v2-rust\killer)
+At <windows-user>\\skathera\AppData\Local\Temp\ps-script-faafcdce-0d09-4368-8da6-32ecf3e0bd1a.ps1:87 char:1
 + cargo test --lib 2>&1 | Out-File -Encoding utf8 test_log.txt
 + ~~~~~~~~~~~~~~~~~~~~~
     + CategoryInfo          : NotSpecified: (   Compiling ki...v2-rust\killer):String) [], RemoteException

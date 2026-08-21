@@ -195,7 +195,7 @@ Note: "Weekly status update - Phase 40 now 40% complete"
 ## 📂 File Organization
 
 ```
-Killer_V2_RS_M11/
+<repo-root>/
 ├── KILLER_STATUS_TRACKER.csv           ← Edit this
 ├── KILLER_STATUS_TRACKER.xlsx           ← Open in Excel
 ├── convert_csv_to_xlsx.py              ← Run this

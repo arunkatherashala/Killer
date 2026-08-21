@@ -22,7 +22,7 @@ Method:         Direct copy (identical)
 
 ### Deployment Action
 ```bash
-Copy-Item target\release\killer_omniscience.exe C:\Users\skathera\Downloads\killer_V2_RS_M11\production\killer.exe
+Copy-Item target\release\killer_omniscience.exe <repo-root>\production\killer.exe
 ```
 
 **Result:** ✅ SUCCESSFUL
@@ -113,13 +113,13 @@ Deployment Log: PRODUCTION_DEPLOYMENT_LOG.md (this file)
 ### Run Killer v1.0 Programs
 ```powershell
 # Navigate to production folder
-cd C:\Users\skathera\Downloads\killer_V2_RS_M11\production
+cd <repo-root>\production
 
 # Run a Killer program
 .\killer.exe my_program.killer
 
 # Or use full path
-C:\Users\skathera\Downloads\killer_V2_RS_M11\production\killer.exe program.killer
+<repo-root>\production\killer.exe program.killer
 ```
 
 ### Deploy to Another Machine

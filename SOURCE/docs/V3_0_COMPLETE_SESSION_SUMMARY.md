@@ -351,7 +351,7 @@
 
 ### For Contributors
 1. Review [V3_0_RELEASE_NOTES.md](docs/RELEASE_NOTES_V3_0.md) for scope
-2. Study source code in `src/v2-rust/killer_vm/src/`
+2. Study source code in `src/v2-rust/killer/src/`
 3. Consult [V3_0_BENCHMARK_SUMMARY.md](docs/V3_0_BENCHMARK_SUMMARY.md) for optimization opportunities
 4. Run benchmarks to establish baselines before changes
 5. Follow existing patterns for new modules

@@ -10,7 +10,7 @@ For deployment, you absolutely need standalone executables. Here's the complete 
 
 Your build already produces **multiple independent, stand-alone executables** in:
 ```
-c:\Users\skathera\Downloads\killer_V2_RS_M11\target\release\
+<repo-root>\target\release\
 ```
 
 ### Primary Binaries Available:

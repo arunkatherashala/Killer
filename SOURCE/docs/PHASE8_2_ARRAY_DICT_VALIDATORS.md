@@ -481,7 +481,7 @@ Guarantees: [Privacy, Encryption]
 
 ## Implementation Details
 
-**File**: `src/v2-rust/killer_vm/src/data_quality.rs`  
+**File**: `src/v2-rust/killer/src/data_quality.rs`  
 **Lines Added**: 350+ (Phase 8.2)
 **Total Module Size**: 800+ lines  
 **Test Count**: 34/34 passing ✅

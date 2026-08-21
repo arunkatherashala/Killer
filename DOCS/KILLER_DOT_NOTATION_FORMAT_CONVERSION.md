@@ -290,7 +290,7 @@ run data.csv.to.data.json
 ### Familiarity
 ```killer
 // Like navigating file paths:
-C:\users\documents\file.csv.to.file.json
+C:\path\to\file.csv.to.file.json
 
 // Or like chained properties:
 object.property1.to.property2

@@ -1,7 +1,7 @@
 # Week 6 Phase 1 Benchmark: Variable Caching Integration
 # Compares performance before and after variable cache implementation
 
-$bench_file = 'C:\Users\skathera\Downloads\killer_V2_RS_M11\examples\arithmetic_bench_week5.killer'
+$bench_file = '<repo-root>\examples\arithmetic_bench_week5.killer'
 $binary = '.\target\release\killer-native.exe'
 
 $results = @()

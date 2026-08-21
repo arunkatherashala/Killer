@@ -27,8 +27,10 @@ pub fn install_from_local(path: &str, dest_dir: &str) -> Result<()> {
     let manifest: PackageManifest = serde_json::from_slice(&data).with_context(|| "parse manifest")?;
     let dest = PathBuf::from(dest_dir).join(format!("{}-{}", manifest.name, manifest.version));
     fs::create_dir_all(&dest)?;
+    let current_dir = Path::new(".");
+    let parent = p.parent().unwrap_or(current_dir);
     for f in manifest.files.iter() {
-        let src = p.parent().unwrap_or(&PathBuf::from(".")).join(f);
+        let src = parent.join(f);
         let dst = dest.join(f);
         if let Some(parent) = dst.parent() { fs::create_dir_all(parent)?; }
         fs::copy(&src, &dst).with_context(|| format!("copy {}", f))?;
@@ -70,7 +72,8 @@ pub fn install_from_remote(url: &str, expected_sha256_hex: &str, dest_dir: &str)
 pub fn publish_package(manifest_path: &str, output_dir: &str) -> Result<(String, String)> {
     let manifest_file = std::fs::read_to_string(manifest_path).with_context(|| "read manifest")?;
     let manifest: PackageManifest = serde_json::from_str(&manifest_file)?;
-    let base_dir = Path::new(manifest_path).parent().unwrap_or(&PathBuf::from("."));
+    let current_dir = Path::new(".");
+    let base_dir = Path::new(manifest_path).parent().unwrap_or(current_dir);
     let tar_path = PathBuf::from(output_dir).join(format!("{}-{}.tar.gz", manifest.name, manifest.version));
     let tar_file = StdFile::create(&tar_path)?;
     let gz = GzEncoder::new(tar_file, Compression::default());

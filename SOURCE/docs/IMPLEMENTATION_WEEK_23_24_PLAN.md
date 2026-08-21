@@ -44,7 +44,7 @@ duration = now - past_time  // Duration math
 ### Implementation Steps
 
 #### Step 1: Create `datetime.rs` module (150 lines)
-**File**: `src/v2-rust/killer_vm/src/datetime.rs`
+**File**: `src/v2-rust/killer/src/datetime.rs`
 
 Core structs:
 - `KillerDateTime` - Wraps SystemTime + formatting

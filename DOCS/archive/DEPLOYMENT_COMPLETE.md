@@ -3,7 +3,7 @@
 ## DEPLOYMENT STATUS: SUCCESS ✅
 
 ```
-Copy-Item target\release\killer_omniscience.exe C:\Users\skathera\Downloads\killer_V2_RS_M11\production\killer.exe
+Copy-Item target\release\killer_omniscience.exe <repo-root>\production\killer.exe
 ✅ EXECUTED SUCCESSFULLY
 ```
 
@@ -66,7 +66,7 @@ cd production
 .\killer.exe my_program.killer
 
 # Or anywhere in system
-C:\Users\skathera\Downloads\killer_V2_RS_M11\production\killer.exe program.killer
+<repo-root>\production\killer.exe program.killer
 ```
 
 ### Create a test program:
@@ -81,7 +81,7 @@ Save as: `test.killer`
 
 ### Run it:
 ```powershell
-C:\Users\skathera\Downloads\killer_V2_RS_M11\production\killer.exe test.killer
+<repo-root>\production\killer.exe test.killer
 # Output: 50
 ```
 
@@ -102,7 +102,7 @@ C:\Users\skathera\Downloads\killer_V2_RS_M11\production\killer.exe test.killer
 
 ### Location:
 ```
-C:\Users\skathera\Downloads\killer_V2_RS_M11\production\killer.exe
+<repo-root>\production\killer.exe
 ```
 
 ### To use:

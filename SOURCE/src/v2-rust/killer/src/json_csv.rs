@@ -1,4 +1,4 @@
-// src/v2-rust/killer_vm/src/json_csv.rs
+// src/v2-rust/killer/src/json_csv.rs
 // JSON and CSV serialization/deserialization module for Killer language
 // Provides pretty-printing, CSV parsing, and data format conversion
 

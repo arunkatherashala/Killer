@@ -30,7 +30,7 @@
 
 1. **Navigate to folder:**
    ```
-   c:\Users\skathera\Downloads\killer_V2_RS_M11
+   <repo-root>
    ```
 
 2. **Run converter:**
@@ -67,7 +67,7 @@
 
 2. **Navigate to folder:**
    ```powershell
-   cd "c:\Users\skathera\Downloads\killer_V2_RS_M11"
+   cd "<repo-root>"
    ```
 
 3. **Run conversion script:**

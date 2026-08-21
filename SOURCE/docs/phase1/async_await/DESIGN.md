@@ -391,7 +391,7 @@ docs/phase1/async_await/
       ├── error_handling.killer
       └── with_other_features.killer
 
-src/v2-rust/killer_vm/src/
+src/v2-rust/killer/src/
   ├── async_runtime.rs
   ├── future.rs
   ├── executor.rs

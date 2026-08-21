@@ -136,7 +136,7 @@ Dependencies:     ZERO (fully self-contained)
 
 ### Location
 ```
-C:\Users\skathera\Downloads\killer_V2_RS_M11\production\killer.exe
+<repo-root>\production\killer.exe
 ```
 
 ### Distribution

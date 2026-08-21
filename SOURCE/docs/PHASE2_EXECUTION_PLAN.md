@@ -74,22 +74,22 @@
 ### **Week 9 Tasks (Next Immediate)**
 
 1. **Implement TCP Sockets**
-   - Location: `src/v2-rust/killer_vm/src/runtime/networking.rs`
+   - Location: `src/v2-rust/killer/src/runtime/networking.rs`
    - Requirements: TcpListener, TcpStream
    - Estimate: 2-3 days
 
 2. **HTTP Parser**
-   - Location: `src/v2-rust/killer_vm/src/stdlib/http.rs`
+   - Location: `src/v2-rust/killer/src/stdlib/http.rs`
    - Parse HTTP requests (GET, POST, headers, body)
    - Estimate: 2-3 days
 
 3. **Basic Web Server**
-   - Location: `src/v2-rust/killer_vm/src/server/mod.rs`
+   - Location: `src/v2-rust/killer/src/server/mod.rs`
    - Accept connections, parse requests, send responses
    - Estimate: 2 days
 
 4. **Simple Routing System**
-   - Location: `src/v2-rust/killer_vm/src/server/routing.rs`
+   - Location: `src/v2-rust/killer/src/server/routing.rs`
    - Pattern-based route matching
    - Estimate: 1-2 days
 
@@ -149,7 +149,7 @@
 
 **New directories**:
 ```
-src/v2-rust/killer_vm/src/
+src/v2-rust/killer/src/
   ├── stdlib/
   │   ├── http.rs              (HTTP protocol)
   │   └── networking.rs        (TCP/UDP sockets)

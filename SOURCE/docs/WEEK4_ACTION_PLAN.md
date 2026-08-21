@@ -51,7 +51,7 @@ Instead of trying to replace the loop (risky, breaks state management), optimize
 
 ### Step 1: Create Specialized Add Instruction (1 hour)
 
-**File**: `src/v2-rust/killer_vm/src/vm.rs`
+**File**: `src/v2-rust/killer/src/vm.rs`
 
 Current Add implementation:
 ```rust
@@ -227,7 +227,7 @@ variables.set("sum", cached_sum);
 ## References
 
 - Current baseline: `docs/WEEK3_COMPLETION_REPORT.md` (19.5s)
-- Fast executor performance: `src/v2-rust/killer_vm/src/vm.rs` (execute_hot_arithmetic_loop = 0.08s!)
+- Fast executor performance: `src/v2-rust/killer/src/vm.rs` (execute_hot_arithmetic_loop = 0.08s!)
 - Benchmark: `benchmarks/arithmetic_bench.killer`
 - Next level plan: `WEEK5_PATTERN_DETECTION.md` (if needed)
 

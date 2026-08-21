@@ -3,7 +3,7 @@ import subprocess
 import os
 import sys
 
-os.chdir(r'c:\Users\skathera\Downloads\killer\native\killer_vm')
+os.chdir(r'<repo-root>\\native\killer_vm')
 
 print("=" * 80)
 print("KILLER DUAL-SYNTAX BUILD & TEST")
@@ -12,7 +12,7 @@ print("=" * 80)
 # Step 1: Build
 print("\n[1/3] Building Killer with dual-syntax support...")
 result = subprocess.run(
-    [r'C:\Users\skathera\.cargo\bin\cargo.exe', 'build', '--release'],
+    [r'<windows-user>\\skathera\.cargo\bin\cargo.exe', 'build', '--release'],
     capture_output=True,
     text=True,
     timeout=300
@@ -84,7 +84,7 @@ for test_file, expected_outputs in test_files:
             capture_output=True,
             text=True,
             timeout=5,
-            cwd=r'c:\Users\skathera\Downloads\killer\native\killer_vm'
+            cwd=r'<repo-root>\\native\killer_vm'
         )
         
         if result.returncode == 0:

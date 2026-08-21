@@ -419,7 +419,7 @@ This curriculum is **certified ready for production teaching**:
 
 All example files are in: `examples/week[19-22]_*.killer`  
 All documentation is in: `docs/` directory  
-All API code is in: `src/v2-rust/killer_vm/src/builtin.rs`
+All API code is in: `src/v2-rust/killer/src/builtin.rs`
 
 **Total Project Effort**: 4 weeks  
 **Total Code Added**: 1000+ lines  

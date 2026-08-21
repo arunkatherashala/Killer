@@ -10,7 +10,7 @@
 ### Primary Tracking Files
 
 1. **MASTER_KILLER_TRACKING_ENHANCED.csv**
-   - Location: `c:\Users\skathera\Downloads\killer\`
+   - Location: `<repo-root>\\`
    - Purpose: Single source of truth for all phases
    - Update Frequency: After each phase completion
    - Contains: 42+ phases with detailed metrics
@@ -21,7 +21,7 @@
    - Status: Superceded by _ENHANCED version
 
 3. **PROJECT_TRACKING_DASHBOARD.md**
-   - Location: `c:\Users\skathera\Downloads\killer\`
+   - Location: `<repo-root>\\`
    - Purpose: Human-readable summary (auto-generated from CSV)
    - Update Frequency: After CSV updates
 

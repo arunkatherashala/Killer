@@ -167,7 +167,7 @@ Security Status: SECURE ✓
 
 ## Integration with Build System
 
-All three modules are registered in `src/v2-rust/killer_vm/src/lib.rs`:
+All three modules are registered in `src/v2-rust/killer/src/lib.rs`:
 
 ```rust
 pub mod seccomp;      // Assassin Layer: Seccomp syscall filtering

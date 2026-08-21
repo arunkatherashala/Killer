@@ -322,7 +322,7 @@ Step 5 (SIMD):            32.4 × 2-4      = 64.8 - 129.6 M ops/sec
 
 ### Priority 1: Baseline JIT (CRITICAL)
 ```
-Edit: src/v2-rust/killer_vm/src/runtime_optimization.rs
+Edit: src/v2-rust/killer/src/runtime_optimization.rs
 
 Add HotCodeDetector:
 □ Loop counter tracking
@@ -335,7 +335,7 @@ Time: 2-3 hours
 
 ### Priority 2: Fast Path Implementation
 ```
-Edit: src/v2-rust/killer_vm/src/executor.rs
+Edit: src/v2-rust/killer/src/executor.rs
 
 Add fast paths for:
 □ ADD operation optimization

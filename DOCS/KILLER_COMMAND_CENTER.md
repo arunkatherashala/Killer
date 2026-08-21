@@ -98,7 +98,7 @@ Sections: What was delivered, why it matters, next steps
 
 ### Core SuperProcessor
 ```
-SOURCE/src/v2-rust/killer_vm/src/
+SOURCE/src/v2-rust/killer/src/
 ├── super_processor.rs           (385 lines)
 │   ├── SuperProcessor struct
 │   ├── execute_full_pipeline()

@@ -262,7 +262,7 @@
 ```
 1. Start: V3_0_RELEASE_NOTES.md (understand scope)
    ↓
-2. Study: Source code in src/v2-rust/killer_vm/src/
+2. Study: Source code in src/v2-rust/killer/src/
    ↓
 3. Reference: V3_0_API_QUICK_REFERENCE.md (API contracts)
    ↓

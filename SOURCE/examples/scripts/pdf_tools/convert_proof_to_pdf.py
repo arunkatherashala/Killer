@@ -12,7 +12,7 @@ from pathlib import Path
 
 def convert_md_to_pdf():
     # File paths
-    workspace = r"c:\Users\skathera\Downloads\killer_V2_RS_M11"
+    workspace = r"<repo-root>"
     md_file = os.path.join(workspace, "EXPERT_SUBMISSION_MARCH24", "P_vs_NP_PROOF_FINAL_MARCH2026.md")
     pdf_file = os.path.join(workspace, "EXPERT_SUBMISSION_MARCH24", "P_vs_NP_PROOF_FINAL_MARCH2026.pdf")
     

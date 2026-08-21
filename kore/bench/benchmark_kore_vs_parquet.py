@@ -203,7 +203,7 @@ def main():
     print(f"{'='*70}")
 
     kore_bin = os.path.join(
-        r"C:\Users\skathera\Downloads\killer_M29\killer\SOURCE\src\v2-rust\killer",
+        r"<repo-root>\SOURCE\src\v2-rust\killer",
         "target", "release", "kore_bench.exe"
     )
     kore_bin_debug = kore_bin.replace("release", "debug")

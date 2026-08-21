@@ -181,6 +181,9 @@ mod tests {
     #[test]
     fn test_module_registry() {
         let registry = ModuleRegistry::new();
-        assert_eq!(registry.search_paths.len(), 3);
+        assert!(registry.search_paths.len() >= 3);
+        assert!(registry.search_paths.contains(&PathBuf::from("./stdlib")));
+        assert!(registry.search_paths.contains(&PathBuf::from("./packages")));
+        assert!(registry.search_paths.contains(&PathBuf::from(".")));
     }
 }

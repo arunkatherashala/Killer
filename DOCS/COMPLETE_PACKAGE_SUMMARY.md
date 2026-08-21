@@ -232,10 +232,10 @@ FOR LEARNING (Teach Your Team):
 All files in: `DOCS/` folder
 
 ```
-c:\Users\skathera\Downloads\killer_V2_RS_M11\DOCS\
+<repo-root>\DOCS\
 ```
 
-Binary: `c:\Users\skathera\Downloads\killer_V2_RS_M11\production\killer.exe`
+Binary: `<repo-root>\production\killer.exe`
 
 ---
 

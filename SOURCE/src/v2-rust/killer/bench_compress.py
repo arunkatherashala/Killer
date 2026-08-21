@@ -1,9 +1,9 @@
 import gzip, lzma, zlib, brotli, time, os
 
-koreb = open(r'C:\Users\skathera\Downloads\kore\1st_data_bin.kore','rb').read()
-kore  = open(r'C:\Users\skathera\Downloads\kore\1st_data_v2.kore','rb').read()
-csv   = open(r'C:\Users\skathera\Downloads\test_data_100records.csv','rb').read()
-pq    = open(r'C:\Users\skathera\Downloads\kore\1st_data.parquet','rb').read()
+koreb = open(r'<windows-user>\\skathera\Downloads\kore\1st_data_bin.kore','rb').read()
+kore  = open(r'<windows-user>\\skathera\Downloads\kore\1st_data_v2.kore','rb').read()
+csv   = open(r'<windows-user>\\skathera\Downloads\test_data_100records.csv','rb').read()
+pq    = open(r'<windows-user>\\skathera\Downloads\kore\1st_data.parquet','rb').read()
 
 csvlen = len(csv)
 

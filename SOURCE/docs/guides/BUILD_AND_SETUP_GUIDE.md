@@ -160,12 +160,12 @@ $profile_dir = Split-Path $PROFILE
 $profile_content = @"
 function killer {
     param([Parameter(ValueFromRemainingArguments)]$args)
-    & "C:\path\to\Killer\src\v2-rust\killer_vm\target\release\killer_vm.exe" @args
+    & "C:\path\to\Killer\src\v2-rust\\killer\target\release\killer_vm.exe" @args
 }
 
 function killer_fmt {
     param([Parameter(ValueFromRemainingArguments)]$args)
-    python "C:\path\to\Killer\src\v2-rust\killer_vm\killer_fmt.py" @args
+    python "C:\path\to\Killer\src\v2-rust\\killer\killer_fmt.py" @args
 }
 "@
 
@@ -280,8 +280,8 @@ Killer/
 ```batch
 REM Create distribution
 mkdir killer-release
-copy src\v2-rust\killer_vm\target\release\killer_vm.exe killer-release\
-copy src\v2-rust\killer_vm\killer_fmt.py killer-release\
+copy src\v2-rust\\killer\target\release\killer_vm.exe killer-release\
+copy src\v2-rust\\killer\killer_fmt.py killer-release\
 copy QUICK_START_GUIDE.md killer-release\
 copy examples\*.killer killer-release\examples\
 

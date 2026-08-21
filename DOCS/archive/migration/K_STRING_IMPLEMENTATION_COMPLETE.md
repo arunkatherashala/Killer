@@ -135,9 +135,9 @@ Result: "User Alice is 30 years old"
 ### Core Implementation Files
 | File | Change | Lines | Status |
 |------|--------|-------|--------|
-| [lexer.rs](SOURCE/src/v2-rust/killer_vm/src/lexer.rs) | Add TokenKind::KString + read_kstring() + detector | 50 | ✅ Complete |
-| [ast.rs](SOURCE/src/v2-rust/killer_vm/src/ast.rs) | Add Expr::KString variant | 1 | ✅ Complete |
-| [parser.rs](SOURCE/src/v2-rust/killer_vm/src/parser.rs) | Add parse case + build_kstring_expr() | 55 | ✅ Complete |
+| [lexer.rs](SOURCE/src/v2-rust/killer/src/lexer.rs) | Add TokenKind::KString + read_kstring() + detector | 50 | ✅ Complete |
+| [ast.rs](SOURCE/src/v2-rust/killer/src/ast.rs) | Add Expr::KString variant | 1 | ✅ Complete |
+| [parser.rs](SOURCE/src/v2-rust/killer/src/parser.rs) | Add parse case + build_kstring_expr() | 55 | ✅ Complete |
 
 ### Test Files
 | File | Purpose | Tests | Status |

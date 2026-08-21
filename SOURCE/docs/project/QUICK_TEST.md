@@ -4,7 +4,7 @@
 
 ### Windows
 ```
-cd C:\Users\skathera\Downloads\killer
+cd <windows-user>\\skathera\Downloads\killer
 .\killer-standalone-installer.bat
 ```
 

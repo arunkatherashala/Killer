@@ -298,8 +298,8 @@ Performance:          ✅ Exceeds targets
 
 ### **Run the Engine**
 ```bash
-cd c:\Users\skathera\Downloads\killer\_CURRENT_WORK
-C:\Users\skathera\Downloads\killer\production\m20\killer.exe SUPERNOVA_FULL_ENGINE.killer
+cd <repo-root>\\_CURRENT_WORK
+<repo-root>\\production\m20\killer.exe SUPERNOVA_FULL_ENGINE.killer
 ```
 
 ### **What Happens**

@@ -14,7 +14,7 @@ from pathlib import Path
 import time
 
 ORCHESTRA_FILE = r"SOURCE\orchestration\phase7_orchestration_worldclass.killer"
-KILLER_BAT = r"C:\Users\skathera\Killer\killer.bat"
+KILLER_BAT = r"<repo-root>\\killer.bat"
 CSV_OUTPUT = "phase7_orchestration_results.csv"
 
 def run_orchestration():

@@ -1,6 +1,5 @@
-mod registry;
-
 use anyhow::Result;
+use kpm::registry;
 use std::env;
 
 fn main() -> Result<()> {

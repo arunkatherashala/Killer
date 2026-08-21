@@ -3,7 +3,7 @@ param(
     [switch]$CreateBackup = $true
 )
 
-$ScriptPath = "c:\Users\skathera\Downloads\killer"
+$ScriptPath = "<windows-user>\\skathera\Downloads\killer"
 $BackupFolder = "$ScriptPath\_CLEANUP_BACKUP_$(Get-Date -Format 'yyyyMMdd_HHmmss')"
 
 Write-Host ""
@@ -87,7 +87,7 @@ Write-Host "  DONE: $MoveCount test files moved"
 Write-Host ""
 
 Write-Host "[5/5] Consolidating tracking files..."
-$OldCSV = "c:\Users\skathera\Downloads\killer\MASTER_KILLER_TRACKING.csv"
+$OldCSV = "<repo-root>\\MASTER_KILLER_TRACKING.csv"
 if (Test-Path $OldCSV) {
     if ($CreateBackup) {
         Copy-Item $OldCSV $BackupFolder -ErrorAction SilentlyContinue

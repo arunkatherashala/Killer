@@ -7,7 +7,7 @@
 ## 📊 TRACKING FILES CREATED
 
 ### 1. **MASTER_KILLER_TRACKING_ENHANCED.csv** ⭐ PRIMARY
-**Location:** `c:\Users\skathera\Downloads\killer\`  
+**Location:** `<repo-root>\\`  
 **Purpose:** Single source of truth for all phases  
 **Size:** 42+ rows (phases) + headers
 
@@ -39,7 +39,7 @@
 ---
 
 ### 2. **PROJECT_TRACKING_DASHBOARD.md** 📈 EXECUTIVE VIEW
-**Location:** `c:\Users\skathera\Downloads\killer\`  
+**Location:** `<repo-root>\\`  
 **Purpose:** Human-readable summary (auto-generated from CSV)  
 **Audience:** Team leads, executives, stakeholders
 
@@ -70,7 +70,7 @@
 ---
 
 ### 3. **CSV_TRACKING_UPDATE_GUIDE.md** 📋 HOW-TO GUIDE
-**Location:** `c:\Users\skathera\Downloads\killer\`  
+**Location:** `<repo-root>\\`  
 **Purpose:** Instructions for keeping CSV updated  
 **Audience:** Project team, daily operations
 
@@ -101,7 +101,7 @@
 ---
 
 ### 4. **QUICK_START_REFERENCE.md** 🚀 YOUR CHEAT SHEET
-**Location:** `c:\Users\skathera\Downloads\killer\`  
+**Location:** `<repo-root>\\`  
 **Purpose:** Quick lookup for common tasks  
 **Audience:** You (project owner)
 
@@ -130,7 +130,7 @@
 ---
 
 ### 5. **KILLER_ACCURACY_AUDIT_REPORT_MARCH_20_2026.md** 🔍 AUDIT FINDINGS
-**Location:** `c:\Users\skathera\Downloads\killer\`  
+**Location:** `<repo-root>\\`  
 **Purpose:** Document accuracy issues found & fixed  
 **Audience:** QA, leadership, documentation team
 
@@ -153,7 +153,7 @@
 ---
 
 ### 6. **KILLER_CSV_ANALYSIS_REAL_METRICS.md** 📊 DATA ANALYSIS
-**Location:** `c:\Users\skathera\Downloads\killer\`  
+**Location:** `<repo-root>\\`  
 **Purpose:** CSV data analysis & insights  
 **Audience:** Data-driven decision makers
 

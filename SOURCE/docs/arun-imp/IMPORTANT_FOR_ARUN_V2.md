@@ -10,7 +10,7 @@ Rust V2 is the native runtime path (`killer-native.exe`) and is intended to be f
 ## Build Steps (Windows)
 
 ```powershell
-cd src\v2-rust\killer_vm
+cd src\v2-rust\\killer
 cargo build --release
 ```
 
@@ -21,7 +21,7 @@ Expected output binary:
 ## Run Command
 
 ```powershell
-.\src\v2-rust\killer_vm\target\release\killer-native.exe program.killer
+.\src\v2-rust\\killer\target\release\killer-native.exe program.killer
 ```
 
 ## Current Verified Status (From Latest V2 Reports)
@@ -51,7 +51,7 @@ Expected output binary:
 ## Quick Sanity Test (V2)
 
 ```powershell
-.\src\v2-rust\killer_vm\target\release\killer-native.exe examples\01_hello.killer
+.\src\v2-rust\\killer\target\release\killer-native.exe examples\01_hello.killer
 ```
 
 If this fails on comma-separated `print` calls, use V1 standalone until parser patch lands.

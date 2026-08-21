@@ -180,8 +180,8 @@ DOCS: _CURRENT_WORK\ACHIEVEMENT_DECLARATION.md
 
 ### Run Supernova Engine
 ```bash
-C:\Users\skathera\Downloads\killer\production\m20\killer.exe ^
-  C:\Users\skathera\Downloads\killer\SOURCE\engines\supernova\SUPERNOVA_FULL_ENGINE.killer
+<repo-root>\\production\m20\killer.exe ^
+  <repo-root>\\SOURCE\engines\supernova\SUPERNOVA_FULL_ENGINE.killer
 ```
 
 ### Run Benchmarks

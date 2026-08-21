@@ -12,7 +12,7 @@
 ## ✨ What Was Implemented
 
 ### 1. `system_time_ms()` Function
-**Location**: `src/v2-rust/killer_vm/src/builtin.rs` (lines 1750-1762)
+**Location**: `src/v2-rust/killer/src/builtin.rs` (lines 1750-1762)
 
 **Code Added**:
 ```rust
@@ -39,7 +39,7 @@ fn system_time_ms(_args: &[Value]) -> Result<Value, VmError> {
 ---
 
 ### 2. `thread_sleep_ms()` Function
-**Location**: `src/v2-rust/killer_vm/src/builtin.rs` (lines 1764-1779)
+**Location**: `src/v2-rust/killer/src/builtin.rs` (lines 1764-1779)
 
 **Code Added**:
 ```rust
@@ -71,7 +71,7 @@ fn thread_sleep_ms(args: &[Value]) -> Result<Value, VmError> {
 ---
 
 ### 3. Registration in Builtin Match
-**Location**: `src/v2-rust/killer_vm/src/builtin.rs` (lines 88-91)
+**Location**: `src/v2-rust/killer/src/builtin.rs` (lines 88-91)
 
 **Code Added to Match Statement**:
 ```rust

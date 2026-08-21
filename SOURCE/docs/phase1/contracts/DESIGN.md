@@ -435,7 +435,7 @@ docs/phase1/contracts/
       ├── error_cases.killer
       └── with_other_features.killer
 
-src/v2-rust/killer_vm/src/
+src/v2-rust/killer/src/
   ├── contracts.rs
   ├── contract_checker.rs
   └── contract_verifier.rs

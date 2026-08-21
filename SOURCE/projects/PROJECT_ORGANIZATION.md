@@ -179,7 +179,7 @@ millennium_prize_N_[name]/
 
 ### To Run a Framework
 ```bash
-cd c:\Users\skathera\Downloads\killer_V2_RS_M11
+cd <repo-root>
 killer projects/[field]/[problem]/FRAMEWORK.killer
 ```
 

@@ -349,7 +349,7 @@ strategist.select_strategy("YourCustomStrategy".to_string())?;
 ## File Structure
 
 ```
-src/v2-rust/killer_vm/src/custom_optimization/
+src/v2-rust/killer/src/custom_optimization/
 ├── mod.rs                  # Module exports
 ├── strategist.rs           # Main framework (500+ lines)
 │   ├── OptimizationStrategy
@@ -440,10 +440,10 @@ CompositeOptimizationBuilder::new()
 
 ## Files Modified
 
-✅ `src/v2-rust/killer_vm/src/lib.rs` - Added custom_optimization module  
-✅ `src/v2-rust/killer_vm/src/custom_optimization/mod.rs` - Module exports  
-✅ `src/v2-rust/killer_vm/src/custom_optimization/strategist.rs` - Main framework  
-✅ `src/v2-rust/killer_vm/src/custom_optimization/examples.rs` - Example strategies  
+✅ `src/v2-rust/killer/src/lib.rs` - Added custom_optimization module  
+✅ `src/v2-rust/killer/src/custom_optimization/mod.rs` - Module exports  
+✅ `src/v2-rust/killer/src/custom_optimization/strategist.rs` - Main framework  
+✅ `src/v2-rust/killer/src/custom_optimization/examples.rs` - Example strategies  
 
 **Build Status**: ✅ CLEAN (zero errors, zero warnings)  
 **Test Status**: ✅ ALL PASSING (187/187)

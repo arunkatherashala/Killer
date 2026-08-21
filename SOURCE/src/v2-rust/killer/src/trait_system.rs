@@ -1,4 +1,4 @@
-// src/v2-rust/killer_vm/src/trait_system.rs
+// src/v2-rust/killer/src/trait_system.rs
 // Trait system for Killer language - v3.0 simplified implementation
 // Provides trait definitions, implementations, and method resolution
 

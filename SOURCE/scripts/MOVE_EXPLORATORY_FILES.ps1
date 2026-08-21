@@ -1,4 +1,4 @@
-$SourceRoot = "c:\Users\skathera\Downloads\killer_V2_RS_M11"
+$SourceRoot = "<repo-root>"
 $ArchiveBase = "$SourceRoot\EXPLORATION_ARCHIVE"
 
 # Ensure directories exist

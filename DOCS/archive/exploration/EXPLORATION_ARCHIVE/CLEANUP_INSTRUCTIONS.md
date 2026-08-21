@@ -21,7 +21,7 @@
 2. **Run this script in PowerShell:**
 
 ```powershell
-cd c:\Users\skathera\Downloads\killer_V2_RS_M11
+cd <repo-root>
 & ".\MOVE_EXPLORATORY_FILES.ps1"
 ```
 
@@ -47,7 +47,7 @@ Get-ChildItem -File -Depth 0 | Where-Object {$_.Name -like "PHASE_7*" -or $_.Nam
 
 ### Option 3: Command Line (cmd.exe)
 ```batch
-cd c:\Users\skathera\Downloads\killer_V2_RS_M11
+cd <repo-root>
 for /r . /f "tokens=*" %%F in ('dir /b PHASE_7*.md KILLER_SUPER*.md AI_INTEGRATION*.md 2^>nul') do move "%%F" "EXPLORATION_ARCHIVE\phase-7-research\" 2>nul
 ```
 

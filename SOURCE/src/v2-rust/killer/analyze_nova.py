@@ -2,12 +2,12 @@ import os, struct, zlib, gzip, math
 from collections import Counter
 
 files = {
-    'CSV original':    r'C:\Users\skathera\Downloads\test_data_100records.csv',
-    'KORE-K v1':       r'C:\Users\skathera\Downloads\kore\1st_data.kore',
-    'KORE-K v2':       r'C:\Users\skathera\Downloads\kore\1st_data_v2.kore',
-    'KORE-B binary':   r'C:\Users\skathera\Downloads\kore\1st_data_bin.kore',
-    'Nova current':    r'C:\Users\skathera\Downloads\kore\1st_data.nova',
-    'Parquet+Snappy':  r'C:\Users\skathera\Downloads\kore\1st_data.parquet',
+    'CSV original':    r'<windows-user>\\skathera\Downloads\test_data_100records.csv',
+    'KORE-K v1':       r'<windows-user>\\skathera\Downloads\kore\1st_data.kore',
+    'KORE-K v2':       r'<windows-user>\\skathera\Downloads\kore\1st_data_v2.kore',
+    'KORE-B binary':   r'<windows-user>\\skathera\Downloads\kore\1st_data_bin.kore',
+    'Nova current':    r'<windows-user>\\skathera\Downloads\kore\1st_data.nova',
+    'Parquet+Snappy':  r'<windows-user>\\skathera\Downloads\kore\1st_data.parquet',
 }
 csv_sz = os.path.getsize(files['CSV original'])
 print("  Format                  Bytes    pct_CSV")
@@ -16,7 +16,7 @@ for name, path in files.items():
     sz = os.path.getsize(path)
     print(f"  {name:<22} {sz:>8}   {sz*100/csv_sz:>6.1f}%")
 
-nova = open(r'C:\Users\skathera\Downloads\kore\1st_data.nova', 'rb').read()
+nova = open(r'<windows-user>\\skathera\Downloads\kore\1st_data.nova', 'rb').read()
 zc   = zlib.compress(nova, 9)
 
 print()
@@ -43,7 +43,7 @@ print(f"Byte=1:           {ones}/{total}")
 print(f"Bytes < 16:       {small}/{total} = {small*100/total:.0f}%  (varint wins here)")
 
 # What does the CSV actually contain (unique values)
-csv_text = open(r'C:\Users\skathera\Downloads\test_data_100records.csv', encoding='utf-8').read()
+csv_text = open(r'<windows-user>\\skathera\Downloads\test_data_100records.csv', encoding='utf-8').read()
 csv_lines = csv_text.splitlines()
 header = csv_lines[0].split(',')
 nrows  = len(csv_lines) - 1

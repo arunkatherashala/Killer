@@ -12,8 +12,8 @@ Optimizations over v1:
 
 import re, os, sys
 
-CSV_PATH  = r"C:\Users\skathera\Downloads\test_data_100records.csv"
-OUT_PATH  = r"C:\Users\skathera\Downloads\kore\1st_data_v2.kore"
+CSV_PATH  = r"<windows-user>\\skathera\Downloads\test_data_100records.csv"
+OUT_PATH  = r"<windows-user>\\skathera\Downloads\kore\1st_data_v2.kore"
 
 # ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -187,7 +187,7 @@ with open(OUT_PATH, 'w', encoding='utf-8', newline='\n') as f:
 # ─── stats ───────────────────────────────────────────────────────────────────
 
 csv_sz  = os.path.getsize(CSV_PATH)
-v1_sz   = os.path.getsize(r"C:\Users\skathera\Downloads\kore\1st_data.kore")
+v1_sz   = os.path.getsize(r"<windows-user>\\skathera\Downloads\kore\1st_data.kore")
 v2_sz   = os.path.getsize(OUT_PATH)
 
 print(f"\n{'='*50}")
@@ -200,7 +200,7 @@ print(f"{'='*50}")
 # Per-column breakdown of biggest savers
 print("\nTop 10 columns by size reduction:")
 import json
-v1_lines = open(r"C:\Users\skathera\Downloads\kore\1st_data.kore", encoding='utf-8').read().splitlines()
+v1_lines = open(r"<windows-user>\\skathera\Downloads\kore\1st_data.kore", encoding='utf-8').read().splitlines()
 v1_data = {}
 for ln in v1_lines[3:-1]:
     parts = ln.split(' ', 2)

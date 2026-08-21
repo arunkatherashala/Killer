@@ -544,7 +544,7 @@ let result = swarm.coordinate().await?;
 ## 📁 FILE LOCATIONS
 
 ```
-SOURCE/src/v2-rust/killer_vm/src/
+SOURCE/src/v2-rust/killer/src/
 ├── ai_optimizer.rs              # 315 lines - ML performance tuning
 ├── llm_client.rs                # 350 lines - Multi-provider LLM
 ├── agent_framework.rs           # 360 lines - Autonomous agents

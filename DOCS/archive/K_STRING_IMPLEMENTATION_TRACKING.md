@@ -21,7 +21,7 @@
 ### Phase 1: Lexer Changes (lexer.rs)
 **Goal**: Add `TokenKind::KString` detection
 
-**Files**: `SOURCE/src/v2-rust/killer_vm/src/lexer.rs`
+**Files**: `SOURCE/src/v2-rust/killer/src/lexer.rs`
 
 **Changes**:
 - [ ] Add `KString(String)` variant to `TokenKind` enum (after Template)
@@ -40,7 +40,7 @@ Should lex to: `Identifier("msg"), Equal, KString("Hello {name}"), EOF`
 ### Phase 2: AST Changes (ast.rs)
 **Goal**: Add `Expr::KString` variant
 
-**Files**: `SOURCE/src/v2-rust/killer_vm/src/ast.rs`
+**Files**: `SOURCE/src/v2-rust/killer/src/ast.rs`
 
 **Changes**:
 - [ ] Add `KString(String)` variant to `Expr` enum
@@ -51,7 +51,7 @@ Should lex to: `Identifier("msg"), Equal, KString("Hello {name}"), EOF`
 ### Phase 3: Parser Changes (parser.rs)
 **Goal**: Parse K-strings into AST
 
-**Files**: `SOURCE/src/v2-rust/killer_vm/src/parser.rs`
+**Files**: `SOURCE/src/v2-rust/killer/src/parser.rs`
 
 **Changes**:
 - [ ] Find `parse_primary()` function (around line 1636)
@@ -69,7 +69,7 @@ Should parse without errors
 ### Phase 4: VM Evaluation (vm.rs)
 **Goal**: Evaluate K-strings to runtime values
 
-**Files**: `SOURCE/src/v2-rust/killer_vm/src/vm.rs`
+**Files**: `SOURCE/src/v2-rust/killer/src/vm.rs`
 
 **Changes**:
 - [ ] Find `eval_expr()` function

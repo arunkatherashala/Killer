@@ -1,4 +1,4 @@
-// src/v2-rust/killer_vm/src/datetime.rs
+// src/v2-rust/killer/src/datetime.rs
 // DateTime module for Killer language
 // Provides system time, parsing, formatting, and date operations
 

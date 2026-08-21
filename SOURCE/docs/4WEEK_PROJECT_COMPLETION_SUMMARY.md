@@ -256,7 +256,7 @@ Added: pub mod net;  // Network module for Week 2
 
 **New Files Created**
 ```
-src/v2-rust/killer_vm/src/net.rs (200+ lines)
+src/v2-rust/killer/src/net.rs (200+ lines)
   - KillerTcpListener struct with bind/accept
   - KillerTcpStream struct with read/write/close
   - Thread-safe Arc<Mutex> wrappers
@@ -436,8 +436,8 @@ With **11 core APIs**, **8+ working examples**, and **275 curriculum problems** 
 - Build System: `cargo build` in `src/v2-rust/killer_vm/`
 - Documentation: All files in `docs/` directory
 - Examples: All files in `examples/week*.killer`
-- Implementation: `src/v2-rust/killer_vm/src/builtin.rs`
-- Architecture: `src/v2-rust/killer_vm/src/net.rs`
+- Implementation: `src/v2-rust/killer/src/builtin.rs`
+- Architecture: `src/v2-rust/killer/src/net.rs`
 
 ---
 
