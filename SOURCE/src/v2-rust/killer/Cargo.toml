@@ -60,6 +60,9 @@ kore-engine = []
 # Ghost VM signing uses in-crate SHA-256 + HMAC (no extra crates.io deps).
 # JIT: src/jit_x86.rs — no default crates.io deps.
 
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [[bench]]
 name = "ai_benchmark"
 harness = false
