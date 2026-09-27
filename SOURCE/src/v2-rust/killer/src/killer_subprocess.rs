@@ -279,7 +279,11 @@ mod tests {
 
     #[test]
     fn capture_output() {
-        let out = capture("cmd", &["/C", "echo test_output"]);
+        let out = if cfg!(windows) {
+            capture("cmd", &["/C", "echo test_output"])
+        } else {
+            capture("sh", &["-c", "echo test_output"])
+        };
         assert!(out.is_ok());
         assert!(out.unwrap().contains("test_output"));
     }
