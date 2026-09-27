@@ -54,8 +54,9 @@ impl KillerSuper {
         &self.pipeline
     }
 
-    /// Compile source code (simulated, returns success but doesn't write files)
-    /// Actual output file writing is handled by the caller
+    /// Compile and validate source code using the real Killer compiler pipeline.
+    /// Parses the source, compiles to bytecode, and reports real errors.
+    /// Actual output file writing is handled by the caller.
     pub fn compile(&self, source: &str, output_file: &str) -> CompilationResult {
         let start = Instant::now();
 
@@ -77,7 +78,13 @@ impl KillerSuper {
             };
         }
 
-        // Execute pipeline
+        // Run real compiler: parse source → emit bytecode → catch errors
+        let compile_error: Option<String> = match crate::compiler::compile_killer_default(source) {
+            Ok(_program) => None,
+            Err(e) => Some(format!("{}", e)),
+        };
+
+        // Record pipeline stage metrics (no sleeping — just accounting)
         let pipeline_result = self.pipeline.execute_simulation();
 
         let elapsed = start.elapsed();
@@ -90,16 +97,17 @@ impl KillerSuper {
             }
         }
 
+        let success = compile_error.is_none() && pipeline_result.success;
         CompilationResult {
-            success: pipeline_result.success,
-            error_message: None,
+            success,
+            error_message: compile_error,
             warnings: vec![],
-            output_file: Some(output_file.to_string()),
+            output_file: if success { Some(output_file.to_string()) } else { None },
             stats: CompilerStats {
                 compile_time_ms,
                 optimization_speedup: pipeline_result.final_speedup,
                 input_size_bytes: source.len(),
-                output_size_bytes: (source.len() as f64 * 0.8) as usize, // Estimate
+                output_size_bytes: source.len(),
                 phases_used,
                 strategies_used: self.config.enabled_strategies.len() as u32,
             },
@@ -206,8 +214,10 @@ mod tests {
     #[test]
     fn test_compile_valid_source() {
         let compiler = KillerSuper::new();
-        let result = compiler.compile("fn main() { print(42); }", "output.bin");
-        assert!(result.success);
+        // Use valid Killer syntax: simple expression that compile_killer_default handles
+        let source = "let x = 42\nprintln(x)\n";
+        let result = compiler.compile(source, "output.bin");
+        assert!(result.success, "compile failed: {:?}", result.error_message);
         assert!(result.stats.phases_used >= 5); // Phases 1-5 plus custom
     }
 
@@ -223,7 +233,7 @@ mod tests {
     #[test]
     fn test_compilation_result_display() {
         let compiler = KillerSuper::new();
-        let result = compiler.compile("fn main() { }", "test.bin");
+        let result = compiler.compile("let x = 1\nprintln(x)\n", "test.bin");
         let display = format!("{}", result);
         assert!(display.contains("Compilation Result"));
         assert!(display.contains("Speedup"));

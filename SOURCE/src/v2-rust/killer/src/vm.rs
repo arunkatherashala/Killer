@@ -18,6 +18,35 @@ use crate::jit_x86::JitEngine;
 use std::collections::HashMap;
 use std::fmt::Write as FmtWrite;
 use std::sync::LazyLock;
+use std::cell::RefCell;
+use std::sync::mpsc::{Sender, Receiver};
+
+// ── Debug channel (thread-local) ─────────────────────────────────────────────
+// When a DAP session is active, the VM sends (line, var_snapshot) to the
+// debugger and then blocks until it receives a DebugCmd back.
+// Zero overhead when channel is None (release / non-debug runs).
+
+/// Debug event emitted by the VM at each `DebugLine` instruction.
+pub type DbgEvent = (usize, Vec<(String, String)>);
+/// Debug command sent by the DAP client to the VM.
+/// `true` = step/continue; `false` = stop.
+pub type DbgCmd = bool;
+
+thread_local! {
+    static VM_DBG: RefCell<Option<(Sender<DbgEvent>, Receiver<DbgCmd>)>> =
+        RefCell::new(None);
+}
+
+/// Register a debug channel for the **current thread's** VM.
+/// Call this from the same thread that will call `vm.run(…)`.
+pub fn set_vm_debug_channel(ev_tx: Sender<DbgEvent>, cmd_rx: Receiver<DbgCmd>) {
+    VM_DBG.with(|c| *c.borrow_mut() = Some((ev_tx, cmd_rx)));
+}
+
+/// Remove the debug channel (call after the VM exits or when debugging ends).
+pub fn clear_vm_debug_channel() {
+    VM_DBG.with(|c| *c.borrow_mut() = None);
+}
 
 static MATH_SINGLETON: LazyLock<Value> = LazyLock::new(|| {
     let mut m = HashMap::new();
@@ -97,6 +126,16 @@ pub struct VirtualMachine {
 
     /// Sandboxed builtin policy for this VM; installed on the OS thread for each [`VirtualMachine::run`].
     pub capabilities: CapabilitySet,
+
+    // ── Unique Killer features ────────────────────────────────────────────────
+    /// Reactive graph for `live` variables: name → (deps, instr_start, instr_count)
+    reactive_graph: HashMap<String, (Vec<String>, usize, usize)>,
+    /// Variable history for `@` time-travel: name → ring buffer of past values (max 10)
+    var_history: HashMap<String, std::collections::VecDeque<Value>>,
+    /// GC: allocation counter — triggers gc_collect every GC_INTERVAL array allocs.
+    gc_alloc_epoch: u64,
+    /// When true, `run()` preserves scopes and classes across calls (REPL mode).
+    pub repl_mode: bool,
 }
 
 // SAFETY: VirtualMachine contains `JitEngine` which holds `ExecPage { *mut u8 }` for
@@ -140,6 +179,10 @@ impl Default for VirtualMachine {
             jit_engine: JitEngine::new(),
             current_program: None,
             capabilities: CapabilitySet::trusted_local(),
+            reactive_graph: HashMap::new(),
+            var_history: HashMap::new(),
+            gc_alloc_epoch: 0,
+            repl_mode: false,
         }
     }
 }
@@ -189,6 +232,10 @@ impl VirtualMachine {
             jit_engine: JitEngine::new(),
             current_program: None,
             capabilities: CapabilitySet::trusted_local(),
+            reactive_graph: HashMap::new(),
+            var_history: HashMap::new(),
+            gc_alloc_epoch: 0,
+            repl_mode: false,
         }
     }
 
@@ -206,6 +253,25 @@ impl VirtualMachine {
         self.current_program = None;
         self.yielded_values.clear();
         self.collecting_yields = false;
+    }
+
+    // ========== REPL / Diagnostics ========================================
+
+    /// All variables currently in scope — for REPL `:vars` command.
+    pub fn repl_vars(&self) -> Vec<(String, String)> {
+        let mut vars = Vec::new();
+        for scope in &self.scopes {
+            for (k, v) in scope {
+                vars.push((k.clone(), format!("{}", v)));
+            }
+        }
+        vars.sort_by(|a, b| a.0.cmp(&b.0));
+        vars
+    }
+
+    /// JIT stats: (compiled_loops, hit_threshold).
+    pub fn jit_stats(&self) -> (usize, usize) {
+        (self.jit_engine.compiled_count(), 500)
     }
 
     // ========== Spawn VM Pool ============================================
@@ -365,16 +431,24 @@ impl VirtualMachine {
         self.current_program = None;
         self.ip = 0;
         self.stack.clear();
-        self.scopes.clear();
         self.call_stack.clear();
-        self.locals_stack.clear();
-        self.locals_stack.push(Vec::new());  // fresh top-level frame
-        self.classes.clear();
         self.current_object = None;
         self.exception_manager.reset();
         self.generator_manager.clear();
         self.yielded_values.clear();
-        self.push_scope();
+
+        if self.repl_mode && !self.scopes.is_empty() {
+            // REPL mode: preserve variables and class defs across calls.
+            // Only reset the call/local frames, not the scope chain.
+            self.locals_stack.truncate(1);
+            if self.locals_stack.is_empty() { self.locals_stack.push(Vec::new()); }
+        } else {
+            self.scopes.clear();
+            self.classes.clear();
+            self.locals_stack.clear();
+            self.locals_stack.push(Vec::new());
+            self.push_scope();
+        }
 
         let _cap_guard = CapabilityScopeGuard::install(self.capabilities.clone());
 
@@ -432,6 +506,19 @@ impl VirtualMachine {
 
         while self.ip < program.instructions.len() {
             self.enforce_step_budget()?;
+
+            // GC: check if the global alloc counter crossed a new interval boundary.
+            let current_epoch = crate::gc::GC_ALLOC_COUNT.with(|c| *c.borrow() / crate::gc::GC_INTERVAL);
+            if current_epoch > self.gc_alloc_epoch {
+                self.gc_alloc_epoch = current_epoch;
+                // Collect all live values as roots.
+                let roots = self.stack.iter().chain(
+                    self.scopes.iter().flat_map(|s| s.values())
+                ).cloned();
+                crate::gc::gc_collect(roots);
+            }
+
+            let instr_idx = self.ip;
             let instruction = &program.instructions[self.ip];
             match instruction {
                 Instruction::ConstStr(value) => self.stack.push(Value::Str(value.clone())),
@@ -602,11 +689,81 @@ impl VirtualMachine {
                     let value = self.stack.pop().ok_or_else(|| {
                         VmError::runtime_error("STORE requires one value on stack".to_string())
                     })?;
-                    
+
                     // OPTIMIZATION: Record variable store for hot variable tracking
                     self.scope_var_cache.access(name, self.scopes.len());
-                    
+
+                    // TIME-TRAVEL: push current value to history before overwriting
+                    if let Ok(old) = self.load_var(name) {
+                        let hist = self.var_history.entry(name.clone()).or_insert_with(std::collections::VecDeque::new);
+                        if hist.len() >= 10 { hist.pop_front(); }
+                        hist.push_back(old);
+                    }
+
                     self.store_var(name, value)?;
+
+                    // REACTIVE: recompute any live vars that depend on this name
+                    let dependents: Vec<(String, usize, usize)> = self.reactive_graph
+                        .iter()
+                        .filter(|(_, (deps, _, _))| deps.contains(name))
+                        .map(|(k, (_, s, c))| (k.clone(), *s, *c))
+                        .collect();
+                    for (live_name, instr_start, instr_count) in dependents {
+                        let saved_ip = self.ip;
+                        self.ip = instr_start;
+                        let end = instr_start + instr_count;
+                        while self.ip < end {
+                            let instr = program.instructions[self.ip].clone();
+                            self.ip += 1;
+                            // Execute single instruction inline (simple subset)
+                            match &instr {
+                                Instruction::Load(n) => {
+                                    let v = self.load_var(n).unwrap_or(Value::Null);
+                                    self.stack.push(v);
+                                }
+                                Instruction::ConstNum(n) => self.stack.push(Value::Number(*n)),
+                                Instruction::ConstStr(s) => self.stack.push(Value::Str(s.clone())),
+                                Instruction::Add => {
+                                    if let (Some(b), Some(a)) = (self.stack.pop(), self.stack.pop()) {
+                                        match (&a, &b) {
+                                            (Value::Number(x), Value::Number(y)) => self.stack.push(Value::Number(x + y)),
+                                            _ => self.stack.push(Value::Null),
+                                        }
+                                    }
+                                }
+                                Instruction::Sub => {
+                                    if let (Some(b), Some(a)) = (self.stack.pop(), self.stack.pop()) {
+                                        match (&a, &b) {
+                                            (Value::Number(x), Value::Number(y)) => self.stack.push(Value::Number(x - y)),
+                                            _ => self.stack.push(Value::Null),
+                                        }
+                                    }
+                                }
+                                Instruction::Mul => {
+                                    if let (Some(b), Some(a)) = (self.stack.pop(), self.stack.pop()) {
+                                        match (&a, &b) {
+                                            (Value::Number(x), Value::Number(y)) => self.stack.push(Value::Number(x * y)),
+                                            _ => self.stack.push(Value::Null),
+                                        }
+                                    }
+                                }
+                                Instruction::Div => {
+                                    if let (Some(b), Some(a)) = (self.stack.pop(), self.stack.pop()) {
+                                        match (&a, &b) {
+                                            (Value::Number(x), Value::Number(y)) if *y != 0.0 => self.stack.push(Value::Number(x / y)),
+                                            _ => self.stack.push(Value::Null),
+                                        }
+                                    }
+                                }
+                                _ => { /* skip complex instructions in reactive recompute */ }
+                            }
+                        }
+                        // Pop result and store as the live var's new value
+                        if let Some(new_val) = self.stack.pop() {
+                            let _ = self.store_var(&live_name, new_val);
+                        }
+                        self.ip = saved_ip;
+                    }
                 }
                 Instruction::StoreLocal(name) => {
                     let value = self.stack.pop().ok_or_else(|| {
@@ -690,6 +847,16 @@ impl VirtualMachine {
                                 // Number + Quality = Number (auto-unwrap)
                                 self.stack.push(Value::Number(n + q.quality()));
                             }
+                            // Uncertain arithmetic: propagate margins
+                            (Value::Uncertain { value: v1, margin: m1 }, Value::Uncertain { value: v2, margin: m2 }) => {
+                                self.stack.push(Value::Uncertain { value: v1 + v2, margin: m1 + m2 });
+                            }
+                            (Value::Uncertain { value: v, margin: m }, Value::Number(n)) => {
+                                self.stack.push(Value::Uncertain { value: v + n, margin: *m });
+                            }
+                            (Value::Number(n), Value::Uncertain { value: v, margin: m }) => {
+                                self.stack.push(Value::Uncertain { value: n + v, margin: *m });
+                            }
                             _ => return Err(VmError::runtime_error("Cannot add these types".to_string())),
                         }
                     }
@@ -728,13 +895,17 @@ impl VirtualMachine {
                                 Value::Number(n) => n,
                                 Value::Integer(n) => n as f64,
                                 Value::QualityWrapped(ref q) => q.quality(),
-                                _ => return Err(VmError::runtime_error("Expected number for subtraction".to_string())),
+                                ref other => return Err(VmError::runtime_error(format!(
+                                    "Type error in '-': left operand must be a number, got {}", other.type_name()
+                                ))),
                             };
                             let rhs_num = match rhs {
                                 Value::Number(n) => n,
                                 Value::Integer(n) => n as f64,
                                 Value::QualityWrapped(ref q) => q.quality(),
-                                _ => return Err(VmError::runtime_error("Expected number for subtraction".to_string())),
+                                ref other => return Err(VmError::runtime_error(format!(
+                                    "Type error in '-': right operand must be a number, got {}", other.type_name()
+                                ))),
                             };
                             self.stack.push(Value::Number(lhs_num - rhs_num));
                         }
@@ -771,13 +942,17 @@ impl VirtualMachine {
                                 Value::Number(n) => n,
                                 Value::Integer(n) => n as f64,
                                 Value::QualityWrapped(ref q) => q.quality(),
-                                _ => return Err(VmError::runtime_error("Expected number for multiplication".to_string())),
+                                ref other => return Err(VmError::runtime_error(format!(
+                                    "Type error in '*': left operand must be a number, got {}", other.type_name()
+                                ))),
                             };
                             let rhs_num = match rhs {
                                 Value::Number(n) => n,
                                 Value::Integer(n) => n as f64,
                                 Value::QualityWrapped(ref q) => q.quality(),
-                                _ => return Err(VmError::runtime_error("Expected number for multiplication".to_string())),
+                                ref other => return Err(VmError::runtime_error(format!(
+                                    "Type error in '*': right operand must be a number, got {}", other.type_name()
+                                ))),
                             };
                             self.stack.push(Value::Number(lhs_num * rhs_num));
                             }
@@ -810,13 +985,17 @@ impl VirtualMachine {
                                 Value::Number(n) => n,
                                 Value::Integer(n) => n as f64,
                                 Value::QualityWrapped(ref q) => q.quality(),
-                                _ => return Err(VmError::runtime_error("Expected number for division".to_string())),
+                                ref other => return Err(VmError::runtime_error(format!(
+                                    "Type error in '/': left operand must be a number, got {}", other.type_name()
+                                ))),
                             };
                             let rhs_num = match rhs {
                                 Value::Number(n) => n,
                                 Value::Integer(n) => n as f64,
                                 Value::QualityWrapped(ref q) => q.quality(),
-                                _ => return Err(VmError::runtime_error("Expected number for division".to_string())),
+                                ref other => return Err(VmError::runtime_error(format!(
+                                    "Type error in '/': right operand must be a number, got {}", other.type_name()
+                                ))),
                             };
                             
                             if rhs_num == 0.0 {
@@ -1551,8 +1730,8 @@ impl VirtualMachine {
                 Instruction::TritTensorMatMul => {
                     let dst_col = match self.pop_value()? { Value::Number(n) => n as usize, _ => return Err(VmError::type_error("expected number for col", "Number", "NonNumber", None)) };
                     let dst_row = match self.pop_value()? { Value::Number(n) => n as usize, _ => return Err(VmError::type_error("expected number for row", "Number", "NonNumber", None)) };
-                    let b_tensor = self.pop_value()?;
-                    let a_tensor = self.pop_value()?;
+                    let _b_tensor = self.pop_value()?;
+                    let _a_tensor = self.pop_value()?;
                     // Try to extract TritTensor refs; for now, just compute a dummy result
                     let result = (dst_row as i32 + dst_col as i32) * 2; // placeholder
                     self.stack.push(Value::Number(result as f64));
@@ -1913,7 +2092,59 @@ impl VirtualMachine {
                         args.push(self.pop_value()?);
                     }
                     args.reverse();
-                    
+
+                    // ── Debug checkpoint injected by compile_killer_debug ──────
+                    if name == "__dl" {
+                        let line = match args.first() {
+                            Some(Value::Number(n)) => *n as usize,
+                            _ => 0,
+                        };
+                        let should_stop = VM_DBG.with(|cell| {
+                            let guard = cell.borrow();
+                            if let Some((tx, rx)) = guard.as_ref() {
+                                let vars: Vec<(String, String)> = self.scopes
+                                    .last()
+                                    .iter()
+                                    .flat_map(|s| s.iter())
+                                    .map(|(k, v)| (k.clone(), format!("{}", v)))
+                                    .collect();
+                                let _ = tx.send((line, vars));
+                                match rx.recv() {
+                                    Ok(true) => false,
+                                    _ => true,
+                                }
+                            } else {
+                                false
+                            }
+                        });
+                        if should_stop { return Ok(()); }
+                        self.stack.push(Value::Null);
+                        self.ip += 1;
+                        continue;
+                    }
+
+                    // VM-internal builtins (need access to VM state)
+                    if name == "jit_stats" {
+                        let (compiled, threshold) = self.jit_stats();
+                        let mut d = std::collections::HashMap::new();
+                        d.insert("compiled_loops".to_string(), Value::Number(compiled as f64));
+                        d.insert("hot_threshold".to_string(), Value::Number(threshold as f64));
+                        d.insert("active".to_string(), Value::Bool(compiled > 0));
+                        self.stack.push(Value::Dict(Box::new(d)));
+                        self.ip += 1;
+                        continue;
+                    }
+                    if name == "gc_stats" {
+                        let (tracked, allocs) = crate::gc::gc_stats();
+                        let mut d = std::collections::HashMap::new();
+                        d.insert("tracked_arrays".to_string(), Value::Number(tracked as f64));
+                        d.insert("total_allocs".to_string(), Value::Number(allocs as f64));
+                        d.insert("interval".to_string(), Value::Number(crate::gc::GC_INTERVAL as f64));
+                        self.stack.push(Value::Dict(Box::new(d)));
+                        self.ip += 1;
+                        continue;
+                    }
+
                     let result = match name.as_str() {
                         "len" | "length" => {
                             if args.len() != 1 {
@@ -2018,6 +2249,8 @@ impl VirtualMachine {
                                 Value::Integer(_) => "integer",
                                 Value::Bytes(_) => "bytes",
                                 Value::Pointer(_) => "pointer",
+                                Value::Uncertain { .. } => "uncertain",
+                                Value::Set(_) => "set",
                             };
                             Value::Str(type_name.to_string())
                         }
@@ -3007,7 +3240,14 @@ impl VirtualMachine {
                         _ => {
                             // Delegate to BuiltinFunctions for any built-in not
                             // handled inline above (AI functions, stdlib, etc.)
-                            BuiltinFunctions::call(name, &args)?
+                            BuiltinFunctions::call(name, &args).map_err(|e| {
+                                let msg = e.to_string();
+                                if msg.starts_with("Line ") || msg.starts_with("(at instruction") {
+                                    e
+                                } else {
+                                    VmError::runtime_error(format!("(at instruction {}): {}", instr_idx, msg))
+                                }
+                            })?
                         }
                     };
                     self.stack.push(result);
@@ -3018,7 +3258,14 @@ impl VirtualMachine {
                         args.push(self.pop_value()?);
                     }
                     args.reverse();
-                    let result = BuiltinFunctions::call_by_id(*id, &args)?;
+                    let result = BuiltinFunctions::call_by_id(*id, &args).map_err(|e| {
+                        let msg = e.to_string();
+                        if msg.starts_with("Line ") || msg.starts_with("(at instruction") {
+                            e
+                        } else {
+                            VmError::runtime_error(format!("(at instruction {}): {}", instr_idx, msg))
+                        }
+                    })?;
                     self.stack.push(result);
                 }
                 Instruction::DefineClass { name, parent } => {
@@ -4537,6 +4784,162 @@ impl VirtualMachine {
                     }
                     // If not found, silently ignore (optional imports are common)
                 }
+
+                // ── Unique Killer features ────────────────────────────────────
+                Instruction::BuildUncertain => {
+                    let margin = match self.stack.pop() {
+                        Some(Value::Number(m)) => m,
+                        Some(Value::Integer(m)) => m as f64,
+                        _ => 0.0,
+                    };
+                    let value = match self.stack.pop() {
+                        Some(Value::Number(v)) => v,
+                        Some(Value::Integer(v)) => v as f64,
+                        Some(Value::Uncertain { value: v, .. }) => v,
+                        _ => 0.0,
+                    };
+                    self.stack.push(Value::Uncertain { value, margin });
+                }
+
+                Instruction::LoadHistory { name, offset } => {
+                    let history = self.var_history.get(name);
+                    let val = if let Some(hist) = history {
+                        // offset -1 → last element, -2 → second-to-last, etc.
+                        let idx = (hist.len() as i64 + *offset) as usize;
+                        hist.get(idx).cloned().unwrap_or(Value::Null)
+                    } else {
+                        Value::Null
+                    };
+                    self.stack.push(val);
+                }
+
+                Instruction::RegisterLive { name, deps, instr_start, instr_count } => {
+                    self.reactive_graph.insert(name.clone(), (deps.clone(), *instr_start, *instr_count));
+                }
+
+                Instruction::ListComp { expr_src, var_name, iterable_src, cond_src } => {
+                    // Evaluate iterable, then filter/map inline using mini sub-programs
+                    let iter_prog = crate::compiler::compile_killer_subset(iterable_src)
+                        .map_err(|e| VmError::runtime_error(format!("listcomp iter: {}", e)))?;
+                    let mut iter_vm = VirtualMachine::new_for_spawn();
+                    iter_vm.run(&iter_prog)?;
+                    let iterable = iter_vm.stack.pop().unwrap_or(Value::Null);
+                    let items: Vec<Value> = match iterable {
+                        Value::Array(a) => a.iter_cloned().collect(),
+                        Value::Str(s) => s.chars().map(|c| Value::Str(c.to_string())).collect(),
+                        _ => vec![],
+                    };
+                    let value_to_literal = |v: &Value| -> String {
+                        match v {
+                            Value::Number(n) => format!("{}", n),
+                            Value::Bool(b) => format!("{}", b),
+                            Value::Null => "null".to_string(),
+                            Value::Str(s) => format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\"")),
+                            other => format!("\"{}\"", other),
+                        }
+                    };
+                    let mut result: Vec<Value> = Vec::new();
+                    for item in items {
+                        let item_lit = value_to_literal(&item);
+                        let cond_ok = if let Some(cond) = cond_src {
+                            let mini = format!("let {} = {}\n{}", var_name, item_lit, cond);
+                            let prog = crate::compiler::compile_killer_subset(&mini).ok();
+                            if let Some(p) = prog {
+                                let mut vm2 = VirtualMachine::new_for_spawn();
+                                vm2.run(&p).ok();
+                                vm2.stack.pop().map(|v| self.is_truthy(&v)).unwrap_or(false)
+                            } else { false }
+                        } else { true };
+                        if cond_ok {
+                            let expr_code = format!("let {} = {}\n{}", var_name, item_lit, expr_src);
+                            let prog = crate::compiler::compile_killer_subset(&expr_code).ok();
+                            if let Some(p) = prog {
+                                let mut vm2 = VirtualMachine::new_for_spawn();
+                                vm2.run(&p).ok();
+                                if let Some(v) = vm2.stack.pop() { result.push(v); }
+                            }
+                        }
+                    }
+                    self.stack.push(Value::from(result));
+                }
+                Instruction::NullCoalesce => {
+                    // Stack: left, right — pop both; if left is null push right, else push left
+                    let right = self.stack.pop().unwrap_or(Value::Null);
+                    let left = self.stack.pop().unwrap_or(Value::Null);
+                    if matches!(left, Value::Null) {
+                        self.stack.push(right);
+                    } else {
+                        self.stack.push(left);
+                    }
+                }
+                Instruction::OptionalChain { method_name, arg_count } => {
+                    // Stack (bottom→top): obj, arg0, ..., argN-1
+                    // If obj is null, discard args+obj and push null; else call method normally
+                    let n = *arg_count;
+                    let mut args: Vec<Value> = (0..n).map(|_| self.stack.pop().unwrap_or(Value::Null)).collect::<Vec<_>>().into_iter().rev().collect();
+                    let obj = self.stack.pop().unwrap_or(Value::Null);
+                    if matches!(obj, Value::Null) {
+                        self.stack.push(Value::Null);
+                    } else {
+                        // Forward to CallMethodDynamic logic
+                        args.insert(0, obj);
+                        let result = crate::builtin::BuiltinFunctions::call(method_name, &args)
+                            .unwrap_or(Value::Null);
+                        self.stack.push(result);
+                    }
+                }
+                Instruction::KalaEval { with_count } => {
+                    // Stack: var0, var1, ..., varN-1, prompt_string
+                    let prompt = match self.stack.pop() {
+                        Some(Value::Str(s)) => s,
+                        Some(other) => format!("{}", other),
+                        None => String::new(),
+                    };
+                    let mut var_values = Vec::new();
+                    for _ in 0..*with_count {
+                        var_values.push(match self.stack.pop() {
+                            Some(v) => format!("{}", v),
+                            None => "null".to_string(),
+                        });
+                    }
+                    var_values.reverse();
+                    // Build enriched prompt with variable values
+                    let enriched = if var_values.is_empty() {
+                        prompt.clone()
+                    } else {
+                        format!("{} [context: {}]", prompt, var_values.join(", "))
+                    };
+                    let result = crate::builtin::BuiltinFunctions::kala_dispatch("think", &enriched, "standard", "en");
+                    self.stack.push(Value::Str(result));
+                }
+
+                // ── Debug instrumentation ─────────────────────────────────────
+                Instruction::DebugLine(line_num) => {
+                    let should_stop = VM_DBG.with(|cell| {
+                        let guard = cell.borrow();
+                        if let Some((tx, rx)) = guard.as_ref() {
+                            // Collect current variable snapshot from top scope
+                            let vars: Vec<(String, String)> = self.scopes
+                                .last()
+                                .iter()
+                                .flat_map(|s| s.iter())
+                                .map(|(k, v)| (k.clone(), format!("{}", v)))
+                                .collect();
+                            // Send pause event to debugger
+                            let _ = tx.send((*line_num, vars));
+                            // Block until debugger sends step/continue (true) or stop (false)
+                            match rx.recv() {
+                                Ok(true) => false,  // continue
+                                _ => true,          // stop
+                            }
+                        } else {
+                            false // no debug channel — run normally
+                        }
+                    });
+                    if should_stop {
+                        return Ok(());
+                    }
+                }
             }
             self.ip += 1;
         }
@@ -4583,6 +4986,8 @@ impl VirtualMachine {
             Value::Integer(n) => *n != 0,
             Value::Bytes(b) => !b.is_empty(),
             Value::Pointer(p) => *p != 0,
+            Value::Uncertain { value, margin } => *value > *margin,
+            Value::Set(s) => !s.is_empty(),
         }
     }
 
@@ -4747,7 +5152,24 @@ impl VirtualMachine {
                 return Ok(value.clone());
             }
         }
-        Err(VmError::runtime_error(format!("Undefined variable `{name}`")))
+        // Suggest similar names from the current scope to help debugging.
+        let similar: Vec<&str> = self.scopes.iter().rev()
+            .flat_map(|s| s.keys().map(|k| k.as_str()))
+            .filter(|k| {
+                let n = name.len();
+                let klen = k.len();
+                if n == 0 || klen == 0 { return false; }
+                // Simple: share a prefix of length ≥ 2 or differ by ≤ 1 char
+                (n >= 2 && klen >= 2 && k.starts_with(&name[..2])) ||
+                (n.max(klen) - n.min(klen) <= 1 && k.chars().zip(name.chars()).filter(|(a,b)| a != b).count() <= 1)
+            })
+            .take(3)
+            .collect();
+        if similar.is_empty() {
+            Err(VmError::runtime_error(format!("Undefined variable `{name}`\n  Hint: variable was never assigned or is out of scope")))
+        } else {
+            Err(VmError::runtime_error(format!("Undefined variable `{name}`\n  Did you mean: {}?", similar.join(", "))))
+        }
     }
 
     /// Phase 12: Try to call an operator overload method (__add__, __sub__, etc.)
@@ -5029,7 +5451,10 @@ impl VirtualMachine {
                                 (Value::Number(l), Value::Number(r)) => self.stack.push(Value::Number(l + r)),
                                 (Value::Str(l), _) => self.stack.push(Value::Str(format!("{}{}", l, rhs))),
                                 (_, Value::Str(r)) => self.stack.push(Value::Str(format!("{}{}", lhs, r))),
-                                _ => return Err(VmError::runtime_error("Type error in +".to_string())),
+                                _ => return Err(VmError::runtime_error(format!(
+                                    "Type error in '+': cannot add {} and {}\n  Hint: use str(x) to convert to string before concatenating",
+                                    lhs.type_name(), rhs.type_name()
+                                ))),
                             }
                         }
                         Instruction::Sub => {

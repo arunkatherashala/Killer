@@ -604,3 +604,87 @@ mod tests {
         assert!(winner.is_resolved());
     }
 }
+
+// ── Global numeric-ID future registry ────────────────────────────────────────
+//
+// Provides a thread-safe registry of `Value::Future`-compatible results keyed
+// by an auto-incrementing i64 handle.  Used by the `spawn()` / `await()`
+// builtins when callers prefer an integer handle over a Value::Future pointer.
+//
+// The VM's SpawnCall* opcodes and AwaitTask opcode bypass this registry
+// entirely — they embed the Arc<Mutex<...>> directly in Value::Future.
+// This registry is an optional convenience for scripts that call `spawn(val)`
+// and receive a numeric handle they pass around before calling `await(handle)`.
+
+use std::collections::HashMap as _HashMap;
+use std::sync::{Mutex as _Mutex, OnceLock as _OnceLock};
+use std::sync::atomic::{AtomicI64 as _AtomicI64, Ordering as _Ordering};
+
+pub enum AsyncResult {
+    Pending,
+    Ready(Value),
+    Error(String),
+}
+
+static REGISTRY: _OnceLock<_Mutex<_HashMap<i64, AsyncResult>>> = _OnceLock::new();
+static NEXT_ID: _AtomicI64 = _AtomicI64::new(1);
+
+fn registry() -> &'static _Mutex<_HashMap<i64, AsyncResult>> {
+    REGISTRY.get_or_init(|| _Mutex::new(_HashMap::new()))
+}
+
+/// Allocate a new pending future slot; returns its numeric ID.
+pub fn new_future_id() -> i64 {
+    let id = NEXT_ID.fetch_add(1, _Ordering::Relaxed);
+    if let Ok(mut map) = registry().lock() {
+        map.insert(id, AsyncResult::Pending);
+    }
+    id
+}
+
+/// Mark a future as successfully resolved.
+pub fn complete_future(id: i64, result: Value) {
+    if let Ok(mut map) = registry().lock() {
+        map.insert(id, AsyncResult::Ready(result));
+    }
+}
+
+/// Mark a future as failed.
+pub fn fail_future(id: i64, error: String) {
+    if let Ok(mut map) = registry().lock() {
+        map.insert(id, AsyncResult::Error(error));
+    }
+}
+
+/// Non-blocking poll.  Returns `None` while still pending.
+pub fn poll_future(id: i64) -> Option<Result<Value, String>> {
+    let map = registry().lock().ok()?;
+    match map.get(&id)? {
+        AsyncResult::Pending   => None,
+        AsyncResult::Ready(v)  => Some(Ok(v.clone())),
+        AsyncResult::Error(e)  => Some(Err(e.clone())),
+    }
+}
+
+/// Blocking await with spin-wait (no tokio required).
+/// Times out after ~10 s and returns an error.
+pub fn await_future_id(id: i64) -> Result<Value, String> {
+    let mut attempts: u32 = 0;
+    loop {
+        if let Some(result) = poll_future(id) {
+            return result;
+        }
+        attempts += 1;
+        if attempts > 10_000 {
+            return Err(format!("future {} timed out", id));
+        }
+        std::thread::sleep(std::time::Duration::from_millis(1));
+    }
+}
+
+/// Remove a future from the registry (optional clean-up).
+pub fn drop_future_id(id: i64) {
+    if let Ok(mut map) = registry().lock() {
+        map.remove(&id);
+    }
+}

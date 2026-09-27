@@ -50,6 +50,9 @@
 pub mod source_location;
 pub mod safe_mutex;
 
+// Cycle-collecting GC (tri-color mark-and-sweep on top of Rc<RefCell<>>)
+pub mod gc;
+
 // Module declarations (Week 3-5 focus)
 pub mod jit;
 pub mod benchmark;
@@ -193,142 +196,133 @@ pub mod advanced_features;
 // Standard Library Builder - 220+ functions (Math, String, Collections, I/O, Time, Type, Concurrency)
 pub mod stdlib_builder;
 
-// Standard Library Implementation - Phase 21-22 Solvers
-// 600+ functions across all scientific, technical, and infrastructure domains (PLANNED v4.0 with FFI)
-/*
-pub mod stdlib_impl {
-    /// Math library: 71+ functions (trig, exponential, stats, special, RNG)
-    pub mod math_impl;
-    
-    /// Linear Algebra: 25+ functions (matrix ops, decomposition, eigenvalues)
-    pub mod linear_algebra;
-    
-    /// Statistics: 50+ functions (descriptive, distributions, hypothesis testing, correlation)
-    pub mod statistics_solver;
-    
-    /// Game Theory: 35+ functions (Nash equilibrium, cooperative games, auctions, voting)
-    pub mod game_theory;
-    
-    /// Cryptography: 50+ functions (RSA, ECC, hash, DH key exchange, signatures)
-    pub mod cryptography_solver;
-    
-    /// Network Science: 40+ functions (centrality, clustering, algorithms, community detection)
-    pub mod network_science;
-    
-    /// Signal Processing: 45+ functions (FFT, filtering, windowing, spectral analysis, features)
-    pub mod signal_processing;
-    
-    /// Medical & Biomedical: 43+ functions (pharmacokinetics, epidemiology, diagnostics, clinical metrics)
-    pub mod medical_biomedical;
-    
-    /// Millennium Prize Problems: 20+ functions (P vs NP, Riemann hypothesis, Navier-Stokes, Yang-Mills)
-    pub mod millennium_prize;
-    
-    /// File I/O & Streams: 42+ functions (file ops, streams, buffering, serialization, binary I/O)
-    pub mod io_solver;
-    
-    /// Time & Scheduling: 40+ functions (current time, calculations, scheduling, timers, formatting)
-    pub mod time_solver;
-    
-    /// Type System: 40+ functions (type introspection, reflection, classification, constraints)
-    pub mod type_solver;
-    
-    /// Concurrency: 40+ functions (atomic ops, synchronization, thread-safe primitives, memory barriers)
-    pub mod concurrency_solver;
-    
-    /// MongoDB Database: 42+ functions (connection pool, CRUD, aggregation, indexing, transactions)
-    pub mod database_mongodb;
-    
-    /// PostgreSQL Database: 45+ functions (connection pool, queries, prepared statements, transactions, DDL, indexing)
-    pub mod database_postgresql;
-    
-    /// Query Builder & ORM: 40+ functions (generic query DSL, filter builder, pagination, joins, result mapping)
-    pub mod database_query;
-    
-    /// HTTP Server: 50+ functions (server lifecycle, routing, connections, static files, keep-alive)
-    pub mod http_server;
-    
-    /// Request/Response HTTP Protocol: 55+ functions (parsing, headers, cookies, encoding/decoding, content types)
-    pub mod request_response;
-    
-    /// Middleware: 50+ functions (CORS, logging, compression, security, rate limiting, request/response filtering)
-    pub mod middleware;
-    
-    /// Template Engine: 55+ functions (parsing, variable interpolation, filters, loops, rendering, caching)
-    pub mod template_engine;
-    
-    /// Session Management: 50+ functions (session lifecycle, storage, serialization, TTL, config)
-    pub mod session;
-    
-    /// Authentication & Authorization: 50+ functions (basic auth, bearer tokens, JWT, permissions, roles)
-    pub mod auth;
-    
-    /// WebSocket: 50+ functions (handshake, frame parsing, messaging, connection management, extensions)
-    pub mod websocket;
-    
-    /// GraphQL: 50+ functions (schema definition, query parsing, execution, types, response formatting)
-    pub mod graphql;
-    
-    /// File Upload: 45+ functions (multipart parsing, file handling, form processing, progress tracking, security)
-    pub mod file_upload;
-    
-    /// Streaming: 45+ functions (response streaming, stream processing, buffering, composition, error handling)
-    pub mod streaming;
-    
-    /// Server-Sent Events: 50+ functions (connection management, event publishing, formats, client management, channels)
-    pub mod sse;
-    
-    /// OAuth 2.0 & OpenID Connect: 50+ functions (auth flows, token management, PKCE, identity verification)
-    pub mod oauth2;
-    
-    /// Role-Based Access Control: 50+ functions (roles, permissions, hierarchy, audit)
-    pub mod rbac;
-    
-    /// Attribute-Based Access Control: 50+ functions (policies, conditions, attributes, decision making)
-    pub mod abac;
-    
-    /// Distributed Session Management: 50+ functions (session storage, multi-device, synchronization)
-    pub mod sessions;
-    
-    /// Token Introspection & Revocation: 40+ functions (validation, revocation tracking, JTI management)
-    pub mod token_introspection;
-    
-    /// Service Discovery: 50+ functions (registry, DNS, health checks, service watch)
-    pub mod service_discovery;
-    
-    /// Load Balancing: 50+ functions (round robin, least connections, weighted, consistent hashing, health-aware)
-    pub mod load_balancer;
-    
-    /// Circuit Breaker: 50+ functions (state machine, failure detection, recovery, multi-circuit management)
-    pub mod circuit_breaker;
-    
-    /// Message Queues: 50+ functions (pub/sub, consumer groups, dead letter queues, partitioning)
-    pub mod message_queue;
-    
-    /// Distributed Tracing: 50+ functions (spans, instrumentation, context propagation, sampling)
-    pub mod distributed_tracing;
-    
-    /// PHASE 28: Distributed Consensus - 5 modules, 250+ functions
-    
-    /// Raft Consensus: 46+ functions (leader election, log replication, safety)
-    pub mod raft;
-    
-    /// Paxos for Byzantine Resilience: 50+ functions (proposer, acceptor, learner, Byzantine handling)
-    pub mod paxos;
-    
-    /// Hybrid Logical Clocks: 50+ functions (HLC management, causality tracking, gap handling, timestamp ordering)
-    pub mod hlc;
-    
-    /// Distributed Locks: 50+ functions (basic locking, expiration, RW locks, lock manager, deadlock detection)
-    pub mod locks;
-    
-    /// Consensus State Machines: 50+ functions (state management, command logs, snapshots, queries)
-    pub mod state_machines;
-}
-*/  // END stdlib_impl - PLANNED v4.0
+// ══════════════════════════════════════════════════════════════════════════════
+// Standard Library Implementation - Phase 21-28 Solvers (NOW IMPLEMENTED)
+// 600+ functions across all scientific, technical, and infrastructure domains
+// ══════════════════════════════════════════════════════════════════════════════
+
+#[doc(hidden)]
+pub mod math_impl;
+
+#[doc(hidden)]
+pub mod linear_algebra;
+
+/// Statistics: 50+ functions (descriptive, distributions, hypothesis testing, correlation)
+pub mod statistics_solver;
+
+#[doc(hidden)]
+pub mod game_theory;
+
+#[doc(hidden)]
+pub mod cryptography_solver;
+
+/// Network Science: 40+ functions (centrality, clustering, algorithms, community detection)
+pub mod network_science;
+
+#[doc(hidden)]
+pub mod signal_processing;
+
+/// Medical & Biomedical: 43+ functions (pharmacokinetics, epidemiology, diagnostics, clinical metrics)
+pub mod medical_biomedical;
+
+/// Millennium Prize Problems: 20+ functions (P vs NP, Riemann hypothesis, Navier-Stokes, Yang-Mills)
+pub mod millennium_prize;
+
+#[doc(hidden)]
+pub mod io_solver;
+
+/// Time & Scheduling: 40+ functions (current time, calculations, scheduling, timers, formatting)
+pub mod time_solver;
+
+/// Type System: 40+ functions (type introspection, reflection, classification, constraints)
+pub mod type_solver;
+
+#[doc(hidden)]
+pub mod concurrency_solver;
+
+#[doc(hidden)]
+pub mod database_mongodb;
+
+#[doc(hidden)]
+pub mod database_postgresql;
+
+#[doc(hidden)]
+pub mod database_query;
+
+#[doc(hidden)]
+pub mod request_response;
+
+#[doc(hidden)]
+pub mod middleware;
+
+/// Template Engine: 55+ functions (parsing, variable interpolation, filters, loops, rendering, caching)
+pub mod template_engine;
+
+#[doc(hidden)]
+pub mod session;
+
+#[doc(hidden)]
+pub mod auth;
+
+#[doc(hidden)]
+pub mod graphql;
+
+#[doc(hidden)]
+pub mod file_upload;
+
+#[doc(hidden)]
+pub mod streaming;
+
+/// Server-Sent Events: 50+ functions (connection management, event publishing, formats, client management, channels)
+pub mod sse;
+
+#[doc(hidden)]
+pub mod oauth2;
+
+#[doc(hidden)]
+pub mod rbac;
+
+#[doc(hidden)]
+pub mod abac;
+
+#[doc(hidden)]
+pub mod sessions;
+
+#[doc(hidden)]
+pub mod token_introspection;
+
+#[doc(hidden)]
+pub mod service_discovery;
+
+#[doc(hidden)]
+pub mod load_balancer;
+
+#[doc(hidden)]
+pub mod message_queue;
+
+#[doc(hidden)]
+pub mod distributed_tracing;
+
+#[doc(hidden)]
+pub mod raft;
+
+#[doc(hidden)]
+pub mod paxos;
+
+#[doc(hidden)]
+pub mod hlc;
+
+#[doc(hidden)]
+pub mod locks;
+
+#[doc(hidden)]
+pub mod state_machines;
 
 // Async/Await - Non-blocking I/O and async functions
 pub mod async_await;
+
+// Async runtime: global future registry + task scheduler
+pub mod async_runtime;
 
 // Type system for static type checking and inference
 pub mod type_system;
@@ -402,6 +396,8 @@ pub mod http;            // HTTP client utils
 pub mod json_csv;        // JSON and CSV parsing
 pub mod websocket;       // WebSocket support
 pub mod compiler;        // Killer → bytecode compiler
+pub mod regex_engine;    // Native regex engine (no external crates)
+pub mod channel_registry; // Global channel registry for chan_new/send/recv builtins
 pub mod vm;              // Bytecode virtual machine
 pub mod ghost_vm;        // Ghost VM — cold-resumable capsule (GHST) + fuel-bounded interpreter
 pub mod ghost_lang;      // GhostLang — high-level language that compiles to Ghost assembly
@@ -423,6 +419,10 @@ pub mod kore_v2;
 pub mod kore_query;
 // -- KORE Transactions — ACID writes + Time Travel versioning --------------------
 pub mod kore_txn;
+// -- KORE Transaction Registry — global handle store for builtin kore_txn_* -----
+pub mod txn_registry;
+// -- KORE Engine FFI — Killer ↔ kore-ffi static library (Phase 2) ---------------
+pub mod kore_engine;
 // -- Nova Compression — KORE columnar encoding + LZ77 (no external deps) ---------
 // nova_write / nova_info / nova_read_col builtins
 pub mod nova;
@@ -462,7 +462,7 @@ pub use killer_super::{
 pub use bytecode::Program;
 pub use vm::VirtualMachine;
 pub use error::VmError;
-pub use compiler::{compile_killer_ast, compile_killer_default, compile_killer_subset};
+pub use compiler::{compile_killer_ast, compile_killer_default, compile_killer_subset, compile_killer_debug};
 pub use stmt_parser::{parse_killer_program, run_killer_parsed};
 
 /// KhLM / RLM helpers for embedders and tools (model path heuristics, synthesis context budget).

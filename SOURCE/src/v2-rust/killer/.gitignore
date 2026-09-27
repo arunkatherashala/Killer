@@ -1,0 +1,27 @@
+target/
+
+# Compiled artifacts that end up at the crate root during dev
+*.rcgu.o
+*.dll.exp
+*.dll.lib
+*.pdb
+*.so
+*.obj
+*.exe
+
+# Scratch / benchmark runner files at crate root
+*.log
+_*.log
+b.txt
+added.kore
+analyze_nova.py
+bench_compress.py
+
+# Scratch .killer files at crate root (b*.killer, bench*.killer)
+b*.killer
+bench*.killer
+bench_*.killer
+
+# Ghost VM scratch
+bench_spawn.ghost
+bench_spawn.ghst

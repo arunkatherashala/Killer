@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 pub struct LspServer {
     document_store: HashMap<String, LsDocument>,
-    capabilities: LspCapabilities,
+    _capabilities: LspCapabilities,
 }
 
 #[derive(Clone)]
@@ -43,7 +43,7 @@ impl LspServer {
     pub fn new() -> Self {
         Self {
             document_store: HashMap::new(),
-            capabilities: LspCapabilities {
+            _capabilities: LspCapabilities {
                 completion: true,
                 hover: true,
                 go_to_definition: true,

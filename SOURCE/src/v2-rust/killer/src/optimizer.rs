@@ -17,6 +17,9 @@ pub fn optimize_bytecode_with_map(instructions: &[Instruction]) -> (Vec<Instruct
     // Phase 2: Eliminate redundant operations (conservative pass)
     let instructions = eliminate_redundant_operations(&instructions);
 
+    // Phase 2b: Constant folding on ConstNum+ConstNum+Op triplets
+    let instructions = fold_const_arithmetic(&instructions);
+
     // Phase 3: Peephole fusion — combine common slot+const+op patterns
     let (instructions, map) = fuse_slot_patterns(&instructions);
 
@@ -24,6 +27,52 @@ pub fn optimize_bytecode_with_map(instructions: &[Instruction]) -> (Vec<Instruct
     let instructions = lower_builtin_calls(&instructions);
 
     (instructions, map)
+}
+
+/// Fold sequences: ConstNum(a) ConstNum(b) <ArithOp> → ConstNum(result)
+/// Catches cases the AST constant-folder misses (e.g., values from macros,
+/// string concat, or folded-in sub-expressions that become adjacent consts).
+fn fold_const_arithmetic(instructions: &[Instruction]) -> Vec<Instruction> {
+    let mut out: Vec<Instruction> = Vec::with_capacity(instructions.len());
+    let mut i = 0;
+    while i < instructions.len() {
+        // Look for: ConstNum(a) ConstNum(b) <Op>
+        if i + 2 < instructions.len() {
+            if let (Instruction::ConstNum(a), Instruction::ConstNum(b)) =
+                (&instructions[i], &instructions[i + 1])
+            {
+                let a = *a;
+                let b = *b;
+                let folded = match &instructions[i + 2] {
+                    Instruction::Add => Some(a + b),
+                    Instruction::Sub => Some(a - b),
+                    Instruction::Mul => Some(a * b),
+                    Instruction::Div if b != 0.0 => Some(a / b),
+                    Instruction::Mod if b != 0.0 => Some(a % b),
+                    Instruction::IntDiv if b != 0.0 => Some((a / b).floor()),
+                    _ => None,
+                };
+                if let Some(result) = folded {
+                    out.push(Instruction::ConstNum(result));
+                    i += 3;
+                    continue;
+                }
+            }
+        }
+        // Look for: ConstStr(a) ConstStr(b) Add → ConstStr(ab)
+        if i + 2 < instructions.len() {
+            if let (Instruction::ConstStr(a), Instruction::ConstStr(b), Instruction::Add) =
+                (&instructions[i], &instructions[i + 1], &instructions[i + 2])
+            {
+                out.push(Instruction::ConstStr(format!("{}{}", a, b)));
+                i += 3;
+                continue;
+            }
+        }
+        out.push(instructions[i].clone());
+        i += 1;
+    }
+    out
 }
 
 fn lower_builtin_calls(instructions: &[Instruction]) -> Vec<Instruction> {

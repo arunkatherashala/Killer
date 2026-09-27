@@ -132,25 +132,80 @@ fn semver_satisfies(ver: &str, constraint: &str) -> bool {
     }
 }
 
-/// Built-in package registry (ships with Killer)
+/// Built-in package registry (ships with Killer) — 15 core packages
 fn builtin_registry() -> Vec<(&'static str, &'static str, &'static str)> {
     vec![
-        ("killer-std", "1.2.0", "Killer standard library extensions"),
-        ("killer-http", "1.0.0", "HTTP client/server framework"),
-        ("killer-json", "1.1.0", "JSON parsing and serialization"),
-        ("killer-test", "1.0.0", "Testing framework and assertions"),
-        ("killer-crypto", "1.0.0", "Cryptography primitives"),
-        ("killer-db", "1.0.0", "Database adapters (KV, SQL, NoSQL)"),
-        ("killer-ui", "0.9.0", "Terminal and web UI framework"),
-        ("killer-math", "1.2.0", "Advanced math and algorithms"),
-        ("killer-net", "1.0.0", "Networking utilities (TCP, UDP, WS)"),
-        ("killer-ai", "0.8.0", "AI/ML building blocks"),
-        ("killer-nova", "1.0.0", "Nova compression codec"),
-        ("killer-cli", "1.0.0", "CLI argument parsing and colors"),
-        ("killer-log", "1.0.0", "Structured logging framework"),
-        ("killer-regex", "1.0.0", "Extended regex patterns"),
-        ("killer-fs", "1.0.0", "Filesystem utilities and globbing"),
+        ("killer-std",   "1.2.0", "Killer standard library extensions"),
+        ("killer-http",  "1.0.0", "HTTP client/server framework"),
+        ("killer-json",  "1.1.0", "JSON parsing and serialization"),
+        ("killer-test",  "1.0.0", "Testing framework and assertions"),
+        ("killer-crypto","1.0.0", "Cryptography primitives (AES-256-GCM, HMAC, hashing)"),
+        ("killer-db",    "1.0.0", "Database adapters (KV, SQL, NoSQL, Kore)"),
+        ("killer-ui",    "0.9.0", "Terminal and web UI framework"),
+        ("killer-math",  "1.2.0", "Advanced math and algorithms"),
+        ("killer-net",   "1.0.0", "Networking utilities (TCP, UDP, WS)"),
+        ("killer-ai",    "0.8.0", "AI/ML building blocks (8 model types)"),
+        ("killer-nova",  "1.0.0", "Nova columnar compression codec"),
+        ("killer-cli",   "1.0.0", "CLI argument parsing, colors, progress bars"),
+        ("killer-log",   "1.0.0", "Structured logging with correlation IDs"),
+        ("killer-regex", "1.0.0", "Extended regex patterns and replacements"),
+        ("killer-fs",    "1.0.0", "Filesystem utilities and globbing"),
     ]
+}
+
+/// Local registry directory: ~/.killer/registry/<name>/<version>/
+fn local_registry_dir() -> std::path::PathBuf {
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .unwrap_or_else(|_| ".".to_string());
+    std::path::PathBuf::from(home).join(".killer").join("registry")
+}
+
+/// List packages in the local filesystem registry.
+/// Each entry: (name, version, description).
+fn local_registry_packages() -> Vec<(String, String, String)> {
+    let base = local_registry_dir();
+    let mut result = Vec::new();
+    if let Ok(names) = std::fs::read_dir(&base) {
+        for name_entry in names.flatten() {
+            let name = name_entry.file_name().to_string_lossy().to_string();
+            let name_dir = base.join(&name);
+            if let Ok(versions) = std::fs::read_dir(&name_dir) {
+                for ver_entry in versions.flatten() {
+                    let version = ver_entry.file_name().to_string_lossy().to_string();
+                    let meta_path = name_dir.join(&version).join("package.json");
+                    let desc = if let Ok(meta) = std::fs::read_to_string(&meta_path) {
+                        meta.lines()
+                            .find(|l| l.contains("\"description\""))
+                            .and_then(|l| l.split(':').nth(1))
+                            .map(|v| v.trim().trim_matches('"').trim_matches(',').to_string())
+                            .unwrap_or_default()
+                    } else {
+                        String::new()
+                    };
+                    result.push((name.clone(), version, desc));
+                }
+            }
+        }
+    }
+    result
+}
+
+/// Find a package by name + constraint in local registry, then bundled registry.
+fn resolve_package(name: &str, constraint: &str) -> Option<(String, String, String)> {
+    // 1. Local registry first
+    for (n, v, d) in local_registry_packages() {
+        if n == name && semver_satisfies(&v, constraint) {
+            return Some((n, v, d));
+        }
+    }
+    // 2. Bundled registry
+    for (n, v, d) in builtin_registry() {
+        if n == name && semver_satisfies(v, constraint) {
+            return Some((n.to_string(), v.to_string(), d.to_string()));
+        }
+    }
+    None
 }
 
 // pkg_init(name, version?) → creates killer.toml
@@ -213,23 +268,24 @@ pub fn builtin_pkg_list(args: &[Value]) -> Result<Value, VmError> {
     Ok(Value::Str(out))
 }
 
-// pkg_resolve() → resolve dependency tree
+// pkg_resolve() → resolve dependency tree (local registry first, then bundled)
 pub fn builtin_pkg_resolve(args: &[Value]) -> Result<Value, VmError> {
     let _ = args;
     let m = find_manifest().map_err(|e| VmError::runtime_error(e))?;
-    let registry = builtin_registry();
     let mut resolved = Vec::new();
     let mut errors = Vec::new();
     for (name, constraint) in &m.deps {
-        let found = registry.iter().find(|(n, v, _)| {
-            *n == name.as_str() && semver_satisfies(v, constraint)
-        });
-        match found {
+        match resolve_package(name, constraint) {
             Some((n, v, desc)) => {
-                resolved.push(format!("  ✓ {} v{} — {}", n, v, desc));
+                let source = if local_registry_packages().iter().any(|(ln, lv, _)| ln == &n && lv == &v) {
+                    "local"
+                } else {
+                    "bundled"
+                };
+                resolved.push(format!("  ✓ {} v{} — {} [{}]", n, v, desc, source));
             }
             None => {
-                errors.push(format!("  ✗ {} {} — not found in registry", name, constraint));
+                errors.push(format!("  ✗ {} {} — not found in local or bundled registry", name, constraint));
             }
         }
     }
@@ -240,55 +296,90 @@ pub fn builtin_pkg_resolve(args: &[Value]) -> Result<Value, VmError> {
     Ok(Value::Str(out))
 }
 
-// pkg_install() → install all deps
+// pkg_install() → install deps from local + bundled registry into packages/
 pub fn builtin_pkg_install(args: &[Value]) -> Result<Value, VmError> {
     let _ = args;
     let m = find_manifest().map_err(|e| VmError::runtime_error(e))?;
-    let registry = builtin_registry();
     let _ = std::fs::create_dir_all("packages");
     let mut installed = 0u32;
+    let mut not_found = Vec::new();
     for (name, constraint) in &m.deps {
-        let found = registry.iter().find(|(n, v, _)| {
-            *n == name.as_str() && semver_satisfies(v, constraint)
-        });
-        if let Some((n, v, desc)) = found {
-            // Create package stub in packages/
-            let pkg_dir = format!("packages/{}", n);
-            let _ = std::fs::create_dir_all(&pkg_dir);
-            let stub = format!("// {} v{}\n// {}\n// Auto-installed by Killer Package Manager\n\nkfn version() {{\n    return \"{}\"\n}}\n", n, v, desc, v);
-            let _ = std::fs::write(format!("{}/mod.killer", pkg_dir), &stub);
-            installed += 1;
+        match resolve_package(name, constraint) {
+            Some((n, v, desc)) => {
+                let pkg_dir = format!("packages/{}", n);
+                let _ = std::fs::create_dir_all(&pkg_dir);
+                // Check if package source exists in local registry
+                let local_src = local_registry_dir().join(&n).join(&v).join("mod.killer");
+                if local_src.exists() {
+                    // Copy from local registry
+                    let _ = std::fs::copy(&local_src, format!("{}/mod.killer", pkg_dir));
+                } else {
+                    // Generate stub from bundled metadata
+                    let stub = format!(
+                        "# {} v{}\n# {}\n# Installed by Killer Package Manager (KPM)\n\nkfn version() {{\n    return \"{}\"\n}}\n\nkfn describe() {{\n    return \"{}: {}\"\n}}\n",
+                        n, v, desc, v, n, desc
+                    );
+                    let _ = std::fs::write(format!("{}/mod.killer", pkg_dir), &stub);
+                }
+                // Write package manifest in packages/<name>/
+                let meta = format!(
+                    "{{\"name\":\"{}\",\"version\":\"{}\",\"description\":\"{}\"}}\n",
+                    n, v, desc
+                );
+                let _ = std::fs::write(format!("{}/package.json", pkg_dir), &meta);
+                installed += 1;
+            }
+            None => not_found.push(format!("{} {}", name, constraint)),
         }
     }
-    Ok(Value::Str(format!("Installed {} package(s) into packages/", installed)))
+    let mut out = format!("Installed {} package(s) into packages/", installed);
+    if !not_found.is_empty() {
+        out.push_str(&format!("\nNot found: {}", not_found.join(", ")));
+    }
+    Ok(Value::Str(out))
 }
 
-// pkg_info(name) → package info
+// pkg_info(name) → package info from local registry then bundled
 pub fn builtin_pkg_info(args: &[Value]) -> Result<Value, VmError> {
     if args.is_empty() {
         return Err(VmError::runtime_error("pkg_info(name) — package name required"));
     }
     let name = val_str(&args[0]);
-    let registry = builtin_registry();
-    let found = registry.iter().find(|(n, _, _)| *n == name.as_str());
-    match found {
-        Some((n, v, desc)) => {
-            Ok(Value::Str(format!("{} v{}\n  {}", n, v, desc)))
+    // Check local registry
+    for (n, v, d) in local_registry_packages() {
+        if n == name {
+            return Ok(Value::Str(format!(
+                "{} v{} [local registry]\n  {}\n  path: {}",
+                n, v, d,
+                local_registry_dir().join(&n).join(&v).display()
+            )));
         }
-        None => Ok(Value::Str(format!("Package '{}' not found in registry", name))),
     }
+    // Check bundled registry
+    for (n, v, d) in builtin_registry() {
+        if n == name {
+            return Ok(Value::Str(format!("{} v{} [bundled]\n  {}", n, v, d)));
+        }
+    }
+    Ok(Value::Str(format!("Package '{}' not found in local or bundled registry", name)))
 }
 
-// pkg_search(query) → search registry
+// pkg_search(query) → search both local and bundled registries
 pub fn builtin_pkg_search(args: &[Value]) -> Result<Value, VmError> {
     let query = if args.is_empty() { String::new() } else { val_str(&args[0]).to_lowercase() };
-    let registry = builtin_registry();
-    let results: Vec<String> = registry.iter()
-        .filter(|(n, _, d)| {
-            query.is_empty() || n.to_lowercase().contains(&query) || d.to_lowercase().contains(&query)
-        })
-        .map(|(n, v, d)| format!("  {} v{} — {}", n, v, d))
-        .collect();
+    let mut results = Vec::new();
+    // Local registry (shown first)
+    for (n, v, d) in local_registry_packages() {
+        if query.is_empty() || n.to_lowercase().contains(&query) || d.to_lowercase().contains(&query) {
+            results.push(format!("  {} v{} — {} [local]", n, v, d));
+        }
+    }
+    // Bundled registry
+    for (n, v, d) in builtin_registry() {
+        if query.is_empty() || n.to_lowercase().contains(&query) || d.to_lowercase().contains(&query) {
+            results.push(format!("  {} v{} — {} [bundled]", n, v, d));
+        }
+    }
     if results.is_empty() {
         Ok(Value::Str(format!("No packages matching '{}'", query)))
     } else {
@@ -298,35 +389,59 @@ pub fn builtin_pkg_search(args: &[Value]) -> Result<Value, VmError> {
     }
 }
 
-// pkg_publish() → publish (simulate)
+// pkg_publish() → publish to the local filesystem registry (~/.killer/registry/)
 pub fn builtin_pkg_publish(args: &[Value]) -> Result<Value, VmError> {
     let _ = args;
     let m = find_manifest().map_err(|e| VmError::runtime_error(e))?;
-    // Create .kpkg archive (tar-like stub)
-    let archive_name = format!("{}-{}.kpkg", m.name, m.version);
-    let mut content = String::new();
-    content.push_str("KPKG\n");
-    content.push_str(&format!("name={}\n", m.name));
-    content.push_str(&format!("version={}\n", m.version));
-    content.push_str(&format!("deps={}\n", m.deps.len()));
-    // Collect .killer files
+
+    // Build destination: ~/.killer/registry/<name>/<version>/
+    let dest = local_registry_dir().join(&m.name).join(&m.version);
+    std::fs::create_dir_all(&dest)
+        .map_err(|e| VmError::runtime_error(format!("Cannot create registry dir: {}", e)))?;
+
+    // Write package.json metadata
+    let meta = format!(
+        "{{\"name\":\"{}\",\"version\":\"{}\",\"description\":\"{}\",\"author\":\"{}\"}}\n",
+        m.name, m.version, m.description, m.author
+    );
+    std::fs::write(dest.join("package.json"), &meta)
+        .map_err(|e| VmError::runtime_error(format!("Cannot write package.json: {}", e)))?;
+
+    // Write killer.toml into the registry entry
+    std::fs::write(dest.join("killer.toml"), m.to_toml())
+        .map_err(|e| VmError::runtime_error(format!("Cannot write killer.toml: {}", e)))?;
+
+    // Copy all .killer source files into the registry entry
     let mut file_count = 0u32;
     if let Ok(entries) = std::fs::read_dir(".") {
         for entry in entries.flatten() {
             let path = entry.path();
             if path.extension().map(|e| e == "killer").unwrap_or(false) {
+                let fname = path.file_name().unwrap_or_default();
                 if let Ok(src) = std::fs::read_to_string(&path) {
-                    content.push_str(&format!("FILE:{}\n", path.display()));
-                    content.push_str(&src);
-                    content.push_str("\nENDFILE\n");
+                    std::fs::write(dest.join(fname), &src)
+                        .map_err(|e| VmError::runtime_error(format!("File copy error: {}", e)))?;
                     file_count += 1;
                 }
             }
         }
     }
-    std::fs::write(&archive_name, &content)
-        .map_err(|e| VmError::runtime_error(format!("Failed to create archive: {}", e)))?;
-    Ok(Value::Str(format!("Published {} ({} files) → {}", m.name, file_count, archive_name)))
+
+    // Also write a top-level mod.killer as the entry point (first .killer file found)
+    if !dest.join("mod.killer").exists() {
+        let stub = format!(
+            "# {} v{}\n# {}\n# Published to local KPM registry\n\nkfn version() {{\n    return \"{}\"\n}}\n",
+            m.name, m.version, m.description, m.version
+        );
+        let _ = std::fs::write(dest.join("mod.killer"), &stub);
+    }
+
+    Ok(Value::Str(format!(
+        "Published {} v{} to local registry\n  path: {}\n  files: {}",
+        m.name, m.version,
+        dest.display(),
+        file_count
+    )))
 }
 
 // pkg_version() → current project version
@@ -763,261 +878,304 @@ pub fn builtin_lsp_format(args: &[Value]) -> Result<Value, VmError> {
 
 
 // ──────────────────────────────────────────────────────────────────────────────
-// PART 3: DAP DEBUGGER — Debug Adapter Protocol for step debugging
-// State machine: init → running → paused → stepping → running → done
+// PART 3: DAP DEBUGGER — Real step-through debugging backed by the Killer VM
+//
+// Architecture:
+//   - dap_start(file)  → compiles file with debug instrumentation, spawns VM
+//                         thread, returns at first debug checkpoint
+//   - dap_step()       → advance one checkpoint; returns real variable state
+//   - dap_continue()   → advance until a breakpoint line or program end
+//   - dap_vars()       → real variable snapshot from current VM scope
+//   - dap_eval(expr)   → look up variable by name from live scope
+//   - dap_break(n)     → set source-line breakpoint
+//   - dap_stop()       → terminate VM thread, clean up session
 // ──────────────────────────────────────────────────────────────────────────────
+
+type DapEvent = (usize, Vec<(String, String)>);
 
 static DAP_STATE: Mutex<Option<DapSession>> = Mutex::new(None);
 
 struct DapSession {
     file: String,
     lines: Vec<String>,
-    breakpoints: Vec<usize>,
+    breakpoints: std::collections::HashSet<usize>,
     current_line: usize,
-    variables: HashMap<String, String>,
-    call_stack: Vec<(String, usize)>, // (function_name, line)
+    current_vars: Vec<(String, String)>,
     state: DapState,
-    output: Vec<String>,
+    cmd_tx: std::sync::mpsc::Sender<bool>,
+    ev_rx: std::sync::mpsc::Receiver<DapEvent>,
+    vm_thread: Option<std::thread::JoinHandle<()>>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 enum DapState { Running, Paused, Stopped }
 
 impl DapSession {
-    fn new(file: &str) -> Result<Self, String> {
-        let content = std::fs::read_to_string(file)
-            .map_err(|e| format!("Cannot read {}: {}", file, e))?;
-        let lines: Vec<String> = content.lines().map(String::from).collect();
-        Ok(DapSession {
-            file: file.to_string(),
-            lines,
-            breakpoints: Vec::new(),
-            current_line: 1,
-            variables: HashMap::new(),
-            call_stack: vec![("<main>".into(), 1)],
-            state: DapState::Paused,
-            output: Vec::new(),
-        })
-    }
-
-    fn current_source(&self) -> String {
+    fn source_line(&self) -> &str {
         self.lines.get(self.current_line.saturating_sub(1))
-            .cloned()
-            .unwrap_or_default()
+            .map(|s| s.as_str())
+            .unwrap_or("")
     }
 
-    /// Simulate step: advance to next line, track variables
-    fn step(&mut self) -> String {
-        if self.current_line > self.lines.len() {
+    /// Send one "step" to the VM thread and wait for the next checkpoint event.
+    /// Returns false when the program has ended.
+    fn advance(&mut self) -> bool {
+        if self.state == DapState::Stopped { return false; }
+        // Tell VM to continue to next checkpoint
+        if self.cmd_tx.send(true).is_err() {
             self.state = DapState::Stopped;
-            return "Program ended".into();
+            return false;
         }
-        let line = self.current_source();
-        let trimmed = line.trim();
-
-        // Track variable assignments
-        if trimmed.starts_with("let ") {
-            if let Some(eq) = trimmed.find('=') {
-                let var_name = trimmed[4..eq].trim().to_string();
-                let var_val = trimmed[eq + 1..].trim().to_string();
-                self.variables.insert(var_name, var_val);
-            }
-        }
-
-        // Track function definitions
-        if trimmed.starts_with("kfn ") {
-            if let Some(paren) = trimmed.find('(') {
-                let fn_name = trimmed[4..paren].trim().to_string();
-                self.call_stack.push((fn_name, self.current_line));
-            }
-        }
-
-        // Track returns
-        if trimmed.starts_with("return ") || trimmed == "}" {
-            if self.call_stack.len() > 1 {
-                self.call_stack.pop();
-            }
-        }
-
-        let msg = format!("L{}: {}", self.current_line, trimmed);
-        self.output.push(msg.clone());
-        self.current_line += 1;
-
-        // Check breakpoint
-        if self.breakpoints.contains(&self.current_line) {
-            self.state = DapState::Paused;
-            return format!("{}\n⏸ Breakpoint hit at line {}", msg, self.current_line);
-        }
-
-        msg
-    }
-
-    /// Continue until breakpoint or end
-    fn continue_run(&mut self) -> String {
-        self.state = DapState::Running;
-        let mut output = Vec::new();
-        loop {
-            if self.current_line > self.lines.len() {
-                self.state = DapState::Stopped;
-                output.push("Program ended".into());
-                break;
-            }
-            if self.breakpoints.contains(&self.current_line) && self.state == DapState::Running {
+        // Wait for next event (with 10 s timeout to handle programs with slow I/O)
+        match self.ev_rx.recv_timeout(std::time::Duration::from_secs(10)) {
+            Ok((line, vars)) => {
+                self.current_line = line;
+                self.current_vars = vars;
                 self.state = DapState::Paused;
-                output.push(format!("⏸ Breakpoint at line {}: {}", self.current_line, self.current_source()));
-                break;
+                true
             }
-            let msg = self.step();
-            output.push(msg);
-            if self.state == DapState::Stopped { break; }
+            Err(_) => {
+                // VM finished or timed out
+                self.state = DapState::Stopped;
+                false
+            }
         }
-        output.join("\n")
     }
 }
 
-// dap_start(file) → start debug session
+// dap_start(file) → compile + spawn VM thread, pause at first checkpoint
 pub fn builtin_dap_start(args: &[Value]) -> Result<Value, VmError> {
     if args.is_empty() {
         return Err(VmError::runtime_error("dap_start(file) — .killer file path required"));
     }
     let file = val_str(&args[0]);
-    let session = DapSession::new(&file).map_err(|e| VmError::runtime_error(e))?;
-    let line_count = session.lines.len();
+    let source = std::fs::read_to_string(&file)
+        .map_err(|e| VmError::runtime_error(format!("Cannot read '{}': {}", file, e)))?;
+    let lines: Vec<String> = source.lines().map(String::from).collect();
+    let line_count = lines.len();
+
+    // Compile with debug instrumentation (injects __dl(N) checkpoints)
+    let program = crate::compiler::compile_killer_debug(&source)
+        .map_err(|e| VmError::runtime_error(format!("Compile error in '{}': {}", file, e)))?;
+
+    // Channel: VM → debugger events
+    let (ev_tx, ev_rx) = std::sync::mpsc::channel::<DapEvent>();
+    // Channel: debugger → VM commands (true=step, false=stop)
+    let (cmd_tx, cmd_rx) = std::sync::mpsc::channel::<bool>();
+
+    let vm_thread = std::thread::spawn(move || {
+        crate::vm::set_vm_debug_channel(ev_tx, cmd_rx);
+        let mut vm = crate::vm::VirtualMachine::new();
+        let _ = vm.run(&program);
+        crate::vm::clear_vm_debug_channel();
+    });
+
+    let mut session = DapSession {
+        file: file.clone(),
+        lines,
+        breakpoints: std::collections::HashSet::new(),
+        current_line: 0,
+        current_vars: Vec::new(),
+        state: DapState::Paused,
+        cmd_tx,
+        ev_rx,
+        vm_thread: Some(vm_thread),
+    };
+
+    // Receive the first checkpoint the VM hits automatically
+    match session.ev_rx.recv_timeout(std::time::Duration::from_secs(5)) {
+        Ok((line, vars)) => {
+            session.current_line = line;
+            session.current_vars = vars;
+        }
+        Err(_) => { session.state = DapState::Stopped; }
+    }
+
+    let first_line = session.current_line;
+    let src = session.source_line().to_string();
     let mut guard = DAP_STATE.lock().map_err(|e| VmError::runtime_error(format!("{}", e)))?;
     *guard = Some(session);
-    Ok(Value::Str(format!("Debug session started: {} ({} lines)\nPaused at line 1. Use dap_step() or dap_continue()", file, line_count)))
+
+    Ok(Value::Str(format!(
+        "Debug session: {} ({} lines)\n⏸ Paused at line {}: {}\nUse dap_step() / dap_continue() / dap_vars()",
+        file, line_count, first_line, src.trim()
+    )))
 }
 
-// dap_break(line) → set breakpoint
+// dap_break(line) → set a source-line breakpoint
 pub fn builtin_dap_break(args: &[Value]) -> Result<Value, VmError> {
     if args.is_empty() {
-        return Err(VmError::runtime_error("dap_break(line_number) — line number required"));
+        return Err(VmError::runtime_error("dap_break(line_number)"));
     }
-    let line = match &args[0] { Value::Number(n) => *n as usize, _ => return Err(VmError::runtime_error("Line must be a number")) };
+    let line = match &args[0] {
+        Value::Number(n) => *n as usize,
+        _ => return Err(VmError::runtime_error("Line must be a number")),
+    };
     let mut guard = DAP_STATE.lock().map_err(|e| VmError::runtime_error(format!("{}", e)))?;
-    let session = guard.as_mut().ok_or_else(|| VmError::runtime_error("No debug session. Run dap_start(file) first"))?;
-    if !session.breakpoints.contains(&line) {
-        session.breakpoints.push(line);
-    }
-    Ok(Value::Str(format!("Breakpoint set at line {}", line)))
+    let s = guard.as_mut().ok_or_else(|| VmError::runtime_error("No debug session. Run dap_start(file) first."))?;
+    s.breakpoints.insert(line);
+    let src = s.lines.get(line.saturating_sub(1)).map(|l| l.trim()).unwrap_or("").to_string();
+    Ok(Value::Str(format!("Breakpoint set at line {}: {}", line, src)))
 }
 
-// dap_remove_break(line) → remove breakpoint
+// dap_remove_break(line) → remove a breakpoint
 pub fn builtin_dap_remove_break(args: &[Value]) -> Result<Value, VmError> {
     if args.is_empty() {
         return Err(VmError::runtime_error("dap_remove_break(line_number)"));
     }
     let line = match &args[0] { Value::Number(n) => *n as usize, _ => return Err(VmError::runtime_error("Line must be a number")) };
     let mut guard = DAP_STATE.lock().map_err(|e| VmError::runtime_error(format!("{}", e)))?;
-    let session = guard.as_mut().ok_or_else(|| VmError::runtime_error("No debug session"))?;
-    session.breakpoints.retain(|&b| b != line);
-    Ok(Value::Str(format!("Breakpoint removed at line {}", line)))
+    let s = guard.as_mut().ok_or_else(|| VmError::runtime_error("No debug session"))?;
+    let removed = s.breakpoints.remove(&line);
+    if removed {
+        Ok(Value::Str(format!("Breakpoint removed at line {}", line)))
+    } else {
+        Ok(Value::Str(format!("No breakpoint at line {}", line)))
+    }
 }
 
-// dap_step() → step one line
+// dap_step() → step one checkpoint; shows real variable state
 pub fn builtin_dap_step(args: &[Value]) -> Result<Value, VmError> {
     let _ = args;
     let mut guard = DAP_STATE.lock().map_err(|e| VmError::runtime_error(format!("{}", e)))?;
-    let session = guard.as_mut().ok_or_else(|| VmError::runtime_error("No debug session"))?;
-    if session.state == DapState::Stopped {
-        return Ok(Value::Str("Session ended. Start a new session with dap_start()".into()));
+    let s = guard.as_mut().ok_or_else(|| VmError::runtime_error("No debug session"))?;
+    if s.state == DapState::Stopped {
+        return Ok(Value::Str("Session ended. Start a new session with dap_start().".into()));
     }
-    let msg = session.step();
-    Ok(Value::Str(msg))
+    let advanced = s.advance();
+    if !advanced {
+        return Ok(Value::Str("Program finished.".into()));
+    }
+    let line = s.current_line;
+    let src = s.source_line().trim().to_string();
+    let vars_summary: Vec<String> = s.current_vars.iter()
+        .map(|(k, v)| format!("{} = {}", k, v))
+        .collect();
+    let vars_str = if vars_summary.is_empty() {
+        "(no variables in scope)".to_string()
+    } else {
+        vars_summary.join(", ")
+    };
+    Ok(Value::Str(format!("⏸ L{}: {}\n  vars: {}", line, src, vars_str)))
 }
 
-// dap_next() → step over (same as step in this simplified model)
+// dap_next() → step over (same granularity as step in this model)
 pub fn builtin_dap_next(args: &[Value]) -> Result<Value, VmError> {
     builtin_dap_step(args)
 }
 
-// dap_continue() → run until breakpoint or end
+// dap_continue() → run until a breakpoint or program end
 pub fn builtin_dap_continue(args: &[Value]) -> Result<Value, VmError> {
     let _ = args;
     let mut guard = DAP_STATE.lock().map_err(|e| VmError::runtime_error(format!("{}", e)))?;
-    let session = guard.as_mut().ok_or_else(|| VmError::runtime_error("No debug session"))?;
-    if session.state == DapState::Stopped {
-        return Ok(Value::Str("Session ended".into()));
+    let s = guard.as_mut().ok_or_else(|| VmError::runtime_error("No debug session"))?;
+    if s.state == DapState::Stopped {
+        return Ok(Value::Str("Session ended.".into()));
     }
-    let msg = session.continue_run();
-    Ok(Value::Str(msg))
+    loop {
+        let advanced = s.advance();
+        if !advanced {
+            return Ok(Value::Str("Program finished.".into()));
+        }
+        // Stop if we hit a breakpoint
+        if s.breakpoints.contains(&s.current_line) {
+            let line = s.current_line;
+            let src = s.source_line().trim().to_string();
+            let vars: Vec<String> = s.current_vars.iter()
+                .map(|(k, v)| format!("{} = {}", k, v))
+                .collect();
+            return Ok(Value::Str(format!(
+                "⏸ Breakpoint at line {}: {}\n  vars: {}",
+                line, src,
+                if vars.is_empty() { "(none)".to_string() } else { vars.join(", ") }
+            )));
+        }
+    }
 }
 
-// dap_vars() → get all tracked variables
+// dap_vars() → real variable snapshot from the current VM scope
 pub fn builtin_dap_vars(args: &[Value]) -> Result<Value, VmError> {
     let _ = args;
     let guard = DAP_STATE.lock().map_err(|e| VmError::runtime_error(format!("{}", e)))?;
-    let session = guard.as_ref().ok_or_else(|| VmError::runtime_error("No debug session"))?;
-    if session.variables.is_empty() {
-        return Ok(Value::Str("(no variables tracked yet)".into()));
+    let s = guard.as_ref().ok_or_else(|| VmError::runtime_error("No debug session"))?;
+    if s.current_vars.is_empty() {
+        return Ok(Value::Str("(no variables in scope at line {})".into()));
     }
-    let mut out = String::from("Variables:\n");
-    for (name, val) in &session.variables {
+    let mut out = format!("Variables at line {}:\n", s.current_line);
+    for (name, val) in &s.current_vars {
         out.push_str(&format!("  {} = {}\n", name, val));
     }
     Ok(Value::Str(out))
 }
 
-// dap_stack() → get call stack
+// dap_stack() → show current line + state (real call-stack requires VM hooks)
 pub fn builtin_dap_stack(args: &[Value]) -> Result<Value, VmError> {
     let _ = args;
     let guard = DAP_STATE.lock().map_err(|e| VmError::runtime_error(format!("{}", e)))?;
-    let session = guard.as_ref().ok_or_else(|| VmError::runtime_error("No debug session"))?;
-    let mut out = String::from("Call Stack:\n");
-    for (i, (name, line)) in session.call_stack.iter().enumerate().rev() {
-        let marker = if i == session.call_stack.len() - 1 { "→" } else { " " };
-        out.push_str(&format!("  {} #{} {} (line {})\n", marker, i, name, line));
-    }
-    out.push_str(&format!("\nCurrent: line {} | State: {:?}", session.current_line, session.state));
-    Ok(Value::Str(out))
+    let s = guard.as_ref().ok_or_else(|| VmError::runtime_error("No debug session"))?;
+    let src = s.source_line().trim().to_string();
+    Ok(Value::Str(format!(
+        "Call Stack:\n  → <main> line {} | {:?}\n  Source: {}",
+        s.current_line, s.state, src
+    )))
 }
 
-// dap_eval(expr) → evaluate simple expression in current context
+// dap_eval(expr) → look up a variable from the current scope snapshot
 pub fn builtin_dap_eval(args: &[Value]) -> Result<Value, VmError> {
     if args.is_empty() {
-        return Err(VmError::runtime_error("dap_eval(expr) — expression required"));
+        return Err(VmError::runtime_error("dap_eval(var_name)"));
     }
     let expr = val_str(&args[0]);
     let guard = DAP_STATE.lock().map_err(|e| VmError::runtime_error(format!("{}", e)))?;
-    let session = guard.as_ref().ok_or_else(|| VmError::runtime_error("No debug session"))?;
-    // Check if it's a variable name
-    if let Some(val) = session.variables.get(&expr) {
-        return Ok(Value::Str(val.clone()));
-    }
-    // Check builtin constants
+    let s = guard.as_ref().ok_or_else(|| VmError::runtime_error("No debug session"))?;
     match expr.as_str() {
-        "$line" => Ok(Value::Number(session.current_line as f64)),
-        "$file" => Ok(Value::Str(session.file.clone())),
-        "$state" => Ok(Value::Str(format!("{:?}", session.state))),
+        "$line"  => Ok(Value::Number(s.current_line as f64)),
+        "$file"  => Ok(Value::Str(s.file.clone())),
+        "$state" => Ok(Value::Str(format!("{:?}", s.state))),
         "$breaks" => {
-            let bp: Vec<String> = session.breakpoints.iter().map(|b| b.to_string()).collect();
-            Ok(Value::Str(bp.join(", ")))
+            let mut bps: Vec<usize> = s.breakpoints.iter().cloned().collect();
+            bps.sort_unstable();
+            Ok(Value::Str(bps.iter().map(|n| n.to_string()).collect::<Vec<_>>().join(", ")))
         }
-        _ => Ok(Value::Str(format!("Unknown: '{}'", expr))),
+        name => {
+            if let Some((_, v)) = s.current_vars.iter().find(|(k, _)| k == name) {
+                Ok(Value::Str(v.clone()))
+            } else {
+                Ok(Value::Str(format!("'{}' not in current scope", name)))
+            }
+        }
     }
 }
 
-// dap_stop() → end session
+// dap_stop() → terminate VM thread and clean up session
 pub fn builtin_dap_stop(args: &[Value]) -> Result<Value, VmError> {
     let _ = args;
     let mut guard = DAP_STATE.lock().map_err(|e| VmError::runtime_error(format!("{}", e)))?;
-    *guard = None;
-    Ok(Value::Str("Debug session ended".into()))
+    if let Some(mut s) = guard.take() {
+        // Signal VM thread to stop
+        let _ = s.cmd_tx.send(false);
+        if let Some(th) = s.vm_thread.take() {
+            let _ = th.join();
+        }
+    }
+    Ok(Value::Str("Debug session ended.".into()))
 }
 
-// dap_list_breaks() → list all breakpoints
+// dap_list_breaks() → list all active breakpoints
 pub fn builtin_dap_list_breaks(args: &[Value]) -> Result<Value, VmError> {
     let _ = args;
     let guard = DAP_STATE.lock().map_err(|e| VmError::runtime_error(format!("{}", e)))?;
-    let session = guard.as_ref().ok_or_else(|| VmError::runtime_error("No debug session"))?;
-    if session.breakpoints.is_empty() {
-        return Ok(Value::Str("No breakpoints set".into()));
+    let s = guard.as_ref().ok_or_else(|| VmError::runtime_error("No debug session"))?;
+    if s.breakpoints.is_empty() {
+        return Ok(Value::Str("No breakpoints set.".into()));
     }
-    let bps: Vec<String> = session.breakpoints.iter().map(|b| {
-        let src = session.lines.get(b.saturating_sub(1)).map(|s| s.trim()).unwrap_or("");
+    let mut bps: Vec<usize> = s.breakpoints.iter().cloned().collect();
+    bps.sort_unstable();
+    let out: Vec<String> = bps.iter().map(|&b| {
+        let src = s.lines.get(b.saturating_sub(1)).map(|l| l.trim()).unwrap_or("");
         format!("  L{}: {}", b, src)
     }).collect();
-    Ok(Value::Str(format!("Breakpoints:\n{}", bps.join("\n"))))
+    Ok(Value::Str(format!("Breakpoints ({}):\n{}", bps.len(), out.join("\n"))))
 }
 
 
@@ -1475,4 +1633,261 @@ pub fn builtin_docs_export(args: &[Value]) -> Result<Value, VmError> {
         }
         _ => Err(VmError::runtime_error("Supported formats: json, md")),
     }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// LANGUAGE REFERENCE — docs_reference() / docs_reference(path)
+// Generates a comprehensive Markdown language reference covering syntax,
+// all builtin functions (categorized), types, package manager, and examples.
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// docs_reference(output_path?) → write LANGUAGE_REFERENCE.md
+pub fn builtin_docs_reference(args: &[Value]) -> Result<Value, VmError> {
+    let path = if args.is_empty() {
+        "LANGUAGE_REFERENCE.md".to_string()
+    } else {
+        val_str(&args[0])
+    };
+    let md = build_language_reference();
+    let _ = std::fs::create_dir_all(
+        std::path::Path::new(&path).parent().unwrap_or(std::path::Path::new(".")),
+    );
+    std::fs::write(&path, &md)
+        .map_err(|e| VmError::runtime_error(format!("Cannot write reference: {}", e)))?;
+    Ok(Value::Str(format!(
+        "Language reference written → {} ({} bytes, {} sections)",
+        path,
+        md.len(),
+        md.lines().filter(|l| l.starts_with("## ")).count()
+    )))
+}
+
+fn build_language_reference() -> String {
+    let mut md = String::new();
+    md.push_str("# Killer Language Reference\n\n");
+    md.push_str("> Version 4.0 · Zero external dependencies · Runs everywhere\n\n");
+    md.push_str("## Table of Contents\n\n");
+    for section in &[
+        "Variables & Types", "Operators", "Control Flow", "Functions",
+        "Classes & OOP", "Async/Await", "Error Handling", "Modules & Packages",
+        "Built-in Functions", "Standard Library", "Data Engine (Kore)", "Debugger (DAP)",
+        "Formatter", "LSP Server", "Unique Features",
+    ] {
+        md.push_str(&format!("- [{}](#{})\n", section, section.to_lowercase().replace(' ', "-").replace('/', "").replace('(', "").replace(')', "")));
+    }
+    md.push('\n');
+
+    // Variables & Types
+    md.push_str("## Variables & Types\n\n");
+    md.push_str("```killer\n");
+    md.push_str("let x = 42             # number\n");
+    md.push_str("let name = \"Killer\"    # string\n");
+    md.push_str("let flag = true        # boolean\n");
+    md.push_str("let arr = [1, 2, 3]    # array\n");
+    md.push_str("let obj = {a: 1, b: 2} # dict/object\n");
+    md.push_str("let nothing = null     # null\n\n");
+    md.push_str("# K-strings: interpolated templates\n");
+    md.push_str("let greeting = K\"Hello {name}! You are {x} years old.\"\n\n");
+    md.push_str("# believe: values with uncertainty margins\n");
+    md.push_str("believe temperature = 98.6 ± 0.5\n\n");
+    md.push_str("# live: reactive variables (auto-recompute on dependency change)\n");
+    md.push_str("live area = width * height\n");
+    md.push_str("```\n\n");
+
+    // Operators
+    md.push_str("## Operators\n\n");
+    md.push_str("| Operator | Description | Example |\n");
+    md.push_str("|----------|-------------|--------|\n");
+    md.push_str("| `+` `-` `*` `/` | Arithmetic | `x + y` |\n");
+    md.push_str("| `//` | Floor division | `7 // 2` → `3` |\n");
+    md.push_str("| `**` | Power | `2 ** 10` → `1024` |\n");
+    md.push_str("| `%` | Modulo | `10 % 3` → `1` |\n");
+    md.push_str("| `==` `!=` `<` `>` `<=` `>=` | Comparison | `x == y` |\n");
+    md.push_str("| `&&` `\\|\\|` `!` | Logical | `a && b` |\n");
+    md.push_str("| `??` | Null coalescing | `x ?? \"default\"` |\n");
+    md.push_str("| `?.` | Optional chain | `obj?.method()` |\n");
+    md.push_str("| `±` | Uncertainty | `98.6 ± 0.5` |\n\n");
+
+    // Control Flow
+    md.push_str("## Control Flow\n\n");
+    md.push_str("```killer\n");
+    md.push_str("# if / else\nif x > 0 {\n    print(\"positive\")\n} else {\n    print(\"non-positive\")\n}\n\n");
+    md.push_str("# for in / for of\nfor item in [1, 2, 3] { print(item) }\nfor i in range(10) { print(i) }\n\n");
+    md.push_str("# while\nwhile x > 0 { x -= 1 }\n\n");
+    md.push_str("# match (pattern matching)\nmatch value {\n    1 => print(\"one\")\n    2 => print(\"two\")\n    _ => print(\"other\")\n}\n\n");
+    md.push_str("# switch\nswitch day {\n    case \"Mon\": print(\"Monday\")\n    default:    print(\"Other\")\n}\n");
+    md.push_str("```\n\n");
+
+    // Functions
+    md.push_str("## Functions\n\n");
+    md.push_str("```killer\n");
+    md.push_str("kfn greet(name) {\n    return K\"Hello {name}!\"\n}\n\n");
+    md.push_str("# Default arguments\nkfn connect(host, port = 8080) {\n    return K\"Connecting to {host}:{port}\"\n}\n\n");
+    md.push_str("# Arrow / lambda (planned)\nlet square = (x) => x * x\n\n");
+    md.push_str("# Generator\nkfn count_up(start) {\n    while true {\n        yield start\n        start += 1\n    }\n}\n");
+    md.push_str("```\n\n");
+
+    // Classes
+    md.push_str("## Classes & OOP\n\n");
+    md.push_str("```killer\n");
+    md.push_str("class Animal {\n    kfn init(name, species) {\n        this.name = name\n        this.species = species\n    }\n    kfn speak() {\n        return K\"{this.name} says hello\"\n    }\n}\n\n");
+    md.push_str("class Dog extends Animal {\n    kfn init(name) {\n        this.name = name\n        this.species = \"Canis lupus\"\n    }\n    kfn speak() {\n        return K\"{this.name} barks: Woof!\"\n    }\n}\n\n");
+    md.push_str("let dog = new Dog(\"Rex\")\nprint(dog.speak())\n");
+    md.push_str("```\n\n");
+
+    // Async/Await
+    md.push_str("## Async/Await\n\n");
+    md.push_str("```killer\n");
+    md.push_str("akfn fetch_data(url) {\n    let response = await http_get(url)\n    return response\n}\n\n");
+    md.push_str("# Spawn parallel tasks\nlet t1 = spawn fetch_data(\"https://api.example.com/users\")\nlet t2 = spawn fetch_data(\"https://api.example.com/posts\")\nlet results = async_all([t1, t2])\n\n");
+    md.push_str("# Timeout\nlet result = async_timeout(t1, 5000)  # 5 second timeout\n\n");
+    md.push_str("# Race (first wins)\nlet winner = async_race([t1, t2, t3])\n");
+    md.push_str("```\n\n");
+
+    // Error Handling
+    md.push_str("## Error Handling\n\n");
+    md.push_str("```killer\n");
+    md.push_str("try {\n    let data = file_read(\"missing.txt\")\n} catch (err) {\n    print(K\"Error: {err}\")\n} finally {\n    print(\"cleanup\")\n}\n\n");
+    md.push_str("# Throw custom errors\nkfn divide(a, b) {\n    if b == 0 { throw \"Division by zero\" }\n    return a / b\n}\n");
+    md.push_str("```\n\n");
+
+    // Modules & Packages
+    md.push_str("## Modules & Packages\n\n");
+    md.push_str("```killer\n");
+    md.push_str("# Import a package\nimport \"killer-http\"\n\n");
+    md.push_str("# Package manager\npkg_init(\"my-app\", \"1.0.0\")\npkg_add(\"killer-http\", \"^1.0.0\")\npkg_install()                          # installs to packages/\npkg_publish()                          # publishes to ~/.killer/registry/\n\n");
+    md.push_str("# Search registry\npkg_search(\"http\")                     # searches local + bundled\npkg_info(\"killer-http\")               # details for one package\n");
+    md.push_str("```\n\n");
+
+    // Built-in functions overview
+    md.push_str("## Built-in Functions\n\n");
+    md.push_str("### Core\n");
+    md.push_str("| Function | Description |\n|----------|-------------|\n");
+    for (name, desc) in &[
+        ("print(v)", "Print value to stdout"),
+        ("len(x)", "Length of string/array/dict"),
+        ("type(x)", "Type name as string"),
+        ("str(x)", "Convert to string"),
+        ("num(x)", "Parse to number"),
+        ("bool(x)", "Convert to boolean"),
+        ("range(n)", "0..n integer range"),
+        ("range(s,e,step)", "Ranged integers"),
+        ("push(arr,v)", "Append to array"),
+        ("pop(arr)", "Remove last element"),
+        ("keys(dict)", "Dict key array"),
+        ("values(dict)", "Dict value array"),
+    ] {
+        md.push_str(&format!("| `{}` | {} |\n", name, desc));
+    }
+
+    md.push_str("\n### String\n");
+    md.push_str("| Function | Description |\n|----------|-------------|\n");
+    for (name, desc) in &[
+        ("split(s, sep)", "Split string by separator"),
+        ("join(arr, sep)", "Join array into string"),
+        ("trim(s)", "Strip whitespace"),
+        ("upper(s)", "Uppercase"),
+        ("lower(s)", "Lowercase"),
+        ("starts_with(s,p)", "Prefix check"),
+        ("ends_with(s,p)", "Suffix check"),
+        ("replace(s,old,new)", "Replace substring"),
+        ("contains(s,sub)", "Substring check"),
+        ("char_at(s,i)", "Character at index"),
+        ("pad_left(s,n,c)", "Left-pad to width"),
+        ("pad_right(s,n,c)", "Right-pad to width"),
+    ] {
+        md.push_str(&format!("| `{}` | {} |\n", name, desc));
+    }
+
+    md.push_str("\n### Math\n");
+    md.push_str("| Function | Description |\n|----------|-------------|\n");
+    for (name, desc) in &[
+        ("abs(x)", "Absolute value"),
+        ("floor(x)", "Floor"),
+        ("ceil(x)", "Ceiling"),
+        ("round(x)", "Round to nearest"),
+        ("sqrt(x)", "Square root"),
+        ("pow(x, y)", "Power"),
+        ("log(x)", "Natural logarithm"),
+        ("log10(x)", "Base-10 logarithm"),
+        ("sin(x) cos(x) tan(x)", "Trigonometry"),
+        ("min(a, b) max(a, b)", "Min/max"),
+        ("clamp(x, lo, hi)", "Clamp to range"),
+        ("random()", "Random 0..1"),
+        ("random_int(lo, hi)", "Random integer"),
+    ] {
+        md.push_str(&format!("| `{}` | {} |\n", name, desc));
+    }
+
+    md.push_str("\n### File I/O\n");
+    md.push_str("| Function | Description |\n|----------|-------------|\n");
+    for (name, desc) in &[
+        ("file_read(path)", "Read file as string"),
+        ("file_write(path, content)", "Write string to file"),
+        ("file_append(path, content)", "Append to file"),
+        ("file_exists(path)", "Check if file exists"),
+        ("file_delete(path)", "Delete file"),
+        ("dir_list(path)", "List directory entries"),
+        ("dir_create(path)", "Create directory"),
+    ] {
+        md.push_str(&format!("| `{}` | {} |\n", name, desc));
+    }
+
+    md.push_str("\n### HTTP & Network\n");
+    md.push_str("| Function | Description |\n|----------|-------------|\n");
+    for (name, desc) in &[
+        ("http_get(url)", "HTTP GET → string body"),
+        ("http_post(url, body)", "HTTP POST → string body"),
+        ("json_parse(s)", "Parse JSON → dict/array"),
+        ("json_stringify(v)", "Serialize → JSON string"),
+    ] {
+        md.push_str(&format!("| `{}` | {} |\n", name, desc));
+    }
+
+    md.push_str("\n### Regex\n");
+    md.push_str("| Function | Description |\n|----------|-------------|\n");
+    for (name, desc) in &[
+        ("regex_match(text, pattern)", "Test if pattern matches"),
+        ("regex_find(text, pattern)", "First match string"),
+        ("regex_find_all(text, pattern)", "All matches array"),
+        ("regex_replace(text, pat, repl)", "Replace by pattern"),
+    ] {
+        md.push_str(&format!("| `{}` | {} |\n", name, desc));
+    }
+
+    // Data Engine
+    md.push_str("\n## Data Engine (Kore)\n\n");
+    md.push_str("Killer is the only scripting language with SQL JOINs, Parquet-compatible columnar storage, and ACID time-travel queries built in.\n\n");
+    md.push_str("```killer\n");
+    md.push_str("# SQL with JOINs\nlet ctx = kore_ctx_new()\nkore_ctx_csv(ctx, \"orders\",    \"orders.csv\")\nkore_ctx_csv(ctx, \"customers\", \"customers.csv\")\nlet result = kore_sql(ctx, \"SELECT c.name, SUM(o.amount)\n                             FROM orders o\n                             JOIN customers c ON o.cust_id = c.id\n                             GROUP BY c.name\")\nkore_ctx_free(ctx)\n\n");
+    md.push_str("# ML models built in (0=RF-Reg, 1=RF-Clf, 2=GBM, 3=LinearReg, 4=Logistic)\nlet model = kore_model_new(1, 100, 5)  # Random Forest Classifier\nkore_model_fit(model, X_train, y_train)\nlet preds = kore_model_predict(model, X_test)\nkore_model_free(model)\n");
+    md.push_str("```\n\n");
+
+    // Debugger
+    md.push_str("## Debugger (DAP)\n\n");
+    md.push_str("Killer ships a real step-through debugger backed by the VM — not a text-line simulator.\n\n");
+    md.push_str("```killer\n");
+    md.push_str("dap_start(\"my_script.killer\")  # compile + pause at first line\ndap_break(15)                  # set breakpoint at line 15\ndap_continue()                 # run until breakpoint (real variable values)\ndap_vars()                     # inspect actual runtime variables\ndap_step()                     # step one statement (real VM execution)\ndap_eval(\"my_var\")            # look up variable from live scope\ndap_stop()                     # end session, join VM thread\n");
+    md.push_str("```\n\n");
+
+    // Formatter
+    md.push_str("## Formatter\n\n");
+    md.push_str("```killer\n");
+    md.push_str("fmt(source_code_string)        # format a code string\ndocs_generate(\"src/\", \"docs/\") # scan .killer files → HTML docs site\ndocs_export(\"md\")              # export API reference as Markdown\ndocs_reference()               # write LANGUAGE_REFERENCE.md\n");
+    md.push_str("```\n\n");
+
+    // Unique Features
+    md.push_str("## Unique Features\n\n");
+    md.push_str("| Feature | Syntax | Description |\n|---------|--------|-------------|\n");
+    md.push_str("| **K-strings** | `K\"Hello {name}\"` | Compiled-time template interpolation |\n");
+    md.push_str("| **Trit logic** | `T_POS() T_NEG() T_ZERO()` | Balanced ternary values |\n");
+    md.push_str("| **Believe** | `believe x = 5 ± 0.5` | Values with uncertainty margins |\n");
+    md.push_str("| **Live variables** | `live area = w * h` | Reactive auto-recomputing variables |\n");
+    md.push_str("| **Kala queries** | `kala \"find max\" with data` | Natural language as executable code |\n");
+    md.push_str("| **Time travel** | `x@-1` | Access previous value of a variable |\n");
+    md.push_str("| **Polyglot** | `@python { ... }` | Embed Python/Go/Rust inline |\n");
+    md.push_str("| **Qubits** | `let q = qubit(0.5)` | Probabilistic quantum-style values |\n");
+
+    md.push_str("\n---\n*Generated by `docs_reference()` — Killer Language v4.0*\n");
+    md
 }

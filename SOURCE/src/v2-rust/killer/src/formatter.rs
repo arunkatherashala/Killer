@@ -186,63 +186,183 @@ impl Formatter {
         Ok(result.trim_end().to_string() + "\n")
     }
 
-    /// Format spacing around operators and keywords
+    /// Format spacing around operators and keywords (token-aware, preserves strings/comments)
     fn format_spacing(&mut self, source: &str) -> Result<String, String> {
-        let mut result = source.to_string();
-
-        if self.config.spaces_around_operators {
-            // Add spaces around operators
-            result = result.replace("=", " = ");
-            result = result.replace("+", " + ");
-            result = result.replace("-", " - ");
-            result = result.replace("*", " * ");
-            result = result.replace("/", " / ");
-            // Clean up multiple spaces
-            result = result.replace("  =  ", " = ");
-            result = result.replace("  +  ", " + ");
+        if !self.config.spaces_around_operators && !self.config.spaces_after_keywords {
+            return Ok(source.to_string());
         }
-
-        if self.config.spaces_after_keywords {
-            // Add space after keywords
-            let keywords = vec!["if", "for", "while", "switch", "catch", "return", "throw"];
-            for keyword in keywords {
-                let pattern = format!("{}(", keyword);
-                let replacement = format!("{} (", keyword);
-                result = result.replace(&pattern, &replacement);
-            }
+        let mut result = String::new();
+        for line in source.lines() {
+            result.push_str(&Self::format_line_ops(line, &self.config));
+            result.push('\n');
         }
-
-        // Handle colons
-        if self.config.space_before_colon {
-            result = result.replace(":", " :");
-        }
-        if self.config.space_after_colon {
-            result = result.replace(": ", " : ");
-        }
-
-        Ok(result)
+        Ok(result.trim_end_matches('\n').to_string() + "\n")
     }
 
-    /// Format line breaks for consistency
-    fn format_line_breaks(&mut self, source: &str) -> Result<String, String> {
-        let mut result = String::new();
-        let mut prev_line = String::new();
+    /// Character-level operator formatter — never modifies string literals or comments.
+    fn format_line_ops(line: &str, config: &FormatterConfig) -> String {
+        let chars: Vec<char> = line.chars().collect();
+        let n = chars.len();
+        let mut out = String::with_capacity(n + 16);
+        let mut i = 0;
+        let mut string_delim: Option<char> = None;
 
-        for line in source.lines() {
-            let trimmed = line.trim();
-            
-            // Skip duplicate blank lines
-            if trimmed.is_empty() && prev_line.trim().is_empty() {
+        while i < n {
+            let c = chars[i];
+            let peek = chars.get(i + 1).copied();
+
+            // ── Inside a string literal ──────────────────────────────────────
+            if let Some(delim) = string_delim {
+                out.push(c);
+                if c == '\\' {
+                    // escaped char: consume both chars without inspection
+                    i += 1;
+                    if i < n { out.push(chars[i]); }
+                } else if c == delim {
+                    string_delim = None;
+                }
+                i += 1;
                 continue;
             }
 
-            if !trimmed.is_empty() {
-                result.push_str(trimmed);
-                result.push('\n');
-                prev_line = trimmed.to_string();
+            // ── Line comment (#) — flush rest unchanged ──────────────────────
+            if c == '#' {
+                for &ch in &chars[i..] { out.push(ch); }
+                return out;
+            }
+
+            // ── String literal start ─────────────────────────────────────────
+            if c == '"' || c == '\'' {
+                string_delim = Some(c);
+                out.push(c);
+                i += 1;
+                continue;
+            }
+
+            // ── Operator handling ────────────────────────────────────────────
+            if config.spaces_around_operators {
+                match (c, peek) {
+                    // ++ -- : increment/decrement — emit without any extra spaces
+                    ('+', Some('+')) | ('-', Some('-')) => {
+                        out.push(c);
+                        out.push(peek.unwrap());
+                        i += 2;
+                        continue;
+                    }
+                    // Two-char compound operators: ==, !=, <=, >=, +=, -=, *=, /=,
+                    //   %=, **, //, &&, ||, ->, =>
+                    ('=', Some('=')) | ('!', Some('=')) |
+                    ('<', Some('=')) | ('>', Some('=')) |
+                    ('+', Some('=')) | ('-', Some('=')) |
+                    ('*', Some('=')) | ('/', Some('=')) |
+                    ('%', Some('=')) | ('&', Some('&')) |
+                    ('|', Some('|')) | ('*', Some('*')) |
+                    ('/', Some('/')) | ('-', Some('>')) |
+                    ('=', Some('>')) => {
+                        Self::ensure_space(&mut out);
+                        out.push(c);
+                        out.push(peek.unwrap());
+                        i += 2;
+                        if let Some(&nc) = chars.get(i) {
+                            if nc != ' ' && nc != ')' && nc != ']' && nc != ','
+                                && nc != ';' && nc != ':' && nc != '\n'
+                            {
+                                out.push(' ');
+                            }
+                        }
+                        continue;
+                    }
+                    // Single-char binary operators: only when in binary context
+                    ('=' | '+' | '-' | '*' | '/' | '%' | '<' | '>', _) => {
+                        if Self::is_binary_ctx(&out) {
+                            Self::ensure_space(&mut out);
+                            out.push(c);
+                            i += 1;
+                            if let Some(&nc) = chars.get(i) {
+                                if nc != ' ' && nc != ')' && nc != ']' && nc != ','
+                                    && nc != ';' && nc != ':' && nc != '\n'
+                                {
+                                    out.push(' ');
+                                }
+                            }
+                        } else {
+                            out.push(c);
+                            i += 1;
+                        }
+                        continue;
+                    }
+                    // Comma: no space before, space after
+                    (',', _) => {
+                        while out.ends_with(' ') { out.pop(); }
+                        out.push(',');
+                        i += 1;
+                        if let Some(&nc) = chars.get(i) {
+                            if nc != ' ' && nc != '\n' { out.push(' '); }
+                        }
+                        continue;
+                    }
+                    _ => {}
+                }
+            }
+
+            // ── Keyword spacing: add space before ( after control-flow words ─
+            if c == '(' && config.spaces_after_keywords {
+                let kw = Self::last_word(&out);
+                if matches!(kw.as_str(),
+                    "if" | "for" | "while" | "switch" | "catch" | "return" | "throw")
+                {
+                    if !out.ends_with(' ') { out.push(' '); }
+                }
+            }
+
+            out.push(c);
+            i += 1;
+        }
+        out
+    }
+
+    fn ensure_space(out: &mut String) {
+        if !out.is_empty() && !out.ends_with(' ') { out.push(' '); }
+    }
+
+    /// True when the character position is in a binary-operator context
+    /// (i.e., the previous non-space char is a value-producing token).
+    fn is_binary_ctx(out: &str) -> bool {
+        matches!(
+            out.trim_end_matches(' ').chars().last(),
+            Some(')' | ']' | '}' | '_'
+                | 'a'..='z' | 'A'..='Z' | '0'..='9')
+        )
+    }
+
+    /// Return the last identifier word in the output buffer.
+    fn last_word(out: &str) -> String {
+        out.trim_end_matches(' ')
+           .chars()
+           .rev()
+           .take_while(|c| c.is_alphanumeric() || *c == '_')
+           .collect::<String>()
+           .chars()
+           .rev()
+           .collect()
+    }
+
+    /// Format line breaks: deduplicate blank lines, preserve all indentation.
+    fn format_line_breaks(&mut self, source: &str) -> Result<String, String> {
+        let mut result = String::new();
+        let mut blank_run = 0usize;
+
+        for line in source.lines() {
+            if line.trim().is_empty() {
+                blank_run += 1;
+                // Allow up to max_blank_lines consecutive blank lines
+                if blank_run <= self.config.max_blank_lines {
+                    result.push('\n');
+                }
             } else {
+                blank_run = 0;
+                result.push_str(line); // preserves original indentation
                 result.push('\n');
-                prev_line = String::new();
             }
         }
 

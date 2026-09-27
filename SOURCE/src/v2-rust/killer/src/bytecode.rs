@@ -167,6 +167,35 @@ pub enum Instruction {
     /// Load and execute a Killer package file.
     /// All top-level definitions from that file are merged into current scope.
     ImportPkg(String),
+    // ── Unique Killer features ───────────────────────────────────────────────
+    /// `believe x = 72 ± 3` — pop margin, pop value, push Value::Uncertain
+    BuildUncertain,
+    /// `x@-1` — load historical value of a named variable (offset -1 = previous value)
+    LoadHistory { name: String, offset: i64 },
+    /// `live x = expr` — register a reactive variable with its deps and recompute range
+    /// instr_start/instr_count = slice of instructions[] that re-evaluate the expr
+    RegisterLive { name: String, deps: Vec<String>, instr_start: usize, instr_count: usize },
+    /// `kala "prompt" with x, y` — pop N values + prompt string, call kala reasoning engine
+    KalaEval { with_count: usize },
+    /// `[expr for var in iterable if cond]` — list comprehension evaluated at runtime
+    /// The VM re-uses the line compiler to evaluate expr/cond as strings
+    ListComp {
+        expr_src: String,
+        var_name: String,
+        iterable_src: String,
+        cond_src: Option<String>,
+    },
+    /// `a ?? b` — null coalescing: if top-of-stack is null, replace with right-hand side
+    /// Pops left; if null pushes right, else pushes left
+    NullCoalesce,
+    /// `obj?.method(args)` / `obj?.field` — optional chain: if obj is null, short-circuit to null
+    /// method_name + arg_count; if top is null, skip call and push null
+    OptionalChain { method_name: String, arg_count: usize },
+    /// Debug instrumentation — emitted by `compile_killer_debug`.
+    /// Carries the 1-based source line number. The VM pauses here when a
+    /// thread-local debug channel is registered (see `vm::set_vm_debug_channel`).
+    /// No-op in release / non-debug runs (zero overhead when channel is None).
+    DebugLine(usize),
 }
 
 #[derive(Debug, Clone)]
@@ -184,6 +213,8 @@ pub struct Program {
     pub function_names: HashMap<usize, String>,
     pub method_bytecode: HashMap<(String, String), usize>, // (class_name, method_name) -> bytecode_start
     pub classes: HashMap<String, (Option<String>, Vec<(String, Vec<String>, Vec<crate::ast::Stmt>)>)>, // class_name -> (parent, methods)
+    /// `live` variable registry: name → (deps, recompute_instr_start, recompute_instr_count)
+    pub live_vars: HashMap<String, (Vec<String>, usize, usize)>,
 }
 
 impl Program {
@@ -474,6 +505,7 @@ impl Program {
             function_names,
             method_bytecode: HashMap::new(),
             classes: HashMap::new(),
+            live_vars: HashMap::new(),
         })
     }
 }

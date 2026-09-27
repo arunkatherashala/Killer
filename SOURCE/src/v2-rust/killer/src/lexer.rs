@@ -86,6 +86,15 @@ pub enum TokenKind {
     Await,
     Spawn,
     Import,
+    // Unique Killer features
+    /// `live x = expr` — reactive variable that auto-recomputes on dependency change
+    Live,
+    /// `believe x = 72 ± 3` — value with uncertainty margin
+    Believe,
+    /// `kala "prompt" with x, y` — natural language as executable code
+    Kala,
+    /// `±` (U+00B1) — uncertainty operator for `believe` declarations
+    PlusMinus,
 }
 
 #[derive(Debug, Clone)]
@@ -327,6 +336,9 @@ impl Lexer {
             "await"   => TokenKind::Await,
             "spawn"   => TokenKind::Spawn,
             "import"  => TokenKind::Import,
+            "live"    => TokenKind::Live,
+            "believe" => TokenKind::Believe,
+            "kala"    => TokenKind::Kala,
             _ => TokenKind::Identifier(word.to_string()),
         }
     }
@@ -695,6 +707,11 @@ impl Lexer {
                     let kind = self.keyword_or_identifier(&word);
                     Ok(Token { col: 0, kind })
                 }
+            }
+            '\u{00B1}' => {
+                // ± uncertainty operator for `believe x = 72 ± 3`
+                self.advance();
+                Ok(Token { col: 0, kind: TokenKind::PlusMinus })
             }
             ch => Err(format!("unexpected character: '{}'", ch)),
         }

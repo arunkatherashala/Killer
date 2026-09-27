@@ -164,6 +164,7 @@ mod tests {
             function_names: HashMap::new(),
             method_bytecode: HashMap::new(),
             classes: HashMap::new(),
+            live_vars: HashMap::new(),
         };
 
         let cache = InstructionCache::new(&program);
@@ -183,6 +184,7 @@ mod tests {
             function_names: HashMap::new(),
             method_bytecode: HashMap::new(),
             classes: HashMap::new(),
+            live_vars: HashMap::new(),
         };
 
         let mut cache = InstructionCache::new(&program);

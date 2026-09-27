@@ -290,3 +290,174 @@ pub fn builtin_http_download(args: &[Value]) -> Result<Value, VmError> {
     }
 }
 
+// ── New HTTP verbs ─────────────────────────────────────────────────────────
+
+fn do_method(method: &str, url: &str, body: Option<&str>, content_type: &str, timeout_s: u64) -> Result<String, String> {
+    validate_https_url(url)?;
+    let ts = timeout_s.to_string();
+    let mut cmd = Command::new(curl_bin());
+    cmd.args(["-s", "-k", "--ssl-no-revoke", "--fail-with-body",
+              "-X", method,
+              "--max-time", &ts,
+              "-H", &format!("Content-Type: {content_type}"),
+              "-H", "User-Agent: KillerLang/2.1 Nova-Galaxy-Engine"]);
+    if let Some(b) = body {
+        cmd.args(["--data-raw", b]);
+    }
+    cmd.arg(url);
+    let out = cmd.output().map_err(|e| format!("curl not found: {e}"))?;
+    Ok(String::from_utf8_lossy(&out.stdout).trim_end().to_string())
+}
+
+/// http_put(url, body) → String
+pub fn builtin_http_put(args: &[Value]) -> Result<Value, VmError> {
+    crate::security::require_network()?;
+    let (url, body) = match args {
+        [Value::Str(u), Value::Str(b)] => (u.clone(), b.clone()),
+        _ => return Err(VmError::runtime_error("http_put(url, body) expects two strings".to_string())),
+    };
+    let timeout = match args.get(2) { Some(Value::Number(n)) => *n as u64, _ => 30 };
+    match do_method("PUT", &url, Some(&body), "application/json", timeout) {
+        Ok(r) => Ok(Value::Str(r)),
+        Err(e) => Ok(Value::Str(format!("HTTP Error: {e}"))),
+    }
+}
+
+/// http_delete(url) → String
+pub fn builtin_http_delete(args: &[Value]) -> Result<Value, VmError> {
+    crate::security::require_network()?;
+    let url = match args.first() {
+        Some(Value::Str(s)) => s.clone(),
+        _ => return Err(VmError::runtime_error("http_delete(url) expects a URL string".to_string())),
+    };
+    let timeout = match args.get(1) { Some(Value::Number(n)) => *n as u64, _ => 30 };
+    match do_method("DELETE", &url, None, "application/json", timeout) {
+        Ok(r) => Ok(Value::Str(r)),
+        Err(e) => Ok(Value::Str(format!("HTTP Error: {e}"))),
+    }
+}
+
+/// http_patch(url, body) → String
+pub fn builtin_http_patch(args: &[Value]) -> Result<Value, VmError> {
+    crate::security::require_network()?;
+    let (url, body) = match args {
+        [Value::Str(u), Value::Str(b)] => (u.clone(), b.clone()),
+        _ => return Err(VmError::runtime_error("http_patch(url, body) expects two strings".to_string())),
+    };
+    let timeout = match args.get(2) { Some(Value::Number(n)) => *n as u64, _ => 30 };
+    match do_method("PATCH", &url, Some(&body), "application/json", timeout) {
+        Ok(r) => Ok(Value::Str(r)),
+        Err(e) => Ok(Value::Str(format!("HTTP Error: {e}"))),
+    }
+}
+
+/// http_get_json(url) → Dict  (parses JSON response into a Killer dict/array)
+pub fn builtin_http_get_json(args: &[Value]) -> Result<Value, VmError> {
+    crate::security::require_network()?;
+    let url = match args.first() {
+        Some(Value::Str(s)) => s.clone(),
+        _ => return Err(VmError::runtime_error("http_get_json(url) expects a URL string".to_string())),
+    };
+    let timeout = match args.get(1) { Some(Value::Number(n)) => *n as u64, _ => 30 };
+    match do_get(&url, timeout) {
+        Ok(body) => Ok(parse_json_to_value(&body)),
+        Err(e)   => Err(VmError::runtime_error(format!("http_get_json({url}): {e}"))),
+    }
+}
+
+/// http_with_headers(url, headers_dict) → String  (GET with custom headers)
+pub fn builtin_http_with_headers(args: &[Value]) -> Result<Value, VmError> {
+    crate::security::require_network()?;
+    let url = match args.first() {
+        Some(Value::Str(s)) => s.clone(),
+        _ => return Err(VmError::runtime_error("http_with_headers(url, dict) expects a URL".to_string())),
+    };
+    validate_https_url(&url).map_err(|e| VmError::runtime_error(e))?;
+    let timeout = 30u64;
+    let mut cmd = Command::new(curl_bin());
+    cmd.args(["-s", "-k", "--ssl-no-revoke", "--max-time", &timeout.to_string(),
+              "-H", "User-Agent: KillerLang/2.1"]);
+    if let Some(Value::Dict(headers)) = args.get(1) {
+        for (k, v) in headers.iter() {
+            cmd.arg("-H");
+            cmd.arg(format!("{k}: {v}"));
+        }
+    }
+    cmd.arg(&url);
+    match cmd.output() {
+        Ok(out) => Ok(Value::Str(String::from_utf8_lossy(&out.stdout).trim_end().to_string())),
+        Err(e)  => Err(VmError::runtime_error(format!("http_with_headers: {e}"))),
+    }
+}
+
+// ── Minimal JSON → Value parser ────────────────────────────────────────────
+
+fn parse_json_to_value(s: &str) -> Value {
+    let s = s.trim();
+    if s.starts_with('{') {
+        parse_json_object(s)
+    } else if s.starts_with('[') {
+        parse_json_array(s)
+    } else if s.starts_with('"') && s.ends_with('"') {
+        Value::Str(s[1..s.len()-1].replace("\\\"", "\"").replace("\\n", "\n").replace("\\t", "\t"))
+    } else if s == "true" {
+        Value::Bool(true)
+    } else if s == "false" {
+        Value::Bool(false)
+    } else if s == "null" {
+        Value::Null
+    } else if let Ok(n) = s.parse::<f64>() {
+        Value::Number(n)
+    } else {
+        Value::Str(s.to_string())
+    }
+}
+
+fn parse_json_object(s: &str) -> Value {
+    let inner = s.trim().trim_start_matches('{').trim_end_matches('}').trim();
+    let mut dict = std::collections::HashMap::new();
+    if inner.is_empty() { return Value::Dict(Box::new(dict)); }
+    for pair in split_json_items(inner) {
+        if let Some(colon) = pair.find(':') {
+            let key_raw = pair[..colon].trim().trim_matches('"');
+            let val_raw = pair[colon+1..].trim();
+            dict.insert(key_raw.to_string(), parse_json_to_value(val_raw));
+        }
+    }
+    Value::Dict(Box::new(dict))
+}
+
+fn parse_json_array(s: &str) -> Value {
+    let inner = s.trim().trim_start_matches('[').trim_end_matches(']').trim();
+    if inner.is_empty() { return Value::Array(crate::value::SharedArray::new(vec![])); }
+    let items: Vec<Value> = split_json_items(inner).into_iter()
+        .map(|item| parse_json_to_value(item.trim()))
+        .collect();
+    Value::Array(crate::value::SharedArray::new(items))
+}
+
+fn split_json_items(s: &str) -> Vec<&str> {
+    let mut items = Vec::new();
+    let mut depth = 0i32;
+    let mut in_str = false;
+    let mut start = 0;
+    let bytes = s.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'"' if !in_str => { in_str = true; }
+            b'"' if in_str && (i == 0 || bytes[i-1] != b'\\') => { in_str = false; }
+            b'{' | b'[' if !in_str => depth += 1,
+            b'}' | b']' if !in_str => depth -= 1,
+            b',' if !in_str && depth == 0 => {
+                items.push(&s[start..i]);
+                start = i + 1;
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    if start < s.len() { items.push(&s[start..]); }
+    items
+}
+

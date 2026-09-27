@@ -24,7 +24,27 @@ impl PartialEq for SharedArray {
 
 impl SharedArray {
     pub fn new(elements: Vec<Value>) -> Self {
-        Self(Rc::new(RefCell::new(elements)))
+        let arr = Self(Rc::new(RefCell::new(elements)));
+        crate::gc::gc_register(&arr);
+        arr
+    }
+
+    /// Raw pointer of the inner Rc allocation — used as a stable identity by the GC.
+    #[inline]
+    pub fn rc_ptr(&self) -> usize {
+        Rc::as_ptr(&self.0) as usize
+    }
+
+    /// Cloned snapshot of elements — used by the GC mark phase without holding a borrow.
+    #[inline]
+    pub fn clone_elements(&self) -> Vec<Value> {
+        self.0.borrow().clone()
+    }
+
+    /// Downgraded Weak reference — registered in the GC heap.
+    #[inline]
+    pub fn weak(&self) -> std::rc::Weak<RefCell<Vec<Value>>> {
+        Rc::downgrade(&self.0)
     }
 
     /// Full structural copy (new buffer). Use when an API must return an independent array.
@@ -276,7 +296,38 @@ pub enum Value {
     Bytes(Vec<u8>),
     /// Raw memory pointer (usize) — for hardware MMIO, page tables, DMA
     Pointer(usize),
+    /// `believe x = 72 ± 3` — value with known uncertainty margin
+    Uncertain { value: f64, margin: f64 },
+    /// Unordered unique-value collection (set semantics)
+    Set(Box<std::collections::BTreeSet<SetKey>>),
     Null,
+}
+
+/// Ordered key for Set — numbers stored as bits (NaN excluded), then strings, then bools
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum SetKey {
+    Num(u64),   // f64::to_bits() — NaN not allowed as set member
+    Str(String),
+    Bool(bool),
+}
+
+impl SetKey {
+    pub fn from_value(v: &Value) -> Option<SetKey> {
+        match v {
+            Value::Number(n) if !n.is_nan() => Some(SetKey::Num(n.to_bits())),
+            Value::Str(s) => Some(SetKey::Str(s.clone())),
+            Value::Bool(b) => Some(SetKey::Bool(*b)),
+            Value::Integer(i) => Some(SetKey::Num((*i as f64).to_bits())),
+            _ => None,
+        }
+    }
+    pub fn to_value(&self) -> Value {
+        match self {
+            SetKey::Num(bits) => Value::Number(f64::from_bits(*bits)),
+            SetKey::Str(s) => Value::Str(s.clone()),
+            SetKey::Bool(b) => Value::Bool(*b),
+        }
+    }
 }
 
 impl Display for Value {
@@ -334,7 +385,41 @@ impl Display for Value {
             Value::Integer(n) => write!(f, "{}", n),
             Value::Bytes(b) => write!(f, "<bytes[{}]>", b.len()),
             Value::Pointer(p) => write!(f, "0x{:016x}", p),
+            Value::Uncertain { value, margin } => write!(f, "{} ± {}", value, margin),
+            Value::Set(s) => {
+                let items: Vec<String> = s.iter().map(|k| format!("{}", k.to_value())).collect();
+                write!(f, "{{{}}}", items.join(", "))
+            }
             Value::Null => write!(f, "null"),
+        }
+    }
+}
+
+impl Value {
+    /// Human-readable type name for error messages.
+    pub fn type_name(&self) -> &'static str {
+        match self {
+            Value::Number(_) => "number",
+            Value::Bool(_) => "bool",
+            Value::Str(_) => "string",
+            Value::Array(_) => "array",
+            Value::Dict(_) => "dict",
+            Value::Object(_) => "object",
+            Value::Class(_) => "class",
+            Value::Function { .. } => "function",
+            Value::Generator(_) => "generator",
+            Value::Trit(_) => "trit",
+            Value::Signal { .. } => "signal",
+            Value::Qubit { .. } => "qubit",
+            Value::Tryte(_) => "tryte",
+            Value::Future(_) => "future",
+            Value::Integer(_) => "integer",
+            Value::Bytes(_) => "bytes",
+            Value::Pointer(_) => "pointer",
+            Value::Uncertain { .. } => "uncertain",
+            Value::Set(_) => "set",
+            Value::QualityWrapped(_) => "quality",
+            Value::Null => "null",
         }
     }
 }

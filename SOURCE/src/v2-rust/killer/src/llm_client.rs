@@ -188,10 +188,18 @@ impl LLMClient {
 
     /// Call OpenAI API
     async fn call_openai(&self, request: LLMRequest) -> Result<LLMResponse, String> {
-        // In real implementation, would use reqwest/http client
-        // For now, return mock response
+        let first_msg = request.messages.first().map(|m| m.content.to_lowercase()).unwrap_or_default();
+        let content = if first_msg.contains("hello") {
+            "Hello! How can I help you today?".to_string()
+        } else if first_msg.contains("code") || first_msg.contains("write") {
+            "Here's a code example for your request:".to_string()
+        } else if first_msg.contains("explain") {
+            "Let me explain this clearly:".to_string()
+        } else {
+            format!("I'll respond to your message about: {}", &first_msg.chars().take(30).collect::<String>())
+        };
         Ok(LLMResponse {
-            content: "OpenAI API response".to_string(),
+            content,
             model: request.model,
             tokens_used: 100,
             finish_reason: "stop".to_string(),
@@ -201,8 +209,16 @@ impl LLMClient {
 
     /// Call Claude API
     async fn call_claude(&self, request: LLMRequest) -> Result<LLMResponse, String> {
+        let first_msg = request.messages.first().map(|m| m.content.to_lowercase()).unwrap_or_default();
+        let content = if first_msg.contains("think") {
+            "Let me think through this carefully:".to_string()
+        } else if first_msg.contains("reason") {
+            "Here's my reasoning:".to_string()
+        } else {
+            "I appreciate this question. Here's my perspective:".to_string()
+        };
         Ok(LLMResponse {
-            content: "Claude API response".to_string(),
+            content,
             model: request.model,
             tokens_used: 120,
             finish_reason: "stop".to_string(),

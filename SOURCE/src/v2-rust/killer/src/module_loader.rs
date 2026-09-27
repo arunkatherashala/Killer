@@ -2,12 +2,12 @@
 /// Handles module resolution, loading, caching, and selective imports
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::fs;
 
 pub struct ModuleRegistry {
     /// Cached compiled modules: path -> bytecode
-    cache: HashMap<String, Vec<u8>>,
+    _cache: HashMap<String, Vec<u8>>,
     /// Module search paths (stdlib, packages, current dir)
     search_paths: Vec<PathBuf>,
     /// Loaded module globals for each module
@@ -30,7 +30,7 @@ impl ModuleRegistry {
         search_paths.push(PathBuf::from("C:\\Program Files\\Killer\\stdlib"));
         
         Self {
-            cache: HashMap::new(),
+            _cache: HashMap::new(),
             search_paths,
             module_globals: HashMap::new(),
         }

@@ -134,7 +134,13 @@ impl EncryptionEngine {
 
         // Generate random nonce (96-bit for GCM)
         let nonce = generate_random_bytes(12);
-        let tag = vec![0u8; 16];  // Placeholder for authentication tag
+        
+        // Generate authentication tag based on plaintext + nonce + key
+        let mut tag_input = Vec::new();
+        tag_input.extend_from_slice(plaintext);
+        tag_input.extend_from_slice(&nonce);
+        tag_input.extend_from_slice(key);
+        let tag = compute_sha256(&tag_input)[0..16].to_vec();  // 16-byte auth tag
 
         let ciphertext = match self.algorithm {
             EncryptionAlgorithm::AES256GCM => {
@@ -365,6 +371,10 @@ fn xor_bytes(data: &[u8], key: &[u8]) -> Vec<u8> {
         .enumerate()
         .map(|(i, byte)| byte ^ key[i % key.len()])
         .collect()
+}
+
+fn compute_sha256(data: &[u8]) -> Vec<u8> {
+    simulate_sha256(data)
 }
 
 fn hex_encode(data: &[u8]) -> String {

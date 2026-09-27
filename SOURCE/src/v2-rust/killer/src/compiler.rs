@@ -116,6 +116,19 @@ fn collect_stmt_vars(stmt: &crate::ast::Stmt, vars: &mut HashSet<String>) {
                 }
             }
         }
+        Stmt::LiveDecl { name, expr } => {
+            vars.insert(name.clone());
+            collect_expr_vars(expr, vars);
+        }
+        Stmt::BelieveDecl { name, value, margin } => {
+            vars.insert(name.clone());
+            collect_expr_vars(value, vars);
+            collect_expr_vars(margin, vars);
+        }
+        Stmt::KalaCall { prompt, with_vars } => {
+            collect_expr_vars(prompt, vars);
+            for v in with_vars { vars.insert(v.clone()); }
+        }
         _ => {}
     }
 }
@@ -212,6 +225,7 @@ fn collect_expr_vars(expr: &crate::ast::Expr, vars: &mut HashSet<String>) {
                 }
             }
         }
+        Expr::History { name, .. } => { vars.insert(name.clone()); }
         _ => {}
     }
 }
@@ -239,6 +253,8 @@ struct CompilerState {
     class_defs: HashMap<String, (Option<String>, Vec<(String, Vec<String>)>)>,
     /// Method bytecode map: (class_name, method_name) → bytecode_start index.
     method_bytecode: HashMap<(String, String), usize>,
+    /// `live` variable registry: name → (deps, recompute_instr_start, recompute_instr_count)
+    live_vars: HashMap<String, (Vec<String>, usize, usize)>,
 }
 
 #[derive(Debug, Clone)]
@@ -342,6 +358,7 @@ pub fn compile_killer_subset(source: &str) -> Result<Program, VmError> {
         function_names: std::collections::HashMap::new(),
         method_bytecode,
         classes,
+        live_vars: state.live_vars,
     })
 }
 
@@ -515,6 +532,7 @@ pub fn compile_statements(statements: &[crate::ast::Stmt]) -> Result<Program, Vm
         function_names,
         method_bytecode: method_bytecode_map,
         classes,
+        live_vars: state.live_vars,
     })
 }
 
@@ -524,6 +542,27 @@ pub fn compile_statements(statements: &[crate::ast::Stmt]) -> Result<Program, Vm
 #[inline]
 pub fn compile_killer_default(source: &str) -> Result<Program, VmError> {
     compile_killer_subset(source)
+}
+
+/// Debug-instrumented compile: identical to `compile_killer_default` but injects
+/// `__dl(N)` checkpoints before every non-blank, non-comment top-level line.
+/// At runtime the VM pauses at each `__dl(N)` call when a debug channel is active
+/// (see `vm::set_vm_debug_channel`).  Uses this alongside `vm::set_vm_debug_channel`
+/// to power the DAP step-debugger.
+pub fn compile_killer_debug(source: &str) -> Result<Program, VmError> {
+    let mut injected = String::new();
+    for (idx, line) in source.lines().enumerate() {
+        let trimmed = line.trim();
+        // Skip blank lines and comments
+        let is_blank = trimmed.is_empty();
+        let is_comment = trimmed.starts_with('#');
+        if !is_blank && !is_comment {
+            injected.push_str(&format!("__dl({})\n", idx + 1));
+        }
+        injected.push_str(line);
+        injected.push('\n');
+    }
+    compile_killer_subset(&injected)
 }
 
 /// **Full AST** pipeline: compile [`crate::ast::Stmt`] trees (built programmatically or from a
@@ -1286,6 +1325,34 @@ fn compile_stmt(
         Stmt::Export(_names) => {
             // Export declarations are handled at module boundary; no bytecode emitted.
         }
+        Stmt::LiveDecl { name, expr } => {
+            let deps = collect_expr_identifiers(expr);
+            let instr_start = state.instructions.len();
+            compile_expr(expr, state, context)?;
+            let instr_count = state.instructions.len() - instr_start;
+            state.live_vars.insert(name.clone(), (deps.clone(), instr_start, instr_count));
+            state.instructions.push(Instruction::RegisterLive {
+                name: name.clone(),
+                deps,
+                instr_start,
+                instr_count,
+            });
+            state.instructions.push(Instruction::Store(name.clone()));
+        }
+        Stmt::BelieveDecl { name, value, margin } => {
+            compile_expr(value, state, context)?;
+            compile_expr(margin, state, context)?;
+            state.instructions.push(Instruction::BuildUncertain);
+            state.instructions.push(Instruction::Store(name.clone()));
+        }
+        Stmt::KalaCall { prompt, with_vars } => {
+            for var in with_vars {
+                state.instructions.push(Instruction::Load(var.clone()));
+            }
+            compile_expr(prompt, state, context)?;
+            state.instructions.push(Instruction::KalaEval { with_count: with_vars.len() });
+            state.instructions.push(Instruction::Print);
+        }
     }
 
     Ok(())
@@ -1443,6 +1510,23 @@ fn compile_expr(
             }
         }
         Expr::Binary { left, op, right } => {
+            // Constant folding: both operands are number literals → compute at compile time
+            if let (Expr::Number(l), Expr::Number(r)) = (left.as_ref(), right.as_ref()) {
+                let folded = match op {
+                    BinaryOp::Add => Some(l + r),
+                    BinaryOp::Sub => Some(l - r),
+                    BinaryOp::Mul => Some(l * r),
+                    BinaryOp::Div if *r != 0.0 => Some(l / r),
+                    BinaryOp::Mod if *r != 0.0 => Some(l % r),
+                    BinaryOp::Pow => Some(l.powf(*r)),
+                    BinaryOp::IntDiv if *r != 0.0 => Some((l / r).floor()),
+                    _ => None,
+                };
+                if let Some(result) = folded {
+                    state.instructions.push(Instruction::ConstNum(result));
+                    return Ok(());
+                }
+            }
             compile_expr(left, state, context)?;
             compile_expr(right, state, context)?;
             match op {
@@ -1775,6 +1859,12 @@ fn compile_expr(
             compile_expr(inner, state, context)?;
             state.instructions.push(Instruction::AwaitTask);
         }
+        Expr::History { name, offset } => {
+            state.instructions.push(Instruction::LoadHistory {
+                name: name.clone(),
+                offset: *offset,
+            });
+        }
         Expr::Assign { name, value } => {
             // Assignment expression: evaluate value, store in variable, and leave value on stack
             compile_expr(value, state, context)?;
@@ -2074,6 +2164,9 @@ fn compile_block(
         state.instructions.push(Instruction::EnterScope);
     }
 
+    // Pending decorators collected before the next fn definition
+    let mut pending_decorators: Vec<String> = Vec::new();
+
     while *cursor < lines.len() {
         let (line_no, raw_line) = &lines[*cursor];
         let line_no = *line_no;
@@ -2104,17 +2197,46 @@ fn compile_block(
             continue;
         }
 
+        // @decorator — collect for the next fn definition
+        if line.starts_with('@') && !line.starts_with("@lang{") {
+            let decorator = line[1..].trim().to_string();
+            if !decorator.is_empty() && (is_valid_name(&decorator) || decorator.contains('(')) {
+                pending_decorators.push(decorator);
+                *cursor += 1;
+                continue;
+            }
+        }
+
         if line.starts_with("fn ") || line.starts_with("kfn ")
             || line.starts_with("async fn ") || line.starts_with("async kfn ")
         {
-            compile_fn_definition(lines, cursor, state)?;
+            // Extract function name before compiling
+            let fn_name = extract_fn_name(line);
+            compile_fn_definition(lines, cursor, state).map_err(|e| {
+                let msg = e.to_string();
+                if msg.starts_with("Line ") { e } else { VmError::parse_error_simple(format!("Line {}: {}", line_no, msg)) }
+            })?;
+            // Apply pending decorators: fn_name = decorator(fn_name) for each
+            if !pending_decorators.is_empty() {
+                for decorator in pending_decorators.drain(..).rev() {
+                    if let Some(fn_name) = &fn_name {
+                        // Emit: load decorator, load fn, call(1), store fn_name
+                        let call_expr = format!("{}({})", decorator, fn_name);
+                        compile_expr_str(&call_expr, line_no, state, context)?;
+                        state.instructions.push(Instruction::Store(fn_name.clone()));
+                    }
+                }
+            }
             continue;
         }
 
         // class ClassName { kfn methods... }
         // class Child extends Parent { ... }
         if line.starts_with("class ") {
-            compile_class_definition(lines, cursor, state)?;
+            compile_class_definition(lines, cursor, state).map_err(|e| {
+                let msg = e.to_string();
+                if msg.starts_with("Line ") { e } else { VmError::parse_error_simple(format!("Line {}: {}", line_no, msg)) }
+            })?;
             continue;
         }
 
@@ -2501,6 +2623,24 @@ fn compile_simple_statement(
         return Ok(());
     }
 
+    // `live name = expr` — reactive variable
+    if let Some(rest) = stmt.strip_prefix("live ") {
+        compile_live(rest, line_no, state, context)?;
+        return Ok(());
+    }
+
+    // `believe name = value ± margin` — uncertain variable
+    if let Some(rest) = stmt.strip_prefix("believe ") {
+        compile_believe(rest, line_no, state, context)?;
+        return Ok(());
+    }
+
+    // `kala "prompt" with x, y` or `kala "prompt"` — natural language as code
+    if let Some(rest) = stmt.strip_prefix("kala ") {
+        compile_kala(rest, line_no, state, context)?;
+        return Ok(());
+    }
+
     // v2.2: spawn statement (fire-and-forget) — e.g. `spawn worker()` or `spawn worker(a,b)`
     if let Some(body) = stmt.strip_prefix("spawn ") {
         emit_spawn_call(body.trim(), line_no, state, context)?;
@@ -2687,7 +2827,9 @@ fn compile_let(
     context: &mut CompileContext,
 ) -> Result<(), VmError> {
     let mut parts = rest.splitn(2, '=');
-    let name = parts.next().unwrap_or("").trim();
+    let raw_name = parts.next().unwrap_or("").trim();
+    // Strip type annotation: `x: Int` → `x`
+    let name = raw_name.splitn(2, ':').next().unwrap_or(raw_name).trim();
     let expr = parts.next().unwrap_or("").trim();
 
     if name.is_empty() || expr.is_empty() {
@@ -2731,6 +2873,168 @@ fn compile_let(
         state.known_top_level_vars.insert(name.to_string());
     }
     Ok(())
+}
+
+/// Collect all Identifier names from an AST expression (for live-var dependency tracking).
+fn collect_expr_identifiers(expr: &crate::ast::Expr) -> Vec<String> {
+    let mut set = HashSet::new();
+    collect_expr_vars(expr, &mut set);
+    let mut ids: Vec<String> = set.into_iter().collect();
+    ids.sort();
+    ids
+}
+
+/// Compile `live name = expr` — reactive variable.
+/// Emits the expr instructions, stores the result, and registers (deps, range) in live_vars.
+fn compile_live(
+    rest: &str,
+    line_no: usize,
+    state: &mut CompilerState,
+    context: &mut CompileContext,
+) -> Result<(), VmError> {
+    let mut parts = rest.splitn(2, '=');
+    let raw_name = parts.next().unwrap_or("").trim();
+    let name = raw_name.splitn(2, ':').next().unwrap_or(raw_name).trim();
+    let expr = parts.next().unwrap_or("").trim();
+
+    if name.is_empty() || expr.is_empty() {
+        return Err(VmError::parse_error_simple(format!(
+            "Line {}: live statement must be `live name = expression`", line_no
+        )));
+    }
+    if !is_valid_name(name) {
+        return Err(VmError::parse_error_simple(format!(
+            "Line {}: invalid variable name `{}`", line_no, name
+        )));
+    }
+
+    // Collect dependency names (identifiers in the expression)
+    let deps: Vec<String> = extract_identifiers(expr)
+        .into_iter()
+        .filter(|id| id != name)
+        .collect();
+
+    // Record where the recompute instructions start
+    let instr_start = state.instructions.len();
+    compile_expr_str(expr, line_no, state, context)?;
+    let instr_count = state.instructions.len() - instr_start;
+
+    // Register in live_vars map
+    state.live_vars.insert(name.to_string(), (deps, instr_start, instr_count));
+
+    // Emit RegisterLive so the VM knows at runtime
+    state.instructions.push(Instruction::RegisterLive {
+        name: name.to_string(),
+        deps: extract_identifiers(expr).into_iter().filter(|id| id != name).collect(),
+        instr_start,
+        instr_count,
+    });
+
+    // Store the initial value
+    state.instructions.push(Instruction::StoreLocal(name.to_string()));
+    state.known_top_level_vars.insert(name.to_string());
+    Ok(())
+}
+
+/// Compile `believe name = value ± margin` — uncertain value.
+fn compile_believe(
+    rest: &str,
+    line_no: usize,
+    state: &mut CompilerState,
+    context: &mut CompileContext,
+) -> Result<(), VmError> {
+    let mut parts = rest.splitn(2, '=');
+    let raw_name = parts.next().unwrap_or("").trim();
+    let name = raw_name.splitn(2, ':').next().unwrap_or(raw_name).trim();
+    let rhs = parts.next().unwrap_or("").trim();
+
+    if name.is_empty() || rhs.is_empty() {
+        return Err(VmError::parse_error_simple(format!(
+            "Line {}: believe statement must be `believe name = value ± margin` or `believe name = confidence`",
+            line_no
+        )));
+    }
+
+    // Split on ± (U+00B1) if present
+    if let Some(pm_pos) = rhs.find('\u{00B1}') {
+        let value_str = rhs[..pm_pos].trim();
+        let margin_str = rhs[pm_pos + '\u{00B1}'.len_utf8()..].trim();
+        compile_expr_str(value_str, line_no, state, context)?;
+        compile_expr_str(margin_str, line_no, state, context)?;
+        state.instructions.push(Instruction::BuildUncertain);
+    } else {
+        // Single confidence value: `believe raining = 0.7`
+        compile_expr_str(rhs, line_no, state, context)?;
+        state.instructions.push(Instruction::ConstNum(0.0));
+        state.instructions.push(Instruction::BuildUncertain);
+    }
+
+    state.instructions.push(Instruction::StoreLocal(name.to_string()));
+    state.known_top_level_vars.insert(name.to_string());
+    Ok(())
+}
+
+/// Compile `kala "prompt" with x, y` — natural language as code.
+fn compile_kala(
+    rest: &str,
+    line_no: usize,
+    state: &mut CompilerState,
+    context: &mut CompileContext,
+) -> Result<(), VmError> {
+    // Split on " with " to separate prompt from variable list
+    let (prompt_str, with_vars) = if let Some(with_pos) = rest.find(" with ") {
+        let prompt_part = rest[..with_pos].trim();
+        let vars_part = rest[with_pos + " with ".len()..].trim();
+        let vars: Vec<String> = vars_part.split(',').map(|v| v.trim().to_string()).collect();
+        (prompt_part.to_string(), vars)
+    } else {
+        (rest.trim().to_string(), vec![])
+    };
+
+    // Push variable values
+    for var in &with_vars {
+        compile_expr_str(var.trim(), line_no, state, context)?;
+    }
+
+    // Push the prompt string
+    compile_expr_str(&prompt_str, line_no, state, context)?;
+
+    // Emit KalaEval
+    state.instructions.push(Instruction::KalaEval { with_count: with_vars.len() });
+
+    // Print the result
+    state.instructions.push(Instruction::Print);
+    Ok(())
+}
+
+/// Extract identifier names from an expression string (simple heuristic).
+fn extract_identifiers(expr: &str) -> Vec<String> {
+    let mut ids = Vec::new();
+    let mut word = String::new();
+    for ch in expr.chars() {
+        if ch.is_alphanumeric() || ch == '_' {
+            word.push(ch);
+        } else {
+            if !word.is_empty() {
+                let w = word.clone();
+                word.clear();
+                // Skip pure numbers and keywords
+                if w.chars().next().map(|c| c.is_alphabetic() || c == '_').unwrap_or(false) {
+                    let skip = matches!(w.as_str(), "let"|"fn"|"if"|"else"|"while"|"for"|"true"|"false"|"null"|"return");
+                    if !skip { ids.push(w); }
+                }
+            }
+        }
+    }
+    if !word.is_empty() {
+        if word.chars().next().map(|c| c.is_alphabetic() || c == '_').unwrap_or(false) {
+            let skip = matches!(word.as_str(), "let"|"fn"|"if"|"else"|"while"|"for"|"true"|"false"|"null"|"return");
+            if !skip { ids.push(word); }
+        }
+    }
+    ids.sort();
+    ids.dedup();
+    ids
 }
 
 /// Compile a K-string interpolation: the raw content between `K"..."` or `k"..."`.
@@ -2811,6 +3115,21 @@ fn compile_expr_str(
     context: &CompileContext,
 ) -> Result<(), VmError> {
     let expr = expr.trim();
+
+    // `x@-1` or `x@1` — time-travel: load historical value; check FIRST before binary split
+    if let Some(at_pos) = expr.find('@') {
+        let var_name = expr[..at_pos].trim();
+        let offset_str = expr[at_pos + 1..].trim();
+        if is_valid_name(var_name) {
+            if let Ok(offset) = offset_str.parse::<i64>() {
+                state.instructions.push(Instruction::LoadHistory {
+                    name: var_name.to_string(),
+                    offset,
+                });
+                return Ok(());
+            }
+        }
+    }
 
     // Parenthesized grouping: (inner) — strip outer parens and recurse
     if expr.starts_with('(') && expr.ends_with(')') {
@@ -2987,6 +3306,27 @@ fn compile_expr_str(
         }
     }
 
+    // `obj?.method(args)` / `obj?.field` — optional chaining: returns null if obj is null
+    if let Some(qmark_pos) = find_top_level_op(expr, "?.") {
+        let obj_part = expr[..qmark_pos].trim();
+        let rest = expr[qmark_pos + 2..].trim();
+        compile_expr_str(obj_part, line_no, state, context)?;
+        if let Some(paren_start) = rest.find('(') {
+            let method_name = rest[..paren_start].trim().to_string();
+            let args_src = rest[paren_start + 1..rest.len().saturating_sub(1)].trim();
+            let args_list = split_arguments(args_src).unwrap_or_default();
+            for arg in &args_list {
+                compile_expr_str(arg.trim(), line_no, state, context)?;
+            }
+            state.instructions.push(Instruction::OptionalChain { method_name, arg_count: args_list.len() });
+        } else {
+            // Field access: obj?.field — emit OptionalChain with 0 args
+            let field = rest.trim().to_string();
+            state.instructions.push(Instruction::OptionalChain { method_name: field, arg_count: 0 });
+        }
+        return Ok(());
+    }
+
     // `obj.method(args)` — method call or `obj.field` — property access
     if let Some((receiver, method_name, args)) = parse_dot_call_expr(expr) {
         // Compile the receiver (the object)
@@ -3034,6 +3374,7 @@ fn compile_expr_str(
         match op {
             "&&" => state.instructions.push(Instruction::And),
             "||" => state.instructions.push(Instruction::Or),
+            "??" => state.instructions.push(Instruction::NullCoalesce),
             _ => {
                 return Err(VmError::parse_error_simple(format!(
                     "Line {}: unsupported logical operator `{}`",
@@ -3102,11 +3443,21 @@ fn compile_expr_str(
         return Ok(());
     }
 
-    // Array literal: [] or [elem1, elem2, ...]
+    // Array literal or list comprehension: [] / [elem...] / [expr for var in iter if cond]
     if expr.starts_with('[') && expr.ends_with(']') {
         let inner = expr[1..expr.len() - 1].trim();
         if inner.is_empty() {
             state.instructions.push(Instruction::BuildArray(0));
+            return Ok(());
+        }
+        // List comprehension: detect "expr for var in iterable [if cond]" at top level
+        if let Some(lc) = parse_list_comprehension(inner) {
+            state.instructions.push(Instruction::ListComp {
+                expr_src: lc.0,
+                var_name: lc.1,
+                iterable_src: lc.2,
+                cond_src: lc.3,
+            });
             return Ok(());
         }
         if let Some(elems) = split_arguments(inner) {
@@ -3270,8 +3621,40 @@ fn split_comparison(expr: &str) -> Option<(&str, &str, &str)> {
     None
 }
 
+/// Extract function name from a `fn name(...)` line
+fn extract_fn_name(line: &str) -> Option<String> {
+    let rest = line
+        .strip_prefix("async kfn ")
+        .or_else(|| line.strip_prefix("async fn "))
+        .or_else(|| line.strip_prefix("kfn "))
+        .or_else(|| line.strip_prefix("fn "))?
+        .trim();
+    let name_end = rest.find(|c: char| !c.is_alphanumeric() && c != '_').unwrap_or(rest.len());
+    if name_end == 0 { None } else { Some(rest[..name_end].to_string()) }
+}
+
+/// Parse `expr for var in iterable [if cond]` — returns (expr, var, iterable, cond_opt)
+fn parse_list_comprehension(inner: &str) -> Option<(String, String, String, Option<String>)> {
+    // Find " for " at top level (depth 0, not inside strings)
+    let for_pos = find_top_level_op(inner, " for ")?;
+    let expr_part = inner[..for_pos].trim().to_string();
+    let after_for = inner[for_pos + 5..].trim(); // " for " is 5 chars
+    // Find " in " after for
+    let in_pos = find_top_level_op(after_for, " in ")?;
+    let var_name = after_for[..in_pos].trim().to_string();
+    let after_in = after_for[in_pos + 4..].trim(); // " in " is 4 chars
+    // Optionally find " if " at top level
+    if let Some(if_pos) = find_top_level_op(after_in, " if ") {
+        let iterable = after_in[..if_pos].trim().to_string();
+        let cond = after_in[if_pos + 4..].trim().to_string();
+        Some((expr_part, var_name, iterable, Some(cond)))
+    } else {
+        Some((expr_part, var_name, after_in.to_string(), None))
+    }
+}
+
 fn split_logical(expr: &str) -> Option<(&str, &str, &str)> {
-    for op in ["&&", "||"] {
+    for op in ["&&", "||", "??"] {
         if let Some(index) = find_top_level_op(expr, op) {
             let left = expr[..index].trim();
             let right = expr[index + op.len()..].trim();

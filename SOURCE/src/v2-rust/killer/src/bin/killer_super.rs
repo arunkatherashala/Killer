@@ -255,6 +255,22 @@ fn main() {
         }
     };
 
+    // ── VM run path: execute .killer source directly (works for all programs) ──
+    // When --run is set without an explicit output file, execute via the VM.
+    // The native/rustc path is only for --emit native with an explicit output target.
+    if cli_args.run && cli_args.output_file.is_none() {
+        if cli_args.verbose {
+            eprintln!("Running via Killer VM...");
+        }
+        match killer_native::run_killer_source(&source) {
+            Ok(()) => process::exit(0),
+            Err(e) => {
+                eprintln!("ERROR: {}", e);
+                process::exit(1);
+            }
+        }
+    }
+
     // Determine output file
     let output_file = cli_args.output_file.clone().unwrap_or_else(|| {
         let mut path = cli_args.input_file.clone();
@@ -389,11 +405,7 @@ fn main() {
         }
 
         if cli_args.run {
-            if cli_args.emit_format != EmitFormat::Native {
-                eprintln!("ERROR: --run is only supported with --emit native");
-                process::exit(1);
-            }
-
+            // --run with --emit native: run the compiled native binary
             let exec_path = if output_file.is_absolute() {
                 output_file.clone()
             } else {

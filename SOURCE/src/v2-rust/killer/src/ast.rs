@@ -142,6 +142,12 @@ pub enum Stmt {
         expression: Box<Expr>,
         arms: Vec<MatchArm>,
     },
+    /// `live total = a + b` — reactive variable that auto-recomputes when deps change
+    LiveDecl { name: String, expr: Box<Expr> },
+    /// `believe x = 72 ± 3` — variable with uncertainty margin
+    BelieveDecl { name: String, value: Box<Expr>, margin: Box<Expr> },
+    /// `kala "prompt" with x, y` — natural language as executable code
+    KalaCall { prompt: Box<Expr>, with_vars: Vec<String> },
 }
 
 /// A single pattern-match arm: `pattern [if guard] => body`
@@ -217,6 +223,8 @@ pub enum Expr {
     Spread(Box<Expr>),
     /// `await expr` — block until a spawned Future resolves
     Await(Box<Expr>),
+    /// `x@-1` — access historical value of variable (time-travel operator)
+    History { name: String, offset: i64 },
 }
 
 #[cfg(test)]

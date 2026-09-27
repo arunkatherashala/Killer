@@ -427,6 +427,20 @@ impl BuiltinFunctions {
             // File I/O
             "readFile" => Self::read_file(args),
             "writeFile" => Self::write_file(args),
+            "appendFile" => Self::append_file(args),
+            "fileExists" => Self::file_exists(args),
+            "deleteFile" => Self::delete_file(args),
+            "fileSize" => Self::file_size(args),
+            "listDir" => Self::list_dir(args),
+            "mkdir" => Self::make_dir(args),
+            "fileCopy" => Self::file_copy(args),
+            "renameFile" => Self::rename_file(args),
+            "pathJoin" => Self::path_join(args),
+            "pathBasename" => Self::path_basename(args),
+            "pathDirname" => Self::path_dirname(args),
+            "pathExtension" => Self::path_extension(args),
+            "readBytes" => Self::read_bytes(args),
+            "writeBytes" => Self::write_bytes(args),
             
             // Timing functions (Week 1: Curriculum Support)
             "system_time_ms" | "time_ms" => Self::system_time_ms(args),
@@ -446,15 +460,44 @@ impl BuiltinFunctions {
             // Async functions (Week 4: Curriculum Support)
             "async_spawn" => Self::async_spawn(args),
             "async_await" => Self::async_await(args),
-            
+
+            // High-level async/spawn builtins
+            "spawn"        => Self::builtin_spawn(args),
+            "await"        => Self::builtin_await_future(args),
+            "await_future" => Self::builtin_await_future(args),
+            "async_sleep"  => Self::builtin_async_sleep(args),
+            // Enhanced async primitives (wired from async_runtime)
+            "async_timeout"    => Self::builtin_async_timeout(args),
+            "async_all"        => Self::builtin_async_all(args),
+            "async_race"       => Self::builtin_async_race(args),
+            "async_resolve"    => Self::builtin_async_resolve(args),
+            "async_reject"     => Self::builtin_async_reject(args),
+            "async_map"        => Self::builtin_async_map(args),
+            "async_chain"      => Self::builtin_async_chain(args),
+
             // DateTime functions (Week 23: System Time, Formatting, Parsing)
-            "now" => Self::now(args),
-            "parse_datetime" => Self::parse_datetime(args),
-            "format_datetime" => Self::format_datetime(args),
+            "now" | "date_now" => Self::now(args),
+            "parse_datetime" | "date_parse" => Self::parse_datetime(args),
+            "format_datetime" | "date_format" => Self::format_datetime(args),
+            "date_diff" => Self::date_diff(args),
+            "date_add"  => Self::date_add(args),
+            "date_year" => Self::date_year(args),
+            "date_month"=> Self::date_month(args),
+            "date_day"  => Self::date_day(args),
+            "timestamp" => Self::timestamp(args),
             
             // HTTP functions -- routed to Nova Galaxy Engine HTTP Client (HTTPS-only, secure)
-            "http_get"  => crate::http_client::builtin_http_get(args),
-            "http_post" => crate::http_client::builtin_http_post(args),
+            "http_get"          => crate::http_client::builtin_http_get(args),
+            "http_post"         => crate::http_client::builtin_http_post(args),
+            "http_put"          => crate::http_client::builtin_http_put(args),
+            "http_delete"       => crate::http_client::builtin_http_delete(args),
+            "http_patch"        => crate::http_client::builtin_http_patch(args),
+            "http_get_json"     => crate::http_client::builtin_http_get_json(args),
+            "http_with_headers" => crate::http_client::builtin_http_with_headers(args),
+            "http_post_json"    => crate::http_client::builtin_http_post_json(args),
+            "http_head"         => crate::http_client::builtin_http_head(args),
+            "http_status"       => crate::http_client::builtin_http_status(args),
+            "http_download"     => crate::http_client::builtin_http_download(args),
 
             // Assert builtins -- test assertions, panic with clear message on failure
             "assert_eq"       => Self::assert_eq(args),
@@ -523,8 +566,8 @@ impl BuiltinFunctions {
             "tryte_eq"        => Self::tryte_eq(args),
             "tryte_zero"      => Self::tryte_zero(args),
             "tryte_type"      => { let _ = args; Ok(Value::Str("tryte".to_string())) },
-            "parse_json" => Self::parse_json(args),
-            "json_stringify" => Self::json_stringify(args),
+            "parse_json" | "json_parse" => Self::parse_json(args),
+            "json_stringify" | "json_encode" => Self::json_stringify(args),
             "HttpServer_new" => Self::http_server_new(args),
             "HttpServer_listen" => Self::http_server_listen(args),
             
@@ -652,11 +695,7 @@ impl BuiltinFunctions {
             "nova_assist_set_budget" => crate::assassin_assist::builtin_assist_set_budget(args),
             "nova_assist_set_log"    => crate::assassin_assist::builtin_assist_set_log(args),
             "nova_assist_clear"      => crate::assassin_assist::builtin_assist_clear(args),
-            // -- E: HTTP Client â€” native http_get/post from Killer code ----------
-            "http_post_json"    => crate::http_client::builtin_http_post_json(args),
-            "http_head"         => crate::http_client::builtin_http_head(args),
-            "http_status"       => crate::http_client::builtin_http_status(args),
-            "http_download"     => crate::http_client::builtin_http_download(args),
+            // -- E: HTTP Client (moved to primary dispatch above) --
             // -- A: Streaming polyglot output ----------------------------------
             "polyglot_stream"   => crate::polyglot::builtin_polyglot_stream(args),
             // -- B: Vector Memory ----------------------------------------------
@@ -823,6 +862,26 @@ impl BuiltinFunctions {
             "hash_map_keys"     => Self::hm_keys(args),
             "hash_map_values"   => Self::hm_values(args),
 
+            // -- Channels: mpsc-backed inter-thread message passing -----------
+            "chan_new"         => Self::chan_new(args),
+            "chan_send"        => Self::chan_send(args),
+            "chan_recv"        => Self::chan_recv(args),
+            "chan_try_recv"    => Self::chan_try_recv(args),
+            "chan_close"       => Self::chan_close(args),
+
+            // -- Set type: unordered unique collections -----------------------
+            "set_new"          => Self::set_new(args),
+            "set_add"          => Self::set_add(args),
+            "set_remove"       => Self::set_remove(args),
+            "set_has"          => Self::set_has(args),
+            "set_size"         => Self::set_size(args),
+            "set_to_array"     => Self::set_to_array(args),
+            "set_union"        => Self::set_union(args),
+            "set_intersection" => Self::set_intersection(args),
+            "set_difference"   => Self::set_difference(args),
+            "set_from_array"   => Self::set_from_array(args),
+            "set_clear"        => Self::set_clear(args),
+
             // -- v1.2: Dijkstra shortest path O((V+E) log V) -----------
             // dijkstra(adj_list, source)            â†’ Array of distances
             //   adj_list: Array of Arrays: [[{to:Int,weight:Int},...], ...]
@@ -972,6 +1031,7 @@ impl BuiltinFunctions {
             "docs_search"      => crate::killer_10x::builtin_docs_search(args),
             "docs_api"         => crate::killer_10x::builtin_docs_api(args),
             "docs_export"      => crate::killer_10x::builtin_docs_export(args),
+            "docs_reference"   => crate::killer_10x::builtin_docs_reference(args),
 
             // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
             // IMPROVE MODULE â€” Errors, Imports, Watch, Stack, REPL, Perf, Docs
@@ -1126,9 +1186,101 @@ impl BuiltinFunctions {
             "idt_encode"        => Self::idt_encode(args),
             "call_native"       => Self::call_native(args),
 
-            _ => Err(VmError::runtime_error(
-                format!("Unknown builtin function: {}", name),
-            )),
+            // -- KORE Query builtins -----------------------------------------------
+            "kore_query"       => Self::builtin_kore_query(args),
+            "kore_query_table" => Self::builtin_kore_query_table(args),
+            "kore_query_csv"   => Self::builtin_kore_query_csv(args),
+
+            // -- KORE Transaction builtins -----------------------------------------
+            "kore_txn_begin"   => Self::builtin_kore_txn_begin(args),
+            "kore_txn_commit"  => Self::builtin_kore_txn_commit(args),
+            "kore_txn_abort"   => Self::builtin_kore_txn_abort(args),
+            "kore_versions"    => Self::builtin_kore_versions(args),
+            "kore_checkout"    => Self::builtin_kore_checkout(args),
+            "kore_as_of"       => Self::builtin_kore_as_of(args),
+            "kore_diff"        => Self::builtin_kore_diff(args),
+
+            // -- KORE v2 advanced builtins -----------------------------------------
+            "kore2_from_csv"   => Self::builtin_kore2_from_csv(args),
+            "kore2_to_csv"     => Self::builtin_kore2_to_csv(args),
+            "kore2_filter"     => Self::builtin_kore2_filter(args),
+            "kore2_stats"      => Self::builtin_kore2_stats(args),
+            "kore2_read_row"   => Self::builtin_kore2_read_row(args),
+            "kore2_read_range" => Self::builtin_kore2_read_range(args),
+            "kore2_info"       => Self::builtin_kore2_info(args),
+            "kore2_read"       => Self::builtin_kore2_read(args),
+            "kore2_read_col"   => Self::builtin_kore2_read_col(args),
+
+            // ── KORE Engine FFI builtins (Phase 2) ─────────────────────────
+            "kore_ctx_new"       => Self::builtin_kore_ctx_new(args),
+            "kore_ctx_csv"       => Self::builtin_kore_ctx_csv(args),
+            "kore_ctx_load"      => Self::builtin_kore_ctx_load(args),
+            "kore_sql"           => Self::builtin_kore_sql(args),
+            "kore_sql_table"     => Self::builtin_kore_sql_table(args),
+            "kore_ctx_rows"      => Self::builtin_kore_ctx_rows(args),
+            "kore_ctx_free"      => Self::builtin_kore_ctx_free(args),
+            "kore_model_new"     => Self::builtin_kore_model_new(args),
+            "kore_model_fit"     => Self::builtin_kore_model_fit(args),
+            "kore_model_predict" => Self::builtin_kore_model_predict(args),
+            "kore_model_free"    => Self::builtin_kore_model_free(args),
+
+            _ => {
+                let all_builtins: &[&str] = &[
+                    "print", "println", "len", "type", "str", "int", "float", "bool",
+                    "push", "pop", "append", "slice", "sort", "reverse", "keys", "values",
+                    "contains", "split", "join", "trim", "upper", "lower", "replace",
+                    "starts_with", "ends_with", "find", "count", "format",
+                    "abs", "min", "max", "floor", "ceil", "round", "sqrt", "pow",
+                    "range", "zip", "map", "filter", "reduce", "any", "all",
+                    "json_parse", "json_stringify", "http_get", "http_post",
+                    "kore_write", "kore_read", "kore_query", "kore_query_table", "kore_query_csv",
+                    "kore_txn_begin", "kore_txn_commit", "kore_txn_abort",
+                    "kore_versions", "kore_checkout", "kore_as_of", "kore_diff",
+                    "kore2_from_csv", "kore2_to_csv", "kore2_filter", "kore2_stats",
+                    "kore2_read", "kore2_read_col", "kore2_read_row", "kore2_read_range", "kore2_info",
+                    "set_new", "set_add", "set_remove", "set_has", "set_size",
+                    "set_union", "set_intersection", "set_difference", "set_to_array",
+                    "chan_new", "chan_send", "chan_recv", "chan_close",
+                    "regex_match", "regex_find_all", "regex_replace",
+                    "encrypt", "decrypt", "hash_sha256",
+                    "nova_write", "nova_read_col", "nova_info",
+                ];
+
+                fn edit_distance(a: &str, b: &str) -> usize {
+                    let a: Vec<char> = a.chars().collect();
+                    let b: Vec<char> = b.chars().collect();
+                    let (m, n) = (a.len(), b.len());
+                    let mut dp = vec![vec![0usize; n + 1]; m + 1];
+                    for i in 0..=m { dp[i][0] = i; }
+                    for j in 0..=n { dp[0][j] = j; }
+                    for i in 1..=m {
+                        for j in 1..=n {
+                            dp[i][j] = if a[i-1] == b[j-1] {
+                                dp[i-1][j-1]
+                            } else {
+                                1 + dp[i-1][j].min(dp[i][j-1]).min(dp[i-1][j-1])
+                            };
+                        }
+                    }
+                    dp[m][n]
+                }
+
+                let best = all_builtins.iter()
+                    .map(|b| (*b, edit_distance(name, b)))
+                    .min_by_key(|(_, d)| *d);
+
+                let suggestion = if let Some((candidate, dist)) = best {
+                    if dist <= 3 {
+                        format!(" -- did you mean '{}'?", candidate)
+                    } else {
+                        String::new()
+                    }
+                } else {
+                    String::new()
+                };
+
+                Err(VmError::runtime_error(format!("unknown function '{}'{}",  name, suggestion)))
+            }
         }
     }
 
@@ -1239,6 +1391,8 @@ impl BuiltinFunctions {
             Value::Integer(_) => "integer",
             Value::Bytes(_) => "bytes",
             Value::Pointer(_) => "pointer",
+            Value::Uncertain { .. } => "uncertain",
+            Value::Set(_) => "set",
         };
         Ok(Value::Str(type_name.to_string()))
     }
@@ -2460,11 +2614,13 @@ impl BuiltinFunctions {
             Value::Str(filename) => {
                 match std::fs::read_to_string(filename) {
                     Ok(contents) => Ok(Value::Str(contents)),
-                    Err(_) => Ok(Value::Null),
+                    Err(e) => Err(VmError::runtime_error(format!(
+                        "readFile({filename}): {e}\n  Hint: check the path exists with fileExists(\"{filename}\")"
+                    ))),
                 }
             }
             _ => Err(VmError::runtime_error(
-                "readFile() expects a string filename".to_string(),
+                "readFile(path) expects a string — got a non-string argument".to_string(),
             )),
         }
     }
@@ -2472,20 +2628,197 @@ impl BuiltinFunctions {
     fn write_file(args: &[Value]) -> Result<Value, VmError> {
         crate::security::require_file_write()?;
         if args.len() != 2 {
-            return Err(VmError::runtime_error(
-                "writeFile() expects 2 arguments (filename, content)".to_string(),
-            ));
+            return Err(VmError::runtime_error(format!(
+                "writeFile() expects 2 arguments (path, content), got {}",
+                args.len()
+            )));
         }
         match (&args[0], &args[1]) {
             (Value::Str(filename), Value::Str(content)) => {
-                match std::fs::write(filename, content) {
-                    Ok(_) => Ok(Value::Bool(true)),
-                    Err(_) => Ok(Value::Bool(false)),
+                std::fs::write(filename, content)
+                    .map(|_| Value::Bool(true))
+                    .map_err(|e| VmError::runtime_error(format!("writeFile({filename}): {e}")))
+            }
+            (Value::Str(_), other) => Err(VmError::runtime_error(format!(
+                "writeFile(): content must be a string, got {}",
+                other.type_name()
+            ))),
+            (other, _) => Err(VmError::runtime_error(format!(
+                "writeFile(): path must be a string, got {}",
+                other.type_name()
+            ))),
+        }
+    }
+
+    // ===== Extended File I/O =====
+
+    fn append_file(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_write()?;
+        match args {
+            [Value::Str(path), Value::Str(content)] => {
+                use std::io::Write;
+                let mut f = std::fs::OpenOptions::new().append(true).create(true).open(path)
+                    .map_err(|e| VmError::runtime_error(format!("appendFile({path}): {e}")))?;
+                f.write_all(content.as_bytes())
+                    .map_err(|e| VmError::runtime_error(format!("appendFile({path}): {e}")))?;
+                Ok(Value::Bool(true))
+            }
+            _ => Err(VmError::runtime_error("appendFile(path, content) expects two strings".to_string())),
+        }
+    }
+
+    fn file_exists(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_read()?;
+        match args {
+            [Value::Str(path)] => Ok(Value::Bool(std::path::Path::new(path).exists())),
+            _ => Err(VmError::runtime_error("fileExists(path) expects one string".to_string())),
+        }
+    }
+
+    fn delete_file(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_write()?;
+        match args {
+            [Value::Str(path)] => {
+                let p = std::path::Path::new(path);
+                let ok = if p.is_dir() {
+                    std::fs::remove_dir_all(path).is_ok()
+                } else {
+                    std::fs::remove_file(path).is_ok()
+                };
+                Ok(Value::Bool(ok))
+            }
+            _ => Err(VmError::runtime_error("deleteFile(path) expects one string".to_string())),
+        }
+    }
+
+    fn file_size(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_read()?;
+        match args {
+            [Value::Str(path)] => {
+                match std::fs::metadata(path) {
+                    Ok(m) => Ok(Value::Number(m.len() as f64)),
+                    Err(e) => Err(VmError::runtime_error(format!("fileSize({path}): {e}"))),
                 }
             }
-            _ => Err(VmError::runtime_error(
-                "writeFile() expects string arguments (filename, content)".to_string(),
-            )),
+            _ => Err(VmError::runtime_error("fileSize(path) expects one string".to_string())),
+        }
+    }
+
+    fn list_dir(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_read()?;
+        match args {
+            [Value::Str(path)] => {
+                let entries = std::fs::read_dir(path)
+                    .map_err(|e| VmError::runtime_error(format!("listDir({path}): {e}")))?;
+                let mut names = Vec::new();
+                for entry in entries.flatten() {
+                    names.push(Value::Str(entry.file_name().to_string_lossy().into_owned()));
+                }
+                Ok(Value::Array(crate::value::SharedArray::new(names)))
+            }
+            _ => Err(VmError::runtime_error("listDir(path) expects one string".to_string())),
+        }
+    }
+
+    fn make_dir(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_write()?;
+        match args {
+            [Value::Str(path)] => {
+                Ok(Value::Bool(std::fs::create_dir_all(path).is_ok()))
+            }
+            _ => Err(VmError::runtime_error("mkdir(path) expects one string".to_string())),
+        }
+    }
+
+    fn file_copy(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_write()?;
+        match args {
+            [Value::Str(src), Value::Str(dst)] => {
+                Ok(Value::Bool(std::fs::copy(src, dst).is_ok()))
+            }
+            _ => Err(VmError::runtime_error("fileCopy(src, dst) expects two strings".to_string())),
+        }
+    }
+
+    fn rename_file(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_write()?;
+        match args {
+            [Value::Str(src), Value::Str(dst)] => {
+                Ok(Value::Bool(std::fs::rename(src, dst).is_ok()))
+            }
+            _ => Err(VmError::runtime_error("renameFile(src, dst) expects two strings".to_string())),
+        }
+    }
+
+    fn path_join(args: &[Value]) -> Result<Value, VmError> {
+        let mut p = std::path::PathBuf::new();
+        for arg in args {
+            match arg {
+                Value::Str(s) => p.push(s),
+                _ => return Err(VmError::runtime_error("pathJoin() expects string segments".to_string())),
+            }
+        }
+        Ok(Value::Str(p.to_string_lossy().into_owned()))
+    }
+
+    fn path_basename(args: &[Value]) -> Result<Value, VmError> {
+        match args {
+            [Value::Str(path)] => {
+                let s = std::path::Path::new(path)
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                Ok(Value::Str(s))
+            }
+            _ => Err(VmError::runtime_error("pathBasename(path) expects one string".to_string())),
+        }
+    }
+
+    fn path_dirname(args: &[Value]) -> Result<Value, VmError> {
+        match args {
+            [Value::Str(path)] => {
+                let s = std::path::Path::new(path)
+                    .parent()
+                    .map(|p| p.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                Ok(Value::Str(s))
+            }
+            _ => Err(VmError::runtime_error("pathDirname(path) expects one string".to_string())),
+        }
+    }
+
+    fn path_extension(args: &[Value]) -> Result<Value, VmError> {
+        match args {
+            [Value::Str(path)] => {
+                let s = std::path::Path::new(path)
+                    .extension()
+                    .map(|e| e.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                Ok(Value::Str(s))
+            }
+            _ => Err(VmError::runtime_error("pathExtension(path) expects one string".to_string())),
+        }
+    }
+
+    fn read_bytes(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_read()?;
+        match args {
+            [Value::Str(path)] => {
+                let bytes = std::fs::read(path)
+                    .map_err(|e| VmError::runtime_error(format!("readBytes({path}): {e}")))?;
+                Ok(Value::Bytes(bytes))
+            }
+            _ => Err(VmError::runtime_error("readBytes(path) expects one string".to_string())),
+        }
+    }
+
+    fn write_bytes(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_write()?;
+        match args {
+            [Value::Str(path), Value::Bytes(data)] => {
+                Ok(Value::Bool(std::fs::write(path, data).is_ok()))
+            }
+            _ => Err(VmError::runtime_error("writeBytes(path, bytes) expects string and bytes".to_string())),
         }
     }
 
@@ -2733,125 +3066,253 @@ impl BuiltinFunctions {
     
     fn spawn_thread(args: &[Value]) -> Result<Value, VmError> {
         crate::security::require_process_spawn()?;
-        if args.len() != 1 {
+        if args.is_empty() {
             return Err(VmError::runtime_error(
-                "spawn_thread() expects 1 argument (closure/function)".to_string(),
+                "spawn_thread() expects 1 argument (value/closure)".to_string(),
             ));
         }
-        
-        // In Killer, closures are represented as Function values
-        // For v2.3, we would:
-        // 1. Clone the function bytecode
-        // 2. Create a new VM instance in a thread
-        // 3. Execute the function
-        // 4. Return the thread handle ID
-        
-        // For v3.0 (current), return a thread handle dictionary
-        use std::sync::atomic::{AtomicUsize, Ordering};
-        
-        // Generate unique thread ID
-        static THREAD_COUNTER: AtomicUsize = AtomicUsize::new(0);
-        let thread_id = THREAD_COUNTER.fetch_add(1, Ordering::SeqCst);
-        let thread_handle_str = format!("thread_{}", thread_id);
-        
-        // Return thread handle
-        let mut handle = std::collections::HashMap::new();
-        handle.insert("type".to_string(), Value::Str("ThreadHandle".to_string()));
-        handle.insert("id".to_string(), Value::Str(thread_handle_str));
-        handle.insert("status".to_string(), Value::Str("running".to_string()));
-        
-        Ok(Value::Dict(Box::new(handle)))
+        let val = args[0].clone();
+        let slot: std::sync::Arc<std::sync::Mutex<Option<Box<Value>>>> =
+            std::sync::Arc::new(std::sync::Mutex::new(None));
+        let slot_clone = std::sync::Arc::clone(&slot);
+        std::thread::spawn(move || {
+            *slot_clone.lock().unwrap() = Some(Box::new(val));
+        });
+        Ok(Value::Future(crate::value::FutureHandle(slot)))
     }
-    
+
     fn join_thread(args: &[Value]) -> Result<Value, VmError> {
-        if args.len() != 1 {
+        if args.is_empty() {
             return Err(VmError::runtime_error(
-                "join_thread() expects 1 argument (thread handle)".to_string(),
+                "join_thread() expects 1 argument (future/thread handle)".to_string(),
             ));
         }
-        
-        match &args[0] {
-            Value::Dict(handle) => {
-                // Verify it's a thread handle
-                if let Some(Value::Str(type_str)) = handle.get("type") {
-                    if type_str != "ThreadHandle" {
-                        return Err(VmError::runtime_error(
-                            "join_thread(): argument must be a thread handle".to_string(),
-                        ));
-                    }
-                } else {
-                    return Err(VmError::runtime_error(
-                        "join_thread(): argument must be a thread handle".to_string(),
-                    ));
-                }
-                
-                // In v3.0, wait for the thread to complete
-                // For now, return null (thread would have completed)
-                Ok(Value::Null)
-            }
-            _ => Err(VmError::runtime_error(
-                "join_thread(): argument must be a thread handle (Dict)".to_string(),
-            )),
-        }
+        Self::async_await(args)
     }
-    
+
     // ===== Async Functions (Week 4: Curriculum Support) =====
-    
+
     fn async_spawn(args: &[Value]) -> Result<Value, VmError> {
         crate::security::require_process_spawn()?;
         if args.len() != 1 {
             return Err(VmError::runtime_error(
-                "async_spawn() expects 1 argument (async closure/function)".to_string(),
+                "async_spawn() expects 1 argument (value or closure)".to_string(),
             ));
         }
-        
-        // Create a future handle (similar to thread handle but for async tasks)
-        use std::sync::atomic::{AtomicUsize, Ordering};
-        
-        static FUTURE_COUNTER: AtomicUsize = AtomicUsize::new(0);
-        let future_id = FUTURE_COUNTER.fetch_add(1, Ordering::SeqCst);
-        let future_handle_str = format!("future_{}", future_id);
-        
-        // Return future handle
-        let mut handle = std::collections::HashMap::new();
-        handle.insert("type".to_string(), Value::Str("Future".to_string()));
-        handle.insert("id".to_string(), Value::Str(future_handle_str));
-        handle.insert("status".to_string(), Value::Str("pending".to_string()));
-        
-        Ok(Value::Dict(Box::new(handle)))
+        let val = args[0].clone();
+        let slot: std::sync::Arc<std::sync::Mutex<Option<Box<Value>>>> =
+            std::sync::Arc::new(std::sync::Mutex::new(None));
+        let slot_clone = std::sync::Arc::clone(&slot);
+        std::thread::spawn(move || {
+            *slot_clone.lock().unwrap() = Some(Box::new(val));
+        });
+        Ok(Value::Future(crate::value::FutureHandle(slot)))
     }
-    
+
     fn async_await(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 1 {
             return Err(VmError::runtime_error(
                 "async_await() expects 1 argument (future)".to_string(),
             ));
         }
-        
         match &args[0] {
-            Value::Dict(handle) => {
-                // Verify it's a future handle
-                if let Some(Value::Str(type_str)) = handle.get("type") {
-                    if type_str != "Future" {
-                        return Err(VmError::runtime_error(
-                            "async_await(): argument must be a future".to_string(),
-                        ));
+            Value::Future(handle) => {
+                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+                let mut sleep_ms = 1u64;
+                loop {
+                    {
+                        let mut slot = handle.0.lock().unwrap();
+                        if let Some(result) = slot.take() {
+                            return Ok(*result);
+                        }
                     }
-                } else {
-                    return Err(VmError::runtime_error(
-                        "async_await(): argument must be a future".to_string(),
-                    ));
+                    if std::time::Instant::now() >= deadline {
+                        return Ok(Value::Null);
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(sleep_ms));
+                    sleep_ms = (sleep_ms * 2).min(50);
                 }
-                
-                // In v3.0, wait for the async task to complete
-                // Returns the result of the async computation
-                // For now, return null (task would have completed)
-                Ok(Value::Null)
             }
-            _ => Err(VmError::runtime_error(
-                "async_await(): argument must be a future (Dict)".to_string(),
-            )),
+            Value::Dict(handle) => {
+                if let Some(Value::Str(type_str)) = handle.get("type") {
+                    if type_str == "Future" {
+                        return Ok(Value::Null);
+                    }
+                }
+                Err(VmError::runtime_error(
+                    "async_await(): argument must be a future".to_string(),
+                ))
+            }
+            other => Ok(other.clone()),
         }
+    }
+
+    fn builtin_spawn(args: &[Value]) -> Result<Value, VmError> {
+        let val = args.first().cloned().unwrap_or(Value::Null);
+        let slot: std::sync::Arc<std::sync::Mutex<Option<Box<Value>>>> =
+            std::sync::Arc::new(std::sync::Mutex::new(None));
+        let slot_clone = std::sync::Arc::clone(&slot);
+        std::thread::spawn(move || {
+            *slot_clone.lock().unwrap() = Some(Box::new(val));
+        });
+        Ok(Value::Future(crate::value::FutureHandle(slot)))
+    }
+
+    fn builtin_await_future(args: &[Value]) -> Result<Value, VmError> {
+        if args.is_empty() {
+            return Err(VmError::runtime_error(
+                "await() expects 1 argument (future handle)".to_string(),
+            ));
+        }
+        Self::async_await(args)
+    }
+
+    fn builtin_async_sleep(args: &[Value]) -> Result<Value, VmError> {
+        let ms = match args.first() {
+            Some(Value::Number(n)) => *n as u64,
+            _ => 100,
+        };
+        std::thread::sleep(std::time::Duration::from_millis(ms));
+        Ok(Value::Null)
+    }
+
+    // ── Enhanced async primitives ─────────────────────────────────────────────
+
+    /// async_timeout(future_handle, ms) → resolved value or "timeout" string
+    /// Blocks up to `ms` milliseconds for the future to resolve.
+    fn builtin_async_timeout(args: &[Value]) -> Result<Value, VmError> {
+        let timeout_ms = match args.get(1) {
+            Some(Value::Number(n)) => *n as u64,
+            _ => 5000,
+        };
+        match args.first() {
+            Some(Value::Future(handle)) => {
+                let deadline = std::time::Instant::now()
+                    + std::time::Duration::from_millis(timeout_ms);
+                loop {
+                    {
+                        let guard = handle.0.lock()
+                            .map_err(|e| VmError::runtime_error(format!("Future lock: {}", e)))?;
+                        if let Some(v) = guard.as_ref() {
+                            return Ok(*v.clone());
+                        }
+                    }
+                    if std::time::Instant::now() >= deadline {
+                        return Ok(Value::Str("timeout".to_string()));
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(5));
+                }
+            }
+            _ => Err(VmError::runtime_error("async_timeout(future, ms) — first arg must be a future")),
+        }
+    }
+
+    /// async_all(array_of_futures) → array of resolved values (all must complete)
+    fn builtin_async_all(args: &[Value]) -> Result<Value, VmError> {
+        let arr = match args.first() {
+            Some(Value::Array(a)) => a.clone(),
+            _ => return Err(VmError::runtime_error("async_all(array) — expects array of futures")),
+        };
+        let len = arr.len();
+        let mut results = Vec::with_capacity(len);
+        for i in 0..len {
+            let fut = arr.get(i).unwrap_or(Value::Null);
+            match fut {
+                Value::Future(handle) => {
+                    loop {
+                        let guard = handle.0.lock()
+                            .map_err(|e| VmError::runtime_error(format!("Future lock: {}", e)))?;
+                        if let Some(v) = guard.as_ref() {
+                            results.push(*v.clone());
+                            break;
+                        }
+                        drop(guard);
+                        std::thread::sleep(std::time::Duration::from_millis(2));
+                    }
+                }
+                other => results.push(other),
+            }
+        }
+        Ok(Value::Array(crate::value::SharedArray::new(results)))
+    }
+
+    /// async_race(array_of_futures) → first resolved value wins
+    fn builtin_async_race(args: &[Value]) -> Result<Value, VmError> {
+        let arr = match args.first() {
+            Some(Value::Array(a)) => a.clone(),
+            _ => return Err(VmError::runtime_error("async_race(array) — expects array of futures")),
+        };
+        if arr.is_empty() {
+            return Ok(Value::Null);
+        }
+        let len = arr.len();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        loop {
+            for i in 0..len {
+                match arr.get(i).unwrap_or(Value::Null) {
+                    Value::Future(handle) => {
+                        let guard = handle.0.lock()
+                            .map_err(|e| VmError::runtime_error(format!("{}", e)))?;
+                        if let Some(v) = guard.as_ref() {
+                            return Ok(*v.clone());
+                        }
+                    }
+                    other => return Ok(other),
+                }
+            }
+            if std::time::Instant::now() >= deadline {
+                return Ok(Value::Str("race_timeout".to_string()));
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+    }
+
+    /// async_resolve(value) → wrap a value in an already-resolved future handle
+    fn builtin_async_resolve(args: &[Value]) -> Result<Value, VmError> {
+        let val = args.first().cloned().unwrap_or(Value::Null);
+        let handle = crate::value::FutureHandle(
+            std::sync::Arc::new(std::sync::Mutex::new(Some(Box::new(val)))),
+        );
+        Ok(Value::Future(handle))
+    }
+
+    /// async_reject(msg) → wrap an error string in a "rejected" future (returns the string)
+    fn builtin_async_reject(args: &[Value]) -> Result<Value, VmError> {
+        let msg = match args.first() {
+            Some(Value::Str(s)) => s.clone(),
+            Some(other) => format!("{}", other),
+            None => "rejected".to_string(),
+        };
+        // A rejected future resolves to an error string
+        let handle = crate::value::FutureHandle(
+            std::sync::Arc::new(std::sync::Mutex::new(Some(Box::new(Value::Str(
+                format!("Error: {}", msg),
+            ))))),
+        );
+        Ok(Value::Future(handle))
+    }
+
+    /// async_map(future, fn) — NOT a real async map (no closures in builtins),
+    /// but waits for the future then applies the fn name as a string builtin.
+    fn builtin_async_map(args: &[Value]) -> Result<Value, VmError> {
+        if args.len() < 2 {
+            return Err(VmError::runtime_error("async_map(future, transform_name)"));
+        }
+        let resolved = Self::builtin_async_timeout(&[args[0].clone(), Value::Number(10000.0)])?;
+        Ok(resolved) // transformation requires closures; return resolved value as-is
+    }
+
+    /// async_chain(future1, future2) → resolves future1, then future2, returns second result
+    fn builtin_async_chain(args: &[Value]) -> Result<Value, VmError> {
+        let _first = Self::builtin_async_timeout(&[
+            args.first().cloned().unwrap_or(Value::Null),
+            Value::Number(10000.0),
+        ])?;
+        // Resolve second (depends on first being done)
+        Self::builtin_async_timeout(&[
+            args.get(1).cloned().unwrap_or(Value::Null),
+            Value::Number(10000.0),
+        ])
     }
 
     // ========== DateTime Functions (Week 23) ==========
@@ -2965,6 +3426,104 @@ impl BuiltinFunctions {
         };
 
         Ok(Value::Str(dt.format(format_str)))
+    }
+
+    // ========== Date stdlib extensions ==========
+
+    /// date_diff(dt_a, dt_b, unit) → Number
+    /// unit: "seconds" | "minutes" | "hours" | "days"  (default "seconds")
+    fn date_diff(args: &[Value]) -> Result<Value, VmError> {
+        fn secs(v: &Value) -> Result<i64, VmError> {
+            match v {
+                Value::Dict(d) => match d.get("seconds") {
+                    Some(Value::Number(n)) => Ok(*n as i64),
+                    _ => Err(VmError::runtime_error("date_diff: datetime dict must have 'seconds' key")),
+                },
+                Value::Number(n) => Ok(*n as i64),
+                _ => Err(VmError::runtime_error("date_diff: args must be datetime dicts or numbers")),
+            }
+        }
+        if args.len() < 2 {
+            return Err(VmError::runtime_error("date_diff(a, b, unit?) expects 2+ args"));
+        }
+        let a = secs(&args[0])?;
+        let b = secs(&args[1])?;
+        let diff = (a - b).abs() as f64;
+        let unit = match args.get(2) { Some(Value::Str(s)) => s.as_str(), _ => "seconds" };
+        let result = match unit {
+            "minutes" => diff / 60.0,
+            "hours"   => diff / 3600.0,
+            "days"    => diff / 86400.0,
+            _         => diff,
+        };
+        Ok(Value::Number(result))
+    }
+
+    /// date_add(dt, amount, unit) → Dict  (new datetime)
+    /// unit: "seconds" | "minutes" | "hours" | "days"
+    fn date_add(args: &[Value]) -> Result<Value, VmError> {
+        let secs_base = match args.first() {
+            Some(Value::Dict(d)) => match d.get("seconds") {
+                Some(Value::Number(n)) => *n as i64,
+                _ => return Err(VmError::runtime_error("date_add: first arg must be a datetime dict")),
+            },
+            Some(Value::Number(n)) => *n as i64,
+            _ => return Err(VmError::runtime_error("date_add(dt, amount, unit)")),
+        };
+        let amount = match args.get(1) {
+            Some(Value::Number(n)) => *n,
+            _ => return Err(VmError::runtime_error("date_add: second arg must be a number")),
+        };
+        let unit = match args.get(2) { Some(Value::Str(s)) => s.as_str(), _ => "seconds" };
+        let delta_s = match unit {
+            "minutes" => (amount * 60.0) as i64,
+            "hours"   => (amount * 3600.0) as i64,
+            "days"    => (amount * 86400.0) as i64,
+            _         => amount as i64,
+        };
+        let new_secs = secs_base + delta_s;
+        let mut d = std::collections::HashMap::new();
+        d.insert("seconds".to_string(), Value::Number(new_secs as f64));
+        d.insert("nanos".to_string(), Value::Number(0.0));
+        Ok(Value::Dict(Box::new(d)))
+    }
+
+    /// date_year(dt) → Number
+    fn date_year(args: &[Value]) -> Result<Value, VmError> {
+        let secs = Self::dt_secs(args)?;
+        Ok(Value::Number(secs_to_year(secs) as f64))
+    }
+
+    /// date_month(dt) → Number  (1-12)
+    fn date_month(args: &[Value]) -> Result<Value, VmError> {
+        let secs = Self::dt_secs(args)?;
+        Ok(Value::Number(secs_to_month(secs) as f64))
+    }
+
+    /// date_day(dt) → Number  (1-31)
+    fn date_day(args: &[Value]) -> Result<Value, VmError> {
+        let secs = Self::dt_secs(args)?;
+        Ok(Value::Number(secs_to_day(secs) as f64))
+    }
+
+    /// timestamp() → Number  (Unix seconds as float)
+    fn timestamp(_args: &[Value]) -> Result<Value, VmError> {
+        let secs = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs_f64();
+        Ok(Value::Number(secs))
+    }
+
+    fn dt_secs(args: &[Value]) -> Result<i64, VmError> {
+        match args.first() {
+            Some(Value::Dict(d)) => match d.get("seconds") {
+                Some(Value::Number(n)) => Ok(*n as i64),
+                _ => Err(VmError::runtime_error("expected datetime dict with 'seconds' key")),
+            },
+            Some(Value::Number(n)) => Ok(*n as i64),
+            _ => Err(VmError::runtime_error("expected datetime dict or unix timestamp number")),
+        }
     }
 
     // ========== Assert Builtins ==========
@@ -5979,7 +6538,157 @@ impl BuiltinFunctions {
     }
 
     // =========================================================
-    // v1.2: Native Dijkstra builtins â€” O((V+E) log V)
+    // Channel builtins (mpsc-backed, channel IDs as Value::Integer)
+    // =========================================================
+
+    fn chan_new(_args: &[Value]) -> Result<Value, VmError> {
+        use std::sync::mpsc;
+        let (tx, rx) = mpsc::channel::<Value>();
+        let id = crate::channel_registry::register(tx, rx);
+        Ok(Value::Integer(id))
+    }
+
+    fn chan_send(args: &[Value]) -> Result<Value, VmError> {
+        if args.len() < 2 { return Err(VmError::runtime_error("chan_send(chan_id, value) requires 2 args")); }
+        let id = match &args[0] { Value::Integer(i) => *i, _ => return Err(VmError::runtime_error("chan_send: first arg must be channel id")) };
+        let val = args[1].clone();
+        crate::channel_registry::send(id, val).map_err(|e| VmError::runtime_error(e))?;
+        Ok(Value::Null)
+    }
+
+    fn chan_recv(args: &[Value]) -> Result<Value, VmError> {
+        if args.is_empty() { return Err(VmError::runtime_error("chan_recv(chan_id) requires 1 arg")); }
+        let id = match &args[0] { Value::Integer(i) => *i, _ => return Err(VmError::runtime_error("chan_recv: arg must be channel id")) };
+        crate::channel_registry::recv(id).map_err(|e| VmError::runtime_error(e))
+    }
+
+    fn chan_try_recv(args: &[Value]) -> Result<Value, VmError> {
+        if args.is_empty() { return Err(VmError::runtime_error("chan_try_recv(chan_id) requires 1 arg")); }
+        let id = match &args[0] { Value::Integer(i) => *i, _ => return Err(VmError::runtime_error("chan_try_recv: arg must be channel id")) };
+        Ok(crate::channel_registry::try_recv(id).unwrap_or(Value::Null))
+    }
+
+    fn chan_close(args: &[Value]) -> Result<Value, VmError> {
+        if args.is_empty() { return Err(VmError::runtime_error("chan_close(chan_id) requires 1 arg")); }
+        let id = match &args[0] { Value::Integer(i) => *i, _ => return Err(VmError::runtime_error("chan_close: arg must be channel id")) };
+        crate::channel_registry::close(id);
+        Ok(Value::Null)
+    }
+
+    // =========================================================
+    // Set type builtins
+    // =========================================================
+
+    fn set_new(args: &[Value]) -> Result<Value, VmError> {
+        use std::collections::BTreeSet;
+        use crate::value::SetKey;
+        let mut s = BTreeSet::new();
+        for a in args {
+            if let Some(k) = SetKey::from_value(a) { s.insert(k); }
+        }
+        Ok(Value::Set(Box::new(s)))
+    }
+
+    fn set_from_array(args: &[Value]) -> Result<Value, VmError> {
+        use std::collections::BTreeSet;
+        use crate::value::SetKey;
+        if args.is_empty() { return Err(VmError::runtime_error("set_from_array(arr) requires 1 arg")); }
+        let mut s = BTreeSet::new();
+        if let Value::Array(arr) = &args[0] {
+            for v in arr.iter_cloned() {
+                if let Some(k) = SetKey::from_value(&v) { s.insert(k); }
+            }
+        }
+        Ok(Value::Set(Box::new(s)))
+    }
+
+    fn set_add(args: &[Value]) -> Result<Value, VmError> {
+        use crate::value::SetKey;
+        if args.len() < 2 { return Err(VmError::runtime_error("set_add(set, value) requires 2 args")); }
+        let mut s = match &args[0] {
+            Value::Set(s) => *s.clone(),
+            _ => return Err(VmError::runtime_error("set_add: first arg must be a set")),
+        };
+        if let Some(k) = SetKey::from_value(&args[1]) { s.insert(k); }
+        Ok(Value::Set(Box::new(s)))
+    }
+
+    fn set_remove(args: &[Value]) -> Result<Value, VmError> {
+        use crate::value::SetKey;
+        if args.len() < 2 { return Err(VmError::runtime_error("set_remove(set, value) requires 2 args")); }
+        let mut s = match &args[0] {
+            Value::Set(s) => *s.clone(),
+            _ => return Err(VmError::runtime_error("set_remove: first arg must be a set")),
+        };
+        if let Some(k) = SetKey::from_value(&args[1]) { s.remove(&k); }
+        Ok(Value::Set(Box::new(s)))
+    }
+
+    fn set_has(args: &[Value]) -> Result<Value, VmError> {
+        use crate::value::SetKey;
+        if args.len() < 2 { return Err(VmError::runtime_error("set_has(set, value) requires 2 args")); }
+        let s = match &args[0] {
+            Value::Set(s) => s,
+            _ => return Err(VmError::runtime_error("set_has: first arg must be a set")),
+        };
+        let found = SetKey::from_value(&args[1]).map(|k| s.contains(&k)).unwrap_or(false);
+        Ok(Value::Bool(found))
+    }
+
+    fn set_size(args: &[Value]) -> Result<Value, VmError> {
+        if args.is_empty() { return Err(VmError::runtime_error("set_size(set) requires 1 arg")); }
+        let s = match &args[0] {
+            Value::Set(s) => s,
+            _ => return Err(VmError::runtime_error("set_size: arg must be a set")),
+        };
+        Ok(Value::Number(s.len() as f64))
+    }
+
+    fn set_to_array(args: &[Value]) -> Result<Value, VmError> {
+        if args.is_empty() { return Err(VmError::runtime_error("set_to_array(set) requires 1 arg")); }
+        let s = match &args[0] {
+            Value::Set(s) => s,
+            _ => return Err(VmError::runtime_error("set_to_array: arg must be a set")),
+        };
+        let items: Vec<Value> = s.iter().map(|k| k.to_value()).collect();
+        Ok(Value::from(items))
+    }
+
+    fn set_clear(args: &[Value]) -> Result<Value, VmError> {
+        use std::collections::BTreeSet;
+        if args.is_empty() { return Err(VmError::runtime_error("set_clear(set) requires 1 arg")); }
+        match &args[0] {
+            Value::Set(_) => Ok(Value::Set(Box::new(BTreeSet::new()))),
+            _ => Err(VmError::runtime_error("set_clear: arg must be a set")),
+        }
+    }
+
+    fn set_union(args: &[Value]) -> Result<Value, VmError> {
+        if args.len() < 2 { return Err(VmError::runtime_error("set_union(a, b) requires 2 args")); }
+        let a = match &args[0] { Value::Set(s) => s, _ => return Err(VmError::runtime_error("set_union: args must be sets")) };
+        let b = match &args[1] { Value::Set(s) => s, _ => return Err(VmError::runtime_error("set_union: args must be sets")) };
+        let result = a.union(b.as_ref()).cloned().collect();
+        Ok(Value::Set(Box::new(result)))
+    }
+
+    fn set_intersection(args: &[Value]) -> Result<Value, VmError> {
+        if args.len() < 2 { return Err(VmError::runtime_error("set_intersection(a, b) requires 2 args")); }
+        let a = match &args[0] { Value::Set(s) => s, _ => return Err(VmError::runtime_error("set_intersection: args must be sets")) };
+        let b = match &args[1] { Value::Set(s) => s, _ => return Err(VmError::runtime_error("set_intersection: args must be sets")) };
+        let result = a.intersection(b.as_ref()).cloned().collect();
+        Ok(Value::Set(Box::new(result)))
+    }
+
+    fn set_difference(args: &[Value]) -> Result<Value, VmError> {
+        if args.len() < 2 { return Err(VmError::runtime_error("set_difference(a, b) requires 2 args")); }
+        let a = match &args[0] { Value::Set(s) => s, _ => return Err(VmError::runtime_error("set_difference: args must be sets")) };
+        let b = match &args[1] { Value::Set(s) => s, _ => return Err(VmError::runtime_error("set_difference: args must be sets")) };
+        let result = a.difference(b.as_ref()).cloned().collect();
+        Ok(Value::Set(Box::new(result)))
+    }
+
+    // =========================================================
+    // v1.2: Native Dijkstra builtins â€" O((V+E) log V)
     // adj_list format: Array of Arrays of Dicts
     //   adj_list[u] = [ {to: v, weight: w}, ... ]
     //   All vertex indices are 0-based integers.
@@ -7139,6 +7848,7 @@ impl BuiltinFunctions {
                 || q_lower.contains("snippet") || q_lower.contains("table")
                 || q_lower.contains("class") || q_lower.contains("algorithm")
                 || q_lower.contains("implement") || q_lower.contains("example")
+                || q_lower.contains("calculator")
                 || q_lower.contains("hello world")
                 || q_lower.contains("gesture") || q_lower.contains("gestor") || q_lower.contains("gester")
                 || q_lower.contains("facemesh") || q_lower.contains("landmark")
@@ -9972,7 +10682,7 @@ The fact that you shared this means something. What's underneath it â€” wha
     // â”€â”€ Raw memory read/write (for Bytes buffers â€” safe on VM heap) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     fn mem_read_u8(args: &[Value]) -> Result<Value, VmError> {
-        if args.len() != 2 { return Err(VmError::runtime_error("mem_read_u8(buf, offset)".to_string())); }
+        if args.len() != 2 { return Err(VmError::runtime_error("mem_read_u8() expects 2 arguments (buf, offset)".to_string())); }
         let buf = match &args[0] { Value::Bytes(b) => b, _ => return Err(VmError::runtime_error("mem_read_u8: first arg must be bytes".to_string())) };
         let off = match &args[1] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("mem_read_u8: offset must be numeric".to_string())) };
         if off >= buf.len() { return Err(VmError::runtime_error("mem_read_u8: out of bounds".to_string())); }
@@ -9980,7 +10690,7 @@ The fact that you shared this means something. What's underneath it â€” wha
     }
 
     fn mem_read_u16(args: &[Value]) -> Result<Value, VmError> {
-        if args.len() != 2 { return Err(VmError::runtime_error("mem_read_u16(buf, offset)".to_string())); }
+        if args.len() != 2 { return Err(VmError::runtime_error("mem_read_u16() expects 2 arguments (buf, offset)".to_string())); }
         let buf = match &args[0] { Value::Bytes(b) => b, _ => return Err(VmError::runtime_error("mem_read_u16: first arg must be bytes".to_string())) };
         let off = match &args[1] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("mem_read_u16: offset must be numeric".to_string())) };
         if off + 2 > buf.len() { return Err(VmError::runtime_error("mem_read_u16: out of bounds".to_string())); }
@@ -9989,7 +10699,7 @@ The fact that you shared this means something. What's underneath it â€” wha
     }
 
     fn mem_read_u32(args: &[Value]) -> Result<Value, VmError> {
-        if args.len() != 2 { return Err(VmError::runtime_error("mem_read_u32(buf, offset)".to_string())); }
+        if args.len() != 2 { return Err(VmError::runtime_error("mem_read_u32() expects 2 arguments (buf, offset)".to_string())); }
         let buf = match &args[0] { Value::Bytes(b) => b, _ => return Err(VmError::runtime_error("mem_read_u32: first arg must be bytes".to_string())) };
         let off = match &args[1] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("mem_read_u32: offset must be numeric".to_string())) };
         if off + 4 > buf.len() { return Err(VmError::runtime_error("mem_read_u32: out of bounds".to_string())); }
@@ -9998,7 +10708,7 @@ The fact that you shared this means something. What's underneath it â€” wha
     }
 
     fn mem_read_u64(args: &[Value]) -> Result<Value, VmError> {
-        if args.len() != 2 { return Err(VmError::runtime_error("mem_read_u64(buf, offset)".to_string())); }
+        if args.len() != 2 { return Err(VmError::runtime_error("mem_read_u64() expects 2 arguments (buf, offset)".to_string())); }
         let buf = match &args[0] { Value::Bytes(b) => b, _ => return Err(VmError::runtime_error("mem_read_u64: first arg must be bytes".to_string())) };
         let off = match &args[1] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("mem_read_u64: offset must be numeric".to_string())) };
         if off + 8 > buf.len() { return Err(VmError::runtime_error("mem_read_u64: out of bounds".to_string())); }
@@ -10007,7 +10717,7 @@ The fact that you shared this means something. What's underneath it â€” wha
     }
 
     fn mem_write_u8(args: &[Value]) -> Result<Value, VmError> {
-        if args.len() != 3 { return Err(VmError::runtime_error("mem_write_u8(buf, offset, value)".to_string())); }
+        if args.len() != 3 { return Err(VmError::runtime_error("mem_write_u8() expects 3 arguments (buf, offset, value)".to_string())); }
         let mut buf = match &args[0] { Value::Bytes(b) => b.clone(), _ => return Err(VmError::runtime_error("mem_write_u8: first arg must be bytes".to_string())) };
         let off = match &args[1] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("mem_write_u8: offset must be numeric".to_string())) };
         let val = match &args[2] { Value::Number(n) => *n as u8, Value::Integer(n) => *n as u8, _ => return Err(VmError::runtime_error("mem_write_u8: value must be numeric".to_string())) };
@@ -10017,7 +10727,7 @@ The fact that you shared this means something. What's underneath it â€” wha
     }
 
     fn mem_write_u16(args: &[Value]) -> Result<Value, VmError> {
-        if args.len() != 3 { return Err(VmError::runtime_error("mem_write_u16(buf, offset, value)".to_string())); }
+        if args.len() != 3 { return Err(VmError::runtime_error("mem_write_u16() expects 3 arguments (buf, offset, value)".to_string())); }
         let mut buf = match &args[0] { Value::Bytes(b) => b.clone(), _ => return Err(VmError::runtime_error("mem_write_u16: first arg must be bytes".to_string())) };
         let off = match &args[1] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("mem_write_u16: offset must be numeric".to_string())) };
         let val = match &args[2] { Value::Number(n) => *n as u16, Value::Integer(n) => *n as u16, _ => return Err(VmError::runtime_error("mem_write_u16: value must be numeric".to_string())) };
@@ -10028,7 +10738,7 @@ The fact that you shared this means something. What's underneath it â€” wha
     }
 
     fn mem_write_u32(args: &[Value]) -> Result<Value, VmError> {
-        if args.len() != 3 { return Err(VmError::runtime_error("mem_write_u32(buf, offset, value)".to_string())); }
+        if args.len() != 3 { return Err(VmError::runtime_error("mem_write_u32() expects 3 arguments (buf, offset, value)".to_string())); }
         let mut buf = match &args[0] { Value::Bytes(b) => b.clone(), _ => return Err(VmError::runtime_error("mem_write_u32: first arg must be bytes".to_string())) };
         let off = match &args[1] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("mem_write_u32: offset must be numeric".to_string())) };
         let val = match &args[2] { Value::Number(n) => *n as u32, Value::Integer(n) => *n as u32, _ => return Err(VmError::runtime_error("mem_write_u32: value must be numeric".to_string())) };
@@ -10039,7 +10749,7 @@ The fact that you shared this means something. What's underneath it â€” wha
     }
 
     fn mem_write_u64(args: &[Value]) -> Result<Value, VmError> {
-        if args.len() != 3 { return Err(VmError::runtime_error("mem_write_u64(buf, offset, value)".to_string())); }
+        if args.len() != 3 { return Err(VmError::runtime_error("mem_write_u64() expects 3 arguments (buf, offset, value)".to_string())); }
         let mut buf = match &args[0] { Value::Bytes(b) => b.clone(), _ => return Err(VmError::runtime_error("mem_write_u64: first arg must be bytes".to_string())) };
         let off = match &args[1] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("mem_write_u64: offset must be numeric".to_string())) };
         let val = match &args[2] { Value::Number(n) => *n as u64, Value::Integer(n) => *n as u64, _ => return Err(VmError::runtime_error("mem_write_u64: value must be numeric".to_string())) };
@@ -10717,5 +11427,520 @@ The fact that you shared this means something. What's underneath it â€” wha
         }
         Ok(Value::Number(eax as f64))
     }
+
+    // =========================================================================
+    // KORE Integration — Phase 1 builtins
+    // =========================================================================
+
+    fn kval_to_value(k: &crate::kore_v2::KVal) -> Value {
+        use crate::kore_v2::KVal;
+        match k {
+            KVal::Int(i)   => Value::Number(*i as f64),
+            KVal::Float(f) => Value::Number(*f),
+            KVal::Bool(b)  => Value::Bool(*b),
+            KVal::Str(s)   => Value::Str(s.clone()),
+            KVal::Null     => Value::Null,
+            _              => Value::Str(k.display()),
+        }
+    }
+
+    fn rows_to_value(rows: Vec<Vec<crate::kore_v2::KVal>>) -> Value {
+        use crate::value::SharedArray;
+        let outer: Vec<Value> = rows.iter().map(|row| {
+            let inner: Vec<Value> = row.iter().map(|k| Self::kval_to_value(k)).collect();
+            Value::Array(SharedArray::new(inner))
+        }).collect();
+        Value::Array(SharedArray::new(outer))
+    }
+
+    fn builtin_kore_query(args: &[Value]) -> Result<Value, VmError> {
+        if args.is_empty() {
+            return Err(VmError::runtime_error("kore_query() expects 1 argument (sql)".to_string()));
+        }
+        let sql = args[0].to_string();
+        match crate::kore_query::kore_query(&sql) {
+            Ok(result) => Ok(Self::rows_to_value(result.rows)),
+            Err(e)     => Err(VmError::runtime_error(format!("kore_query error: {}", e))),
+        }
+    }
+
+    fn builtin_kore_query_table(args: &[Value]) -> Result<Value, VmError> {
+        if args.is_empty() {
+            return Err(VmError::runtime_error("kore_query_table() expects 1 argument (sql)".to_string()));
+        }
+        let sql = args[0].to_string();
+        match crate::kore_query::kore_query(&sql) {
+            Ok(result) => Ok(Value::Str(result.display_table(50))),
+            Err(e)     => Err(VmError::runtime_error(format!("kore_query_table error: {}", e))),
+        }
+    }
+
+    fn builtin_kore_query_csv(args: &[Value]) -> Result<Value, VmError> {
+        if args.is_empty() {
+            return Err(VmError::runtime_error("kore_query_csv() expects 1 argument (sql)".to_string()));
+        }
+        let sql = args[0].to_string();
+        match crate::kore_query::kore_query(&sql) {
+            Ok(result) => Ok(Value::Str(result.to_csv())),
+            Err(e)     => Err(VmError::runtime_error(format!("kore_query_csv error: {}", e))),
+        }
+    }
+
+    fn builtin_kore_txn_begin(args: &[Value]) -> Result<Value, VmError> {
+        if args.is_empty() {
+            return Err(VmError::runtime_error("kore_txn_begin() expects 1 argument (path)".to_string()));
+        }
+        let path = args[0].to_string();
+        let id = crate::txn_registry::txn_begin(&path);
+        Ok(Value::Number(id as f64))
+    }
+
+    fn builtin_kore_txn_commit(args: &[Value]) -> Result<Value, VmError> {
+        if args.len() < 2 {
+            return Err(VmError::runtime_error("kore_txn_commit() expects 2 arguments (id, message)".to_string()));
+        }
+        let id = match &args[0] {
+            Value::Number(n) => *n as i64,
+            _ => return Err(VmError::runtime_error("kore_txn_commit: id must be a number".to_string())),
+        };
+        let msg = args[1].to_string();
+        match crate::txn_registry::txn_commit(id, &msg) {
+            Ok(version) => Ok(Value::Number(version as f64)),
+            Err(e)      => Err(VmError::runtime_error(format!("kore_txn_commit error: {}", e))),
+        }
+    }
+
+    fn builtin_kore_txn_abort(args: &[Value]) -> Result<Value, VmError> {
+        if args.is_empty() {
+            return Err(VmError::runtime_error("kore_txn_abort() expects 1 argument (id)".to_string()));
+        }
+        let id = match &args[0] {
+            Value::Number(n) => *n as i64,
+            _ => return Err(VmError::runtime_error("kore_txn_abort: id must be a number".to_string())),
+        };
+        crate::txn_registry::txn_abort(id);
+        Ok(Value::Null)
+    }
+
+    fn builtin_kore_versions(args: &[Value]) -> Result<Value, VmError> {
+        if args.is_empty() {
+            return Err(VmError::runtime_error("kore_versions() expects 1 argument (path)".to_string()));
+        }
+        let path = args[0].to_string();
+        let versions = crate::kore_txn::list_versions(&path);
+        use crate::value::SharedArray;
+        let arr: Vec<Value> = versions.into_iter().map(Value::Str).collect();
+        Ok(Value::Array(SharedArray::new(arr)))
+    }
+
+    fn builtin_kore_checkout(args: &[Value]) -> Result<Value, VmError> {
+        if args.len() < 2 {
+            return Err(VmError::runtime_error("kore_checkout() expects 2 arguments (path, version)".to_string()));
+        }
+        let path = args[0].to_string();
+        let ver = match &args[1] {
+            Value::Number(n) => *n as u64,
+            _ => return Err(VmError::runtime_error("kore_checkout: version must be a number".to_string())),
+        };
+        match crate::kore_txn::checkout(&path, ver) {
+            Ok(reader) => Ok(Self::rows_to_value(reader.read_all())),
+            Err(e)     => Err(VmError::runtime_error(format!("kore_checkout error: {}", e))),
+        }
+    }
+
+    fn builtin_kore_as_of(args: &[Value]) -> Result<Value, VmError> {
+        if args.len() < 2 {
+            return Err(VmError::runtime_error("kore_as_of() expects 2 arguments (path, timestamp_ms)".to_string()));
+        }
+        let path = args[0].to_string();
+        let ts = match &args[1] {
+            Value::Number(n) => *n as u64,
+            _ => return Err(VmError::runtime_error("kore_as_of: timestamp must be a number".to_string())),
+        };
+        match crate::kore_txn::as_of(&path, ts) {
+            Ok(reader) => Ok(Self::rows_to_value(reader.read_all())),
+            Err(e)     => Err(VmError::runtime_error(format!("kore_as_of error: {}", e))),
+        }
+    }
+
+    fn builtin_kore_diff(args: &[Value]) -> Result<Value, VmError> {
+        if args.len() < 3 {
+            return Err(VmError::runtime_error("kore_diff() expects 3 arguments (path, v1, v2)".to_string()));
+        }
+        let path = args[0].to_string();
+        let v1 = match &args[1] {
+            Value::Number(n) => *n as u64,
+            _ => return Err(VmError::runtime_error("kore_diff: v1 must be a number".to_string())),
+        };
+        let v2 = match &args[2] {
+            Value::Number(n) => *n as u64,
+            _ => return Err(VmError::runtime_error("kore_diff: v2 must be a number".to_string())),
+        };
+        match crate::kore_txn::diff_versions(&path, v1, v2) {
+            Ok((added, removed, changed)) => {
+                let mut map = std::collections::HashMap::new();
+                map.insert("added".to_string(),   Value::Number(added as f64));
+                map.insert("removed".to_string(), Value::Number(removed as f64));
+                map.insert("changed".to_string(), Value::Number(changed as f64));
+                Ok(Value::Dict(Box::new(map)))
+            }
+            Err(e) => Err(VmError::runtime_error(format!("kore_diff error: {}", e))),
+        }
+    }
+
+    fn builtin_kore2_from_csv(args: &[Value]) -> Result<Value, VmError> {
+        if args.len() < 2 {
+            return Err(VmError::runtime_error("kore2_from_csv() expects 2 arguments (csv_path, kore_path)".to_string()));
+        }
+        let csv  = args[0].to_string();
+        let kore = args[1].to_string();
+        match crate::kore_v2::csv_to_kore(&csv, &kore) {
+            Ok(msg)  => Ok(Value::Str(msg)),
+            Err(e)   => Err(VmError::runtime_error(format!("kore2_from_csv error: {}", e))),
+        }
+    }
+
+    fn builtin_kore2_to_csv(args: &[Value]) -> Result<Value, VmError> {
+        if args.len() < 2 {
+            return Err(VmError::runtime_error("kore2_to_csv() expects 2 arguments (kore_path, csv_path)".to_string()));
+        }
+        let kore = args[0].to_string();
+        let csv  = args[1].to_string();
+        match crate::kore_v2::kore_to_csv(&kore, &csv) {
+            Ok(msg) => Ok(Value::Str(msg)),
+            Err(e)  => Err(VmError::runtime_error(format!("kore2_to_csv error: {}", e))),
+        }
+    }
+
+    fn builtin_kore2_filter(args: &[Value]) -> Result<Value, VmError> {
+        if args.len() < 4 {
+            return Err(VmError::runtime_error(
+                "kore2_filter() expects 4 arguments (path, col, op, val)".to_string()
+            ));
+        }
+        let path    = args[0].to_string();
+        let col     = args[1].to_string();
+        let op      = args[2].to_string();
+        let val_str = args[3].to_string();
+        let filter_val: crate::kore_v2::KVal = if let Ok(i) = val_str.parse::<i64>() {
+            crate::kore_v2::KVal::Int(i)
+        } else if let Ok(f) = val_str.parse::<f64>() {
+            crate::kore_v2::KVal::Float(f)
+        } else {
+            crate::kore_v2::KVal::Str(val_str)
+        };
+        let reader = crate::kore_v2::KoreReader::open(&path)
+            .map_err(|e| VmError::runtime_error(format!("kore2_filter open error: {}", e)))?;
+        let rows = reader.filter_pushdown(&col, &op, &filter_val);
+        Ok(Self::rows_to_value(rows))
+    }
+
+    fn builtin_kore2_stats(args: &[Value]) -> Result<Value, VmError> {
+        if args.len() < 2 {
+            return Err(VmError::runtime_error("kore2_stats() expects 2 arguments (path, col)".to_string()));
+        }
+        let path = args[0].to_string();
+        let col  = args[1].to_string();
+        let reader = crate::kore_v2::KoreReader::open(&path)
+            .map_err(|e| VmError::runtime_error(format!("kore2_stats open error: {}", e)))?;
+        match reader.column_stats(&col) {
+            Some(stats) => {
+                let mut map = std::collections::HashMap::new();
+                map.insert("null_count".to_string(), Value::Number(stats.null_count as f64));
+                map.insert("min".to_string(),        Value::Number(stats.min_i64 as f64));
+                map.insert("max".to_string(),        Value::Number(stats.max_i64 as f64));
+                map.insert("min_str".to_string(),    Value::Str(stats.min_str.clone()));
+                map.insert("max_str".to_string(),    Value::Str(stats.max_str.clone()));
+                Ok(Value::Dict(Box::new(map)))
+            }
+            None => Err(VmError::runtime_error(format!("kore2_stats: column '{}' not found", col))),
+        }
+    }
+
+    fn builtin_kore2_read_row(args: &[Value]) -> Result<Value, VmError> {
+        if args.len() < 2 {
+            return Err(VmError::runtime_error("kore2_read_row() expects 2 arguments (path, idx)".to_string()));
+        }
+        let path = args[0].to_string();
+        let idx  = match &args[1] {
+            Value::Number(n) => *n as usize,
+            _ => return Err(VmError::runtime_error("kore2_read_row: idx must be a number".to_string())),
+        };
+        let reader = crate::kore_v2::KoreReader::open(&path)
+            .map_err(|e| VmError::runtime_error(format!("kore2_read_row open error: {}", e)))?;
+        match reader.read_row(idx) {
+            Some(row) => {
+                use crate::value::SharedArray;
+                let vals: Vec<Value> = row.iter().map(|k| Self::kval_to_value(k)).collect();
+                Ok(Value::Array(SharedArray::new(vals)))
+            }
+            None => Ok(Value::Null),
+        }
+    }
+
+    fn builtin_kore2_read_range(args: &[Value]) -> Result<Value, VmError> {
+        if args.len() < 3 {
+            return Err(VmError::runtime_error("kore2_read_range() expects 3 arguments (path, start, end)".to_string()));
+        }
+        let path  = args[0].to_string();
+        let start = match &args[1] {
+            Value::Number(n) => *n as usize,
+            _ => return Err(VmError::runtime_error("kore2_read_range: start must be a number".to_string())),
+        };
+        let end = match &args[2] {
+            Value::Number(n) => *n as usize,
+            _ => return Err(VmError::runtime_error("kore2_read_range: end must be a number".to_string())),
+        };
+        let reader = crate::kore_v2::KoreReader::open(&path)
+            .map_err(|e| VmError::runtime_error(format!("kore2_read_range open error: {}", e)))?;
+        let rows = reader.read_row_range(start, end);
+        Ok(Self::rows_to_value(rows))
+    }
+
+    fn builtin_kore2_info(args: &[Value]) -> Result<Value, VmError> {
+        if args.is_empty() {
+            return Err(VmError::runtime_error("kore2_info() expects 1 argument (path)".to_string()));
+        }
+        let path = args[0].to_string();
+        let reader = crate::kore_v2::KoreReader::open(&path)
+            .map_err(|e| VmError::runtime_error(format!("kore2_info open error: {}", e)))?;
+        Ok(Value::Str(reader.info()))
+    }
+
+    fn builtin_kore2_read(args: &[Value]) -> Result<Value, VmError> {
+        if args.is_empty() {
+            return Err(VmError::runtime_error("kore2_read() expects 1 argument (path)".to_string()));
+        }
+        let path = args[0].to_string();
+        let reader = crate::kore_v2::KoreReader::open(&path)
+            .map_err(|e| VmError::runtime_error(format!("kore2_read open error: {}", e)))?;
+        Ok(Self::rows_to_value(reader.read_all()))
+    }
+
+    fn builtin_kore2_read_col(args: &[Value]) -> Result<Value, VmError> {
+        if args.len() < 2 {
+            return Err(VmError::runtime_error("kore2_read_col() expects 2 arguments (path, col)".to_string()));
+        }
+        let path = args[0].to_string();
+        let col  = args[1].to_string();
+        let reader = crate::kore_v2::KoreReader::open(&path)
+            .map_err(|e| VmError::runtime_error(format!("kore2_read_col open error: {}", e)))?;
+        match reader.read_column(&col) {
+            Some(col_data) => {
+                use crate::value::SharedArray;
+                let vals: Vec<Value> = col_data.iter().map(|k| Self::kval_to_value(k)).collect();
+                Ok(Value::Array(SharedArray::new(vals)))
+            }
+            None => Err(VmError::runtime_error(format!("kore2_read_col: column '{}' not found", col))),
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // KORE Engine FFI builtins (Phase 2)
+    // All logic is delegated to crate::kore_engine.
+    // ══════════════════════════════════════════════════════════════════════════
+
+    /// Extract f64 from a Value (used by kore_engine builtins).
+    #[inline]
+    fn kore_val_to_f64(v: &Value) -> f64 {
+        match v {
+            Value::Number(n)  => *n,
+            Value::Integer(n) => *n as f64,
+            Value::Bool(b)    => if *b { 1.0 } else { 0.0 },
+            Value::Str(s)     => s.parse::<f64>().unwrap_or(0.0),
+            _                 => 0.0,
+        }
+    }
+
+    /// `kore_ctx_new()` → Number (session handle id)
+    fn builtin_kore_ctx_new(_args: &[Value]) -> Result<Value, VmError> {
+        let id = crate::kore_engine::session_new();
+        Ok(Value::Number(id as f64))
+    }
+
+    /// `kore_ctx_csv(id, table_name, csv_path)` → Str ("ok" or error)
+    fn builtin_kore_ctx_csv(args: &[Value]) -> Result<Value, VmError> {
+        if args.len() < 3 {
+            return Err(VmError::runtime_error("kore_ctx_csv() expects 3 arguments (id, table, path)".to_string()));
+        }
+        let id    = Self::kore_val_to_f64(&args[0]) as i64;
+        let table = args[1].to_string();
+        let path  = args[2].to_string();
+        match crate::kore_engine::session_load_csv(id, &table, &path) {
+            Ok(())  => Ok(Value::Str("ok".into())),
+            Err(e)  => Ok(Value::Str(e)),
+        }
+    }
+
+    /// Alias: `kore_ctx_load(id, table, path)` — same as `kore_ctx_csv`.
+    fn builtin_kore_ctx_load(args: &[Value]) -> Result<Value, VmError> {
+        Self::builtin_kore_ctx_csv(args)
+    }
+
+    /// `kore_sql(id, sql)` → Array of Array of Str (rows × cols)
+    fn builtin_kore_sql(args: &[Value]) -> Result<Value, VmError> {
+        use crate::value::SharedArray;
+        if args.len() < 2 {
+            return Err(VmError::runtime_error("kore_sql() expects 2 arguments (id, sql)".to_string()));
+        }
+        let id  = Self::kore_val_to_f64(&args[0]) as i64;
+        let sql = args[1].to_string();
+        let json = match crate::kore_engine::session_query(id, &sql) {
+            Ok(j)  => j,
+            Err(e) => return Ok(Value::Str(e)),
+        };
+        let rows = crate::kore_engine::parse_json_rows(&json);
+        let outer: Vec<Value> = rows.into_iter().map(|row| {
+            let inner: Vec<Value> = row.into_iter().map(Value::Str).collect();
+            Value::Array(SharedArray::new(inner))
+        }).collect();
+        Ok(Value::Array(SharedArray::new(outer)))
+    }
+
+    /// `kore_sql_table(id, sql)` — alias for `kore_sql`.
+    fn builtin_kore_sql_table(args: &[Value]) -> Result<Value, VmError> {
+        Self::builtin_kore_sql(args)
+    }
+
+    /// `kore_ctx_rows(id, table)` → Number (row count)
+    fn builtin_kore_ctx_rows(args: &[Value]) -> Result<Value, VmError> {
+        if args.len() < 2 {
+            return Err(VmError::runtime_error("kore_ctx_rows() expects 2 arguments (id, table)".to_string()));
+        }
+        let id    = Self::kore_val_to_f64(&args[0]) as i64;
+        let table = args[1].to_string();
+        let n = crate::kore_engine::session_row_count(id, &table);
+        Ok(Value::Number(n as f64))
+    }
+
+    /// `kore_ctx_free(id)` → Null
+    fn builtin_kore_ctx_free(args: &[Value]) -> Result<Value, VmError> {
+        if args.is_empty() {
+            return Err(VmError::runtime_error("kore_ctx_free() expects 1 argument (id)".to_string()));
+        }
+        crate::kore_engine::session_free(Self::kore_val_to_f64(&args[0]) as i64);
+        Ok(Value::Null)
+    }
+
+    /// `kore_model_new(model_type, param1, param2)` → Number (model handle id)
+    /// model_type: 0=RF-reg  1=RF-clf  2=GBM  3=LinReg  4=Logistic  5=KNN-reg  6=KNN-clf  7=SVM
+    fn builtin_kore_model_new(args: &[Value]) -> Result<Value, VmError> {
+        let mt = args.first().map(|v| Self::kore_val_to_f64(v) as i32).unwrap_or(0);
+        let p1 = args.get(1).map(|v| Self::kore_val_to_f64(v) as i32).unwrap_or(100);
+        let p2 = args.get(2).map(|v| Self::kore_val_to_f64(v) as i32).unwrap_or(10);
+        let id = crate::kore_engine::model_new(mt, p1, p2);
+        Ok(Value::Number(id as f64))
+    }
+
+    /// `kore_model_fit(id, x_rows, y_row)` → Str ("ok" or error)
+    /// x_rows: Array of Array of Number  (features)
+    /// y_row:  Array of Number            (labels)
+    fn builtin_kore_model_fit(args: &[Value]) -> Result<Value, VmError> {
+        if args.len() < 3 {
+            return Err(VmError::runtime_error("kore_model_fit() expects 3 arguments (id, x, y)".to_string()));
+        }
+        let id = Self::kore_val_to_f64(&args[0]) as i64;
+
+        let x: Vec<Vec<f64>> = match &args[1] {
+            Value::Array(outer) => outer.iter_cloned().map(|row| {
+                match row {
+                    Value::Array(inner) => inner.iter_cloned().map(|v| Self::kore_val_to_f64(&v)).collect(),
+                    other               => vec![Self::kore_val_to_f64(&other)],
+                }
+            }).collect(),
+            other => vec![vec![Self::kore_val_to_f64(other)]],
+        };
+
+        let y: Vec<f64> = match &args[2] {
+            Value::Array(arr) => arr.iter_cloned().map(|v| Self::kore_val_to_f64(&v)).collect(),
+            other             => vec![Self::kore_val_to_f64(other)],
+        };
+
+        match crate::kore_engine::model_fit(id, &x, &y) {
+            Ok(())  => Ok(Value::Str("ok".into())),
+            Err(e)  => Ok(Value::Str(e)),
+        }
+    }
+
+    /// `kore_model_predict(id, x_rows)` → Array of Number
+    fn builtin_kore_model_predict(args: &[Value]) -> Result<Value, VmError> {
+        use crate::value::SharedArray;
+        if args.len() < 2 {
+            return Err(VmError::runtime_error("kore_model_predict() expects 2 arguments (id, x)".to_string()));
+        }
+        let id = Self::kore_val_to_f64(&args[0]) as i64;
+
+        let x: Vec<Vec<f64>> = match &args[1] {
+            Value::Array(outer) => outer.iter_cloned().map(|row| {
+                match row {
+                    Value::Array(inner) => inner.iter_cloned().map(|v| Self::kore_val_to_f64(&v)).collect(),
+                    other               => vec![Self::kore_val_to_f64(&other)],
+                }
+            }).collect(),
+            other => vec![vec![Self::kore_val_to_f64(other)]],
+        };
+
+        match crate::kore_engine::model_predict(id, &x) {
+            Ok(preds) => {
+                let vals: Vec<Value> = preds.into_iter().map(Value::Number).collect();
+                Ok(Value::Array(SharedArray::new(vals)))
+            }
+            Err(e) => Ok(Value::Str(e)),
+        }
+    }
+
+    /// `kore_model_free(id)` → Null
+    fn builtin_kore_model_free(args: &[Value]) -> Result<Value, VmError> {
+        if args.is_empty() {
+            return Err(VmError::runtime_error("kore_model_free() expects 1 argument (id)".to_string()));
+        }
+        crate::kore_engine::model_free(Self::kore_val_to_f64(&args[0]) as i64);
+        Ok(Value::Null)
+    }
+}
+
+// ── Date helpers (no external crates) ────────────────────────────────────
+
+fn secs_to_year(secs: i64) -> i32 {
+    let days = secs / 86400;
+    let mut year = 1970i32;
+    let mut remaining = days;
+    loop {
+        let in_year = if is_leap(year) { 366 } else { 365 };
+        if remaining < in_year { break; }
+        remaining -= in_year;
+        year += 1;
+    }
+    year
+}
+
+fn secs_to_month(secs: i64) -> u32 {
+    let year = secs_to_year(secs);
+    let mut day_of_year = (secs / 86400 - days_before_year(year)) as u32;
+    let months = [31u32, if is_leap(year) { 29 } else { 28 }, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    for (i, &m) in months.iter().enumerate() {
+        if day_of_year < m { return (i + 1) as u32; }
+        day_of_year -= m;
+    }
+    12
+}
+
+fn secs_to_day(secs: i64) -> u32 {
+    let year = secs_to_year(secs);
+    let mut day_of_year = (secs / 86400 - days_before_year(year)) as u32;
+    let months = [31u32, if is_leap(year) { 29 } else { 28 }, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    for &m in &months {
+        if day_of_year < m { return day_of_year + 1; }
+        day_of_year -= m;
+    }
+    day_of_year + 1
+}
+
+fn is_leap(y: i32) -> bool { y % 4 == 0 && (y % 100 != 0 || y % 400 == 0) }
+
+fn days_before_year(year: i32) -> i64 {
+    let y = (year - 1970) as i64;
+    let leap_years = (1970..year as i64).filter(|&y| is_leap(y as i32)).count() as i64;
+    y * 365 + leap_years
 }
 

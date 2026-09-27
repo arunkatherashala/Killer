@@ -8,9 +8,34 @@ authors = ["Sai Arun Kumar Katherashala <arunkatherashala@gmail.com>"]
 repository = "https://github.com/arunkatherashala/Killer"
 homepage = "https://github.com/arunkatherashala/Killer"
 documentation = "https://docs.rs/killer-native"
-readme = "../../README.md"
+readme = "README.md"
 keywords = ["language", "runtime", "vm", "jit", "ai"]
 categories = ["command-line-utilities", "development-tools", "algorithms"]
+exclude = [
+    "*.rcgu.o",
+    "*.dll.exp",
+    "*.dll.lib",
+    "*.pdb",
+    "*.so",
+    "*.obj",
+    "*.exe",
+    "*.log",
+    "_*.log",
+    "b.txt",
+    "added.kore",
+    "analyze_nova.py",
+    "bench_compress.py",
+    "b*.killer",
+    "bench*.killer",
+    "bench_spawn.ghost",
+    "bench_spawn.ghst",
+    "_chat*.log",
+    "_full_*.log",
+    "test_results.txt",
+    "cargo_test_result.log",
+    "module_names_in_order.json",
+    "speed_test.rs",
+]
 
 [lib]
 # Many module docs use illustrative snippets that are not rustdoc-runnable; unit + integration tests cover behavior.
@@ -27,6 +52,9 @@ legacy-killer-rcore-tests = []
 cli-e2e-tests = []
 # `cluster_coordinator` is not wired in killer-native yet.
 cluster-demo-tests = []
+# Link against the kore-ffi static library (kore_ffi.lib / libkore_ffi.a).
+# Build path is controlled by KORE_FFI_DIR env var (default: KoreRepo/target/release).
+kore-engine = []
 
 [dependencies]
 # Ghost VM signing uses in-crate SHA-256 + HMAC (no extra crates.io deps).
@@ -40,6 +68,18 @@ harness = false
 [[bench]]
 name = "vm_runtime"
 harness = false
+
+[[bin]]
+name = "killer-repl"
+path = "src/bin/killer_repl.rs"
+
+[[bin]]
+name = "kpm-registry"
+path = "src/bin/kpm_registry.rs"
+
+[[bin]]
+name = "killer-playground"
+path = "src/bin/killer_playground.rs"
 
 [[bin]]
 name = "killer-mcp"
@@ -60,6 +100,154 @@ path = "src/bin/killer_ui_serve.rs"
 [[bin]]
 name = "killer_ui"
 path = "src/bin/killer_ui.rs"
+
+[[bin]]
+name = "killer_super"
+path = "src/bin/killer_super.rs"
+
+[[bin]]
+name = "ghost_vm"
+path = "src/bin/ghost_vm.rs"
+
+[[bin]]
+name = "kala_smoke_server"
+path = "src/bin/kala_smoke_server.rs"
+
+[[bin]]
+name = "killer_ui_demo"
+path = "src/bin/killer_ui_demo.rs"
+
+[[bin]]
+name = "csv_format_compare"
+path = "src/bin/csv_format_compare.rs"
+
+[[bin]]
+name = "kore_nova_bench"
+path = "src/bin/kore_nova_bench.rs"
+
+[[bin]]
+name = "kore_nova_format_bench"
+path = "src/bin/kore_nova_format_bench.rs"
+
+[[bin]]
+name = "kore_profile"
+path = "src/bin/kore_profile.rs"
+
+[[bin]]
+name = "nova_csv_bench"
+path = "src/bin/nova_csv_bench.rs"
+
+[[bin]]
+name = "time_machine_cli"
+path = "src/bin/time_machine_cli.rs"
+
+[[bin]]
+name = "time_machine_api"
+path = "src/bin/time_machine_api.rs"
+
+[[bin]]
+name = "use_cases"
+path = "src/bin/use_cases.rs"
+
+[[bin]]
+name = "ai_profiler"
+path = "src/bin/ai_profiler.rs"
+
+[[bin]]
+name = "check_size"
+path = "src/bin/check_size.rs"
+
+[[bin]]
+name = "gen_test_kore"
+path = "src/bin/gen_test_kore.rs"
+
+[[bin]]
+name = "padmavyuha_tech"
+path = "src/bin/padmavyuha_tech.rs"
+
+[[bin]]
+name = "security_padmavyuha"
+path = "src/bin/security_padmavyuha.rs"
+
+[[bin]]
+name = "killer_omniscience"
+path = "src/bin/killer_omniscience.rs"
+
+[[bin]]
+name = "killer_science_complete"
+path = "src/bin/killer_science_complete.rs"
+
+[[bin]]
+name = "killer_ultimate_complete"
+path = "src/bin/killer_ultimate_complete.rs"
+
+[[bin]]
+name = "killer_full_metrics"
+path = "src/bin/killer_full_metrics.rs"
+
+[[bin]]
+name = "killer_10_level_benchmark"
+path = "src/bin/killer_10_level_benchmark.rs"
+
+[[bin]]
+name = "spill_to_disk_breakthrough"
+path = "src/bin/spill_to_disk_breakthrough.rs"
+
+[[bin]]
+name = "unlimited_load_test"
+path = "src/bin/unlimited_load_test.rs"
+
+[[bin]]
+name = "phase1_benchmark"
+path = "src/bin/phase1_benchmark.rs"
+
+[[bin]]
+name = "phase1_realistic_benchmark"
+path = "src/bin/phase1_realistic_benchmark.rs"
+
+[[bin]]
+name = "phase2_integration_test"
+path = "src/bin/phase2_integration_test.rs"
+
+[[bin]]
+name = "phase2_simd_cache"
+path = "src/bin/phase2_simd_cache.rs"
+
+[[bin]]
+name = "phase3_multicore"
+path = "src/bin/phase3_multicore.rs"
+
+[[bin]]
+name = "phase4_spilltodisk"
+path = "src/bin/phase4_spilltodisk.rs"
+
+[[bin]]
+name = "phase5_gpu_acceleration"
+path = "src/bin/phase5_gpu_acceleration.rs"
+
+[[bin]]
+name = "phase6_distributed_computing"
+path = "src/bin/phase6_distributed_computing.rs"
+
+[[bin]]
+name = "phase_a_testing"
+path = "src/bin/phase_a_testing.rs"
+
+[[bin]]
+name = "phase_b_dashboard"
+path = "src/bin/phase_b_dashboard.rs"
+
+[[bin]]
+name = "phase_c_hybrid"
+path = "src/bin/phase_c_hybrid.rs"
+
+[[bin]]
+name = "phase_d_quantum_ready"
+path = "src/bin/phase_d_quantum_ready.rs"
+
+[[bin]]
+name = "phase_e_tiny"
+path = "src/bin/phase_e_tiny.rs"
 
 [profile.release]
 opt-level = 3

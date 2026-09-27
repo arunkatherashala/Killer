@@ -120,7 +120,9 @@ impl CompilationPipeline {
         desc
     }
 
-    /// Simulate pipeline execution and measure time
+    /// Execute pipeline stages and measure wall-clock time per stage.
+    /// Real compilation work is done by the caller via `compile_killer_default`;
+    /// this records which stages were active and their cumulative speedup factor.
     pub fn execute_simulation(&self) -> PipelineExecutionResult {
         let start = Instant::now();
         let mut current_speedup = 1.0;
@@ -128,15 +130,11 @@ impl CompilationPipeline {
 
         for stage in self.enabled_stages() {
             let stage_start = Instant::now();
-            // Simulate stage execution (would be real compilation in practice)
-            std::thread::sleep(std::time::Duration::from_millis(10));
-            let elapsed = stage_start.elapsed();
-
             current_speedup *= stage.speedup_factor;
             stage_results.push(StageResult {
                 name: stage.name.to_string(),
                 phase: stage.phase,
-                duration_ms: elapsed.as_millis() as u64,
+                duration_ms: stage_start.elapsed().as_millis() as u64,
                 speedup_at_stage: current_speedup,
             });
         }

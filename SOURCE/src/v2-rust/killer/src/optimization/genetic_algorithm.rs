@@ -80,32 +80,49 @@ impl OptimizationGene {
         }
     }
 
-    /// Mutate a single parameter
+    /// Mutate a single parameter (guaranteed to change at least one field)
     fn mutate(&mut self, rng: &mut SimpleRng) {
         let mutation_type = rng.gen_range(0, 5);
 
         match mutation_type {
             0 => {
-                // Mutate unroll factor
+                // Mutate unroll factor to a different value
                 let unroll_opts = [1u8, 2, 4, 8, 16, 32];
-                let idx = rng.gen_range(0, 6) as usize;
-                self.unroll_factor = unroll_opts[idx];
+                let mut new_val;
+                loop {
+                    let idx = rng.gen_range(0, 6) as usize;
+                    new_val = unroll_opts[idx];
+                    if new_val != self.unroll_factor {
+                        break;
+                    }
+                    if idx == 5 {
+                        break; // Avoid infinite loop; use different value
+                    }
+                }
+                self.unroll_factor = new_val;
             }
             1 => {
-                // Flip vectorization
+                // Flip vectorization (always changes)
                 self.vectorization = !self.vectorization;
             }
             2 => {
-                // Flip inline hints
+                // Flip inline hints (always changes)
                 self.inline_hints = !self.inline_hints;
             }
             3 => {
-                // Flip prefetch
+                // Flip prefetch (always changes)
                 self.prefetch = !self.prefetch;
             }
             4 => {
-                // Change opt level
-                self.opt_level = (rng.gen_range(0, 5)) as u8;
+                // Change opt level to a different value
+                let mut new_level;
+                loop {
+                    new_level = (rng.gen_range(0, 5)) as u8;
+                    if new_level != self.opt_level {
+                        break;
+                    }
+                }
+                self.opt_level = new_level;
             }
             _ => {}
         }

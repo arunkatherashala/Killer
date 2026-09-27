@@ -127,6 +127,8 @@ impl StackManager {
             Value::Integer(n) => *n != 0,
             Value::Bytes(b) => !b.is_empty(),
             Value::Pointer(p) => *p != 0,
+            Value::Uncertain { value, margin } => *value > *margin,  // truthy if value > margin (clearly positive)
+            Value::Set(s) => !s.is_empty(),
         }
     }
 
