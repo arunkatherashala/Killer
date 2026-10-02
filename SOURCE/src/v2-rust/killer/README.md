@@ -280,6 +280,34 @@ add("one", 2)        # type error (line 5): argument 1 of add() expects number, 
 Types are `number`, `string`, `bool`, `array`, `dict` and `any`. The checker is gradual: it only
 reports errors it can prove, and code without annotations is untouched.
 
+## Uncertain values and three-valued comparisons
+
+A measurement is a range, and Killer treats it as one. `believe x = v ± m` creates a value that is
+guaranteed to lie in `[v - m, v + m]`. Arithmetic returns a range that *encloses every possible
+result*, and comparisons answer with a three-valued `Trit` instead of guessing:
+
+```killer
+believe length = 10 ± 1       # somewhere in [9, 11]
+believe width  = 4 ± 0.5      # somewhere in [3.5, 4.5]
+
+area = length * width
+println(area)                 # 40 ± 9.5
+println(area > 20)            # T_POS:  true for every possible value
+println(area > 40)            # T_ZERO: cannot be decided
+println(area < 10)            # T_NEG:  false for every possible value
+
+if area > 20 { println("certainly larger than 20") }   # runs
+if area > 40 { println("not printed: not certain") }    # does not run
+```
+
+- `+ - * /` propagate the margin; dividing by a range that includes zero, or taking `sqrt` of a
+  range that includes negatives, is an error rather than a silent wrong answer.
+- `< <= > >= == !=` return `T_POS` (certain), `T_NEG` (impossible) or `T_ZERO` (overlapping
+  ranges). `if` only takes the branch for `T_POS`, so decisions are made only when they are safe.
+- `uncertain(v, m)` builds one directly; `unc_value`, `unc_margin`, `unc_lo`, `unc_hi` read the parts.
+- Plain numbers are exact (margin 0), so they mix freely with uncertain values.
+- The margin is a worst-case bound (interval arithmetic), not a statistical standard deviation.
+
 ## Known limitations
 
 - The JIT is x86-64 only and covers pure numeric code; everything else is interpreted.
