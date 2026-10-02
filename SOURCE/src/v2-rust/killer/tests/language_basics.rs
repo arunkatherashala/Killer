@@ -207,3 +207,59 @@ fn recursion_and_mutual_recursion_still_work() {
     let src = "fn even(n) {\n  if n == 0 {\n    return true\n  }\n  return odd(n - 1)\n}\nfn odd(n) {\n  if n == 0 {\n    return false\n  }\n  return even(n - 1)\n}\nprintln(even(10))\nprintln(odd(7))\n";
     assert_eq!(run(src), "true\ntrue");
 }
+
+// ---------------------------------------------------------------- operators and literals
+
+#[test]
+fn augmented_assignment_and_increment() {
+    let src = "x = 10\nx += 5\nx -= 3\nx *= 2\nx /= 4\nprintln(x)\nn = 1\nn++\nn++\nprintln(n)\n";
+    assert_eq!(run(src), "6\n3");
+}
+
+#[test]
+fn augmented_assignment_on_indexes_fields_and_inside_functions() {
+    let src = "a = [1, 2, 3]\na[1] += 10\nprintln(a)\nclass C {\n  fn init() {\n    this.n = 0\n  }\n  fn bump() {\n    this.n += 2\n    this.n++\n  }\n}\nc = new C()\nc.bump()\nc.bump()\nprintln(c.n)\nfn total(xs) {\n  t = 0\n  for x in xs {\n    t += x\n  }\n  return t\n}\nprintln(total([1, 2, 3, 4]))\n";
+    assert_eq!(run(src), "[1, 12, 3]\n6\n10");
+}
+
+#[test]
+fn string_concatenation_with_plus_equals() {
+    let src = "s = \"a\"\ns += \"b\"\ns += \"c\"\nprintln(s)\n";
+    assert_eq!(run(src), "abc");
+}
+
+#[test]
+fn multiple_assignment_swap_and_unpacking() {
+    let src = "a, b = 1, 2\nprintln(a + b)\na, b = b, a\nprintln(a)\nprintln(b)\nfn pair() {\n  return [10, 20]\n}\nx, y = pair()\nprintln(x + y)\nfn f() {\n  p, q = 3, 4\n  return p * q\n}\nprintln(f())\n";
+    assert_eq!(run(src), "3\n2\n1\n30\n12");
+}
+
+#[test]
+fn word_operators_and_elif() {
+    let src = "x = 7\nif x < 5 {\n  println(\"low\")\n} elif x < 10 and x > 6 {\n  println(\"mid\")\n} else {\n  println(\"high\")\n}\nprintln(true and false)\nprintln(false or true)\nprintln(not false)\nprintln(not x == 5)\n";
+    assert_eq!(run(src), "mid\nfalse\ntrue\ntrue\ntrue");
+}
+
+#[test]
+fn not_and_bang_bind_tighter_than_and_or() {
+    let src = "println(!true && false)\nprintln(!false && true)\nprintln(!true || true)\nprintln(not true and false)\nprintln(not true or true)\n";
+    assert_eq!(run(src), "false\ntrue\ntrue\nfalse\ntrue");
+}
+
+#[test]
+fn string_literal_forms() {
+    let src = "println('single')\nprintln(\"it's\")\nprintln('say \"hi\"')\nn = 5\nprintln(f\"n is {n}\")\nprintln(f\"n+1 is {n + 1}\")\ns = \"\"\"a\nb\"\"\"\nprintln(len(s))\n";
+    assert_eq!(run(src), "single\nit's\nsay \"hi\"\nn is 5\nn+1 is 6\n3");
+}
+
+#[test]
+fn number_literal_forms() {
+    let src = "println(0xFF)\nprintln(0b101)\nprintln(0o17)\nprintln(1_000_000)\nprintln(0xFF + 1_000)\n";
+    assert_eq!(run(src), "255\n5\n15\n1000000\n1255");
+}
+
+#[test]
+fn comments_and_quotes_inside_strings_are_left_alone() {
+    let src = "x = 1  # it's fine\ns = \"a # b\"\nprintln(s)\nt = 'a#b'\nprintln(t)\nprintln(x)\n";
+    assert_eq!(run(src), "a # b\na#b\n1");
+}

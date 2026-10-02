@@ -301,7 +301,8 @@ struct CompileContext {
 
 pub fn compile_killer_subset(source: &str) -> Result<Program, VmError> {
     let checked = crate::typecheck::process(source)?;
-    let source = checked.as_str();
+    let sugared = crate::sugar::preprocess(&checked, &|l| parse_polyglot_header(l).is_some());
+    let source = sugared.as_str();
     let mut state = CompilerState::default();
 
     // Phase 0: Convert indentation-based syntax → brace-delimited syntax,
@@ -605,7 +606,8 @@ pub fn compile_killer_ast(statements: &[crate::ast::Stmt]) -> Result<Program, Vm
 /// Indent + polyglot preprocessing (same order as [`compile_killer_subset`]). Exposed for
 /// [`crate::stmt_parser::parse_killer_program`].
 pub fn preprocess_killer_source(source: &str) -> String {
-    let indented = preprocess_indentation(source);
+    let sugared = crate::sugar::preprocess(source, &|l| parse_polyglot_header(l).is_some());
+    let indented = preprocess_indentation(&sugared);
     let preprocessed = preprocess_polyglot(&indented);
     preprocess_ui_sugar(&preprocessed)
 }
@@ -3263,15 +3265,29 @@ fn compile_expr_str(
         return Ok(());
     }
 
-    // Unary logical NOT: !expr  (e.g. !ready, !contains(arr, x))
+    // Unary logical NOT: !expr  (e.g. !ready, !contains(arr, x)).
+    // `!` binds tighter than && and ||, so `!a && b` is `(!a) && b`: when the whole expression has a
+    // top-level logical operator, leave it to the logical split below, which reaches `!a` as an operand.
     if let Some(rest) = expr.strip_prefix('!') {
         let rest = rest.trim();
-        if !rest.is_empty() {
+        if !rest.is_empty() && split_logical(expr).is_none() {
             compile_expr_str(rest, line_no, state, context)?;
             state.instructions.push(Instruction::Not);
             return Ok(());
         }
     }
+    // `not expr` (Python spelling): lower than comparisons, higher than && and ||
+    if split_logical(expr).is_none() {
+        if let Some(rest) = expr.strip_prefix("not ") {
+            let rest = rest.trim();
+            if !rest.is_empty() {
+                compile_expr_str(rest, line_no, state, context)?;
+                state.instructions.push(Instruction::Not);
+                return Ok(());
+            }
+        }
+    }
+
     // v2.2: spawn expr — true OS-thread parallel execution (SpawnCall opcode)
     if let Some(body) = expr.strip_prefix("spawn ") {
         emit_spawn_call(body.trim(), line_no, state, context)?;
@@ -4901,8 +4917,8 @@ fn scan_globals(lines: &[(usize, String)]) -> std::collections::HashSet<String> 
     // (depth at the function header, whether its opening brace has been seen)
     let mut region: Option<(i32, bool)> = None;
 
-    for (_, raw) in lines {
-        let line = raw.trim();
+    for (_, raw_line) in lines {
+        let line = raw_line.trim();
         let is_header = line.starts_with("fn ")
             || line.starts_with("kfn ")
             || line.starts_with("async fn ")
@@ -4913,15 +4929,18 @@ fn scan_globals(lines: &[(usize, String)]) -> std::collections::HashSet<String> 
         if region.is_some() {
             identifiers(line, &mut used_in_functions);
         } else {
-            // `name = expr`, `let name = expr`, `name += expr` (not `==`)
-            let t = line.strip_prefix("let ").unwrap_or(line);
-            let name: String = t.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
-            if !name.is_empty() && !name.chars().next().unwrap().is_ascii_digit() {
-                let rest = t[name.len()..].trim_start();
-                let is_assign = (rest.starts_with('=') && !rest.starts_with("=="))
-                    || ["+=", "-=", "*=", "/=", "%="].iter().any(|op| rest.starts_with(op));
-                if is_assign {
-                    assigned_at_top.insert(name);
+            // every statement on the line: `name = expr`, `let name = expr`, `name += expr` (not `==`)
+            for piece in line.split(';') {
+                let piece = piece.trim();
+                let t = piece.strip_prefix("let ").unwrap_or(piece);
+                let name: String = t.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
+                if !name.is_empty() && !name.chars().next().unwrap().is_ascii_digit() {
+                    let rest = t[name.len()..].trim_start();
+                    let is_assign = (rest.starts_with('=') && !rest.starts_with("=="))
+                        || ["+=", "-=", "*=", "/=", "%="].iter().any(|op| rest.starts_with(op));
+                    if is_assign {
+                        assigned_at_top.insert(name);
+                    }
                 }
             }
         }

@@ -44,8 +44,8 @@
  {
   "category": "Basics",
   "name": "boolean keywords and/or/not",
-  "status": "ERROR",
-  "detail": "ERROR: Parse error: Line 1: unsupported expression `true and false`"
+  "status": "PASS",
+  "detail": ""
  },
  {
   "category": "Basics",
@@ -68,26 +68,26 @@
  {
   "category": "Basics",
   "name": "multiple assignment",
-  "status": "ERROR",
-  "detail": "ERROR: Parse error: Line 1: unsupported Killer subset statement `a, b = 1, 2`"
+  "status": "PASS",
+  "detail": ""
  },
  {
   "category": "Basics",
   "name": "swap via tuple",
-  "status": "ERROR",
-  "detail": "ERROR: Parse error: Line 3: unsupported Killer subset statement `a, b = b, a`"
+  "status": "PASS",
+  "detail": ""
  },
  {
   "category": "Basics",
   "name": "augmented assignment",
-  "status": "ERROR",
-  "detail": "ERROR: Parse error: Line 2: unsupported Killer subset statement `x += 5`"
+  "status": "PASS",
+  "detail": ""
  },
  {
   "category": "Basics",
   "name": "increment ++",
-  "status": "ERROR",
-  "detail": "ERROR: Parse error: Line 2: unsupported Killer subset statement `x++`"
+  "status": "PASS",
+  "detail": ""
  },
  {
   "category": "Basics",
@@ -122,8 +122,8 @@
  {
   "category": "Basics",
   "name": "hex literal",
-  "status": "ERROR",
-  "detail": "ERROR: Parse error: Line 1: unsupported expression `0xFF`"
+  "status": "PASS",
+  "detail": ""
  },
  {
   "category": "Control flow",
@@ -134,8 +134,8 @@
  {
   "category": "Control flow",
   "name": "elif keyword",
-  "status": "ERROR",
-  "detail": "ERROR: Parse error: Line 4: unsupported Killer subset statement `elif x < 10`"
+  "status": "PASS",
+  "detail": ""
  },
  {
   "category": "Control flow",
@@ -242,8 +242,8 @@
  {
   "category": "Functions",
   "name": "return multiple values",
-  "status": "ERROR",
-  "detail": "ERROR: Parse error: Line 4: unsupported Killer subset statement `a, b = two()`"
+  "status": "PASS",
+  "detail": ""
  },
  {
   "category": "Functions",
@@ -632,8 +632,8 @@
  {
   "category": "Strings",
   "name": "f-string interpolation",
-  "status": "ERROR",
-  "detail": "ERROR: Parse error: Line 2: unsupported expression `f\"n is {n}\"`"
+  "status": "PASS",
+  "detail": ""
  },
  {
   "category": "Strings",
@@ -650,14 +650,14 @@
  {
   "category": "Strings",
   "name": "single-quoted strings",
-  "status": "ERROR",
-  "detail": "ERROR: Parse error: Line 1: unsupported expression `'hi'`"
+  "status": "PASS",
+  "detail": ""
  },
  {
   "category": "Strings",
   "name": "multiline string",
-  "status": "ERROR",
-  "detail": "ERROR: Parse error: Line 1: unsupported expression `\"\"\"a`"
+  "status": "PASS",
+  "detail": ""
  },
  {
   "category": "Strings",
@@ -674,8 +674,8 @@
  {
   "category": "Strings",
   "name": "unicode",
-  "status": "WRONG",
-  "detail": "got '6', expected '5'"
+  "status": "ERROR",
+  "detail": "thread 'main' (26548) panicked at src\\sugar.rs:421:30:\nstart byte index 18446744073709551615 is out of bounds for string of length 22\nnote: run with `"
  },
  {
   "category": "Strings",
@@ -855,7 +855,7 @@
   "category": "Modules & I/O",
   "name": "json round trip",
   "status": "ERROR",
-  "detail": "ERROR: Parse error: Line 1: unsupported expression `'{\"a\": 1, \"b\": [1, 2]}'`"
+  "detail": "ERROR: Runtime error: Cannot index [1 with 1"
  },
  {
   "category": "Modules & I/O",
