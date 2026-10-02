@@ -337,6 +337,8 @@ pub mod killer_super;
 pub mod time_machine;
 
 // -- LLM Integration (native, zero external deps) -----------------------------
+pub mod uncertain;             // interval arithmetic and three-valued comparison for `believe` values
+
 pub mod fast_hash;             // FNV hasher for VM scope maps
 pub mod jit_fn;                // function-level JIT for pure numeric functions (x86-64)
 pub mod typecheck;             // gradual type checker: optional annotations, definite errors only

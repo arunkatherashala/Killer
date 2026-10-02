@@ -731,7 +731,7 @@ impl VirtualMachine {
                     if let Value::Number(v) = &frame[idx] {
                         frame[idx] = Value::Number(v + n);
                     } else {
-                        return Err(VmError::runtime_error("AddSlotConst: slot is not a number".to_string()));
+                        self.slot_const_arith_fallback(idx, *n, crate::uncertain::BinOp::Add, "AddSlotConst")?;
                     }
                 }
                 // Fused: LoadSlot(s) + ConstNum(n) + Lt -- one instruction -> pushes Bool
@@ -744,7 +744,7 @@ impl VirtualMachine {
                     if let Value::Number(v) = val {
                         self.stack.push(Value::Bool(v < n));
                     } else {
-                        return Err(VmError::runtime_error("LtSlotConst: slot is not a number".to_string()));
+                        self.slot_const_cmp_fallback(idx, *n, crate::uncertain::CmpOp::Lt, "LtSlotConst")?;
                     }
                 }
                 // Fused Sub: LoadSlot(s) + ConstNum(n) + Sub + StoreSlot(s)
@@ -753,32 +753,32 @@ impl VirtualMachine {
                     let frame = self.locals_stack.last_mut().ok_or_else(|| VmError::runtime_error("No locals frame".to_string()))?;
                     if idx >= frame.len() { frame.resize(idx + 1, Value::Null); }
                     if let Value::Number(v) = &frame[idx] { frame[idx] = Value::Number(v - n); }
-                    else { return Err(VmError::runtime_error("SubSlotConst: slot is not a number".to_string())); }
+                    else { self.slot_const_arith_fallback(idx, *n, crate::uncertain::BinOp::Sub, "SubSlotConst")?; }
                 }
                 // Fused comparisons: LoadSlot(s) + ConstNum(n) + CMP
                 Instruction::GtSlotConst(slot, n) => {
                     let idx = *slot as usize;
                     let frame = self.locals_stack.last().ok_or_else(|| VmError::runtime_error("No locals frame".to_string()))?;
                     if let Value::Number(v) = frame.get(idx).unwrap_or(&Value::Null) { self.stack.push(Value::Bool(v > n)); }
-                    else { return Err(VmError::runtime_error("GtSlotConst: not a number".to_string())); }
+                    else { self.slot_const_cmp_fallback(idx, *n, crate::uncertain::CmpOp::Gt, "GtSlotConst")?; }
                 }
                 Instruction::GeSlotConst(slot, n) => {
                     let idx = *slot as usize;
                     let frame = self.locals_stack.last().ok_or_else(|| VmError::runtime_error("No locals frame".to_string()))?;
                     if let Value::Number(v) = frame.get(idx).unwrap_or(&Value::Null) { self.stack.push(Value::Bool(v >= n)); }
-                    else { return Err(VmError::runtime_error("GeSlotConst: not a number".to_string())); }
+                    else { self.slot_const_cmp_fallback(idx, *n, crate::uncertain::CmpOp::Ge, "GeSlotConst")?; }
                 }
                 Instruction::LeSlotConst(slot, n) => {
                     let idx = *slot as usize;
                     let frame = self.locals_stack.last().ok_or_else(|| VmError::runtime_error("No locals frame".to_string()))?;
                     if let Value::Number(v) = frame.get(idx).unwrap_or(&Value::Null) { self.stack.push(Value::Bool(v <= n)); }
-                    else { return Err(VmError::runtime_error("LeSlotConst: not a number".to_string())); }
+                    else { self.slot_const_cmp_fallback(idx, *n, crate::uncertain::CmpOp::Le, "LeSlotConst")?; }
                 }
                 Instruction::EqSlotConst(slot, n) => {
                     let idx = *slot as usize;
                     let frame = self.locals_stack.last().ok_or_else(|| VmError::runtime_error("No locals frame".to_string()))?;
                     if let Value::Number(v) = frame.get(idx).unwrap_or(&Value::Null) { self.stack.push(Value::Bool((v - n).abs() < f64::EPSILON)); }
-                    else { return Err(VmError::runtime_error("EqSlotConst: not a number".to_string())); }
+                    else { self.slot_const_cmp_fallback(idx, *n, crate::uncertain::CmpOp::Eq, "EqSlotConst")?; }
                 }
                 Instruction::Store(name) => {
                     let value = self.stack.pop().ok_or_else(|| {
@@ -877,6 +877,13 @@ impl VirtualMachine {
                     // PERF: fast path for number+number (most common case)
                     let rhs = self.pop_value()?;
                     let lhs = self.pop_value()?;
+                    if crate::uncertain::is_uncertain(&lhs) || crate::uncertain::is_uncertain(&rhs) {
+                        if let Some(r) = crate::uncertain::binary(crate::uncertain::BinOp::Add, &lhs, &rhs) {
+                            self.stack.push(r.map_err(VmError::runtime_error)?);
+                            self.ip += 1;
+                            continue;
+                        }
+                    }
                     if let (Value::Number(l), Value::Number(r)) = (&lhs, &rhs) {
                         self.stack.push(Value::Number(l + r));
                     } else if let (Value::Integer(l), Value::Integer(r)) = (&lhs, &rhs) {
@@ -942,16 +949,6 @@ impl VirtualMachine {
                                 // Number + Quality = Number (auto-unwrap)
                                 self.stack.push(Value::Number(n + q.quality()));
                             }
-                            // Uncertain arithmetic: propagate margins
-                            (Value::Uncertain { value: v1, margin: m1 }, Value::Uncertain { value: v2, margin: m2 }) => {
-                                self.stack.push(Value::Uncertain { value: v1 + v2, margin: m1 + m2 });
-                            }
-                            (Value::Uncertain { value: v, margin: m }, Value::Number(n)) => {
-                                self.stack.push(Value::Uncertain { value: v + n, margin: *m });
-                            }
-                            (Value::Number(n), Value::Uncertain { value: v, margin: m }) => {
-                                self.stack.push(Value::Uncertain { value: n + v, margin: *m });
-                            }
                             _ => return Err(VmError::runtime_error("Cannot add these types".to_string())),
                         }
                     }
@@ -960,6 +957,13 @@ impl VirtualMachine {
                     // Phase 12: Check for __sub__ operator overload
                     let rhs = self.pop_value()?;
                     let lhs = self.pop_value()?;
+                    if crate::uncertain::is_uncertain(&lhs) || crate::uncertain::is_uncertain(&rhs) {
+                        if let Some(r) = crate::uncertain::binary(crate::uncertain::BinOp::Sub, &lhs, &rhs) {
+                            self.stack.push(r.map_err(VmError::runtime_error)?);
+                            self.ip += 1;
+                            continue;
+                        }
+                    }
                     
                     // Fast path: Integer - Integer
                     if let (Value::Integer(l), Value::Integer(r)) = (&lhs, &rhs) {
@@ -1011,6 +1015,13 @@ impl VirtualMachine {
                     // Phase 12: Check for __mul__ operator overload
                     let rhs = self.pop_value()?;
                     let lhs = self.pop_value()?;
+                    if crate::uncertain::is_uncertain(&lhs) || crate::uncertain::is_uncertain(&rhs) {
+                        if let Some(r) = crate::uncertain::binary(crate::uncertain::BinOp::Mul, &lhs, &rhs) {
+                            self.stack.push(r.map_err(VmError::runtime_error)?);
+                            self.ip += 1;
+                            continue;
+                        }
+                    }
                     
                     match &lhs {
                         Value::Object(obj) => {
@@ -1058,6 +1069,13 @@ impl VirtualMachine {
                     // Phase 12: Check for __div__ operator overload
                     let rhs = self.pop_value()?;
                     let lhs = self.pop_value()?;
+                    if crate::uncertain::is_uncertain(&lhs) || crate::uncertain::is_uncertain(&rhs) {
+                        if let Some(r) = crate::uncertain::binary(crate::uncertain::BinOp::Div, &lhs, &rhs) {
+                            self.stack.push(r.map_err(VmError::runtime_error)?);
+                            self.ip += 1;
+                            continue;
+                        }
+                    }
                     
                     match &lhs {
                         Value::Object(obj) => {
@@ -1176,6 +1194,13 @@ impl VirtualMachine {
                     // Phase 12: Check for __eq__ operator overload
                     let rhs = self.pop_value()?;
                     let lhs = self.pop_value()?;
+                    if crate::uncertain::is_uncertain(&lhs) || crate::uncertain::is_uncertain(&rhs) {
+                        if let Some(r) = crate::uncertain::compare(crate::uncertain::CmpOp::Eq, &lhs, &rhs) {
+                            self.stack.push(r.map_err(VmError::runtime_error)?);
+                            self.ip += 1;
+                            continue;
+                        }
+                    }
                     
                     match &lhs {
                         Value::Object(obj) => {
@@ -1212,6 +1237,13 @@ impl VirtualMachine {
                     // Phase 12: Check for __ne__ operator overload
                     let rhs = self.pop_value()?;
                     let lhs = self.pop_value()?;
+                    if crate::uncertain::is_uncertain(&lhs) || crate::uncertain::is_uncertain(&rhs) {
+                        if let Some(r) = crate::uncertain::compare(crate::uncertain::CmpOp::Ne, &lhs, &rhs) {
+                            self.stack.push(r.map_err(VmError::runtime_error)?);
+                            self.ip += 1;
+                            continue;
+                        }
+                    }
                     
                     match &lhs {
                         Value::Object(obj) => {
@@ -1252,6 +1284,13 @@ impl VirtualMachine {
                     // Phase 12: Check for __gt__ operator overload on left operand
                     let rhs = self.pop_value()?;
                     let lhs = self.pop_value()?;
+                    if crate::uncertain::is_uncertain(&lhs) || crate::uncertain::is_uncertain(&rhs) {
+                        if let Some(r) = crate::uncertain::compare(crate::uncertain::CmpOp::Gt, &lhs, &rhs) {
+                            self.stack.push(r.map_err(VmError::runtime_error)?);
+                            self.ip += 1;
+                            continue;
+                        }
+                    }
                     
                     match &lhs {
                         Value::Object(obj) => {
@@ -1285,6 +1324,13 @@ impl VirtualMachine {
                     // Phase 12: Check for __ge__ operator overload
                     let rhs = self.pop_value()?;
                     let lhs = self.pop_value()?;
+                    if crate::uncertain::is_uncertain(&lhs) || crate::uncertain::is_uncertain(&rhs) {
+                        if let Some(r) = crate::uncertain::compare(crate::uncertain::CmpOp::Ge, &lhs, &rhs) {
+                            self.stack.push(r.map_err(VmError::runtime_error)?);
+                            self.ip += 1;
+                            continue;
+                        }
+                    }
                     
                     match &lhs {
                         Value::Object(obj) => {
@@ -1316,6 +1362,13 @@ impl VirtualMachine {
                 Instruction::Lt => {
                     let rhs = self.pop_value()?;
                     let lhs = self.pop_value()?;
+                    if crate::uncertain::is_uncertain(&lhs) || crate::uncertain::is_uncertain(&rhs) {
+                        if let Some(r) = crate::uncertain::compare(crate::uncertain::CmpOp::Lt, &lhs, &rhs) {
+                            self.stack.push(r.map_err(VmError::runtime_error)?);
+                            self.ip += 1;
+                            continue;
+                        }
+                    }
                     // PERF: fast path for number < number (most common case)
                     if let (Value::Number(l), Value::Number(r)) = (&lhs, &rhs) {
                         self.stack.push(Value::Bool(l < r));
@@ -1353,6 +1406,13 @@ impl VirtualMachine {
                     // Phase 12: Check for __le__ operator overload
                     let rhs = self.pop_value()?;
                     let lhs = self.pop_value()?;
+                    if crate::uncertain::is_uncertain(&lhs) || crate::uncertain::is_uncertain(&rhs) {
+                        if let Some(r) = crate::uncertain::compare(crate::uncertain::CmpOp::Le, &lhs, &rhs) {
+                            self.stack.push(r.map_err(VmError::runtime_error)?);
+                            self.ip += 1;
+                            continue;
+                        }
+                    }
                     
                     match &lhs {
                         Value::Object(obj) => {
@@ -5105,6 +5165,35 @@ impl VirtualMachine {
         }
 
         Ok(())
+    }
+
+    /// Fused `slot <cmp> const` on a slot that is not a plain number: uncertain values compare
+    /// three-valued (pushes a Trit); anything else is a type error.
+    fn slot_const_cmp_fallback(&mut self, idx: usize, n: f64, op: crate::uncertain::CmpOp, what: &str) -> Result<(), VmError> {
+        let val = self.locals_stack.last().and_then(|f| f.get(idx)).cloned().unwrap_or(Value::Null);
+        match crate::uncertain::compare(op, &val, &Value::Number(n)) {
+            Some(r) => {
+                let v = r.map_err(VmError::runtime_error)?;
+                self.stack.push(v);
+                Ok(())
+            }
+            None => Err(VmError::runtime_error(format!("{}: slot is not a number", what))),
+        }
+    }
+
+    /// Fused `slot = slot +/- const` on a slot that is not a plain number (uncertain values).
+    fn slot_const_arith_fallback(&mut self, idx: usize, n: f64, op: crate::uncertain::BinOp, what: &str) -> Result<(), VmError> {
+        let val = self.locals_stack.last().and_then(|f| f.get(idx)).cloned().unwrap_or(Value::Null);
+        match crate::uncertain::binary(op, &val, &Value::Number(n)) {
+            Some(r) => {
+                let v = r.map_err(VmError::runtime_error)?;
+                if let Some(frame) = self.locals_stack.last_mut() {
+                    frame[idx] = v;
+                }
+                Ok(())
+            }
+            None => Err(VmError::runtime_error(format!("{}: slot is not a number", what))),
+        }
     }
 
     fn pop_number(&mut self) -> Result<f64, VmError> {

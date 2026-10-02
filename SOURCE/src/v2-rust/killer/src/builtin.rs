@@ -598,6 +598,11 @@ impl BuiltinFunctions {
             // Cloud/local LLM via curl  llm_complete(provider, model, api_key, prompt)
             "llm_complete" => Self::llm_complete(args),
             "llm_embed"    => Self::llm_embed(args),
+            "uncertain"    => Self::uncertain_new(args),
+            "unc_value"    => Self::uncertain_part(args, 0),
+            "unc_margin"   => Self::uncertain_part(args, 1),
+            "unc_lo"       => Self::uncertain_part(args, 2),
+            "unc_hi"       => Self::uncertain_part(args, 3),
             "ffi_open"     => Self::ffi_open(args),
             "ffi_call"     => Self::ffi_call(args),
             "ffi_close"    => Self::ffi_close(args),
@@ -1936,6 +1941,9 @@ impl BuiltinFunctions {
         }
         match &args[0] {
             Value::Number(n) => Ok(Value::Number(n.sqrt())),
+            Value::Uncertain { value, margin } => {
+                crate::uncertain::sqrt(*value, *margin).map_err(VmError::runtime_error)
+            }
             _ => Err(VmError::runtime_error(
                 "sqrt() expects a number".to_string(),
             )),
@@ -2036,6 +2044,7 @@ impl BuiltinFunctions {
         }
         match &args[0] {
             Value::Number(n) => Ok(Value::Number(n.abs())),
+            Value::Uncertain { value, margin } => Ok(crate::uncertain::abs(*value, *margin)),
             _ => Err(VmError::runtime_error(
                 "abs() expects a number".to_string(),
             )),
@@ -4677,6 +4686,31 @@ impl BuiltinFunctions {
                 .map_err(VmError::runtime_error),
             _ => Err(VmError::runtime_error("ffi_peek(ptr, offset, kind)".to_string())),
         }
+    }
+
+    /// uncertain(value, margin) -> value ± margin
+    fn uncertain_new(args: &[Value]) -> Result<Value, VmError> {
+        match args {
+            [Value::Number(v), Value::Number(m)] if m.is_finite() && v.is_finite() => {
+                Ok(Value::Uncertain { value: *v, margin: m.abs() })
+            }
+            _ => Err(VmError::runtime_error("uncertain(value, margin) expects two finite numbers".to_string())),
+        }
+    }
+
+    /// unc_value / unc_margin / unc_lo / unc_hi (x): numbers pass through as exact values
+    fn uncertain_part(args: &[Value], which: u8) -> Result<Value, VmError> {
+        let (v, m) = match args {
+            [Value::Uncertain { value, margin }] => (*value, *margin),
+            [Value::Number(n)] => (*n, 0.0),
+            _ => return Err(VmError::runtime_error("expects one uncertain value or number".to_string())),
+        };
+        Ok(Value::Number(match which {
+            0 => v,
+            1 => m,
+            2 => v - m,
+            _ => v + m,
+        }))
     }
 
     /// ffi_open(path) -> handle

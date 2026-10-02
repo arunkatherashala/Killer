@@ -4914,6 +4914,7 @@ fn patch_pending_calls(state: &mut CompilerState) -> Result<(), VmError> {
         // Native GGUF inference
         "llm_chat", "llm_ask", "llm_info", "llm_complete", "llm_embed",
         "ffi_open", "ffi_call", "ffi_close", "ffi_alloc", "ffi_free", "ffi_poke", "ffi_peek",
+        "uncertain", "unc_value", "unc_margin", "unc_lo", "unc_hi",
         // Ghost Agent (web search + local LLM)
         "ghost_ask",
         "ghost_smart_solve",
@@ -5252,6 +5253,7 @@ fn extract_keyword_condition<'a>(line: &'a str, keyword: &str, line_no: usize) -
 /// Use `--` for inline comments instead.
 fn strip_trailing_line_comment(content: &str) -> &str {
     let mut in_str = false;
+    let mut in_sq = false; // inside a single-quoted run (kept conservative: never strip there)
     let end;
     let bytes = content.as_bytes();
     let mut j = 0;
@@ -5262,6 +5264,15 @@ fn strip_trailing_line_comment(content: &str) -> &str {
         }
         match bytes[j] {
             b'"' => in_str = !in_str,
+            39 if !in_str => in_sq = !in_sq, // single quote
+            // Python-style trailing `# comment`: only after whitespace and some code, so `#[derive]`
+            // attributes, `#include` lines and quoted '#' characters are left alone.
+            b'#' if !in_str && !in_sq && j > 0 && bytes[j - 1].is_ascii_whitespace()
+                && !content[..j].trim().is_empty() =>
+            {
+                end = j;
+                break;
+            }
             b'-' if !in_str && j + 1 < bytes.len() && bytes[j + 1] == b'-' => {
                 end = j;
                 break;
