@@ -66,6 +66,19 @@ static ARRAY_SINGLETON: LazyLock<Value> = LazyLock::new(|| {
     Value::Dict(crate::value::SharedDict::new(HashMap::new()))
 });
 
+/// Resolve an array index: negative values count from the end (`a[-1]` is the last element).
+/// Out-of-range, fractional-negative or NaN indices map to `usize::MAX` so they read as missing.
+#[inline]
+fn array_index(idx: f64, len: usize) -> usize {
+    if idx >= 0.0 {
+        idx as usize
+    } else if idx.is_finite() && idx >= -(len as f64) {
+        (len as f64 + idx.trunc()) as usize
+    } else {
+        usize::MAX
+    }
+}
+
 fn wrap_builtin_error(e: VmError, instr_idx: usize) -> VmError {
     let msg = e.to_string();
     if msg.starts_with("Line ") || msg.starts_with("(at instruction") {
@@ -2182,7 +2195,7 @@ impl VirtualMachine {
                     let object = self.pop_value()?;
                     match (&object, &index) {
                         (Value::Array(arr), Value::Number(idx)) => {
-                            let i = *idx as usize;
+                            let i = array_index(*idx, arr.len());
                             self.stack
                                 .push(arr.get(i).unwrap_or(Value::Null));
                         }
@@ -2216,7 +2229,7 @@ impl VirtualMachine {
                     let object = self.load_var(name)?;
                     match (object, &index) {
                         (Value::Array(arr), Value::Number(idx)) => {
-                            let i = *idx as usize;
+                            let i = array_index(*idx, arr.len());
                             if i < arr.len() {
                                 arr.set(i, value);
                                 self.store_var(name, Value::Array(arr))?;
@@ -2258,7 +2271,7 @@ impl VirtualMachine {
                     };
                     match (object, &index) {
                         (Value::Array(arr), Value::Number(idx)) => {
-                            let i = *idx as usize;
+                            let i = array_index(*idx, arr.len());
                             if i < arr.len() {
                                 arr.set(i, value);
                                 let frame = self.locals_stack.last_mut().ok_or_else(|| {
@@ -2851,8 +2864,8 @@ impl VirtualMachine {
                             }
                             match (&args[0], &args[1]) {
                                 (Value::Str(s), Value::Number(idx)) => {
-                                    let i = *idx as usize;
                                     let char_count = s.chars().count();
+                                    let i = array_index(*idx, char_count);
                                     if i < char_count {
                                         if let Some(ch) = s.chars().nth(i) {
                                             Value::Str(ch.to_string())
@@ -2876,8 +2889,8 @@ impl VirtualMachine {
                             }
                             match (&args[0], &args[1]) {
                                 (Value::Str(s), Value::Number(idx)) => {
-                                    let i = *idx as usize;
                                     let char_count = s.chars().count();
+                                    let i = array_index(*idx, char_count);
                                     if i < char_count {
                                         if let Some(ch) = s.chars().nth(i) {
                                             let code = ch as u32 as f64;
@@ -5869,7 +5882,7 @@ impl VirtualMachine {
                                 .unwrap_or(Value::Null);
                             match (object, &index) {
                                 (Value::Array(arr), Value::Number(idx)) => {
-                                    let i = *idx as usize;
+                                    let i = array_index(*idx, arr.len());
                                     if i < arr.len() {
                                         arr.set(i, val);
                                         if let Some(frame) = self.locals_stack.last_mut() {

@@ -17,27 +17,81 @@ pub fn optimize_bytecode_with_map(instructions: &[Instruction]) -> (Vec<Instruct
     // Phase 2: Eliminate redundant operations (conservative pass)
     let instructions = eliminate_redundant_operations(&instructions);
 
-    // Phase 2b: Constant folding on ConstNum+ConstNum+Op triplets
-    let instructions = fold_const_arithmetic(&instructions);
+    let n_input = instructions.len();
+
+    // Phase 2b: Constant folding on ConstNum+ConstNum+Op triplets (shrinks the code, so it
+    // yields its own index map and rewrites every code address)
+    let (instructions, fold_map) = fold_const_arithmetic(&instructions);
 
     // Phase 3: Peephole fusion — combine common slot+const+op patterns
-    let (instructions, map) = fuse_slot_patterns(&instructions);
+    let (instructions, fuse_map) = fuse_slot_patterns(&instructions);
 
     // Phase 4: Convert CallBuiltin(name) → CallBuiltinId(id) for known builtins
     let instructions = lower_builtin_calls(&instructions);
 
+    // Compose: original index -> after folding -> after fusion.
+    let last = fuse_map.last().copied().unwrap_or(0);
+    let mut map: Vec<usize> = fold_map
+        .iter()
+        .map(|&mid| fuse_map.get(mid).copied().unwrap_or(last))
+        .collect();
+    // Callers index the map with `ip.min(original_len)`; keep it that long even when
+    // unreachable trailing code (after Halt) was dropped.
+    while map.len() < n_input + 1 {
+        map.push(last);
+    }
+
     (instructions, map)
+}
+
+/// Rewrite every code address in `code` through `old_to_new` (`n` = length of the old code).
+/// One shared routine so that no shrinking pass can forget an instruction kind.
+fn remap_code_addresses(code: &mut [Instruction], old_to_new: &[usize], n: usize) {
+    let m = |x: usize| old_to_new[x.min(n)];
+    for instr in code {
+        match instr {
+            Instruction::Jump(t)
+            | Instruction::JumpIfFalse(t)
+            | Instruction::JumpIfTNeg(t)
+            | Instruction::JumpIfTZero(t)
+            | Instruction::JumpIfTPos(t)
+            | Instruction::JumpIfQubitMeasure(t)
+            | Instruction::JumpIfSignalConfident(t, _)
+            | Instruction::JumpIfSignalUncertain(t, _)
+            | Instruction::JumpIfFuzzyHigh(t, _)
+            | Instruction::JumpIfFuzzyLow(t, _) => *t = m(*t),
+            Instruction::Call { target, .. }
+            | Instruction::TailCall { target, .. }
+            | Instruction::SpawnCallDirect { target, .. } => *target = m(*target),
+            Instruction::ForNext { body, exit, .. } => {
+                *body = m(*body);
+                *exit = m(*exit);
+            }
+            Instruction::ConstFunc { bytecode_start, .. } => *bytecode_start = m(*bytecode_start),
+            Instruction::RegisterLive { instr_start, .. } => *instr_start = m(*instr_start),
+            Instruction::TryEnter { catch_target, finally_target } => {
+                *catch_target = m(*catch_target);
+                if *finally_target != usize::MAX {
+                    *finally_target = m(*finally_target);
+                }
+            }
+            _ => {}
+        }
+    }
 }
 
 /// Fold sequences: ConstNum(a) ConstNum(b) <ArithOp> → ConstNum(result)
 /// Catches cases the AST constant-folder misses (e.g., values from macros,
 /// string concat, or folded-in sub-expressions that become adjacent consts).
-fn fold_const_arithmetic(instructions: &[Instruction]) -> Vec<Instruction> {
-    let mut out: Vec<Instruction> = Vec::with_capacity(instructions.len());
+fn fold_const_arithmetic(instructions: &[Instruction]) -> (Vec<Instruction>, Vec<usize>) {
+    let n = instructions.len();
+    let mut out: Vec<Instruction> = Vec::with_capacity(n);
+    let mut old_to_new = vec![0usize; n + 1];
     let mut i = 0;
-    while i < instructions.len() {
+    while i < n {
+        old_to_new[i] = out.len();
         // Look for: ConstNum(a) ConstNum(b) <Op>
-        if i + 2 < instructions.len() {
+        if i + 2 < n {
             if let (Instruction::ConstNum(a), Instruction::ConstNum(b)) =
                 (&instructions[i], &instructions[i + 1])
             {
@@ -53,18 +107,24 @@ fn fold_const_arithmetic(instructions: &[Instruction]) -> Vec<Instruction> {
                     _ => None,
                 };
                 if let Some(result) = folded {
+                    let at = out.len();
                     out.push(Instruction::ConstNum(result));
+                    old_to_new[i + 1] = at;
+                    old_to_new[i + 2] = at;
                     i += 3;
                     continue;
                 }
             }
         }
         // Look for: ConstStr(a) ConstStr(b) Add → ConstStr(ab)
-        if i + 2 < instructions.len() {
+        if i + 2 < n {
             if let (Instruction::ConstStr(a), Instruction::ConstStr(b), Instruction::Add) =
                 (&instructions[i], &instructions[i + 1], &instructions[i + 2])
             {
+                let at = out.len();
                 out.push(Instruction::ConstStr(format!("{}{}", a, b)));
+                old_to_new[i + 1] = at;
+                old_to_new[i + 2] = at;
                 i += 3;
                 continue;
             }
@@ -72,7 +132,9 @@ fn fold_const_arithmetic(instructions: &[Instruction]) -> Vec<Instruction> {
         out.push(instructions[i].clone());
         i += 1;
     }
-    out
+    old_to_new[n] = out.len();
+    remap_code_addresses(&mut out, &old_to_new, n);
+    (out, old_to_new)
 }
 
 fn lower_builtin_calls(instructions: &[Instruction]) -> Vec<Instruction> {
@@ -521,39 +583,8 @@ fn fuse_slot_patterns(instructions: &[Instruction]) -> (Vec<Instruction>, Vec<us
     // Sentinel: one-past-end maps to current new_idx
     old_to_new[n] = new_idx;
 
-    // Now remap all jump targets in `out` using old_to_new.
-    for instr in &mut out {
-        match instr {
-            Instruction::Jump(target) => {
-                *target = old_to_new[(*target).min(n)];
-            }
-            Instruction::JumpIfFalse(target) => {
-                *target = old_to_new[(*target).min(n)];
-            }
-            Instruction::Call { target, .. } => {
-                // Function start indices shift when earlier instructions are fused
-                *target = old_to_new[(*target).min(n)];
-            }
-            Instruction::TailCall { target, .. } => {
-                *target = old_to_new[(*target).min(n)];
-            }
-            Instruction::ForNext { body, exit, .. } => {
-                *body = old_to_new[(*body).min(n)];
-                *exit = old_to_new[(*exit).min(n)];
-            }
-            Instruction::SpawnCallDirect { target, .. } => {
-                // Spawn targets also shift when earlier instructions are fused
-                *target = old_to_new[(*target).min(n)];
-            }
-            Instruction::TryEnter { catch_target, finally_target } => {
-                *catch_target = old_to_new[(*catch_target).min(n)];
-                if *finally_target != usize::MAX {
-                    *finally_target = old_to_new[(*finally_target).min(n)];
-                }
-            }
-            _ => {}
-        }
-    }
+    // Now remap all code addresses in `out` using old_to_new.
+    remap_code_addresses(&mut out, &old_to_new, n);
 
     (out, old_to_new)
 }
@@ -561,6 +592,60 @@ fn fuse_slot_patterns(instructions: &[Instruction]) -> (Vec<Instruction>, Vec<us
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Folding `0 - 1` removes two instructions; every jump after it must still land on the
+    /// instruction it targeted before (this used to jump into the middle of an expression).
+    #[test]
+    fn folding_keeps_jump_targets_correct() {
+        // 0: Jump(5)  1: body  2: ConstNum(0)  3: ConstNum(1)  4: Sub  5: Ret  6: Halt-ish tail
+        let code = vec![
+            Instruction::Jump(6),
+            Instruction::ConstNum(0.0),
+            Instruction::ConstNum(1.0),
+            Instruction::Sub,
+            Instruction::Pop,
+            Instruction::Ret,
+            Instruction::ConstNum(7.0), // jump target
+            Instruction::Halt,
+        ];
+        let (out, map) = optimize_bytecode_with_map(&code);
+        // the folded constant replaces three instructions, so everything after moves up by two
+        match &out[0] {
+            Instruction::Jump(t) => assert!(matches!(out[*t], Instruction::ConstNum(v) if v == 7.0), "jump lands on {:?}", out[*t]),
+            other => panic!("expected a jump, got {:?}", other),
+        }
+        assert_eq!(map.len(), code.len() + 1);
+        assert_eq!(map[6], out.iter().position(|i| matches!(i, Instruction::ConstNum(v) if *v == 7.0)).unwrap());
+    }
+
+    #[test]
+    fn folding_remaps_function_calls_and_loops() {
+        let code = vec![
+            Instruction::Jump(5),
+            Instruction::ConstNum(0.0),
+            Instruction::ConstNum(1.0),
+            Instruction::Sub,
+            Instruction::Ret,
+            Instruction::Call { target: 1, arg_count: 0 }, // 5
+            Instruction::JumpIfFalse(8),
+            Instruction::Jump(5),
+            Instruction::Halt, // 8
+        ];
+        let (out, _) = optimize_bytecode_with_map(&code);
+        let call_at = out.iter().position(|i| matches!(i, Instruction::Call { .. })).unwrap();
+        if let Instruction::Jump(t) = out[0] {
+            assert_eq!(t, call_at);
+        } else {
+            panic!("first instruction must stay a jump");
+        }
+        for ins in &out {
+            match ins {
+                Instruction::Call { target, .. } => assert_eq!(*target, 1),
+                Instruction::JumpIfFalse(t) => assert!(matches!(out[*t], Instruction::Halt)),
+                _ => {}
+            }
+        }
+    }
 
     #[test]
     fn constant_fold_add_and_compare() {
