@@ -263,3 +263,89 @@ fn comments_and_quotes_inside_strings_are_left_alone() {
     let src = "x = 1  # it's fine\ns = \"a # b\"\nprintln(s)\nt = 'a#b'\nprintln(t)\nprintln(x)\n";
     assert_eq!(run(src), "a # b\na#b\n1");
 }
+
+// ---------------------------------------------------------------- expression grammar
+
+#[test]
+fn unary_minus_binds_tighter_than_binary_operators() {
+    let src = "x = 5\nprintln(-1 + 5)\nprintln(-2 * 3)\nprintln(2 - -3)\nprintln(-(1 + 2) * 2)\nprintln(-x + 10)\nprintln(-3 > -4)\nprintln(-2 ** 2)\nprintln(2 ** 3 ** 2)\n";
+    assert_eq!(run(src), "4\n-6\n5\n-6\n5\ntrue\n-4\n512");
+}
+
+#[test]
+fn arithmetic_precedence_and_associativity() {
+    let src = "println(10 - 2 - 3)\nprintln(2 + 3 * 4)\nprintln(100 / 10 / 5)\nprintln(8 / 2 * 2)\nprintln(7 % 4 + 1)\nprintln((1 + 2) * (3 + 4))\n";
+    assert_eq!(run(src), "5\n14\n2\n8\n4\n21");
+}
+
+#[test]
+fn member_access_on_the_right_of_an_operator() {
+    let src = "class C {\n  fn init() {\n    this.n = 3\n    this.flag = true\n  }\n  fn get() {\n    return 10\n  }\n}\nc = new C()\nprintln(1 + c.n)\nprintln(1 + c.get())\nprintln(true && c.flag)\nprintln(len([1, 2]) + c.n)\nprintln(c.get() + c.get())\nprintln(c.n > 2 && c.flag)\n";
+    assert_eq!(run(src), "4\n11\ntrue\n5\n20\ntrue");
+}
+
+#[test]
+fn logical_operators_follow_the_usual_precedence() {
+    let src = "println(true && false || true)\nprintln(false && true || true)\nprintln(true || false && false)\nprintln(false || false && true)\n";
+    assert_eq!(run(src), "true\ntrue\ntrue\nfalse");
+}
+
+#[test]
+fn ternary_expressions() {
+    let src = "x = 5\nprintln(x > 2 ? \"big\" : \"small\")\nprintln(x < 2 ? \"big\" : \"small\")\nprintln(\"big\" if x > 2 else \"small\")\nprintln(x > 9 ? 1 : x > 3 ? 2 : 3)\nprintln(\"a\" if x > 9 else \"b\" if x > 3 else \"c\")\nfn sign(n) {\n  return n > 0 ? 1 : n < 0 ? -1 : 0\n}\nprintln(sign(5))\nprintln(sign(-5))\nprintln(sign(0))\n";
+    assert_eq!(run(src), "big\nsmall\nbig\n2\nb\n1\n-1\n0");
+}
+
+#[test]
+fn ternary_does_not_confuse_other_question_mark_operators() {
+    let src = "a = null\nprintln(a ?? 7)\nprintln(a?.x)\nb = 3\nprintln(b ?? 7)\n";
+    assert_eq!(run(src), "7\nnull\n3");
+}
+
+#[test]
+fn chained_comparisons() {
+    let src = "println(1 < 2 < 3)\nprintln(1 < 3 < 2)\nx = 5\nprintln(1 < x <= 5)\nprintln(5 > x > 1)\nprintln(1 == 1 == 1)\n";
+    assert_eq!(run(src), "true\nfalse\ntrue\nfalse\ntrue");
+}
+
+#[test]
+fn membership_operators() {
+    let src = "xs = [1, 2, 3]\nd = {\"a\": 1}\nprintln(2 in xs)\nprintln(5 in xs)\nprintln(5 not in xs)\nprintln(\"a\" in d)\nprintln(\"z\" in d)\nprintln(\"ell\" in \"hello\")\nprintln(\"x\" not in \"hello\")\nprintln([y for y in xs if y in [1, 3]])\n";
+    assert_eq!(run(src), "true\nfalse\ntrue\ntrue\nfalse\ntrue\ntrue\n[1, 3]");
+}
+
+#[test]
+fn bitwise_operators() {
+    let src = "println(6 & 3)\nprintln(6 | 3)\nprintln(6 ^ 3)\nprintln(1 << 4)\nprintln(32 >> 2)\nprintln(~5)\nprintln(8 | 1 ^ 3 & 2)\nprintln(1 << 2 + 1)\nprintln((6 & 3) == 2)\nprintln(true || false)\n";
+    assert_eq!(run(src), "2\n7\n5\n16\n8\n-6\n11\n8\ntrue\ntrue");
+}
+
+#[test]
+fn tuple_literals() {
+    let src = "t = (1, 2, 3)\nprintln(t[1])\nprintln(len(t))\nprintln((1 + 2) * 3)\nfn two() {\n  return (10, 20)\n}\na, b = two()\nprintln(a + b)\n";
+    assert_eq!(run(src), "2\n3\n9\n30");
+}
+
+#[test]
+fn not_binds_looser_than_comparison_but_tighter_than_and_or() {
+    let src = "x = 5\nprintln(not x == 5)\nprintln(not x == 6)\nprintln(not x == 6 and true)\nprintln(not true or true)\nprintln(not (1 == 2))\nprintln(not contains([1, 2], 3))\n";
+    assert_eq!(run(src), "false\ntrue\ntrue\ntrue\ntrue\ntrue");
+}
+
+#[test]
+fn comprehensions_can_use_local_and_top_level_variables() {
+    let src = "xs = [1, 2, 3, 4]\nprintln([y for y in xs])\nprintln([y * 2 for y in xs if y > 1])\nn = 10\nprintln([y + n for y in xs])\nfn evens(limit) {\n  base = 2\n  return [i * base for i in range(limit) if i % 2 == 0]\n}\nprintln(evens(10))\nwords = [\"ab\", \"c\", \"def\"]\nprintln([len(w) for w in words])\nprintln(len([w for w in words if len(w) > 1]))\n";
+    assert_eq!(run(src), "[1, 2, 3, 4]\n[4, 6, 8]\n[11, 12, 13, 14]\n[0, 4, 8, 12, 16]\n[2, 1, 3]\n2");
+}
+
+#[test]
+fn comprehension_variable_does_not_leak_over_an_outer_variable() {
+    let src = "x = 100\nxs = [1, 2]\nprintln([x * 2 for x in xs])\nprintln(x)\nfn f(a) {\n  return [a * 2 for a in [5, 6]]\n}\nprintln(f(1))\n";
+    assert_eq!(run(src), "[2, 4]\n100\n[10, 12]");
+}
+
+#[test]
+fn comprehensions_support_destructuring_and_several_clauses() {
+    let src = "pairs = [[1, 2], [3, 4]]\nprintln([a + b for a, b in pairs])\nprintln([[a, b] for a in range(2) for b in range(3) if a < b])\nm = [[1, 2], [3, 4], [5, 6]]\nprintln([c for row in m for c in row])\nprintln([c * 2 for row in m if len(row) == 2 for c in row if c > 2])\nprintln([i for i in range(10) if i % 2 == 0 if i > 3])\nprintln([[c * 2 for c in row] for row in m])\n";
+    assert_eq!(run(src), "[3, 7]\n[[0, 1], [0, 2], [1, 2]]\n[1, 2, 3, 4, 5, 6]\n[6, 8, 10, 12]\n[4, 6, 8]\n[[2, 4], [6, 8], [10, 12]]");
+}

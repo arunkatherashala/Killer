@@ -3220,6 +3220,15 @@ fn compile_expr_str(
         }
     }
 
+    // Tuple literal `(1, 2, 3)` is an array
+    if let Some(elements) = crate::exprsplit::tuple_elements(expr) {
+        for element in &elements {
+            compile_expr_str(element, line_no, state, context)?;
+        }
+        state.instructions.push(Instruction::BuildArray(elements.len()));
+        return Ok(());
+    }
+
     // Parenthesized grouping: (inner) — strip outer parens and recurse
     if expr.starts_with('(') && expr.ends_with(')') {
         // Verify the opening ( at position 0 matches the closing ) at the last position.
@@ -3245,15 +3254,54 @@ fn compile_expr_str(
         }
     }
 
-    // Unary minus: -expr  (e.g. -42, -n, -(a+b))
+    // Ternary `c ? a : b` / `a if c else b`: the lowest-precedence operator
+    if let Some((cond, then_branch, else_branch)) =
+        crate::exprsplit::split_ternary(expr).or_else(|| crate::exprsplit::split_python_conditional(expr))
+    {
+        compile_expr_str(cond, line_no, state, context)?;
+        let to_else = state.instructions.len();
+        state.instructions.push(Instruction::JumpIfFalse(usize::MAX));
+        compile_expr_str(then_branch, line_no, state, context)?;
+        let to_end = state.instructions.len();
+        state.instructions.push(Instruction::Jump(usize::MAX));
+        let else_start = state.instructions.len();
+        state.instructions[to_else] = Instruction::JumpIfFalse(else_start);
+        compile_expr_str(else_branch, line_no, state, context)?;
+        let end = state.instructions.len();
+        state.instructions[to_end] = Instruction::Jump(end);
+        return Ok(());
+    }
+
+    // Binary operators, lowest precedence first. They are split before any primary-expression
+    // parsing so that `1 + c.n` is `1 + (c.n)` and not a member access on `1 + c`.
+    if compile_binary_operators(expr, line_no, state, context)? {
+        return Ok(());
+    }
+
+    // Unary minus: -expr  (e.g. -42, -n, -(a+b)).
+    // It binds tighter than every binary operator except `**` (`-2 ** 2` is `-(2 ** 2)`), so it is
+    // only unary here when no logical, comparison, additive or multiplicative operator splits the
+    // expression; otherwise `-1 + 5` would be parsed as `-(1 + 5)`.
     if let Some(rest) = expr.strip_prefix('-') {
         let rest = rest.trim();
-        // Make sure it's not subtraction (left side would be non-empty before strip)
-        if !rest.is_empty() {
+        let splits_looser = split_logical(expr).is_some()
+            || split_comparison(expr).is_some()
+            || matches!(split_binary(expr), Some((_, op, _)) if op != "**");
+        if !rest.is_empty() && !splits_looser {
             // Push 0, compile rest, emit Sub (0 - rest = negation)
             state.instructions.push(Instruction::ConstNum(0.0));
             compile_expr_str(rest, line_no, state, context)?;
             state.instructions.push(Instruction::Sub);
+            return Ok(());
+        }
+    }
+
+    // Bitwise NOT `~x`
+    if let Some(rest) = expr.strip_prefix('~') {
+        let rest = rest.trim();
+        if !rest.is_empty() {
+            compile_expr_str(rest, line_no, state, context)?;
+            state.instructions.push(Instruction::CallBuiltin("bit_not".to_string(), 1));
             return Ok(());
         }
     }
@@ -3599,13 +3647,8 @@ fn compile_expr_str(
             return Ok(());
         }
         // List comprehension: detect "expr for var in iterable [if cond]" at top level
-        if let Some(lc) = parse_list_comprehension(inner) {
-            state.instructions.push(Instruction::ListComp {
-                expr_src: lc.0,
-                var_name: lc.1,
-                iterable_src: lc.2,
-                cond_src: lc.3,
-            });
+        if let Some((element, clauses)) = parse_comprehension_clauses(inner) {
+            compile_list_comprehension(&element, &clauses, line_no, state, context)?;
             return Ok(());
         }
         if let Some(elems) = split_arguments(inner) {
@@ -3782,6 +3825,186 @@ fn extract_fn_name(line: &str) -> Option<String> {
 }
 
 /// Parse `expr for var in iterable [if cond]` — returns (expr, var, iterable, cond_opt)
+/// A copy of `context` in which the given names are not visible as locals, so a comprehension
+/// variable does not capture an outer variable of the same name.
+fn shadowed_context(context: &CompileContext, hide: &[String]) -> CompileContext {
+    let mut slot_map = context.slot_map.clone();
+    let mut params = context.params.clone();
+    for name in hide {
+        slot_map.remove(name);
+        params.remove(name);
+    }
+    CompileContext {
+        loop_stack: Vec::new(),
+        in_function: context.in_function,
+        current_function_name: None,
+        params,
+        slot_map,
+        next_slot: context.next_slot,
+        outer_vars: context.outer_vars.clone(),
+        global_decls: context.global_decls.clone(),
+        tail_position: false,
+        tail_value: false,
+        runtime_scope_depth: context.runtime_scope_depth,
+    }
+}
+
+/// One `for names in iterable [if cond]` clause of a comprehension.
+struct CompClause {
+    names: String,
+    iterable: String,
+    conditions: Vec<String>,
+}
+
+/// Split `element for a in A if c for b in B` into the element and its clauses.
+fn parse_comprehension_clauses(inner: &str) -> Option<(String, Vec<CompClause>)> {
+    let first_for = find_top_level_op(inner, " for ")?;
+    let element = inner[..first_for].trim().to_string();
+    if element.is_empty() {
+        return None;
+    }
+    let mut rest = &inner[first_for + 5..];
+    let mut clauses = Vec::new();
+    loop {
+        // this clause runs up to the next top-level " for "
+        let next_for = find_top_level_op(rest, " for ");
+        let clause_text = match next_for {
+            Some(p) => &rest[..p],
+            None => rest,
+        };
+        let in_pos = find_top_level_op(clause_text, " in ")?;
+        let names = clause_text[..in_pos].trim().to_string();
+        let after_in = clause_text[in_pos + 4..].trim();
+        // iterable, then zero or more `if` filters
+        let mut conditions = Vec::new();
+        let iterable = match find_top_level_op(after_in, " if ") {
+            Some(p) => {
+                let mut tail = &after_in[p + 4..];
+                loop {
+                    match find_top_level_op(tail, " if ") {
+                        Some(q) => {
+                            conditions.push(tail[..q].trim().to_string());
+                            tail = &tail[q + 4..];
+                        }
+                        None => {
+                            conditions.push(tail.trim().to_string());
+                            break;
+                        }
+                    }
+                }
+                after_in[..p].trim().to_string()
+            }
+            None => after_in.to_string(),
+        };
+        if names.is_empty() || iterable.is_empty() || conditions.iter().any(|c| c.is_empty()) {
+            return None;
+        }
+        clauses.push(CompClause { names, iterable, conditions });
+        match next_for {
+            Some(p) => rest = &rest[p + 5..],
+            None => break,
+        }
+    }
+    Some((element, clauses))
+}
+
+/// `[element for names in iterable if condition ...]` compiled to ordinary inline loops, so the
+/// iterables, element and conditions can use local variables, slots and parameters.
+/// Names may destructure (`for a, b in pairs`); several `for` clauses nest left to right.
+fn compile_list_comprehension(
+    element: &str,
+    clauses: &[CompClause],
+    line_no: usize,
+    state: &mut CompilerState,
+    context: &CompileContext,
+) -> Result<(), VmError> {
+    let uid = state.instructions.len();
+    let result = format!("__lcR_{}", uid);
+    state.instructions.push(Instruction::BuildArray(0));
+    state.instructions.push(Instruction::Store(result.clone()));
+
+    // names introduced by earlier clauses are hidden from outer slots in later ones
+    let mut hidden: Vec<String> = Vec::new();
+    // per clause: loop start, index of the exit jump, index temp, indices of its filter jumps
+    let mut frames: Vec<(usize, usize, String, Vec<usize>)> = Vec::new();
+    for (level, clause) in clauses.iter().enumerate() {
+        let vars: Vec<String> = clause.names.split(',').map(|n| n.trim().to_string()).collect();
+        if vars.iter().any(|v| !is_valid_name(v)) {
+            return Err(VmError::parse_error_simple(format!(
+                "Line {}: invalid comprehension variable `{}`",
+                line_no, clause.names
+            )));
+        }
+        let scope = shadowed_context(context, &hidden);
+        let (items, index, elem) = (
+            format!("__lcI_{}_{}", uid, level),
+            format!("__lcX_{}_{}", uid, level),
+            format!("__lcE_{}_{}", uid, level),
+        );
+        compile_expr_str(&clause.iterable, line_no, state, &scope)?;
+        state.instructions.push(Instruction::Store(items.clone()));
+        state.instructions.push(Instruction::ConstNum(0.0));
+        state.instructions.push(Instruction::Store(index.clone()));
+
+        let loop_start = state.instructions.len();
+        state.instructions.push(Instruction::Load(index.clone()));
+        state.instructions.push(Instruction::Load(items.clone()));
+        state.instructions.push(Instruction::CallBuiltin("len".to_string(), 1));
+        state.instructions.push(Instruction::Lt);
+        let exit_jump = state.instructions.len();
+        state.instructions.push(Instruction::JumpIfFalse(usize::MAX));
+
+        state.instructions.push(Instruction::Load(items));
+        state.instructions.push(Instruction::Load(index.clone()));
+        state.instructions.push(Instruction::IndexRead);
+        if vars.len() == 1 {
+            state.instructions.push(Instruction::StoreLocal(vars[0].clone()));
+        } else {
+            state.instructions.push(Instruction::Store(elem.clone()));
+            for (k, name) in vars.iter().enumerate() {
+                state.instructions.push(Instruction::Load(elem.clone()));
+                state.instructions.push(Instruction::ConstNum(k as f64));
+                state.instructions.push(Instruction::IndexRead);
+                state.instructions.push(Instruction::StoreLocal(name.clone()));
+            }
+        }
+        hidden.extend(vars);
+
+        // this clause's filters: a failing filter skips to this level's "next element"
+        let scope = shadowed_context(context, &hidden);
+        let mut filter_jumps = Vec::new();
+        for cond in &clause.conditions {
+            compile_expr_str(cond, line_no, state, &scope)?;
+            filter_jumps.push(state.instructions.len());
+            state.instructions.push(Instruction::JumpIfFalse(usize::MAX));
+        }
+        frames.push((loop_start, exit_jump, index, filter_jumps));
+    }
+
+    let scope = shadowed_context(context, &hidden);
+    state.instructions.push(Instruction::Load(result.clone()));
+    compile_expr_str(element, line_no, state, &scope)?;
+    state.instructions.push(Instruction::CallBuiltin("push".to_string(), 2));
+    state.instructions.push(Instruction::Pop);
+
+    // close the loops innermost first; every level has a "next element" point that bumps its index
+    for (loop_start, exit_jump, index, filter_jumps) in frames.iter().rev() {
+        let next = state.instructions.len();
+        for at in filter_jumps {
+            state.instructions[*at] = Instruction::JumpIfFalse(next);
+        }
+        state.instructions.push(Instruction::Load(index.clone()));
+        state.instructions.push(Instruction::ConstNum(1.0));
+        state.instructions.push(Instruction::Add);
+        state.instructions.push(Instruction::Store(index.clone()));
+        state.instructions.push(Instruction::Jump(*loop_start));
+        let end = state.instructions.len();
+        state.instructions[*exit_jump] = Instruction::JumpIfFalse(end);
+    }
+    state.instructions.push(Instruction::Load(result));
+    Ok(())
+}
+
 fn parse_list_comprehension(inner: &str) -> Option<(String, String, String, Option<String>)> {
     // Find " for " at top level (depth 0, not inside strings)
     let for_pos = find_top_level_op(inner, " for ")?;
@@ -4837,6 +5060,118 @@ fn compile_class_definition(
     state.class_defs.insert(class_name, (parent, method_info));
 
     Ok(())
+}
+
+/// Compile `expr` if it is a binary-operator expression; returns whether it was one.
+/// Order (lowest precedence first): `??`, `||`, `&&`, comparison chain / `in`, bitwise
+/// (`| ^ &` then shifts), then the arithmetic operators.
+fn compile_binary_operators(
+    expr: &str,
+    line_no: usize,
+    state: &mut CompilerState,
+    context: &CompileContext,
+) -> Result<bool, VmError> {
+    use crate::exprsplit as xs;
+
+    if let Some((left, op, right)) = xs::split_logical_ordered(expr) {
+        compile_expr_str(left, line_no, state, context)?;
+        compile_expr_str(right, line_no, state, context)?;
+        state.instructions.push(match op {
+            "&&" => Instruction::And,
+            "||" => Instruction::Or,
+            _ => Instruction::NullCoalesce,
+        });
+        return Ok(true);
+    }
+
+    // `not expr` (Python spelling) sits between the logical operators and comparisons:
+    // `not a == b` is `not (a == b)`, while `not a and b` is `(not a) and b` (split above).
+    if let Some(rest) = expr.strip_prefix("not ") {
+        let rest = rest.trim();
+        if !rest.is_empty() {
+            compile_expr_str(rest, line_no, state, context)?;
+            state.instructions.push(Instruction::Not);
+            return Ok(true);
+        }
+    }
+
+    if let Some((operands, ops)) = xs::split_comparison_chain(expr) {
+        if ops.len() == 1 {
+            let op = ops[0];
+            if op == "in" || op == "not in" {
+                // contains(collection, item)
+                compile_expr_str(operands[1], line_no, state, context)?;
+                compile_expr_str(operands[0], line_no, state, context)?;
+                state.instructions.push(Instruction::CallBuiltin("contains".to_string(), 2));
+                if op == "not in" {
+                    state.instructions.push(Instruction::Not);
+                }
+            } else {
+                compile_expr_str(operands[0], line_no, state, context)?;
+                compile_expr_str(operands[1], line_no, state, context)?;
+                state.instructions.push(match op {
+                    "==" => Instruction::Eq,
+                    "!=" => Instruction::Ne,
+                    ">=" => Instruction::Ge,
+                    "<=" => Instruction::Le,
+                    ">" => Instruction::Gt,
+                    _ => Instruction::Lt,
+                });
+            }
+        } else {
+            // a < b < c  ==  (a < b) && (b < c)   (the middle operands are evaluated twice)
+            let mut text = String::new();
+            for (i, op) in ops.iter().enumerate() {
+                if i > 0 {
+                    text.push_str(" && ");
+                }
+                text.push_str(&format!("({} {} {})", operands[i], op, operands[i + 1]));
+            }
+            compile_expr_str(&text, line_no, state, context)?;
+        }
+        return Ok(true);
+    }
+
+    if let Some((left, op, right)) = xs::split_bitwise(expr) {
+        compile_expr_str(left, line_no, state, context)?;
+        compile_expr_str(right, line_no, state, context)?;
+        let name = match op {
+            "|" => "bit_or",
+            "^" => "bit_xor",
+            "&" => "bit_and",
+            "<<" => "bit_shl",
+            _ => "bit_shr",
+        };
+        state.instructions.push(Instruction::CallBuiltin(name.to_string(), 2));
+        return Ok(true);
+    }
+
+    if let Some((left, op, right)) = split_binary(expr) {
+        // `-2 ** 2` is `-(2 ** 2)`: leave it to the unary-minus rule
+        if op == "**" && left.starts_with('-') {
+            return Ok(false);
+        }
+        compile_expr_str(left, line_no, state, context)?;
+        compile_expr_str(right, line_no, state, context)?;
+        match op {
+            "+" => state.instructions.push(Instruction::Add),
+            "-" => state.instructions.push(Instruction::Sub),
+            "*" => state.instructions.push(Instruction::Mul),
+            "//" => state.instructions.push(Instruction::IntDiv),
+            "/" => state.instructions.push(Instruction::Div),
+            "%" => state.instructions.push(Instruction::Mod),
+            "**" => state.instructions.push(Instruction::CallBuiltin("pow".to_string(), 2)),
+            _ => {
+                return Err(VmError::parse_error_simple(format!(
+                    "Line {}: unsupported operator `{}`",
+                    line_no, op
+                )))
+            }
+        }
+        return Ok(true);
+    }
+
+    Ok(false)
 }
 
 /// A bare expression used as a statement leaves its value on the stack. Inside a function the

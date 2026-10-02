@@ -337,6 +337,7 @@ pub mod killer_super;
 pub mod time_machine;
 
 // -- LLM Integration (native, zero external deps) -----------------------------
+pub mod exprsplit;             // top-level operator splitting for the expression parser
 pub mod sugar;                 // surface syntax sugar rewritten to core Killer before compiling
 pub mod uncertain;             // interval arithmetic and three-valued comparison for `believe` values
 
