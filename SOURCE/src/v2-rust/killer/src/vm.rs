@@ -1177,18 +1177,33 @@ impl VirtualMachine {
                 Instruction::And => {
                     let rhs = self.pop_value()?;
                     let lhs = self.pop_value()?;
-                    self.stack
-                        .push(Value::Bool(self.is_truthy(&lhs) && self.is_truthy(&rhs)));
+                    if matches!(lhs, Value::Trit(_)) || matches!(rhs, Value::Trit(_)) {
+                        // Kleene logic: AND is the minimum, so "unknown" survives
+                        let (a, b) = (self.as_trit(&lhs), self.as_trit(&rhs));
+                        self.stack.push(Value::Trit(a.min(b)));
+                    } else {
+                        self.stack
+                            .push(Value::Bool(self.is_truthy(&lhs) && self.is_truthy(&rhs)));
+                    }
                 }
                 Instruction::Or => {
                     let rhs = self.pop_value()?;
                     let lhs = self.pop_value()?;
-                    self.stack
-                        .push(Value::Bool(self.is_truthy(&lhs) || self.is_truthy(&rhs)));
+                    if matches!(lhs, Value::Trit(_)) || matches!(rhs, Value::Trit(_)) {
+                        let (a, b) = (self.as_trit(&lhs), self.as_trit(&rhs));
+                        self.stack.push(Value::Trit(a.max(b)));
+                    } else {
+                        self.stack
+                            .push(Value::Bool(self.is_truthy(&lhs) || self.is_truthy(&rhs)));
+                    }
                 }
                 Instruction::Not => {
                     let val = self.pop_value()?;
-                    self.stack.push(Value::Bool(!self.is_truthy(&val)));
+                    if let Value::Trit(t) = val {
+                        self.stack.push(Value::Trit(-t.clamp(-1, 1)));
+                    } else {
+                        self.stack.push(Value::Bool(!self.is_truthy(&val)));
+                    }
                 }
                 Instruction::Eq => {
                     // Phase 12: Check for __eq__ operator overload
@@ -5212,6 +5227,14 @@ impl VirtualMachine {
         self.stack
             .pop()
             .ok_or_else(|| VmError::runtime_error("Stack underflow".to_string()))
+    }
+
+    /// Truth value as a trit: a Trit stays as is, anything else is certain true/false.
+    fn as_trit(&self, value: &Value) -> i8 {
+        match value {
+            Value::Trit(t) => (*t).clamp(-1, 1),
+            other => if self.is_truthy(other) { 1 } else { -1 },
+        }
     }
 
     fn is_truthy(&self, value: &Value) -> bool {

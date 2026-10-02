@@ -305,6 +305,9 @@ if area > 40 { println("not printed: not certain") }    # does not run
 - `< <= > >= == !=` return `T_POS` (certain), `T_NEG` (impossible) or `T_ZERO` (overlapping
   ranges). `if` only takes the branch for `T_POS`, so decisions are made only when they are safe.
 - `uncertain(v, m)` builds one directly; `unc_value`, `unc_margin`, `unc_lo`, `unc_hi` read the parts.
+- `&&`, `||` and `!` use Kleene three-valued logic on these results: AND is the minimum, OR the
+  maximum, and NOT of an undecided answer is still undecided (`T_ZERO`). A plain boolean mixed in
+  counts as certainly true or false.
 - Plain numbers are exact (margin 0), so they mix freely with uncertain values.
 - The margin is a worst-case bound (interval arithmetic), not a statistical standard deviation.
 

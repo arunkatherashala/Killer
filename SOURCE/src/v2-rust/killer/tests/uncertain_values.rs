@@ -53,3 +53,49 @@ fn results_stay_correct_in_loops_and_functions() {
     let src = "fn total(n) {\n  t = uncertain(0, 0)\n  for i in range(n) {\n    t = t + uncertain(10, 0.5)\n  }\n  return t\n}\nr = total(4)\nprintln(r)\nprintln(r > 37)\nprintln(r > 39)\n";
     assert_eq!(run(src), "40 \u{b1} 2\nT_POS\nT_ZERO");
 }
+
+fn trit_name(t: i8) -> &'static str {
+    match t {
+        1 => "T_POS",
+        0 => "T_ZERO",
+        _ => "T_NEG",
+    }
+}
+
+#[test]
+fn logical_operators_follow_kleene_three_valued_logic() {
+    // T = certain, U = undecidable, F = impossible
+    let mut src = String::from("believe a = 10 \u{b1} 1\nT = a > 5\nU = a > 10\nF = a < 5\n");
+    let vals = [("T", 1i8), ("U", 0i8), ("F", -1i8)];
+    let mut expected: Vec<String> = Vec::new();
+    for (na, va) in vals {
+        for (nb, vb) in vals {
+            src.push_str(&format!("println({} && {})\nprintln({} || {})\n", na, nb, na, nb));
+            expected.push(trit_name(va.min(vb)).to_string());
+            expected.push(trit_name(va.max(vb)).to_string());
+        }
+    }
+    for (na, va) in vals {
+        src.push_str(&format!("println(!{})\n", na));
+        expected.push(trit_name(-va).to_string());
+    }
+    assert_eq!(run(&src), expected.join("\n"));
+}
+
+#[test]
+fn trits_mix_with_plain_booleans() {
+    let src = "believe a = 10 \u{b1} 1\nU = a > 10\nprintln(true && U)\nprintln(false && U)\nprintln(true || U)\nprintln(false || U)\n";
+    assert_eq!(run(src), "T_ZERO\nT_NEG\nT_POS\nT_ZERO");
+}
+
+#[test]
+fn conditions_only_run_when_certain() {
+    let src = "believe a = 10 \u{b1} 1\nbelieve b = 20 \u{b1} 2\nif a > 5 && b > 15 {\n  println(\"both certain\")\n}\nif a > 5 && b > 19 {\n  println(\"not printed\")\n}\nif !(a > 10) {\n  println(\"not printed either\")\n}\nif a > 5 || b > 19 {\n  println(\"one certain is enough\")\n}\nprintln(\"done\")\n";
+    assert_eq!(run(src), "both certain\none certain is enough\ndone");
+}
+
+#[test]
+fn plain_boolean_logic_is_unchanged() {
+    let src = "println(true && false)\nprintln(true || false)\nprintln(!true)\nprintln(1 < 2 && 2 < 3)\n";
+    assert_eq!(run(src), "false\ntrue\nfalse\ntrue");
+}
