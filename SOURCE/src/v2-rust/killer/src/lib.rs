@@ -337,6 +337,9 @@ pub mod killer_super;
 pub mod time_machine;
 
 // -- LLM Integration (native, zero external deps) -----------------------------
+pub mod jit_fn;                // function-level JIT for pure numeric functions (x86-64)
+pub mod typecheck;             // gradual type checker: optional annotations, definite errors only
+pub mod cffi;                  // C FFI: dlopen/LoadLibrary + ffi_call (zero deps)
 pub mod llm;                   // Ollama (TCP) + OpenAI/Anthropic/Groq (curl) — complete/embed/ask
 
 // -- Native Inference Engine — Killer runs its own LLMs, no Ollama, no cloud --

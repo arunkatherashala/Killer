@@ -291,6 +291,8 @@ struct CompileContext {
 }
 
 pub fn compile_killer_subset(source: &str) -> Result<Program, VmError> {
+    let checked = crate::typecheck::process(source)?;
+    let source = checked.as_str();
     let mut state = CompilerState::default();
 
     // Phase 0: Convert indentation-based syntax → brace-delimited syntax,
@@ -4773,7 +4775,8 @@ fn patch_pending_calls(state: &mut CompilerState) -> Result<(), VmError> {
         "ai_local_infer", "ai_provider_set", "ai_provider_get",
         "ai_cache_enable", "ai_cache_clear",
         // Native GGUF inference
-        "llm_chat", "llm_ask", "llm_info",
+        "llm_chat", "llm_ask", "llm_info", "llm_complete", "llm_embed",
+        "ffi_open", "ffi_call", "ffi_close", "ffi_alloc", "ffi_free", "ffi_poke", "ffi_peek",
         // Ghost Agent (web search + local LLM)
         "ghost_ask",
         "ghost_smart_solve",

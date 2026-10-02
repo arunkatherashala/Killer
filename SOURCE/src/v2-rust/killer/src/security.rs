@@ -266,6 +266,8 @@ pub struct CapabilitySet {
     pub allow_native_jit: bool,
     /// LLM / KhLM / vision / tool-calling and other model-backed builtins.
     pub allow_llm: bool,
+    /// Loading shared libraries and calling native C functions (`ffi_*` builtins).
+    pub allow_ffi: bool,
 }
 
 impl Default for CapabilitySet {
@@ -284,6 +286,7 @@ impl CapabilitySet {
             allow_process_spawn: false,
             allow_native_jit: false,
             allow_llm: false,
+            allow_ffi: false,
         }
     }
 
@@ -296,6 +299,7 @@ impl CapabilitySet {
             allow_process_spawn: true,
             allow_native_jit: true,
             allow_llm: true,
+            allow_ffi: true,
         }
     }
 }
@@ -379,6 +383,13 @@ pub fn require_process_spawn() -> Result<(), VmError> {
 pub fn require_llm() -> Result<(), VmError> {
     if !current_capabilities().allow_llm {
         return Err(capability_denied("LLM / model-backed builtins"));
+    }
+    Ok(())
+}
+
+pub fn require_ffi() -> Result<(), VmError> {
+    if !current_capabilities().allow_ffi {
+        return Err(capability_denied("native FFI (ffi_open / ffi_call)"));
     }
     Ok(())
 }

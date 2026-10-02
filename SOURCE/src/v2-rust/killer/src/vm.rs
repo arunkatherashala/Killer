@@ -120,6 +120,7 @@ pub struct VirtualMachine {
 
     // NATIVE JIT: x86-64 machine code for hot loops (March 27, 2026)
     jit_engine: JitEngine,  // Detects hot loops + compiles to native x86-64
+    fn_jit: crate::jit_fn::FnJit,  // pure numeric functions -> native x86-64
 
     // v2.2: Shared program reference for spawned threads
     current_program: Option<std::sync::Arc<Program>>,
@@ -177,6 +178,7 @@ impl Default for VirtualMachine {
             exec_step_counter: 0,
             exec_start: None,
             jit_engine: JitEngine::new(),
+            fn_jit: crate::jit_fn::FnJit::new(),
             current_program: None,
             capabilities: CapabilitySet::trusted_local(),
             reactive_graph: HashMap::new(),
@@ -230,6 +232,7 @@ impl VirtualMachine {
             exec_step_counter: 0,
             exec_start: None,
             jit_engine: JitEngine::new(),
+            fn_jit: crate::jit_fn::FnJit::new(),
             current_program: None,
             capabilities: CapabilitySet::trusted_local(),
             reactive_graph: HashMap::new(),
@@ -429,6 +432,7 @@ impl VirtualMachine {
     pub fn run(&mut self, program: &Program) -> Result<(), VmError> {
         // Filled on first SpawnCall* if needed (see `program_arc_for_spawn`).
         self.current_program = None;
+        self.fn_jit.reset();
         self.ip = 0;
         self.stack.clear();
         self.call_stack.clear();
@@ -1295,7 +1299,11 @@ impl VirtualMachine {
                         self.enforce_wall_budget_on_back_edge()?;
                         use crate::jit_x86::HotPatternKind;
                         use crate::bytecode::Instruction as I;
-                        if matches!(program.instructions.get(dest), Some(I::LtSlotConst(..))) {
+                        let header_is_jit_eligible = matches!(
+                            program.instructions.get(dest),
+                            Some(I::LtSlotConst(..)) | Some(I::GtSlotConst(..))
+                        );
+                        if header_is_jit_eligible {
                             // on_loop_back returns Copy (JitLoopFn, HotPatternKind) — borrow ends here
                             let jit_info = self.jit_engine.on_loop_back(dest, &program.instructions);
                             let jit_info = if crate::security::current_capabilities().allow_native_jit {
@@ -1355,6 +1363,36 @@ impl VirtualMachine {
                                         frame[acc_slot] = Value::Number(existing_acc + acc_result);
                                         if i_slot >= frame.len() { frame.resize(i_slot + 1, Value::Null); }
                                         frame[i_slot] = Value::Number(limit);
+                                        self.ip = exit_ip;
+                                        continue;
+                                    }
+                                    // CountDown: while counter > bound { counter -= step }
+                                    (HotPatternKind::CountDown, I::GtSlotConst(slot, bound)) => {
+                                        let slot = *slot as usize;
+                                        let bound = *bound;
+                                        let exit_ip = match &program.instructions[dest + 1] {
+                                            I::JumpIfFalse(e) => *e,
+                                            _ => { self.ip = dest; continue; }
+                                        };
+                                        let step = {
+                                            let mut found_step = 1.0f64;
+                                            for k in dest+2..dest+20 {
+                                                if k >= program.instructions.len() { break; }
+                                                if let I::SubSlotConst(s, st) = &program.instructions[k] {
+                                                    if *s as usize == slot { found_step = *st; break; }
+                                                }
+                                            }
+                                            found_step
+                                        };
+                                        let start = {
+                                            let frame = self.locals_stack.last().ok_or_else(|| VmError::runtime_error("No frame".to_string()))?;
+                                            match frame.get(slot) { Some(Value::Number(n)) => *n, _ => { self.ip = dest; continue; } }
+                                        };
+                                        // JIT countdown: xmm0=start(counter), xmm1=bound, xmm2=step
+                                        let final_val = unsafe { jit_fn(start, bound, step) };
+                                        let frame = self.locals_stack.last_mut().ok_or_else(|| VmError::runtime_error("No frame".to_string()))?;
+                                        if slot >= frame.len() { frame.resize(slot + 1, Value::Null); }
+                                        frame[slot] = Value::Number(final_val);
                                         self.ip = exit_ip;
                                         continue;
                                     }
@@ -1738,6 +1776,34 @@ impl VirtualMachine {
                 }
                 Instruction::Call { target, arg_count } => {
                     self.ensure_jump_target(program, *target)?;
+
+                    if *arg_count <= 4 && self.stack.len() >= *arg_count
+                        && self.execution_budget.is_none()
+                        && crate::security::current_capabilities().allow_native_jit
+                    {
+                        let base = self.stack.len() - *arg_count;
+                        let mut native_args = [0f64; 4];
+                        let mut all_numbers = true;
+                        for (i, v) in self.stack[base..].iter().enumerate() {
+                            match v {
+                                Value::Number(x) => native_args[i] = *x,
+                                _ => { all_numbers = false; break; }
+                            }
+                        }
+                        if all_numbers {
+                            if let Some(r) = self.fn_jit.try_call(
+                                &program.instructions,
+                                &program.function_arities,
+                                *target,
+                                &native_args[..*arg_count],
+                            ) {
+                                self.stack.truncate(base);
+                                self.stack.push(Value::Number(r));
+                                self.ip += 1;
+                                continue;
+                            }
+                        }
+                    }
 
                     let expected_arity = program.function_arities.get(target).copied().unwrap_or(*arg_count);
 

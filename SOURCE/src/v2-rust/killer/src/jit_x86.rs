@@ -263,13 +263,13 @@ fn detect_sum_range_body(body: &[Instruction], counter_slot: u16) -> Option<u16>
 
 /// Executable memory page for JIT code.
 /// On Windows uses VirtualAlloc with PAGE_EXECUTE_READWRITE.
-struct ExecPage {
+pub(crate) struct ExecPage {
     ptr: *mut u8,
     size: usize,
 }
 
 impl ExecPage {
-    fn alloc(size: usize) -> Option<Self> {
+    pub(crate) fn alloc(size: usize) -> Option<Self> {
         #[cfg(target_os = "windows")]
         unsafe {
             // Windows: VirtualAlloc
@@ -284,7 +284,11 @@ impl ExecPage {
         }
     }
 
-    unsafe fn write(&mut self, code: &[u8]) {
+    pub(crate) fn base(&self) -> *const u8 {
+        self.ptr
+    }
+
+    pub(crate) unsafe fn write(&mut self, code: &[u8]) {
         assert!(code.len() <= self.size);
         std::ptr::copy_nonoverlapping(code.as_ptr(), self.ptr, code.len());
     }

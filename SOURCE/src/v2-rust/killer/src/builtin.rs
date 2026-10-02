@@ -2,7 +2,7 @@
 use crate::value::Value;
 use crate::error::VmError;
 
-// â”€â”€ FFI for mmap / VirtualAlloc â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── FFI for mmap / VirtualAlloc ──────────────────────────────────────────────
 #[cfg(target_os = "windows")]
 extern "system" {
     fn VirtualAlloc(lpAddress: *mut std::ffi::c_void, dwSize: usize, flAllocationType: u32, flProtect: u32) -> *mut std::ffi::c_void;
@@ -41,7 +41,7 @@ unsafe fn libc_mprotect(addr: *mut u8, length: usize, prot: i32) -> i32 {
     unsafe { mprotect(addr, length, prot) }
 }
 
-// â”€â”€ Pure Rust SHA-256 (zero external deps) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Pure Rust SHA-256 (zero external deps) ───────────────────────────────────
 fn sha256_digest(data: &[u8]) -> [u8; 32] {
     const K: [u32; 64] = [
         0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
@@ -329,7 +329,7 @@ impl BuiltinFunctions {
             "len" | "length" => Self::len(args),
             "range" => Self::range(args),
 
-            // Print functions â€” println(x) prints with newline, same as VM Print instruction
+            // Print functions  println(x) prints with newline, same as VM Print instruction
             "println" | "print" => {
                 let s = if args.is_empty() {
                     String::new()
@@ -592,30 +592,40 @@ impl BuiltinFunctions {
             "trait_resolve" => Self::trait_resolve(args),
             
             // Native GGUF inference (killer-native inference engine)
-            "llm_chat"   => Self::llm_chat(args),
-            "llm_ask"    => Self::llm_ask(args),
-            "llm_info"   => Self::llm_info(args),
+            "llm_chat"     => Self::llm_chat(args),
+            "llm_ask"      => Self::llm_ask(args),
+            "llm_info"     => Self::llm_info(args),
+            // Cloud/local LLM via curl  llm_complete(provider, model, api_key, prompt)
+            "llm_complete" => Self::llm_complete(args),
+            "llm_embed"    => Self::llm_embed(args),
+            "ffi_open"     => Self::ffi_open(args),
+            "ffi_call"     => Self::ffi_call(args),
+            "ffi_close"    => Self::ffi_close(args),
+            "ffi_alloc"    => Self::ffi_alloc(args),
+            "ffi_free"     => Self::ffi_free(args),
+            "ffi_poke"     => Self::ffi_poke(args),
+            "ffi_peek"     => Self::ffi_peek(args),
             "ghost_ask"  => Self::ghost_ask(args),
             "ghost_smart_solve" => Self::ghost_smart_solve(args),
-            // RLM â€” Reasoning Language Models (DeepSeek-R1, QwQ)
+            // RLM  Reasoning Language Models (DeepSeek-R1, QwQ)
             "rlm_think"    => Self::rlm_think(args),
             "rlm_answer"   => Self::rlm_answer(args),
             "rlm_thinking" => Self::rlm_thinking(args),
-            // Native Think Engine â€” 100% Killer-native, zero external model
+            // Native Think Engine  100% Killer-native, zero external model
             "native_think" => Self::native_think(args),
-            // Core arithmetic for agents (no LLM): + âˆ’ * / % ^, parens, scientific notation
+            // Core arithmetic for agents (no LLM): + − * / % ^, parens, scientific notation
             "math_eval" => Self::math_eval(args),
             "math_eval_subst" => Self::math_eval_subst(args),
-            // Ghost-108 â€” parallel multi-agent search, fastest wins
+            // Ghost-108  parallel multi-agent search, fastest wins
             "ghost_108" => Self::ghost_108(args),
-            // KhLM â€” Killer Hybrid Language Model unified router
+            // KhLM  Killer Hybrid Language Model unified router
             "khlm_ask"       => Self::khlm_ask(args),
             "khlm_ask_model" => Self::khlm_ask_model(args),
-            // KhLM prefetch â€” fire background fetch at program start, khlm_ask returns from cache instantly
+            // KhLM prefetch  fire background fetch at program start, khlm_ask returns from cache instantly
             "khlm_prefetch"  => Self::khlm_prefetch(args),
-            // Killer AI System â€” parallel KhLM + Ghost-108 + local neural (see llm::khlm_ai_system_multi_agent)
+            // Killer AI System  parallel KhLM + Ghost-108 + local neural (see llm::khlm_ai_system_multi_agent)
             "khlm_ai_system" => Self::khlm_ai_system(args),
-            // LLM-as-RLM â€” any LLM becomes a reasoning model via chain-of-thought prompt
+            // LLM-as-RLM  any LLM becomes a reasoning model via chain-of-thought prompt
             "llm_reason"        => Self::llm_reason(args),
             "llm_reason_answer" => Self::llm_reason_answer(args),
             // User-composable KhLM building blocks
@@ -623,23 +633,23 @@ impl BuiltinFunctions {
             "khlm_run"        => Self::khlm_run(args),
             "llm_parallel"    => Self::llm_parallel(args),
             "rlm_synthesize"  => Self::rlm_synthesize(args),
-            // â”€â”€ IMAGINATION ENGINE â€” think beyond, counterfactual, conceptual bridges â”€â”€
+            // ── IMAGINATION ENGINE  think beyond, counterfactual, conceptual bridges ──
             "imagine"          => Self::builtin_imagine(args),
             "imagine_what_if"  => Self::builtin_imagine_what_if(args),
             "imagine_connect"  => Self::builtin_imagine_connect(args),
             "imagine_beyond"   => Self::builtin_imagine_beyond(args),
             "imagine_self"     => Self::builtin_imagine_self(args),
-            // â”€â”€ AFFECT ENGINE â€” emotional state, feelings, colored responses â”€â”€â”€â”€â”€â”€â”€â”€
+            // ── AFFECT ENGINE  emotional state, feelings, colored responses ────────
             "affect_sense"     => Self::builtin_affect_sense(args),
             "affect_state"     => Self::builtin_affect_state(args),
             "affect_color"     => Self::builtin_affect_color(args),
             "affect_reset"     => Self::builtin_affect_reset(args),
             "affect_set"       => Self::builtin_affect_set(args),
-            // â”€â”€ GUARDIAN ENGINE â€” Human Protection Principle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            // ── GUARDIAN ENGINE  Human Protection Principle ───────────────────────
             "guardian_check"      => Self::builtin_guardian_check(args),
             "guardian_principles" => Self::builtin_guardian_principles(args),
             "guardian_status"     => Self::builtin_guardian_status(args),
-            // KORE — real implementation using kore.rs
+            // KORE  real implementation using kore.rs
             "kore_write" => {
                 if args.len() < 3 {
                     return Err(VmError::runtime_error("kore_write() expects 3 arguments (path, schema, data)".to_string()));
@@ -671,7 +681,7 @@ impl BuiltinFunctions {
                 let path = args[0].to_string();
                 Ok(Value::Str(crate::kore::kore_info_simple(&path)))
             }
-            // Nova — stub: use Killer (full) for Nova data operations
+            // Nova  stub: use Killer (full) for Nova data operations
             "nova_write" | "nova_info" | "nova_read_col" | "nova_read_all"
             | "nova_stats" | "nova_filter" | "nova_to_csv" | "nova_to_json"
             | "nova_to_tsv" | "nova_from_json" | "nova_from_tsv"
@@ -724,17 +734,17 @@ impl BuiltinFunctions {
             "khlm_set_llm"      => crate::khlm_polyglot::builtin_khlm_set_llm(args),
             "khlm_set_rlm"      => crate::khlm_polyglot::builtin_khlm_set_rlm(args),
             "khlm_cache_clear"  => crate::khlm_polyglot::builtin_khlm_cache_clear(args),
-            // â”€â”€ Prose Engine â€” GPT-4o quality writing, offline native fallback â”€â”€â”€â”€
+            // ── Prose Engine  GPT-4o quality writing, offline native fallback ────
             "khlm_write"       => crate::khlm_polyglot::builtin_khlm_write(args),
-            // â”€â”€ Vision Engine â€” image_load / image_describe / khlm_vision â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            // ── Vision Engine  image_load / image_describe / khlm_vision ─────────
             "image_load"       => crate::vision::builtin_image_load(args),
             "image_describe"   => crate::vision::builtin_image_describe(args),
             "khlm_vision"      => crate::vision::builtin_khlm_vision(args),
-            // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-            // KALA (à¤•à¤¾à¤²) â€” Brand face of the Killer AI engine
+            // ══════════════════════════════════════════════════════════════════════
+            // KALA (काल)  Brand face of the Killer AI engine
             // Each kala_* is a clean alias for the underlying KhLM/engine builtin.
             // khlm_* internals remain unchanged; Kala is the public API.
-            // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+            // ══════════════════════════════════════════════════════════════════════
             // Core intelligence
             "kala_ask"         => Self::khlm_ask(args),
             "kala_think"       => Self::native_think(args),
@@ -761,10 +771,10 @@ impl BuiltinFunctions {
             "kala_ai_system"   => Self::khlm_ai_system(args),
             // Kala Chat UI server
             "kala_serve"       => crate::kala_ui::builtin_kala_serve(args),
-            // Kala Generator â€” image & video generation
+            // Kala Generator  image & video generation
             "kala_generate_image" => crate::image_gen::builtin_kala_generate_image(args),
             "kala_generate_video" => crate::image_gen::builtin_kala_generate_video(args),
-            // File system / data operations â€” stub: use Killer (full) for Nova
+            // File system / data operations  stub: use Killer (full) for Nova
             "nova_file_read" | "nova_file_write" | "nova_file_append"
             | "nova_file_exists" | "nova_file_delete" | "nova_file_size"
             | "nova_dir_list" | "nova_dir_exists" | "nova_dir_create"
@@ -798,15 +808,15 @@ impl BuiltinFunctions {
             "next" => Self::next(args),
 
             // -- Nova/Killer native compression builtins -----------------------
-            // compress(text, algo)        â†’ String (base64-encoded compressed bytes)
+            // compress(text, algo)        → String (base64-encoded compressed bytes)
             //   algo: "nova" (LZ77+Huffman), "rle" (run-length), "lz77" (raw LZ77)
-            // decompress(compressed, algo)â†’ String (original text)
-            // b64_encode(text)            â†’ String
-            // b64_decode(b64)             â†’ String
-            // hex_encode(text)            â†’ String
-            // hex_decode(hex)             â†’ String
-            // compress_ratio(orig, comp)  â†’ Number (orig_len / comp_len)
-            // compress_info(text)         â†’ Dict with sizes+ratios for all algos
+            // decompress(compressed, algo)→ String (original text)
+            // b64_encode(text)            → String
+            // b64_decode(b64)             → String
+            // hex_encode(text)            → String
+            // hex_decode(hex)             → String
+            // compress_ratio(orig, comp)  → Number (orig_len / comp_len)
+            // compress_info(text)         → Dict with sizes+ratios for all algos
             "compress"       => Self::builtin_compress(args),
             "decompress"     => Self::builtin_decompress(args),
             "b64_encode"     => Self::builtin_b64_encode(args),
@@ -816,17 +826,17 @@ impl BuiltinFunctions {
             "compress_ratio" => Self::builtin_compress_ratio(args),
             "compress_info"  => Self::builtin_compress_info(args),
 
-            // -- Debug Intelligence â€” "Developer Can Relax" system ------------
-            // debug_check(code)         â†’ Array of issue dicts
-            // auto_fix(code)            â†’ Array of fix-candidate dicts
-            // explain_error(msg, ctx)   â†’ String explanation
-            // suggest_refactor(code)    â†’ Array of suggestion dicts
-            // auto_test(code)           â†’ String (Killer test scaffold)
-            // perf_profile(code)        â†’ Array of perf-hint dicts
-            // ai_pair(task)             â†’ String (generated Killer code)
-            // killer_debug_agent(code)  â†’ Dict (autonomous fix agent result)
-            // watch_value(expr, value)  â†’ Null (record debug watch entry; file watch is `watch` below)
-            // watch_report()            â†’ String (dump watch log)
+            // -- Debug Intelligence  "Developer Can Relax" system ------------
+            // debug_check(code)         → Array of issue dicts
+            // auto_fix(code)            → Array of fix-candidate dicts
+            // explain_error(msg, ctx)   → String explanation
+            // suggest_refactor(code)    → Array of suggestion dicts
+            // auto_test(code)           → String (Killer test scaffold)
+            // perf_profile(code)        → Array of perf-hint dicts
+            // ai_pair(task)             → String (generated Killer code)
+            // killer_debug_agent(code)  → Dict (autonomous fix agent result)
+            // watch_value(expr, value)  → Null (record debug watch entry; file watch is `watch` below)
+            // watch_report()            → String (dump watch log)
             "debug_check"         => Self::dbg_debug_check(args),
             "auto_fix"            => Self::dbg_auto_fix(args),
             "explain_error"       => Self::dbg_explain_error(args),
@@ -841,19 +851,19 @@ impl BuiltinFunctions {
             "lint"                => Self::builtin_lint(args),
             
             // -- v1.2: Native Hash Map (O(1) average) -----------------
-            // hash_map_new()                     â†’ Dict (empty hash map)
-            // hash_map_insert(map, key, value)   â†’ Dict (updated map)
-            // hash_map_get(map, key)             â†’ value or Null
-            // hash_map_contains(map, key)        â†’ Bool
-            // hash_map_remove(map, key)          â†’ Dict (map without key)
-            // hash_map_size(map)                 â†’ Number
-            // hash_map_keys(map)                 â†’ Array of keys
-            // hash_map_values(map)               â†’ Array of values
-            // insert(map, key, value)            â†’ Dict (friendly alias)
+            // hash_map_new()                     → Dict (empty hash map)
+            // hash_map_insert(map, key, value)   → Dict (updated map)
+            // hash_map_get(map, key)             → value or Null
+            // hash_map_contains(map, key)        → Bool
+            // hash_map_remove(map, key)          → Dict (map without key)
+            // hash_map_size(map)                 → Number
+            // hash_map_keys(map)                 → Array of keys
+            // hash_map_values(map)               → Array of values
+            // insert(map, key, value)            → Dict (friendly alias)
             "hash_map_new"      => Self::hm_new(args),
             "hash_map_insert" | "insert" => Self::hm_insert(args),
             "hash_map_get"      => Self::hm_get(args),
-            // Python-style dict: get(map, key[, default]), setdefault(map, key, default) â†’ [newMap, value]
+            // Python-style dict: get(map, key[, default]), setdefault(map, key, default) → [newMap, value]
             "get"               => Self::dict_get(args),
             "setdefault"        => Self::dict_setdefault(args),
             "hash_map_contains" => Self::hm_contains(args),
@@ -883,19 +893,19 @@ impl BuiltinFunctions {
             "set_clear"        => Self::set_clear(args),
 
             // -- v1.2: Dijkstra shortest path O((V+E) log V) -----------
-            // dijkstra(adj_list, source)            â†’ Array of distances
+            // dijkstra(adj_list, source)            → Array of distances
             //   adj_list: Array of Arrays: [[{to:Int,weight:Int},...], ...]
             //   source: Int (0-indexed start vertex)
             //   returns: Array<Int> where result[i] = shortest dist from source to i
             //            (i64::MAX/2 means unreachable)
-            // dijkstra_path(adj_list, source, target) â†’ Array<Int> (vertex path)
+            // dijkstra_path(adj_list, source, target) → Array<Int> (vertex path)
             "dijkstra"          => Self::dijkstra(args),
             "dijkstra_path"     => Self::dijkstra_path(args),
 
-            // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-            // ANDROID NATIVE MODULES â€” Pure Killer Call Recording Engine
+            // ══════════════════════════════════════════════════════════════════
+            // ANDROID NATIVE MODULES  Pure Killer Call Recording Engine
             // Microphone, Phone State, Service, Security, Permissions
-            // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+            // ══════════════════════════════════════════════════════════════════
 
             // -- Microphone Recording (AAudio NDK on Android, simulated on Desktop) --
             "mic_record_start"   => crate::android_audio::builtin_mic_record_start(args),
@@ -952,9 +962,9 @@ impl BuiltinFunctions {
             "evidence_hash"           => crate::android_security::builtin_evidence_hash(args),
             "secure_wipe_recordings"  => crate::android_security::builtin_secure_wipe_recordings(args),
 
-            // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-            // PRODUCTION MODULE â€” Regex, Help/Docs, File DB, Formatter, Linter
-            // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+            // ══════════════════════════════════════════════════════════════════
+            // PRODUCTION MODULE  Regex, Help/Docs, File DB, Formatter, Linter
+            // ══════════════════════════════════════════════════════════════════
 
             // -- Regex Engine (NFA, supports . * + ? | [] [^] ^ $ \d \w \s) --
             "regex_match"      => crate::production::builtin_regex_match(args),
@@ -988,9 +998,9 @@ impl BuiltinFunctions {
             "lint_code"        => crate::production::builtin_lint_code(args),
             "lint_file"        => crate::production::builtin_lint_file(args),
 
-            // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-            // 10x MODULE â€” Package Manager, LSP Server, DAP Debugger, Docs Site
-            // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+            // ══════════════════════════════════════════════════════════════════
+            // 10x MODULE  Package Manager, LSP Server, DAP Debugger, Docs Site
+            // ══════════════════════════════════════════════════════════════════
 
             // -- Package Manager (killer.toml, deps, registry) --
             "pkg_init"         => crate::killer_10x::builtin_pkg_init(args),
@@ -1033,9 +1043,9 @@ impl BuiltinFunctions {
             "docs_export"      => crate::killer_10x::builtin_docs_export(args),
             "docs_reference"   => crate::killer_10x::builtin_docs_reference(args),
 
-            // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-            // IMPROVE MODULE â€” Errors, Imports, Watch, Stack, REPL, Perf, Docs
-            // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+            // ══════════════════════════════════════════════════════════════════
+            // IMPROVE MODULE  Errors, Imports, Watch, Stack, REPL, Perf, Docs
+            // ══════════════════════════════════════════════════════════════════
 
             // -- Enhanced Errors ("did you mean?") --
             "error_enhance"    => crate::killer_improve::builtin_error_enhance(args),
@@ -1107,9 +1117,9 @@ impl BuiltinFunctions {
             "readline"          => Self::readline(args),
             "readline_prompt"   => Self::readline_prompt(args),
 
-            // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-            // v2.3: OS-LEVEL PRIMITIVES â€” Integer, Bytes, Pointer, Memory, I/O
-            // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+            // ══════════════════════════════════════════════════════════════════
+            // v2.3: OS-LEVEL PRIMITIVES  Integer, Bytes, Pointer, Memory, I/O
+            // ══════════════════════════════════════════════════════════════════
             "bit_not"           => Self::bit_not(args),
             "bit_rotl"          => Self::bit_rotl(args),
             "bit_rotr"          => Self::bit_rotr(args),
@@ -2116,7 +2126,7 @@ impl BuiltinFunctions {
         Ok(Value::Number(max_val))
     }
 
-    /// `sorted(arr)` or `sorted(arr, reverse)` â€” numbers or strings (homogeneous), new array.
+    /// `sorted(arr)` or `sorted(arr, reverse)`  numbers or strings (homogeneous), new array.
     fn sorted(args: &[Value]) -> Result<Value, VmError> {
         if args.is_empty() || args.len() > 2 {
             return Err(VmError::runtime_error(
@@ -2181,7 +2191,7 @@ impl BuiltinFunctions {
         }
     }
 
-    /// `sum(array)` â€” sum of numeric elements (empty array â†’ 0).
+    /// `sum(array)`  sum of numeric elements (empty array → 0).
     fn array_sum(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 1 {
             return Err(VmError::runtime_error(
@@ -2209,7 +2219,7 @@ impl BuiltinFunctions {
         }
     }
 
-    /// `enumerate(arr)` or `enumerate(arr, start)` â€” `[[i, v], ...]` like Python's enumerate.
+    /// `enumerate(arr)` or `enumerate(arr, start)`  `[[i, v], ...]` like Python's enumerate.
     fn enumerate(args: &[Value]) -> Result<Value, VmError> {
         if args.is_empty() || args.len() > 2 {
             return Err(VmError::runtime_error(
@@ -2258,7 +2268,7 @@ impl BuiltinFunctions {
         }
     }
 
-    /// `all(array)` â€” true if every element is truthy (empty â†’ true).
+    /// `all(array)`  true if every element is truthy (empty → true).
     fn array_all(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 1 {
             return Err(VmError::runtime_error(
@@ -2275,7 +2285,7 @@ impl BuiltinFunctions {
         }
     }
 
-    /// `any(array)` â€” true if some element is truthy (empty â†’ false).
+    /// `any(array)`  true if some element is truthy (empty → false).
     fn array_any(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 1 {
             return Err(VmError::runtime_error(
@@ -2292,7 +2302,7 @@ impl BuiltinFunctions {
         }
     }
 
-    /// `zip(a, b)` â€” pairs `[[a0,b0],...]` up to min length.
+    /// `zip(a, b)`  pairs `[[a0,b0],...]` up to min length.
     fn zip_arrays(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 2 {
             return Err(VmError::runtime_error(
@@ -2318,8 +2328,8 @@ impl BuiltinFunctions {
         }
     }
 
-    /// `map(array, builtin_name)` â€” apply a named builtin to each element.
-    /// Example: `map([1,2,3], "str")` â†’ `["1","2","3"]`
+    /// `map(array, builtin_name)`  apply a named builtin to each element.
+    /// Example: `map([1,2,3], "str")` → `["1","2","3"]`
     fn array_map(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 2 {
             return Err(VmError::runtime_error(
@@ -2342,8 +2352,8 @@ impl BuiltinFunctions {
         Ok(Value::from(result))
     }
 
-    /// `filter(array[, builtin_name])` â€” keep elements where builtin returns truthy, or keep truthy elements.
-    /// Example: `filter([0,1,2,0,3])` â†’ `[1,2,3]`; `filter(["a","","b"], "len")` â†’ `["a","b"]`
+    /// `filter(array[, builtin_name])`  keep elements where builtin returns truthy, or keep truthy elements.
+    /// Example: `filter([0,1,2,0,3])` → `[1,2,3]`; `filter(["a","","b"], "len")` → `["a","b"]`
     fn array_filter(args: &[Value]) -> Result<Value, VmError> {
         if args.is_empty() || args.len() > 2 {
             return Err(VmError::runtime_error(
@@ -2377,8 +2387,8 @@ impl BuiltinFunctions {
         Ok(Value::from(result))
     }
 
-    /// `reduce(array, operation, initial)` â€” fold with a named binary operation.
-    /// Example: `reduce([1,2,3,4], "add", 0)` â†’ `10`
+    /// `reduce(array, operation, initial)`  fold with a named binary operation.
+    /// Example: `reduce([1,2,3,4], "add", 0)` → `10`
     fn array_reduce(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 3 {
             return Err(VmError::runtime_error(
@@ -2620,7 +2630,7 @@ impl BuiltinFunctions {
                 }
             }
             _ => Err(VmError::runtime_error(
-                "readFile(path) expects a string — got a non-string argument".to_string(),
+                "readFile(path) expects a string  got a non-string argument".to_string(),
             )),
         }
     }
@@ -2895,7 +2905,7 @@ impl BuiltinFunctions {
 
     // ===== Interactive I/O =====
 
-    /// readline() â€” Read a line from stdin, returns trimmed string or Null on EOF
+    /// readline()  Read a line from stdin, returns trimmed string or Null on EOF
     fn readline(_args: &[Value]) -> Result<Value, VmError> {
         use std::io::{self, BufRead, Write};
         // Flush stdout so any prior print() without newline is visible
@@ -2917,7 +2927,7 @@ impl BuiltinFunctions {
         }
     }
 
-    /// readline_prompt(prompt) â€” Print prompt (no newline), then read a line from stdin
+    /// readline_prompt(prompt)  Print prompt (no newline), then read a line from stdin
     fn readline_prompt(args: &[Value]) -> Result<Value, VmError> {
         use std::io::{self, BufRead, Write};
         if args.is_empty() {
@@ -3203,7 +3213,7 @@ impl BuiltinFunctions {
                     std::thread::sleep(std::time::Duration::from_millis(5));
                 }
             }
-            _ => Err(VmError::runtime_error("async_timeout(future, ms) — first arg must be a future")),
+            _ => Err(VmError::runtime_error("async_timeout(future, ms)  first arg must be a future")),
         }
     }
 
@@ -3211,7 +3221,7 @@ impl BuiltinFunctions {
     fn builtin_async_all(args: &[Value]) -> Result<Value, VmError> {
         let arr = match args.first() {
             Some(Value::Array(a)) => a.clone(),
-            _ => return Err(VmError::runtime_error("async_all(array) — expects array of futures")),
+            _ => return Err(VmError::runtime_error("async_all(array)  expects array of futures")),
         };
         let len = arr.len();
         let mut results = Vec::with_capacity(len);
@@ -3240,7 +3250,7 @@ impl BuiltinFunctions {
     fn builtin_async_race(args: &[Value]) -> Result<Value, VmError> {
         let arr = match args.first() {
             Some(Value::Array(a)) => a.clone(),
-            _ => return Err(VmError::runtime_error("async_race(array) — expects array of futures")),
+            _ => return Err(VmError::runtime_error("async_race(array)  expects array of futures")),
         };
         if arr.is_empty() {
             return Ok(Value::Null);
@@ -3292,7 +3302,7 @@ impl BuiltinFunctions {
         Ok(Value::Future(handle))
     }
 
-    /// async_map(future, fn) — NOT a real async map (no closures in builtins),
+    /// async_map(future, fn)  NOT a real async map (no closures in builtins),
     /// but waits for the future then applies the fn name as a string builtin.
     fn builtin_async_map(args: &[Value]) -> Result<Value, VmError> {
         if args.len() < 2 {
@@ -4324,7 +4334,7 @@ impl BuiltinFunctions {
         }
     }
 
-    // ===== AI Functions (v3.2) â€” wired to native AIRuntime =====
+    // ===== AI Functions (v3.2)  wired to native AIRuntime =====
 
     fn ai_generate(args: &[Value]) -> Result<Value, VmError> {
         crate::security::require_llm()?;
@@ -4519,19 +4529,19 @@ impl BuiltinFunctions {
 
     // --- Native GGUF Inference -----------------------------------------------
     // These call the killer-native transformer inference engine directly.
-    // No Ollama, no cloud, no API keys â€” pure local inference.
+    // No Ollama, no cloud, no API keys  pure local inference.
 
-    /// llm_chat(model_path, question)           â†’ String
-    /// llm_chat(model_path, question, max_tokens) â†’ String
+    /// llm_chat(model_path, question)           → String
+    /// llm_chat(model_path, question, max_tokens) → String
     ///
     /// Applies the correct chat template for the model (ChatML / TinyLlama /
     /// Mistral / Phi-3) and generates a response.
     ///
     /// Example Killer code:
     ///   answer = llm_chat("~/.killer/models/qwen2.5-0.5b-instruct-q4_k_m.gguf", "What is 2+2?")
-    ///   print(answer)     // â†’ "2+2 equals 4."
+    ///   print(answer)     // → "2+2 equals 4."
     ///
-    /// Optional: env `KILLER_KV_Q8=1` enables int8 KV cache (~4Ã— smaller KV RAM vs f32; same goal as TurboQuant-style compression).
+    /// Optional: env `KILLER_KV_Q8=1` enables int8 KV cache (~4× smaller KV RAM vs f32; same goal as TurboQuant-style compression).
     fn llm_chat(args: &[Value]) -> Result<Value, VmError> {
         crate::security::require_llm()?;
         if args.len() < 2 || args.len() > 3 {
@@ -4560,14 +4570,14 @@ impl BuiltinFunctions {
             .map_err(VmError::runtime_error)
     }
 
-    /// llm_ask(model_path, raw_prompt)            â†’ String
-    /// llm_ask(model_path, raw_prompt, max_tokens) â†’ String
+    /// llm_ask(model_path, raw_prompt)            → String
+    /// llm_ask(model_path, raw_prompt, max_tokens) → String
     ///
     /// Sends the prompt directly to the model with no chat-template wrapping.
     /// Use this when you want full control over the prompt format.
     ///
-    /// Optional: set env `KILLER_KV_Q8=1` to compress the attention KV cache (~4Ã— less KV RAM;
-    /// TurboQuant-style goal; int8 + scales â€” see `inference/mod.rs`).
+    /// Optional: set env `KILLER_KV_Q8=1` to compress the attention KV cache (~4× less KV RAM;
+    /// TurboQuant-style goal; int8 + scales  see `inference/mod.rs`).
     fn llm_ask(args: &[Value]) -> Result<Value, VmError> {
         crate::security::require_llm()?;
         if args.len() < 2 || args.len() > 3 {
@@ -4596,7 +4606,239 @@ impl BuiltinFunctions {
             .map_err(VmError::runtime_error)
     }
 
-    /// llm_info(model_path) â†’ String
+    fn ffi_ptr(v: &Value, what: &str) -> Result<usize, VmError> {
+        match v {
+            Value::Number(n) if *n >= 1.0 && n.fract() == 0.0 => Ok(*n as usize),
+            Value::Integer(i) if *i >= 1 => Ok(*i as usize),
+            _ => Err(VmError::runtime_error(format!("{}: expected a pointer from ffi_alloc", what))),
+        }
+    }
+
+    fn ffi_off(v: &Value, what: &str) -> Result<usize, VmError> {
+        match v {
+            Value::Number(n) if *n >= 0.0 && n.fract() == 0.0 => Ok(*n as usize),
+            Value::Integer(i) if *i >= 0 => Ok(*i as usize),
+            _ => Err(VmError::runtime_error(format!("{}: offset must be a non-negative integer", what))),
+        }
+    }
+
+    /// ffi_alloc(size) -> pointer (zeroed, bounds-checked by ffi_peek/ffi_poke)
+    fn ffi_alloc(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_ffi()?;
+        match args {
+            [n] => crate::cffi::mem_alloc(Self::ffi_off(n, "ffi_alloc")?)
+                .map(|p| Value::Number(p as f64)).map_err(VmError::runtime_error),
+            _ => Err(VmError::runtime_error("ffi_alloc(size)".to_string())),
+        }
+    }
+
+    /// ffi_free(ptr)
+    fn ffi_free(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_ffi()?;
+        match args {
+            [p] => crate::cffi::mem_free(Self::ffi_ptr(p, "ffi_free")?)
+                .map(|_| Value::Null).map_err(VmError::runtime_error),
+            _ => Err(VmError::runtime_error("ffi_free(ptr)".to_string())),
+        }
+    }
+
+    /// ffi_poke(ptr, offset, kind, value)  kind: u8 i8 i16 i32 i64 f32 f64 str
+    fn ffi_poke(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_ffi()?;
+        match args {
+            [p, off, Value::Str(kind), v] => {
+                let arg = match v {
+                    Value::Number(n) => crate::cffi::FfiArg::Double(*n),
+                    Value::Integer(i) => crate::cffi::FfiArg::Int(*i),
+                    Value::Bool(b) => crate::cffi::FfiArg::Int(*b as i64),
+                    Value::Str(s) => crate::cffi::FfiArg::Str(s.clone()),
+                    other => return Err(VmError::runtime_error(format!("ffi_poke: unsupported value type {}", other.type_name()))),
+                };
+                crate::cffi::poke(Self::ffi_ptr(p, "ffi_poke")?, Self::ffi_off(off, "ffi_poke")?, kind, &arg)
+                    .map(|_| Value::Null).map_err(VmError::runtime_error)
+            }
+            _ => Err(VmError::runtime_error("ffi_poke(ptr, offset, kind, value)".to_string())),
+        }
+    }
+
+    /// ffi_peek(ptr, offset, kind) -> value
+    fn ffi_peek(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_ffi()?;
+        match args {
+            [p, off, Value::Str(kind)] => crate::cffi::peek(Self::ffi_ptr(p, "ffi_peek")?, Self::ffi_off(off, "ffi_peek")?, kind)
+                .map(|r| match r {
+                    crate::cffi::FfiRet::Int(i) => Value::Number(i as f64),
+                    crate::cffi::FfiRet::Double(d) => Value::Number(d),
+                    crate::cffi::FfiRet::Str(s) => Value::Str(s),
+                    crate::cffi::FfiRet::Void => Value::Null,
+                })
+                .map_err(VmError::runtime_error),
+            _ => Err(VmError::runtime_error("ffi_peek(ptr, offset, kind)".to_string())),
+        }
+    }
+
+    /// ffi_open(path) -> handle
+    fn ffi_open(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_ffi()?;
+        match args {
+            [Value::Str(p)] => crate::cffi::open(p)
+                .map(|h| Value::Number(h as f64))
+                .map_err(VmError::runtime_error),
+            _ => Err(VmError::runtime_error("ffi_open(path) expects a string path".to_string())),
+        }
+    }
+
+    /// ffi_call(handle, symbol, signature, ...args) -> value
+    fn ffi_call(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_ffi()?;
+        if args.len() < 3 {
+            return Err(VmError::runtime_error("ffi_call(handle, symbol, signature, ...args)".to_string()));
+        }
+        let handle = match &args[0] {
+            Value::Number(n) if *n >= 1.0 => *n as usize,
+            _ => return Err(VmError::runtime_error("ffi_call: handle must come from ffi_open".to_string())),
+        };
+        let (symbol, sig) = match (&args[1], &args[2]) {
+            (Value::Str(a), Value::Str(b)) => (a.as_str(), b.as_str()),
+            _ => return Err(VmError::runtime_error("ffi_call: symbol and signature must be strings".to_string())),
+        };
+        let mut call_args = Vec::new();
+        for a in &args[3..] {
+            call_args.push(match a {
+                Value::Number(n) => crate::cffi::FfiArg::Double(*n),
+                Value::Integer(i) => crate::cffi::FfiArg::Int(*i),
+                Value::Bool(b) => crate::cffi::FfiArg::Int(*b as i64),
+                Value::Str(s) => crate::cffi::FfiArg::Str(s.clone()),
+                other => return Err(VmError::runtime_error(format!("ffi_call: unsupported argument type {}", other.type_name()))),
+            });
+        }
+        crate::cffi::call(handle, symbol, sig, &call_args)
+            .map(|r| match r {
+                crate::cffi::FfiRet::Int(i) => Value::Number(i as f64),
+                crate::cffi::FfiRet::Double(d) => Value::Number(d),
+                crate::cffi::FfiRet::Str(s) => Value::Str(s),
+                crate::cffi::FfiRet::Void => Value::Null,
+            })
+            .map_err(VmError::runtime_error)
+    }
+
+    /// ffi_close(handle)
+    fn ffi_close(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_ffi()?;
+        match args {
+            [Value::Number(n)] if *n >= 1.0 => crate::cffi::close(*n as usize)
+                .map(|_| Value::Null)
+                .map_err(VmError::runtime_error),
+            _ => Err(VmError::runtime_error("ffi_close(handle)".to_string())),
+        }
+    }
+
+    /// llm_complete(provider, model, api_key, prompt) -> String
+    ///
+    /// Send a single-turn prompt to a cloud or local LLM via curl (zero deps).
+    ///   provider: "openai" | "anthropic" | "groq" | "ollama"
+    ///   model:    e.g. "gpt-4o-mini", "claude-haiku-4-5-20251001", "llama3"
+    ///   api_key:  API key string (pass "" for ollama)
+    ///   prompt:   user message string
+    fn llm_complete(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_llm()?;
+        if args.len() != 4 {
+            return Err(VmError::runtime_error(
+                "llm_complete expects 4 arguments: llm_complete(provider, model, api_key, prompt)".to_string(),
+            ));
+        }
+        let provider_str = match &args[0] {
+            Value::Str(s) => s.to_lowercase(),
+            _ => return Err(VmError::runtime_error("llm_complete: provider must be a string".to_string())),
+        };
+        let model = match &args[1] {
+            Value::Str(s) => s.clone(),
+            _ => return Err(VmError::runtime_error("llm_complete: model must be a string".to_string())),
+        };
+        let api_key = match &args[2] {
+            Value::Str(s) => s.clone(),
+            _ => return Err(VmError::runtime_error("llm_complete: api_key must be a string".to_string())),
+        };
+        let prompt = match &args[3] {
+            Value::Str(s) => s.clone(),
+            _ => return Err(VmError::runtime_error("llm_complete: prompt must be a string".to_string())),
+        };
+        let provider = match provider_str.as_str() {
+            "openai"               => crate::llm::LlmProvider::OpenAI,
+            "anthropic" | "claude" => crate::llm::LlmProvider::Anthropic,
+            "groq"                 => crate::llm::LlmProvider::Groq,
+            "ollama"               => crate::llm::LlmProvider::Ollama,
+            other => return Err(VmError::runtime_error(
+                format!("llm_complete: unknown provider {} (openai/anthropic/groq/ollama)", other)
+            )),
+        };
+        let config = crate::llm::LlmConfig {
+            provider,
+            model,
+            api_key: if api_key.is_empty() { None } else { Some(api_key) },
+            base_url: None,
+            max_tokens: 2048,
+            temperature: 0.7,
+            timeout_s: 30,
+            json_mode: false,
+        };
+        let messages = vec![crate::llm::LlmMessage::user(&prompt)];
+        crate::llm::complete(&config, &messages)
+            .map(|r| Value::Str(r.content))
+            .map_err(VmError::runtime_error)
+    }
+
+    /// llm_embed(provider, model, api_key, text) -> Array of Numbers
+    ///
+    /// Generate an embedding vector. provider: "openai" | "ollama"
+    fn llm_embed(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_llm()?;
+        if args.len() != 4 {
+            return Err(VmError::runtime_error(
+                "llm_embed expects 4 arguments: llm_embed(provider, model, api_key, text)".to_string(),
+            ));
+        }
+        let provider_str = match &args[0] {
+            Value::Str(s) => s.to_lowercase(),
+            _ => return Err(VmError::runtime_error("llm_embed: provider must be a string".to_string())),
+        };
+        let model = match &args[1] {
+            Value::Str(s) => s.clone(),
+            _ => return Err(VmError::runtime_error("llm_embed: model must be a string".to_string())),
+        };
+        let api_key = match &args[2] {
+            Value::Str(s) => s.clone(),
+            _ => return Err(VmError::runtime_error("llm_embed: api_key must be a string".to_string())),
+        };
+        let text = match &args[3] {
+            Value::Str(s) => s.clone(),
+            _ => return Err(VmError::runtime_error("llm_embed: text must be a string".to_string())),
+        };
+        let provider = match provider_str.as_str() {
+            "openai" => crate::llm::LlmProvider::OpenAI,
+            "ollama" => crate::llm::LlmProvider::Ollama,
+            other => return Err(VmError::runtime_error(
+                format!("llm_embed: provider {} not supported (openai/ollama)", other)
+            )),
+        };
+        let config = crate::llm::LlmConfig {
+            provider,
+            model,
+            api_key: if api_key.is_empty() { None } else { Some(api_key) },
+            base_url: None,
+            max_tokens: 0,
+            temperature: 0.0,
+            timeout_s: 30,
+            json_mode: false,
+        };
+        crate::llm::embed(&config, &text)
+            .map(|vec| Value::Array(crate::value::SharedArray::new(
+                vec.into_iter().map(Value::Number).collect()
+            )))
+            .map_err(VmError::runtime_error)
+    }
+
+    /// llm_info(model_path) -> String
     ///
     /// Returns a human-readable summary of the model (arch, layers, params, quant).
     fn llm_info(args: &[Value]) -> Result<Value, VmError> {
@@ -4615,11 +4857,11 @@ impl BuiltinFunctions {
             .map_err(VmError::runtime_error)
     }
 
-    /// ghost_ask(model_path, question)              â†’ String
-    /// ghost_ask(model_path, question, max_tokens)  â†’ String
+    /// ghost_ask(model_path, question)              → String
+    /// ghost_ask(model_path, question, max_tokens)  → String
     ///
     /// Web-grounded LLM answer:
-    ///   1. Math detected â†’ compute natively (exact)
+    ///   1. Math detected → compute natively (exact)
     ///   2. Search DuckDuckGo instant answers (free, no API key)
     ///   3. Search Wikipedia as fallback
     ///   4. Inject facts as context into the LLM prompt
@@ -4657,7 +4899,7 @@ impl BuiltinFunctions {
             .map_err(VmError::runtime_error)
     }
 
-    /// ghost_smart_solve(model_path, question [, max_rounds [, max_tokens]]) â†’ String
+    /// ghost_smart_solve(model_path, question [, max_rounds [, max_tokens]]) → String
     ///
     /// Hybrid Smart Ghost: exact math and retrieval first, then an LLM loop with
     /// `VERIFY_EXPR` (closed-form check) and optional `NUMERIC_ROOT` (bisection).
@@ -4710,17 +4952,17 @@ impl BuiltinFunctions {
 
     // -- Native Think Engine ---------------------------------------
 
-    /// native_think(question)  â†’ String
+    /// native_think(question)  → String
     ///
     /// Killer's own deterministic reasoning engine (rules + KB + optional quick search).
     /// Strong on structured math, units, and short facts; not a universal solver.
     ///
     /// Handles:
-    ///   â€¢ Pure arithmetic:         native_think("What is 15% of 240?")
-    ///   â€¢ Unit conversions:        native_think("How many km in 50 miles?")
-    ///   â€¢ Temperature:             native_think("What is 98.6F in Celsius?")
-    ///   â€¢ Speed/time/distance:     native_think("How long to drive 300km at 90km/h?")
-    ///   â€¢ Fact lookup:             native_think("Who is Alan Turing?")
+    ///    Pure arithmetic:         native_think("What is 15% of 240?")
+    ///    Unit conversions:        native_think("How many km in 50 miles?")
+    ///    Temperature:             native_think("What is 98.6F in Celsius?")
+    ///    Speed/time/distance:     native_think("How long to drive 300km at 90km/h?")
+    ///    Fact lookup:             native_think("Who is Alan Turing?")
     fn native_think(args: &[Value]) -> Result<Value, VmError> {
         crate::security::require_llm()?;
         if args.len() != 1 {
@@ -4735,10 +4977,10 @@ impl BuiltinFunctions {
         Ok(Value::Str(crate::llm::native_think(&question)))
     }
 
-    /// math_eval(expression) â†’ Number
+    /// math_eval(expression) → Number
     ///
     /// Pure arithmetic: `+ - * / % ^`, parentheses, unary `+`/`-`, scientific `1e-6`.
-    /// Strips common English prefixes (`what is`, `solve`, â€¦) like `native_think`.
+    /// Strips common English prefixes (`what is`, `solve`, ) like `native_think`.
     fn math_eval(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 1 {
             return Err(VmError::runtime_error(
@@ -4757,9 +4999,9 @@ impl BuiltinFunctions {
         }
     }
 
-    /// math_eval_subst(expression, var_name, value) â†’ Number
+    /// math_eval_subst(expression, var_name, value) → Number
     ///
-    /// One variable: e.g. `math_eval_subst("2*x + 1", "x", 5)` â†’ 11. Names are case-insensitive; avoid `e` as a name.
+    /// One variable: e.g. `math_eval_subst("2*x + 1", "x", 5)` → 11. Names are case-insensitive; avoid `e` as a name.
     fn math_eval_subst(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 3 {
             return Err(VmError::runtime_error(
@@ -4798,8 +5040,8 @@ impl BuiltinFunctions {
             .map_err(VmError::runtime_error)
     }
 
-    /// llm_reason(model_path, question) â†’ String
-    /// llm_reason(model_path, question, max_tokens) â†’ String
+    /// llm_reason(model_path, question) → String
+    /// llm_reason(model_path, question, max_tokens) → String
     ///
     /// Turns any standard LLM (Qwen, TinyLlama, Mistral, Llama)
     /// into a reasoning model using a chain-of-thought system prompt.
@@ -4837,10 +5079,10 @@ impl BuiltinFunctions {
             .map_err(VmError::runtime_error)
     }
 
-    /// llm_reason_answer(model_path, question) â†’ String
-    /// llm_reason_answer(model_path, question, max_tokens) â†’ String
+    /// llm_reason_answer(model_path, question) → String
+    /// llm_reason_answer(model_path, question, max_tokens) → String
     ///
-    /// Same as llm_reason but returns ONLY the final answer â€” no thinking trace.
+    /// Same as llm_reason but returns ONLY the final answer  no thinking trace.
     /// Use this when you want a clean value to store or pass to another function.
     ///
     /// Example:
@@ -4872,7 +5114,7 @@ impl BuiltinFunctions {
             .map_err(VmError::runtime_error)
     }
 
-    /// ghost_108(question) â†’ String
+    /// ghost_108(question) → String
     ///
     /// Fires all search agents simultaneously in parallel threads.
     /// The fastest agent that returns a quality result wins.
@@ -4896,15 +5138,15 @@ impl BuiltinFunctions {
         Ok(Value::Str(crate::llm::ghost_108(&question)))
     }
 
-    /// khlm_ask(question) â†’ String
+    /// khlm_ask(question) → String
     ///
-    /// KhLM â€” Killer Hybrid Language Model unified smart router.
+    /// KhLM  Killer Hybrid Language Model unified smart router.
     /// Automatically picks the best engine for every question:
     ///
-    ///   Tier 1 â€” Deterministic  (0ms, no network, no model)
+    ///   Tier 1  Deterministic  (0ms, no network, no model)
     ///     Math, percentages, unit conversions, speed/time/distance
     ///
-    ///   Tier 2 â€” Live Web  (~200ms, parallel agents)
+    ///   Tier 2  Live Web  (~200ms, parallel agents)
     ///     Facts, people, news, real-time data
     ///
     /// Example:
@@ -4924,11 +5166,11 @@ impl BuiltinFunctions {
         Ok(Value::Str(crate::llm::khlm_ask(&question)))
     }
 
-    /// khlm_ask_model(model_path, question) â†’ String
+    /// khlm_ask_model(model_path, question) → String
     ///
     /// KhLM with Tier 3 Neural engine.
     /// Fires Tier 1 (deterministic), Tier 2 (web), AND Tier 3 (local .gguf model)
-    /// simultaneously in parallel â€” the fastest quality result wins.
+    /// simultaneously in parallel  the fastest quality result wins.
     ///
     /// Best with DeepSeek-R1, Qwen2.5, Mistral, or any GGUF model.
     ///
@@ -4953,9 +5195,9 @@ impl BuiltinFunctions {
         Ok(Value::Str(crate::llm::khlm_ask_model(&model_path, &question)))
     }
 
-    /// khlm_prefetch(question) â†’ Nil
-    /// Fires all KhLM agents in the background immediately â€” call at program start.
-    /// By the time khlm_ask() runs, the cache is already populated â†’ ns lookup.
+    /// khlm_prefetch(question) → Nil
+    /// Fires all KhLM agents in the background immediately  call at program start.
+    /// By the time khlm_ask() runs, the cache is already populated → ns lookup.
     /// Example:
     ///   khlm_prefetch("who is Deepthi Sudha Katherasala")
     ///   // ... do other work ...
@@ -4975,9 +5217,9 @@ impl BuiltinFunctions {
         Ok(Value::Null)
     }
 
-    /// khlm_ai_system(question) â†’ String
+    /// khlm_ai_system(question) → String
     ///
-    /// **Killer AI System** â€” for **hard** questions: KhLM router + Ghost-108 + local GGUF + merged verdict.
+    /// **Killer AI System**  for **hard** questions: KhLM router + Ghost-108 + local GGUF + merged verdict.
     ///
     /// - **GGUF:** use a **reasoning** model (e.g. R1-style) via `KILLER_KHLM_GGUF` or `~/.killer/models/*.gguf` for best neural + synthesis.
     /// - **Honest scope:** advanced **orchestration + merging**, not AGI.
@@ -4998,10 +5240,10 @@ impl BuiltinFunctions {
         Ok(Value::Str(crate::llm::khlm_ai_system_multi_agent(&question)))
     }
 
-    // -- RLM â€” Reasoning Language Model builtins ------------------------------
+    // -- RLM  Reasoning Language Model builtins ------------------------------
 
-    /// rlm_think(model_path, question)              â†’ String (full response: thinking + answer)
-    /// rlm_think(model_path, question, max_tokens)  â†’ String
+    /// rlm_think(model_path, question)              → String (full response: thinking + answer)
+    /// rlm_think(model_path, question, max_tokens)  → String
     ///
     /// Runs a reasoning model (DeepSeek-R1, QwQ).  The model thinks step-by-step
     /// in a scratchpad before giving its final answer.
@@ -5036,10 +5278,10 @@ impl BuiltinFunctions {
             .map_err(VmError::runtime_error)
     }
 
-    /// rlm_answer(model_path, question)              â†’ String (only the final answer)
-    /// rlm_answer(model_path, question, max_tokens)  â†’ String
+    /// rlm_answer(model_path, question)              → String (only the final answer)
+    /// rlm_answer(model_path, question, max_tokens)  → String
     ///
-    /// Like rlm_think but returns ONLY the answer after reasoning â€” no thinking trace.
+    /// Like rlm_think but returns ONLY the answer after reasoning  no thinking trace.
     /// Use this when you want a clean result to print or use in further computation.
     ///
     /// Example:
@@ -5071,8 +5313,8 @@ impl BuiltinFunctions {
             .map_err(VmError::runtime_error)
     }
 
-    /// rlm_thinking(model_path, question)              â†’ String (only the thinking trace)
-    /// rlm_thinking(model_path, question, max_tokens)  â†’ String
+    /// rlm_thinking(model_path, question)              → String (only the thinking trace)
+    /// rlm_thinking(model_path, question, max_tokens)  → String
     ///
     /// Returns ONLY the model's internal reasoning scratchpad (thinking block).
     /// Useful for debugging or displaying the model's chain-of-thought.
@@ -5108,14 +5350,14 @@ impl BuiltinFunctions {
 
     // -- User-composable KhLM building blocks ---------------------------------
 
-    /// khlm_classify(question) â†’ String
+    /// khlm_classify(question) → String
     ///
-    /// Returns the question type â€” use this to build your own routing logic.
+    /// Returns the question type  use this to build your own routing logic.
     /// Possible return values: "math", "factual", "reasoning"
     ///
-    ///   "math"      â€” arithmetic, percentages, unit conversions
-    ///   "factual"   â€” who/what/when/where questions needing web search
-    ///   "reasoning" â€” explain/prove/implement/analyze â€” best answered by RLM
+    ///   "math"       arithmetic, percentages, unit conversions
+    ///   "factual"    who/what/when/where questions needing web search
+    ///   "reasoning"  explain/prove/implement/analyze  best answered by RLM
     ///
     /// Example:
     ///   kind = khlm_classify("Explain how quicksort works")
@@ -5137,18 +5379,18 @@ impl BuiltinFunctions {
         Ok(Value::Str(kind.to_string()))
     }
 
-    /// khlm_run(model, question, pipeline) â†’ String
+    /// khlm_run(model, question, pipeline) → String
     ///
     /// Run a custom KhLM pipeline. Users choose exactly what happens.
     /// `pipeline` is one of:
-    ///   "web"      â€” Ghost-108 web search only
-    ///   "rlm"      â€” RLM reasoning only (no web)
-    ///   "web+rlm"  â€” web first, then RLM synthesizes the results
-    ///   "rlm+web"  â€” RLM reasons first, web fills in facts
-    ///   "auto"     â€” same as khlm_ask_model (smart route)
+    ///   "web"       Ghost-108 web search only
+    ///   "rlm"       RLM reasoning only (no web)
+    ///   "web+rlm"   web first, then RLM synthesizes the results
+    ///   "rlm+web"   RLM reasons first, web fills in facts
+    ///   "auto"      same as khlm_ask_model (smart route)
     ///
     /// Example:
-    ///   // Pure reasoning pipeline â€” no web needed
+    ///   // Pure reasoning pipeline  no web needed
     ///   result = khlm_run(model, "Explain binary search", "rlm")
     ///
     ///   // Fact + synthesis pipeline
@@ -5176,9 +5418,9 @@ impl BuiltinFunctions {
         Ok(Value::Str(result))
     }
 
-    /// llm_parallel(model_path, questions, max_tokens) â†’ List<String>
+    /// llm_parallel(model_path, questions, max_tokens) → List<String>
     ///
-    /// Run many questions through a model in parallel â€” all at once.
+    /// Run many questions through a model in parallel  all at once.
     /// Returns a List with one answer per question, in the same order.
     /// Essential for building multi-agent pipelines in Killer code.
     ///
@@ -5225,11 +5467,11 @@ impl BuiltinFunctions {
         ))
     }
 
-    /// rlm_synthesize(model_path, question, context) â†’ String
+    /// rlm_synthesize(model_path, question, context) → String
     ///
     /// Give the RLM a question + context (your own data, web results, notes)
     /// and it reasons over them to produce a single coherent answer.
-    /// This is the core of building your own KhLM â€” you gather context
+    /// This is the core of building your own KhLM  you gather context
     /// any way you want, then let the RLM synthesize the final answer.
     ///
     /// Example:
@@ -5264,21 +5506,21 @@ impl BuiltinFunctions {
     // IMAGINATION ENGINE builtins
     // =========================================================================
 
-    /// imagine(question) â€” general creative routing
+    /// imagine(question)  general creative routing
     fn builtin_imagine(args: &[Value]) -> Result<Value, VmError> {
         crate::security::require_llm()?;
         let q = Self::one_str(args, "imagine", "question")?;
         Ok(Value::Str(crate::imagination::imagine(&q)))
     }
 
-    /// imagine_what_if(scenario) â€” counterfactual chain
+    /// imagine_what_if(scenario)  counterfactual chain
     fn builtin_imagine_what_if(args: &[Value]) -> Result<Value, VmError> {
         crate::security::require_llm()?;
         let s = Self::one_str(args, "imagine_what_if", "scenario")?;
         Ok(Value::Str(crate::imagination::imagine_what_if(&s)))
     }
 
-    /// imagine_connect(concept_a, concept_b) â€” unexpected conceptual bridge
+    /// imagine_connect(concept_a, concept_b)  unexpected conceptual bridge
     fn builtin_imagine_connect(args: &[Value]) -> Result<Value, VmError> {
         crate::security::require_llm()?;
         if args.len() != 2 {
@@ -5291,14 +5533,14 @@ impl BuiltinFunctions {
         Ok(Value::Str(crate::imagination::imagine_connect(&a, &b)))
     }
 
-    /// imagine_beyond(given) â€” extrapolate and think further
+    /// imagine_beyond(given)  extrapolate and think further
     fn builtin_imagine_beyond(args: &[Value]) -> Result<Value, VmError> {
         crate::security::require_llm()?;
         let g = Self::one_str(args, "imagine_beyond", "given")?;
         Ok(Value::Str(crate::imagination::imagine_beyond(&g)))
     }
 
-    /// imagine_self() â€” Killer reflects on its own existence
+    /// imagine_self()  Killer reflects on its own existence
     fn builtin_imagine_self(args: &[Value]) -> Result<Value, VmError> {
         crate::security::require_llm()?;
         let _ = args;
@@ -5309,33 +5551,33 @@ impl BuiltinFunctions {
     // AFFECT ENGINE builtins
     // =========================================================================
 
-    /// affect_sense(text) â€” update emotional state from any text
+    /// affect_sense(text)  update emotional state from any text
     fn builtin_affect_sense(args: &[Value]) -> Result<Value, VmError> {
         let t = Self::one_str(args, "affect_sense", "text")?;
         crate::affect::affect_sense(&t);
         Ok(Value::Str(format!("affect updated from: {}", &t.chars().take(40).collect::<String>())))
     }
 
-    /// affect_state() â€” read current emotional state
+    /// affect_state()  read current emotional state
     fn builtin_affect_state(args: &[Value]) -> Result<Value, VmError> {
         let _ = args;
         Ok(Value::Str(crate::affect::affect_state_str()))
     }
 
-    /// affect_color(text) â€” filter text through current emotion
+    /// affect_color(text)  filter text through current emotion
     fn builtin_affect_color(args: &[Value]) -> Result<Value, VmError> {
         let t = Self::one_str(args, "affect_color", "text")?;
         Ok(Value::Str(crate::affect::affect_color(&t)))
     }
 
-    /// affect_reset() â€” return to neutral state
+    /// affect_reset()  return to neutral state
     fn builtin_affect_reset(args: &[Value]) -> Result<Value, VmError> {
         let _ = args;
         crate::affect::affect_reset();
         Ok(Value::Str("affect reset to neutral".to_string()))
     }
 
-    /// affect_set(dimension, value) â€” manually dial one emotion
+    /// affect_set(dimension, value)  manually dial one emotion
     fn builtin_affect_set(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 2 {
             return Err(VmError::runtime_error(
@@ -5350,23 +5592,23 @@ impl BuiltinFunctions {
         Ok(Value::Str(crate::affect::affect_set(&dim, val)))
     }
 
-    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    // GUARDIAN ENGINE â€” Human Protection Principle
+    // ──────────────────────────────────────────────────────────────────────────────
+    // GUARDIAN ENGINE  Human Protection Principle
     // Creator: Sai Arun Kumar Katherashala
-    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ──────────────────────────────────────────────────────────────────────────────
 
-    /// guardian_check(query) â€” check if something is safe. Blocks if harm detected.
+    /// guardian_check(query)  check if something is safe. Blocks if harm detected.
     fn builtin_guardian_check(args: &[Value]) -> Result<Value, VmError> {
         let q = Self::one_str(args, "guardian_check", "query")?;
         Ok(Value::Str(crate::guardian::guardian_check(&q)))
     }
 
-    /// guardian_principles() â€” print Killer's full ethical framework
+    /// guardian_principles()  print Killer's full ethical framework
     fn builtin_guardian_principles(_args: &[Value]) -> Result<Value, VmError> {
         Ok(Value::Str(crate::guardian::guardian_principles()))
     }
 
-    /// guardian_status() â€” show live stats (intercepts, last blocked query)
+    /// guardian_status()  show live stats (intercepts, last blocked query)
     fn builtin_guardian_status(_args: &[Value]) -> Result<Value, VmError> {
         Ok(Value::Str(crate::guardian::guardian_status()))
     }
@@ -5384,21 +5626,21 @@ impl BuiltinFunctions {
         }
     }
 
-    // -- KORE â€” Killer Optimized Record Exchange file format ------------------
+    // -- KORE  Killer Optimized Record Exchange file format ------------------
     //
     //  Ghost-108 research findings applied:
-    //    âœ… PAX layout (all cols in one cache page â†’ zero tuple reconstruction)
-    //    âœ… Bloom filters per col per chunk (O(1) existence check)
-    //    âœ… min/max stats per chunk (predicate pushdown â€” skip chunks)
-    //    âœ… Per-column auto algorithm: delta/dict+RLE/LZ77
-    //    âœ… Per-column XOR encryption (unique feature)
-    //    âœ… Global dictionary pool for string deduplication
-    //    âœ… Index block at end for O(1) chunk access
+    //    ✅ PAX layout (all cols in one cache page → zero tuple reconstruction)
+    //    ✅ Bloom filters per col per chunk (O(1) existence check)
+    //    ✅ min/max stats per chunk (predicate pushdown  skip chunks)
+    //    ✅ Per-column auto algorithm: delta/dict+RLE/LZ77
+    //    ✅ Per-column XOR encryption (unique feature)
+    //    ✅ Global dictionary pool for string deduplication
+    //    ✅ Index block at end for O(1) chunk access
     //
     //  KhLM classification confirmed: compression strategy = "reasoning"
-    //  â†’ applied delta encoding for ints, dict+RLE for low-cardinality strings
+    //  → applied delta encoding for ints, dict+RLE for low-cardinality strings
 
-    // KORE stubs â€” use Killer (full) for KORE operations
+    // KORE stubs  use Killer (full) for KORE operations
     #[allow(dead_code)]
     fn kore_write(_args: &[Value]) -> Result<Value, VmError> {
         Ok(Value::Str("kore_write: use Killer (full) for KORE operations".to_string()))
@@ -5416,7 +5658,7 @@ impl BuiltinFunctions {
         Ok(Value::Str("kore_info: use Killer (full) for KORE operations".to_string()))
     }
 
-    // Duplicate llm_info removed below â€” implementation above
+    // Duplicate llm_info removed below  implementation above
     #[allow(dead_code)]
     fn llm_info_old(args: &[Value]) -> Result<Value, VmError> {
         crate::security::require_llm()?;
@@ -5503,7 +5745,7 @@ impl BuiltinFunctions {
         Self::standalone_b64_decode(s).map(|decoded| decoded.chars().map(|c| c as u8).collect())
     }
 
-    /// `compress(text, algo)` â†’ String â€” stub (use Killer for real compression)
+    /// `compress(text, algo)` → String  stub (use Killer for real compression)
     fn builtin_compress(args: &[Value]) -> Result<Value, VmError> {
         let text = match args.first() {
             Some(Value::Str(t)) => t.clone(),
@@ -5513,7 +5755,7 @@ impl BuiltinFunctions {
         Ok(Value::Str(Self::standalone_b64_encode(&text)))
     }
 
-    /// `decompress(compressed, algo)` â†’ String â€” stub (use Killer for real compression)
+    /// `decompress(compressed, algo)` → String  stub (use Killer for real compression)
     fn builtin_decompress(args: &[Value]) -> Result<Value, VmError> {
         let b64 = match args.first() {
             Some(Value::Str(t)) => t.clone(),
@@ -5524,7 +5766,7 @@ impl BuiltinFunctions {
             .ok_or_else(|| VmError::runtime_error("decompress: invalid base64 input".to_string()))
     }
 
-    /// `b64_encode(text)` â†’ String
+    /// `b64_encode(text)` → String
     fn builtin_b64_encode(args: &[Value]) -> Result<Value, VmError> {
         match args.first() {
             Some(Value::Str(s)) => Ok(Value::Str(Self::standalone_b64_encode(s))),
@@ -5532,7 +5774,7 @@ impl BuiltinFunctions {
         }
     }
 
-    /// `b64_decode(b64)` â†’ String
+    /// `b64_decode(b64)` → String
     fn builtin_b64_decode(args: &[Value]) -> Result<Value, VmError> {
         match args.first() {
             Some(Value::Str(s)) => Self::standalone_b64_decode(s)
@@ -5542,7 +5784,7 @@ impl BuiltinFunctions {
         }
     }
 
-    /// `hex_encode(text)` â†’ String
+    /// `hex_encode(text)` → String
     fn builtin_hex_encode(args: &[Value]) -> Result<Value, VmError> {
         match args.first() {
             Some(Value::Str(s)) => Ok(Value::Str(Self::standalone_hex_encode(s))),
@@ -5550,7 +5792,7 @@ impl BuiltinFunctions {
         }
     }
 
-    /// `hex_decode(hex)` â†’ String
+    /// `hex_decode(hex)` → String
     fn builtin_hex_decode(args: &[Value]) -> Result<Value, VmError> {
         match args.first() {
             Some(Value::Str(s)) => Self::standalone_hex_decode(s)
@@ -5560,7 +5802,7 @@ impl BuiltinFunctions {
         }
     }
 
-    /// `compress_ratio(original, compressed)` â†’ Number
+    /// `compress_ratio(original, compressed)` → Number
     fn builtin_compress_ratio(args: &[Value]) -> Result<Value, VmError> {
         match (args.first(), args.get(1)) {
             (Some(Value::Str(orig)), Some(Value::Str(comp))) => {
@@ -5571,7 +5813,7 @@ impl BuiltinFunctions {
         }
     }
 
-    /// `compress_info(text)` â†’ Dict â€” simplified (no nova compression available)
+    /// `compress_info(text)` → Dict  simplified (no nova compression available)
     fn builtin_compress_info(args: &[Value]) -> Result<Value, VmError> {
         let text = match args.first() {
             Some(Value::Str(s)) => s.clone(),
@@ -5597,7 +5839,7 @@ impl BuiltinFunctions {
     // Debug Intelligence helpers
     // -------------------------------------------------------------------------
 
-    /// `debug_check(code)` â†’ Array of issue dicts
+    /// `debug_check(code)` → Array of issue dicts
     fn dbg_debug_check(args: &[Value]) -> Result<Value, VmError> {
         let code = match args.first() {
             Some(Value::Str(s)) => s.clone(),
@@ -5620,7 +5862,7 @@ impl BuiltinFunctions {
         Ok(Value::from(arr))
     }
 
-    /// `auto_fix(code)` â†’ Array of fix-candidate dicts
+    /// `auto_fix(code)` → Array of fix-candidate dicts
     fn dbg_auto_fix(args: &[Value]) -> Result<Value, VmError> {
         let code = match args.first() {
             Some(Value::Str(s)) => s.clone(),
@@ -5649,7 +5891,7 @@ impl BuiltinFunctions {
         Ok(Value::from(arr))
     }
 
-    /// `explain_error(msg)` or `explain_error(msg, context)` â†’ String
+    /// `explain_error(msg)` or `explain_error(msg, context)` → String
     fn dbg_explain_error(args: &[Value]) -> Result<Value, VmError> {
         let msg = match args.first() {
             Some(Value::Str(s)) => s.clone(),
@@ -5662,7 +5904,7 @@ impl BuiltinFunctions {
         Ok(Value::Str(crate::debug_intelligence::explain_error(&msg, &ctx)))
     }
 
-    /// `suggest_refactor(code)` â†’ Array of suggestion dicts
+    /// `suggest_refactor(code)` → Array of suggestion dicts
     fn dbg_suggest_refactor(args: &[Value]) -> Result<Value, VmError> {
         let code = match args.first() {
             Some(Value::Str(s)) => s.clone(),
@@ -5684,7 +5926,7 @@ impl BuiltinFunctions {
         Ok(Value::from(arr))
     }
 
-    /// `auto_test(code)` â†’ String (Killer test scaffold)
+    /// `auto_test(code)` → String (Killer test scaffold)
     fn dbg_auto_test(args: &[Value]) -> Result<Value, VmError> {
         let code = match args.first() {
             Some(Value::Str(s)) => s.clone(),
@@ -5693,7 +5935,7 @@ impl BuiltinFunctions {
         Ok(Value::Str(crate::debug_intelligence::auto_test(&code)))
     }
 
-    /// `perf_profile(code)` â†’ Array of perf-hint dicts
+    /// `perf_profile(code)` → Array of perf-hint dicts
     fn dbg_perf_profile(args: &[Value]) -> Result<Value, VmError> {
         let code = match args.first() {
             Some(Value::Str(s)) => s.clone(),
@@ -5715,7 +5957,7 @@ impl BuiltinFunctions {
         Ok(Value::from(arr))
     }
 
-    /// `ai_pair(task_description)` â†’ String (generated Killer code)
+    /// `ai_pair(task_description)` → String (generated Killer code)
     fn dbg_ai_pair(args: &[Value]) -> Result<Value, VmError> {
         crate::security::require_llm()?;
         let task = match args.first() {
@@ -5725,7 +5967,7 @@ impl BuiltinFunctions {
         Ok(Value::Str(crate::debug_intelligence::ai_pair(&task)))
     }
 
-    /// `killer_debug_agent(code)` â†’ Dict with keys: success, fixed_code, cycles, summary
+    /// `killer_debug_agent(code)` → Dict with keys: success, fixed_code, cycles, summary
     fn dbg_killer_debug_agent(args: &[Value]) -> Result<Value, VmError> {
         crate::security::require_llm()?;
         let code = match args.first() {
@@ -5762,7 +6004,7 @@ impl BuiltinFunctions {
         Ok(Value::Dict(Box::new(out)))
     }
 
-    /// `watch(expr_name, value)` â†’ Null
+    /// `watch(expr_name, value)` → Null
     fn dbg_watch(args: &[Value]) -> Result<Value, VmError> {
         let expr = match args.first() {
             Some(Value::Str(s)) => s.clone(),
@@ -5776,13 +6018,13 @@ impl BuiltinFunctions {
         Ok(Value::Null)
     }
 
-    /// `watch_report()` â†’ String
+    /// `watch_report()` → String
     fn dbg_watch_report(args: &[Value]) -> Result<Value, VmError> {
         let _ = args;
         Ok(Value::Str(crate::debug_intelligence::watch_report()))
     }
 
-    /// `lint(code)` â†’ String report from the Killer linter
+    /// `lint(code)` → String report from the Killer linter
     fn builtin_lint(args: &[Value]) -> Result<Value, VmError> {
         let code = match args.first() {
             Some(Value::Str(s)) => s.clone(),
@@ -5796,7 +6038,7 @@ impl BuiltinFunctions {
     }
 
     // =========================================================================
-    // Phase 1: Trit â€” balanced ternary (-1, 0, +1)
+    // Phase 1: Trit  balanced ternary (-1, 0, +1)
     // =========================================================================
 
     fn get_trit(v: &Value) -> Result<i8, VmError> {
@@ -5862,7 +6104,7 @@ impl BuiltinFunctions {
         Ok(Value::Str(s.to_string()))
     }
 
-    /// trit_word(trit) â†’ String: maps T_NEGâ†’"no", T_ZEROâ†’"maybe", T_POSâ†’"yes"
+    /// trit_word(trit) → String: maps T_NEG→"no", T_ZERO→"maybe", T_POS→"yes"
     fn trit_word(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 1 { return Err(VmError::runtime_error("trit_word(trit) requires 1 arg")); }
         let t = Self::get_trit(&args[0])?;
@@ -5875,7 +6117,7 @@ impl BuiltinFunctions {
         Ok(Value::Str(word.to_string()))
     }
 
-    /// trit_word_to_int(word) â†’ Number: maps "no"â†’-1, "maybe"â†’0, "yes"â†’1
+    /// trit_word_to_int(word) → Number: maps "no"→-1, "maybe"→0, "yes"→1
     fn trit_word_to_int(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 1 { return Err(VmError::runtime_error("trit_word_to_int(str) requires 1 arg")); }
         match &args[0] {
@@ -5893,7 +6135,7 @@ impl BuiltinFunctions {
     }
 
     // =========================================================================
-    // Phase 2: Fuzzy Logic â€” continuous truth values [0.0, 1.0]
+    // Phase 2: Fuzzy Logic  continuous truth values [0.0, 1.0]
     // =========================================================================
 
     fn get_fuzzy(v: &Value) -> Result<f64, VmError> {
@@ -5919,7 +6161,7 @@ impl BuiltinFunctions {
         Ok(Value::Number(1.0 - Self::get_fuzzy(&args[0])?))
     }
 
-    /// fuzzy_threshold(val, threshold) â†’ Trit (T_POS/T_ZERO/T_NEG)
+    /// fuzzy_threshold(val, threshold) → Trit (T_POS/T_ZERO/T_NEG)
     fn fuzzy_threshold(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 2 { return Err(VmError::runtime_error("fuzzy_threshold(val, threshold) requires 2 args")); }
         let v = Self::get_fuzzy(&args[0])?;
@@ -5931,7 +6173,7 @@ impl BuiltinFunctions {
         else { Ok(Value::Trit(0)) }
     }
 
-    /// fuzzy_combine(a, b, ...) â†’ weighted geometric mean
+    /// fuzzy_combine(a, b, ...) → weighted geometric mean
     fn fuzzy_combine(args: &[Value]) -> Result<Value, VmError> {
         if args.is_empty() { return Err(VmError::runtime_error("fuzzy_combine requires at least 1 arg")); }
         let mut product = 1.0f64;
@@ -5940,10 +6182,10 @@ impl BuiltinFunctions {
     }
 
     // =========================================================================
-    // Phase 3: Cognitive Signal â€” value + confidence + reason
+    // Phase 3: Cognitive Signal  value + confidence + reason
     // =========================================================================
 
-    /// signal_create(value, confidence, reason) â†’ Signal
+    /// signal_create(value, confidence, reason) → Signal
     fn signal_create(args: &[Value]) -> Result<Value, VmError> {
         if args.len() < 2 { return Err(VmError::runtime_error("signal_create(value, confidence, reason?) requires 2-3 args")); }
         let confidence = match &args[1] {
@@ -5977,7 +6219,7 @@ impl BuiltinFunctions {
         }
     }
 
-    /// signal_and(s1, s2) â†’ Signal â€” trit_and values, min confidence, combined reason
+    /// signal_and(s1, s2) → Signal  trit_and values, min confidence, combined reason
     fn signal_and(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 2 { return Err(VmError::runtime_error("signal_and(s1, s2) requires 2 Signals")); }
         match (&args[0], &args[1]) {
@@ -5994,7 +6236,7 @@ impl BuiltinFunctions {
         }
     }
 
-    /// signal_or(s1, s2) â†’ Signal â€” trit_or values, max confidence, combined reason
+    /// signal_or(s1, s2) → Signal  trit_or values, max confidence, combined reason
     fn signal_or(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 2 { return Err(VmError::runtime_error("signal_or(s1, s2) requires 2 Signals")); }
         match (&args[0], &args[1]) {
@@ -6011,7 +6253,7 @@ impl BuiltinFunctions {
         }
     }
 
-    /// signal_confident(signal, threshold) â†’ Bool â€” true if confidence >= threshold
+    /// signal_confident(signal, threshold) → Bool  true if confidence >= threshold
     fn signal_confident(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 2 { return Err(VmError::runtime_error("signal_confident(s, threshold) requires 2 args")); }
         match &args[0] {
@@ -6023,7 +6265,7 @@ impl BuiltinFunctions {
         }
     }
 
-    /// signal_uncertain(signal, threshold) â†’ Bool â€” true if confidence < threshold
+    /// signal_uncertain(signal, threshold) → Bool  true if confidence < threshold
     fn signal_uncertain(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 2 { return Err(VmError::runtime_error("signal_uncertain(s, threshold) requires 2 args")); }
         match &args[0] {
@@ -6035,7 +6277,7 @@ impl BuiltinFunctions {
         }
     }
 
-    /// signal_to_str(signal) â†’ human-readable string
+    /// signal_to_str(signal) → human-readable string
     fn signal_to_str(args: &[Value]) -> Result<Value, VmError> {
         match args.first() {
             Some(Value::Signal { value, confidence, reason }) => {
@@ -6060,7 +6302,7 @@ impl BuiltinFunctions {
     }
 
     // =========================================================================
-    // Phase 4: Qubit â€” quantum simulation  |ÏˆâŸ© = Î±|0âŸ© + Î²|1âŸ©
+    // Phase 4: Qubit  quantum simulation  |ψ⟩ = α|0⟩ + β|1⟩
     // =========================================================================
 
     fn normalize_qubit(alpha: f64, beta: f64) -> (f64, f64) {
@@ -6068,7 +6310,7 @@ impl BuiltinFunctions {
         if norm < 1e-12 { (1.0, 0.0) } else { (alpha / norm, beta / norm) }
     }
 
-    /// qubit_create(alpha, beta) â†’ Qubit  â€” auto-normalizes
+    /// qubit_create(alpha, beta) → Qubit   auto-normalizes
     fn qubit_create(args: &[Value]) -> Result<Value, VmError> {
         let (alpha, beta) = match args.len() {
             1 => match &args[0] {
@@ -6085,7 +6327,7 @@ impl BuiltinFunctions {
         Ok(Value::Qubit { alpha: a, beta: b })
     }
 
-    /// qubit_hadamard(q) â†’ Qubit â€” H gate: creates superposition from |0âŸ©
+    /// qubit_hadamard(q) → Qubit  H gate: creates superposition from |0⟩
     fn qubit_hadamard(args: &[Value]) -> Result<Value, VmError> {
         match args.first() {
             Some(Value::Qubit { alpha, beta }) => {
@@ -6098,7 +6340,7 @@ impl BuiltinFunctions {
         }
     }
 
-    /// qubit_pauli_x(q) â†’ Qubit â€” X gate (quantum NOT): flips |0âŸ©â†”|1âŸ©
+    /// qubit_pauli_x(q) → Qubit  X gate (quantum NOT): flips |0⟩↔|1⟩
     fn qubit_pauli_x(args: &[Value]) -> Result<Value, VmError> {
         match args.first() {
             Some(Value::Qubit { alpha, beta }) => Ok(Value::Qubit { alpha: *beta, beta: *alpha }),
@@ -6106,7 +6348,7 @@ impl BuiltinFunctions {
         }
     }
 
-    /// qubit_pauli_z(q) â†’ Qubit â€” Z gate: phase flip
+    /// qubit_pauli_z(q) → Qubit  Z gate: phase flip
     fn qubit_pauli_z(args: &[Value]) -> Result<Value, VmError> {
         match args.first() {
             Some(Value::Qubit { alpha, beta }) => Ok(Value::Qubit { alpha: *alpha, beta: -*beta }),
@@ -6114,12 +6356,12 @@ impl BuiltinFunctions {
         }
     }
 
-    /// qubit_phase(q, theta) â†’ Qubit â€” phase shift by theta radians
+    /// qubit_phase(q, theta) → Qubit  phase shift by theta radians
     fn qubit_phase(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 2 { return Err(VmError::runtime_error("qubit_phase(q, theta) requires 2 args")); }
         match (&args[0], &args[1]) {
             (Value::Qubit { alpha, beta }, Value::Number(theta)) => {
-                // Apply phase shift to |1âŸ© component: beta â†’ beta * e^(i*theta)
+                // Apply phase shift to |1⟩ component: beta → beta * e^(i*theta)
                 // For real simulation: approximate with cos(theta)
                 let new_beta = beta * theta.cos();
                 let (a, b) = Self::normalize_qubit(*alpha, new_beta);
@@ -6129,7 +6371,7 @@ impl BuiltinFunctions {
         }
     }
 
-    /// qubit_measure(q) â†’ Number (0 or 1) â€” probabilistic collapse using LCG RNG
+    /// qubit_measure(q) → Number (0 or 1)  probabilistic collapse using LCG RNG
     fn qubit_measure(args: &[Value]) -> Result<Value, VmError> {
         match args.first() {
             Some(Value::Qubit { alpha, beta: _ }) => {
@@ -6166,13 +6408,13 @@ impl BuiltinFunctions {
             Some(Value::Qubit { alpha, beta }) => {
                 let p0 = (alpha * alpha * 100.0).round() as i64;
                 let p1 = (beta  * beta  * 100.0).round() as i64;
-                Ok(Value::Str(format!("|ÏˆâŸ© = {:.3}|0âŸ© + {:.3}|1âŸ©  [P(0)={}%, P(1)={}%]", alpha, beta, p0, p1)))
+                Ok(Value::Str(format!("|ψ⟩ = {:.3}|0⟩ + {:.3}|1⟩  [P(0)={}%, P(1)={}%]", alpha, beta, p0, p1)))
             }
             _ => Err(VmError::runtime_error("qubit_to_str(q) requires a Qubit")),
         }
     }
 
-    /// qubit_entangle(q1, q2) â†’ Array[Qubit, Qubit] â€” Bell state (maximally entangled)
+    /// qubit_entangle(q1, q2) → Array[Qubit, Qubit]  Bell state (maximally entangled)
     fn qubit_entangle(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 2 { return Err(VmError::runtime_error("qubit_entangle(q1, q2) requires 2 Qubits")); }
         let inv_sqrt2 = 1.0_f64 / 2.0_f64.sqrt();
@@ -6182,7 +6424,7 @@ impl BuiltinFunctions {
     }
 
     // =========================================================================
-    // Phase 5: Tryte â€” 6-trit balanced ternary word
+    // Phase 5: Tryte  6-trit balanced ternary word
     // 729 states, range -364..+364, 9.51 bits of information
     // Position weights: [3^5, 3^4, 3^3, 3^2, 3^1, 3^0] = [243,81,27,9,3,1]
     // =========================================================================
@@ -6194,7 +6436,7 @@ impl BuiltinFunctions {
         }
     }
 
-    /// tryte_create(t0,t1,t2,t3,t4,t5) â†’ Tryte from 6 trit values
+    /// tryte_create(t0,t1,t2,t3,t4,t5) → Tryte from 6 trit values
     fn tryte_create(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 6 { return Err(VmError::runtime_error("tryte_create(t0..t5) requires 6 trit args")); }
         let mut ts = [0i8; 6];
@@ -6204,12 +6446,12 @@ impl BuiltinFunctions {
         Ok(Value::Tryte(ts))
     }
 
-    /// tryte_zero() â†’ Tryte of all T_ZERO
+    /// tryte_zero() → Tryte of all T_ZERO
     fn tryte_zero(_args: &[Value]) -> Result<Value, VmError> {
         Ok(Value::Tryte([0i8; 6]))
     }
 
-    /// tryte_from_int(n) â†’ Tryte encoding n in balanced ternary (clamped to -364..+364)
+    /// tryte_from_int(n) → Tryte encoding n in balanced ternary (clamped to -364..+364)
     fn tryte_from_int(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 1 { return Err(VmError::runtime_error("tryte_from_int(n) requires 1 arg")); }
         let n = match &args[0] {
@@ -6236,7 +6478,7 @@ impl BuiltinFunctions {
         Ok(Value::Tryte(ts))
     }
 
-    /// tryte_to_int(ty) â†’ Number â€” decode balanced ternary to integer
+    /// tryte_to_int(ty) → Number  decode balanced ternary to integer
     fn tryte_to_int(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 1 { return Err(VmError::runtime_error("tryte_to_int(ty) requires 1 arg")); }
         let ts = Self::get_tryte(&args[0])?;
@@ -6245,7 +6487,7 @@ impl BuiltinFunctions {
         Ok(Value::Number(val as f64))
     }
 
-    /// tryte_to_str(ty) â†’ String like "+-0-+0"
+    /// tryte_to_str(ty) → String like "+-0-+0"
     fn tryte_to_str(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 1 { return Err(VmError::runtime_error("tryte_to_str(ty) requires 1 arg")); }
         let ts = Self::get_tryte(&args[0])?;
@@ -6255,7 +6497,7 @@ impl BuiltinFunctions {
         Ok(Value::Str(s))
     }
 
-    /// tryte_get(ty, i) â†’ Trit at position i (0=most significant)
+    /// tryte_get(ty, i) → Trit at position i (0=most significant)
     fn tryte_get(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 2 { return Err(VmError::runtime_error("tryte_get(ty, i) requires 2 args")); }
         let ts = Self::get_tryte(&args[0])?;
@@ -6266,7 +6508,7 @@ impl BuiltinFunctions {
         Ok(Value::Trit(ts[i]))
     }
 
-    /// tryte_set(ty, i, trit) â†’ new Tryte with position i set to trit
+    /// tryte_set(ty, i, trit) → new Tryte with position i set to trit
     fn tryte_set(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 3 { return Err(VmError::runtime_error("tryte_set(ty, i, trit) requires 3 args")); }
         let mut ts = Self::get_tryte(&args[0])?;
@@ -6278,7 +6520,7 @@ impl BuiltinFunctions {
         Ok(Value::Tryte(ts))
     }
 
-    /// tryte_and(ty1, ty2) â†’ element-wise trit_and (min)
+    /// tryte_and(ty1, ty2) → element-wise trit_and (min)
     fn tryte_and(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 2 { return Err(VmError::runtime_error("tryte_and(ty1, ty2) requires 2 Trytes")); }
         let a = Self::get_tryte(&args[0])?;
@@ -6288,7 +6530,7 @@ impl BuiltinFunctions {
         Ok(Value::Tryte(ts))
     }
 
-    /// tryte_or(ty1, ty2) â†’ element-wise trit_or (max)
+    /// tryte_or(ty1, ty2) → element-wise trit_or (max)
     fn tryte_or(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 2 { return Err(VmError::runtime_error("tryte_or(ty1, ty2) requires 2 Trytes")); }
         let a = Self::get_tryte(&args[0])?;
@@ -6298,7 +6540,7 @@ impl BuiltinFunctions {
         Ok(Value::Tryte(ts))
     }
 
-    /// tryte_not(ty) â†’ element-wise trit_not (negate)
+    /// tryte_not(ty) → element-wise trit_not (negate)
     fn tryte_not(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 1 { return Err(VmError::runtime_error("tryte_not(ty) requires 1 Tryte")); }
         let a = Self::get_tryte(&args[0])?;
@@ -6307,7 +6549,7 @@ impl BuiltinFunctions {
         Ok(Value::Tryte(ts))
     }
 
-    /// tryte_add(ty1, ty2) â†’ Tryte â€” integer add, clamped to -364..+364
+    /// tryte_add(ty1, ty2) → Tryte  integer add, clamped to -364..+364
     fn tryte_add(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 2 { return Err(VmError::runtime_error("tryte_add(ty1, ty2) requires 2 Trytes")); }
         let a = Self::get_tryte(&args[0])?;
@@ -6329,7 +6571,7 @@ impl BuiltinFunctions {
         Ok(Value::Tryte(ts))
     }
 
-    /// tryte_eq(ty1, ty2) â†’ Bool
+    /// tryte_eq(ty1, ty2) → Bool
     fn tryte_eq(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 2 { return Err(VmError::runtime_error("tryte_eq(ty1, ty2) requires 2 Trytes")); }
         let a = Self::get_tryte(&args[0])?;
@@ -6338,17 +6580,17 @@ impl BuiltinFunctions {
     }
 
     // =========================================================
-    // v1.2: Native Hash Map builtins â€” O(1) average operations
+    // v1.2: Native Hash Map builtins  O(1) average operations
     // Killer dicts are already backed by HashMap<String,Value>,
     // so these builtins are thin, zero-copy wrappers.
     // =========================================================
 
-    /// hash_map_new() â†’ Dict
+    /// hash_map_new() → Dict
     fn hm_new(_args: &[Value]) -> Result<Value, VmError> {
         Ok(Value::Dict(Box::new(std::collections::HashMap::new())))
     }
 
-    /// hash_map_insert(map, key, value) â†’ Dict
+    /// hash_map_insert(map, key, value) → Dict
     fn hm_insert(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 3 {
             return Err(VmError::runtime_error("hash_map_insert(map, key, value) requires 3 args"));
@@ -6367,7 +6609,7 @@ impl BuiltinFunctions {
         Ok(Value::Dict(Box::new(map)))
     }
 
-    /// hash_map_get(map, key) â†’ Value | Null
+    /// hash_map_get(map, key) → Value | Null
     fn hm_get(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 2 {
             return Err(VmError::runtime_error("hash_map_get(map, key) requires 2 args"));
@@ -6455,7 +6697,7 @@ impl BuiltinFunctions {
         Ok(Value::from(vec![Value::Dict(Box::new(map)), val]))
     }
 
-    /// hash_map_contains(map, key) â†’ Bool
+    /// hash_map_contains(map, key) → Bool
     fn hm_contains(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 2 {
             return Err(VmError::runtime_error("hash_map_contains(map, key) requires 2 args"));
@@ -6473,7 +6715,7 @@ impl BuiltinFunctions {
         Ok(Value::Bool(map.contains_key(&key)))
     }
 
-    /// hash_map_remove(map, key) â†’ Dict
+    /// hash_map_remove(map, key) → Dict
     fn hm_remove(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 2 {
             return Err(VmError::runtime_error("hash_map_remove(map, key) requires 2 args"));
@@ -6492,7 +6734,7 @@ impl BuiltinFunctions {
         Ok(Value::Dict(Box::new(map)))
     }
 
-    /// hash_map_size(map) â†’ Number
+    /// hash_map_size(map) → Number
     fn hm_size(args: &[Value]) -> Result<Value, VmError> {
         if args.is_empty() {
             return Err(VmError::runtime_error("hash_map_size(map) requires 1 arg"));
@@ -6504,7 +6746,7 @@ impl BuiltinFunctions {
         Ok(Value::Number(map.len() as f64))
     }
 
-    /// hash_map_keys(map) â†’ Array<Str>
+    /// hash_map_keys(map) → Array<Str>
     fn hm_keys(args: &[Value]) -> Result<Value, VmError> {
         if args.is_empty() {
             return Err(VmError::runtime_error("hash_map_keys(map) requires 1 arg"));
@@ -6521,7 +6763,7 @@ impl BuiltinFunctions {
         Ok(Value::from(keys))
     }
 
-    /// hash_map_values(map) â†’ Array<Value>
+    /// hash_map_values(map) → Array<Value>
     fn hm_values(args: &[Value]) -> Result<Value, VmError> {
         if args.is_empty() {
             return Err(VmError::runtime_error("hash_map_values(map) requires 1 arg"));
@@ -6688,7 +6930,7 @@ impl BuiltinFunctions {
     }
 
     // =========================================================
-    // v1.2: Native Dijkstra builtins â€" O((V+E) log V)
+    // v1.2: Native Dijkstra builtins â" O((V+E) log V)
     // adj_list format: Array of Arrays of Dicts
     //   adj_list[u] = [ {to: v, weight: w}, ... ]
     //   All vertex indices are 0-based integers.
@@ -6759,7 +7001,7 @@ impl BuiltinFunctions {
         dist
     }
 
-    /// dijkstra(adj_list, source) â†’ Array<Number>
+    /// dijkstra(adj_list, source) → Array<Number>
     ///   Returns shortest distances from source to every vertex.
     ///   Unreachable vertices have value 9007199254740992 (i64::MAX/2).
     fn dijkstra(args: &[Value]) -> Result<Value, VmError> {
@@ -6776,8 +7018,8 @@ impl BuiltinFunctions {
         Ok(Value::from(result))
     }
 
-    /// dijkstra_path(adj_list, source, target) â†’ Array<Number>
-    ///   Returns the vertex sequence of the shortest path sourceâ†’target,
+    /// dijkstra_path(adj_list, source, target) → Array<Number>
+    ///   Returns the vertex sequence of the shortest path source→target,
     ///   or an empty array if target is unreachable.
     fn dijkstra_path(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 3 {
@@ -6834,12 +7076,12 @@ impl BuiltinFunctions {
         Ok(Value::from(path))
     }
 
-    // â”€â”€â”€ Multilingual chat-language detection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ─── Multilingual chat-language detection ──────────────────────────────────
     /// Detects what human language the user is chatting in, returns ISO-ish tag.
     fn detect_chat_lang(q: &str) -> &'static str {
         let lo = q.to_lowercase();
 
-        // â”€â”€ keyword / greeting giveaways (checked first â€” fast) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── keyword / greeting giveaways (checked first  fast) ─────────────
         // Telugu (checked BEFORE Hindi because "namaskaram" contains "namaskar")
         if lo.contains("namaskaram") || lo.contains("baagunnara") || lo.contains("ela unnaru")
             || lo.contains("ela unnav") || lo.contains("em chestunnav") || lo.contains("cheppandi")
@@ -6900,8 +7142,8 @@ impl BuiltinFunctions {
         // Spanish
         if lo.contains("hola") || lo.contains("buenos") || lo.contains("buenas")
             || lo.contains("gracias") || lo.contains("por favor") || lo.contains("como estas")
-            || lo.contains("cÃ³mo estÃ¡s") || lo.contains("que tal") || lo.contains("adios")
-            || lo.contains("adiÃ³s") || lo.contains("necesito") || lo.contains("puedes")
+            || lo.contains("cómo estás") || lo.contains("que tal") || lo.contains("adios")
+            || lo.contains("adiós") || lo.contains("necesito") || lo.contains("puedes")
             || lo.contains("ayuda") || lo == "vale" || lo.contains("entendido")
             || lo.contains("genial") || lo.contains("hasta luego") || lo.contains("nos vemos")
         { return "es"; }
@@ -6914,7 +7156,7 @@ impl BuiltinFunctions {
         // German
         if lo.contains("guten tag") || lo.contains("guten morgen") || lo.contains("hallo")
             || lo.contains("danke") || lo.contains("bitte") || lo.contains("wie geht")
-            || lo.contains("tschÃ¼ss") || lo.contains("tschuss") || lo.contains("auf wiedersehen")
+            || lo.contains("tschüss") || lo.contains("tschuss") || lo.contains("auf wiedersehen")
             || lo.contains("ich bin") || lo.contains("kannst du")
         { return "de"; }
         // Italian
@@ -6923,51 +7165,51 @@ impl BuiltinFunctions {
             || lo.contains("arrivederci") || lo.contains("sono")
         { return "it"; }
         // Portuguese
-        if lo.contains("olÃ¡") || lo.contains("ola") || lo.contains("obrigado") || lo.contains("obrigada")
-            || lo.contains("como vocÃª") || lo.contains("bom dia") || lo.contains("boa tarde")
+        if lo.contains("olá") || lo.contains("ola") || lo.contains("obrigado") || lo.contains("obrigada")
+            || lo.contains("como você") || lo.contains("bom dia") || lo.contains("boa tarde")
             || lo.contains("boa noite") || lo.contains("tchau") || lo.contains("tudo bem")
-            || lo.contains("atÃ© logo") || lo.contains("ate logo")
+            || lo.contains("até logo") || lo.contains("ate logo")
         { return "pt"; }
         // Russian
-        if lo.contains("Ð¿Ñ€Ð¸Ð²ÐµÑ‚") || lo.contains("Ð·Ð´Ñ€Ð°Ð²ÑÑ‚Ð²ÑƒÐ¹Ñ‚Ðµ") || lo.contains("ÑÐ¿Ð°ÑÐ¸Ð±Ð¾")
-            || lo.contains("Ð¿Ð¾Ð¶Ð°Ð»ÑƒÐ¹ÑÑ‚Ð°") || lo.contains("ÐºÐ°Ðº Ð´ÐµÐ»Ð°") || lo.contains("Ñ…Ð¾Ñ€Ð¾ÑˆÐ¾")
-            || lo.contains("Ð´Ð¾ ÑÐ²Ð¸Ð´Ð°Ð½Ð¸Ñ") || lo.contains("Ð¿Ð¾Ð¼Ð¾Ð³Ð¸") || lo.contains("Ñ‡Ñ‚Ð¾")
+        if lo.contains("привет") || lo.contains("здравствуйте") || lo.contains("спасибо")
+            || lo.contains("пожалуйста") || lo.contains("как дела") || lo.contains("хорошо")
+            || lo.contains("до свидания") || lo.contains("помоги") || lo.contains("что")
         { return "ru"; }
         // Japanese
-        if lo.contains("ã“ã‚“ã«ã¡ã¯") || lo.contains("ãŠã¯ã‚ˆã†") || lo.contains("ã“ã‚“ã°ã‚“ã¯")
-            || lo.contains("ã‚ã‚ŠãŒã¨ã†") || lo.contains("ãŠé¡˜ã„") || lo.contains("ã•ã‚ˆã†ãªã‚‰")
-            || lo.contains("ã™ã¿ã¾ã›ã‚“") || lo.contains("ã¯ã„") || lo.contains("å…ƒæ°—")
+        if lo.contains("こんにちは") || lo.contains("おはよう") || lo.contains("こんばんは")
+            || lo.contains("ありがとう") || lo.contains("お願い") || lo.contains("さようなら")
+            || lo.contains("すみません") || lo.contains("はい") || lo.contains("元気")
         { return "ja"; }
         // Korean
-        if lo.contains("ì•ˆë…•") || lo.contains("ê°ì‚¬") || lo.contains("ê³ ë§ˆì›Œ")
-            || lo.contains("ë„ì™€ì¤˜") || lo.contains("ë„¤") || lo.contains("ì•„ë‹ˆìš”")
+        if lo.contains("안녕") || lo.contains("감사") || lo.contains("고마워")
+            || lo.contains("도와줘") || lo.contains("네") || lo.contains("아니요")
         { return "ko"; }
         // Chinese
-        if lo.contains("ä½ å¥½") || lo.contains("è°¢è°¢") || lo.contains("è¯·") || lo.contains("å†è§")
-            || lo.contains("æ€Žä¹ˆ") || lo.contains("ä»€ä¹ˆ") || lo.contains("å¸®")
+        if lo.contains("你好") || lo.contains("谢谢") || lo.contains("请") || lo.contains("再见")
+            || lo.contains("怎么") || lo.contains("什么") || lo.contains("帮")
         { return "zh"; }
         // Arabic
-        if lo.contains("Ù…Ø±Ø­Ø¨Ø§") || lo.contains("Ø´ÙƒØ±Ø§") || lo.contains("Ù…Ù† ÙØ¶Ù„Ùƒ")
-            || lo.contains("ÙƒÙŠÙ") || lo.contains("Ù…Ø¹ Ø§Ù„Ø³Ù„Ø§Ù…Ø©") || lo.contains("Ø£Ù‡Ù„Ø§")
+        if lo.contains("مرحبا") || lo.contains("شكرا") || lo.contains("من فضلك")
+            || lo.contains("كيف") || lo.contains("مع السلامة") || lo.contains("أهلا")
         { return "ar"; }
         // Turkish
-        if lo.contains("merhaba") || lo.contains("teÅŸekkÃ¼r") || lo.contains("nasÄ±lsÄ±n")
-            || lo.contains("lÃ¼tfen") || lo.contains("gÃ¼le gÃ¼le") || lo.contains("evet")
-            || lo.contains("hayÄ±r")
+        if lo.contains("merhaba") || lo.contains("teşekkür") || lo.contains("nasılsın")
+            || lo.contains("lütfen") || lo.contains("güle güle") || lo.contains("evet")
+            || lo.contains("hayır")
         { return "tr"; }
         // Dutch
         if lo.contains("hallo") || lo.contains("bedankt") || lo.contains("alsjeblieft")
             || lo.contains("hoe gaat het") || lo.contains("tot ziens") || lo.contains("dank je")
         { return "nl"; }
         // Polish
-        if lo.contains("czeÅ›Ä‡") || lo.contains("dzieÅ„ dobry") || lo.contains("dziÄ™kujÄ™")
-            || lo.contains("proszÄ™") || lo.contains("jak siÄ™ masz") || lo.contains("do widzenia")
+        if lo.contains("cześć") || lo.contains("dzień dobry") || lo.contains("dziękuję")
+            || lo.contains("proszę") || lo.contains("jak się masz") || lo.contains("do widzenia")
         { return "pl"; }
         // Thai
-        if lo.contains("à¸ªà¸§à¸±à¸ªà¸”à¸µ") || lo.contains("à¸‚à¸­à¸šà¸„à¸¸à¸“") || lo.contains("à¸„à¸£à¸±à¸š") || lo.contains("à¸„à¹ˆà¸°")
+        if lo.contains("สวัสดี") || lo.contains("ขอบคุณ") || lo.contains("ครับ") || lo.contains("ค่ะ")
         { return "th"; }
         // Vietnamese
-        if lo.contains("xin chÃ o") || lo.contains("cáº£m Æ¡n") || lo.contains("xin")
+        if lo.contains("xin chào") || lo.contains("cảm ơn") || lo.contains("xin")
         { return "vi"; }
         // Indonesian / Malay
         if lo.contains("selamat") || lo.contains("terima kasih") || lo.contains("tolong")
@@ -6978,17 +7220,17 @@ impl BuiltinFunctions {
             || lo.contains("kwaheri")
         { return "sw"; }
         // Hebrew
-        if lo.contains("×©×œ×•×") || lo.contains("×ª×•×“×”") || lo.contains("×‘×‘×§×©×”")
+        if lo.contains("שלום") || lo.contains("תודה") || lo.contains("בבקשה")
         { return "he"; }
         // Greek
-        if lo.contains("Î³ÎµÎ¹Î±") || lo.contains("ÎµÏ…Ï‡Î±ÏÎ¹ÏƒÏ„ÏŽ") || lo.contains("Ï€Î±ÏÎ±ÎºÎ±Î»ÏŽ")
+        if lo.contains("γεια") || lo.contains("ευχαριστώ") || lo.contains("παρακαλώ")
         { return "el"; }
         // Swedish
-        if lo.contains("hej") || lo.contains("tack") || lo.contains("snÃ¤lla")
-            || lo.contains("hur mÃ¥r du")
+        if lo.contains("hej") || lo.contains("tack") || lo.contains("snälla")
+            || lo.contains("hur mår du")
         { return "sv"; }
 
-        // â”€â”€ Unicode script detection (fallback for pure-script text) â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Unicode script detection (fallback for pure-script text) ────────
         let mut devanagari = 0u32;
         let mut telugu_c = 0u32;
         let mut tamil_c = 0u32;
@@ -7051,203 +7293,203 @@ impl BuiltinFunctions {
     /// Returns a localized response for the given category and detected language.
     fn kala_localized(chat_lang: &str, category: &str, name: Option<&str>) -> String {
         match (chat_lang, category) {
-            // â”€â”€ GREETING â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-            ("hi", "greeting") => "à¤¹à¥‡! à¤®à¥ˆà¤‚ Kala à¤¹à¥‚à¤à¥¤ à¤¬à¤¤à¤¾à¤“, à¤•à¥à¤¯à¤¾ à¤®à¤¦à¤¦ à¤•à¤°à¥‚à¤?".into(),
-            ("te", "greeting") => "à°¹à°¾à°¯à±! à°¨à±‡à°¨à± Kala à°¨à°¿. à°à°‚ help à°•à°¾à°µà°¾à°²à°¿?".into(),
-            ("ta", "greeting") => "à®µà®£à®•à¯à®•à®®à¯! à®¨à®¾à®©à¯ Kala. à®Žà®©à¯à®© help à®µà¯‡à®£à¯à®®à¯?".into(),
-            ("kn", "greeting") => "à²¨à²®à²¸à³à²•à²¾à²°! à²¨à²¾à²¨à³ Kala. à²à²¨à³ à²¸à²¹à²¾à²¯ à²¬à³‡à²•à³?".into(),
-            ("ml", "greeting") => "à´¨à´®à´¸àµà´•à´¾à´°à´‚! à´žà´¾àµ» Kala à´†à´£àµ. à´Žà´¨àµà´¤àµ à´¸à´¹à´¾à´¯à´‚ à´µàµ‡à´£à´‚?".into(),
-            ("bn", "greeting") => "à¦¹à§à¦¯à¦¾à¦²à§‹! à¦†à¦®à¦¿ Kalaà¥¤ à¦•à§€à¦­à¦¾à¦¬à§‡ à¦¸à¦¾à¦¹à¦¾à¦¯à§à¦¯ à¦•à¦°à¦¬?".into(),
-            ("mr", "greeting") => "à¤¨à¤®à¤¸à¥à¤•à¤¾à¤°! à¤®à¥€ Kala à¤†à¤¹à¥‡. à¤•à¤¾à¤¯ à¤®à¤¦à¤¤ à¤•à¤°à¥‚?".into(),
-            ("gu", "greeting") => "àª¨àª®àª¸à«àª¤à«‡! àª¹à«àª‚ Kala àª›à«àª‚. àª¶à«àª‚ àª®àª¦àª¦ àª•àª°à«àª‚?".into(),
-            ("pa", "greeting") => "à¨¸à¨¤ à¨¸à©à¨°à©€ à¨…à¨•à¨¾à¨²! à¨®à©ˆà¨‚ Kala à¨¹à¨¾à¨‚à¥¤ à¨•à©€ à¨®à¨¦à¨¦ à¨•à¨°à¨¾à¨‚?".into(),
-            ("ur", "greeting") => "Ø³Ù„Ø§Ù…! Ù…ÛŒÚº Kala ÛÙˆÚºÛ” Ú©ÛŒØ§ Ù…Ø¯Ø¯ Ú©Ø±ÙˆÚº?".into(),
-            ("es", "greeting") => "Â¡Hola! Soy Kala. Â¿En quÃ© te ayudo?".into(),
+            // ── GREETING ────────────────────────────────────────────────────────
+            ("hi", "greeting") => "हे! मैं Kala हूँ। बताओ, क्या मदद करूँ?".into(),
+            ("te", "greeting") => "హాయ్! నేను Kala ని. ఏం help కావాలి?".into(),
+            ("ta", "greeting") => "வணக்கம்! நான் Kala. என்ன help வேணும்?".into(),
+            ("kn", "greeting") => "ನಮಸ್ಕಾರ! ನಾನು Kala. ಏನು ಸಹಾಯ ಬೇಕು?".into(),
+            ("ml", "greeting") => "നമസ്കാരം! ഞാൻ Kala ആണ്. എന്ത് സഹായം വേണം?".into(),
+            ("bn", "greeting") => "হ্যালো! আমি Kala। কীভাবে সাহায্য করব?".into(),
+            ("mr", "greeting") => "नमस्कार! मी Kala आहे. काय मदत करू?".into(),
+            ("gu", "greeting") => "નમસ્તે! હું Kala છું. શું મદદ કરું?".into(),
+            ("pa", "greeting") => "ਸਤ ਸ੍ਰੀ ਅਕਾਲ! ਮੈਂ Kala ਹਾਂ। ਕੀ ਮਦਦ ਕਰਾਂ?".into(),
+            ("ur", "greeting") => "سلام! میں Kala ہوں۔ کیا مدد کروں?".into(),
+            ("es", "greeting") => "¡Hola! Soy Kala. ¿En qué te ayudo?".into(),
             ("fr", "greeting") => "Salut ! Je suis Kala. Comment puis-je t'aider ?".into(),
             ("de", "greeting") => "Hallo! Ich bin Kala. Wie kann ich dir helfen?".into(),
             ("it", "greeting") => "Ciao! Sono Kala. Come posso aiutarti?".into(),
-            ("pt", "greeting") => "OlÃ¡! Eu sou Kala. Como posso ajudar?".into(),
-            ("ru", "greeting") => "ÐŸÑ€Ð¸Ð²ÐµÑ‚! Ð¯ Kala. Ð§ÐµÐ¼ Ð¼Ð¾Ð³Ñƒ Ð¿Ð¾Ð¼Ð¾Ñ‡ÑŒ?".into(),
-            ("ja", "greeting") => "ã“ã‚“ã«ã¡ã¯ï¼Kalaã§ã™ã€‚ä½•ã‹ãŠæ‰‹ä¼ã„ã—ã¾ã—ã‚‡ã†ã‹ï¼Ÿ".into(),
-            ("ko", "greeting") => "ì•ˆë…•í•˜ì„¸ìš”! ì €ëŠ” Kalaì˜ˆìš”. ë¬´ì—‡ì„ ë„ì™€ë“œë¦´ê¹Œìš”?".into(),
-            ("zh", "greeting") => "ä½ å¥½ï¼æˆ‘æ˜¯Kalaã€‚éœ€è¦ä»€ä¹ˆå¸®åŠ©ï¼Ÿ".into(),
-            ("ar", "greeting") => "Ø£Ù‡Ù„Ø§Ù‹! Ø£Ù†Ø§ Kala. ÙƒÙŠÙ Ø£Ù‚Ø¯Ø± Ø£Ø³Ø§Ø¹Ø¯ÙƒØŸ".into(),
-            ("tr", "greeting") => "Merhaba! Ben Kala. NasÄ±l yardÄ±mcÄ± olabilirim?".into(),
+            ("pt", "greeting") => "Olá! Eu sou Kala. Como posso ajudar?".into(),
+            ("ru", "greeting") => "Привет! Я Kala. Чем могу помочь?".into(),
+            ("ja", "greeting") => "こんにちは！Kalaです。何かお手伝いしましょうか？".into(),
+            ("ko", "greeting") => "안녕하세요! 저는 Kala예요. 무엇을 도와드릴까요?".into(),
+            ("zh", "greeting") => "你好！我是Kala。需要什么帮助？".into(),
+            ("ar", "greeting") => "أهلاً! أنا Kala. كيف أقدر أساعدك؟".into(),
+            ("tr", "greeting") => "Merhaba! Ben Kala. Nasıl yardımcı olabilirim?".into(),
             ("nl", "greeting") => "Hallo! Ik ben Kala. Hoe kan ik je helpen?".into(),
-            ("pl", "greeting") => "CzeÅ›Ä‡! Jestem Kala. Jak mogÄ™ pomÃ³c?".into(),
-            ("th", "greeting") => "à¸ªà¸§à¸±à¸ªà¸”à¸µà¸„à¸£à¸±à¸š! à¸œà¸¡ Kala à¸„à¸£à¸±à¸š à¸Šà¹ˆà¸§à¸¢à¸­à¸°à¹„à¸£à¹„à¸”à¹‰à¸šà¹‰à¸²à¸‡?".into(),
-            ("vi", "greeting") => "Xin chÃ o! TÃ´i lÃ  Kala. Cáº§n giÃºp gÃ¬ khÃ´ng?".into(),
+            ("pl", "greeting") => "Cześć! Jestem Kala. Jak mogę pomóc?".into(),
+            ("th", "greeting") => "สวัสดีครับ! ผม Kala ครับ ช่วยอะไรได้บ้าง?".into(),
+            ("vi", "greeting") => "Xin chào! Tôi là Kala. Cần giúp gì không?".into(),
             ("id", "greeting") => "Halo! Saya Kala. Ada yang bisa dibantu?".into(),
             ("sw", "greeting") => "Habari! Mimi ni Kala. Nikisaidie nini?".into(),
-            ("he", "greeting") => "!×©×œ×•×! ×× ×™ Kala. ××™×š ××•×›×œ ×œ×¢×–×•×¨".into(),
-            ("el", "greeting") => "Î“ÎµÎ¹Î±! Î•Î¯Î¼Î±Î¹ Î· Kala. Î ÏŽÏ‚ Î¼Ï€Î¿ÏÏŽ Î½Î± Î²Î¿Î·Î¸Î®ÏƒÏ‰;".into(),
-            ("sv", "greeting") => "Hej! Jag Ã¤r Kala. Hur kan jag hjÃ¤lpa dig?".into(),
+            ("he", "greeting") => "!שלום! אני Kala. איך אוכל לעזור".into(),
+            ("el", "greeting") => "Γεια! Είμαι η Kala. Πώς μπορώ να βοηθήσω;".into(),
+            ("sv", "greeting") => "Hej! Jag är Kala. Hur kan jag hjälpa dig?".into(),
 
-            // â”€â”€ GREETING with name â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-            ("hi", "greeting_name") => format!("à¤¹à¥‡ {}! à¤®à¥ˆà¤‚ Kala à¤¹à¥‚à¤ â€” à¤•à¥à¤› à¤­à¥€ à¤ªà¥‚à¤›à¥‹à¥¤", name.unwrap_or("friend")),
-            ("te", "greeting_name") => format!("à°¹à°¾à°¯à± {}! à°¨à±‡à°¨à± Kala à°¨à°¿. à°à°¦à±ˆà°¨à°¾ à°…à°¡à±à°—à±.", name.unwrap_or("friend")),
-            ("ta", "greeting_name") => format!("à®µà®£à®•à¯à®•à®®à¯ {}! à®¨à®¾à®©à¯ Kala. à®Žà®¤à¯à®µà¯à®®à¯ à®•à¯‡à®³à¯à®™à¯à®•à®³à¯.", name.unwrap_or("friend")),
-            ("kn", "greeting_name") => format!("à²¨à²®à²¸à³à²•à²¾à²° {}! à²¨à²¾à²¨à³ Kala. à²à²¨à²¾à²¦à²°à³‚ à²•à³‡à²³à²¿.", name.unwrap_or("friend")),
-            ("ml", "greeting_name") => format!("à´¨à´®à´¸àµà´•à´¾à´°à´‚ {}! à´žà´¾àµ» Kala. à´Žà´¨àµà´¤àµà´‚ à´šàµ‹à´¦à´¿à´•àµà´•àµ‚.", name.unwrap_or("friend")),
-            ("bn", "greeting_name") => format!("à¦¹à§à¦¯à¦¾à¦²à§‹ {}! à¦†à¦®à¦¿ Kalaà¥¤ à¦¯à§‡à¦•à§‹à¦¨à§‹ à¦•à¦¿à¦›à§ à¦œà¦¿à¦œà§à¦žà§‡à¦¸ à¦•à¦°à§‹à¥¤", name.unwrap_or("friend")),
-            ("es", "greeting_name") => format!("Â¡Hola {}! Soy Kala â€” pregÃºntame lo que quieras.", name.unwrap_or("amigo")),
-            ("fr", "greeting_name") => format!("Salut {} ! Je suis Kala â€” demande-moi n'importe quoi.", name.unwrap_or("ami")),
-            ("de", "greeting_name") => format!("Hallo {}! Ich bin Kala â€” frag mich einfach.", name.unwrap_or("Freund")),
-            ("it", "greeting_name") => format!("Ciao {}! Sono Kala â€” chiedimi qualsiasi cosa.", name.unwrap_or("amico")),
-            ("pt", "greeting_name") => format!("OlÃ¡ {}! Sou Kala â€” pergunte o que quiser.", name.unwrap_or("amigo")),
-            ("ru", "greeting_name") => format!("ÐŸÑ€Ð¸Ð²ÐµÑ‚, {}! Ð¯ Kala â€” ÑÐ¿Ñ€Ð°ÑˆÐ¸Ð²Ð°Ð¹ Ñ‡Ñ‚Ð¾ ÑƒÐ³Ð¾Ð´Ð½Ð¾.", name.unwrap_or("Ð´Ñ€ÑƒÐ³")),
-            ("ja", "greeting_name") => format!("ã“ã‚“ã«ã¡ã¯ã€{}ã•ã‚“ï¼Kalaã§ã™ã€‚ä½•ã§ã‚‚èžã„ã¦ãã ã•ã„ã€‚", name.unwrap_or("friend")),
-            ("ko", "greeting_name") => format!("ì•ˆë…•í•˜ì„¸ìš”, {}! ì €ëŠ” Kalaì˜ˆìš”. ë¬´ì—‡ì´ë“  ë¬¼ì–´ë³´ì„¸ìš”.", name.unwrap_or("friend")),
-            ("zh", "greeting_name") => format!("ä½ å¥½ï¼Œ{}ï¼æˆ‘æ˜¯Kalaï¼Œéšä¾¿é—®æˆ‘ä»€ä¹ˆã€‚", name.unwrap_or("æœ‹å‹")),
-            ("ar", "greeting_name") => format!("Ø£Ù‡Ù„Ø§Ù‹ {}! Ø£Ù†Ø§ Kala â€” Ø§Ø³Ø£Ù„Ù†ÙŠ Ø£ÙŠ Ø´ÙŠØ¡.", name.unwrap_or("ØµØ¯ÙŠÙ‚ÙŠ")),
-            ("tr", "greeting_name") => format!("Merhaba {}! Ben Kala â€” ne istersen sor.", name.unwrap_or("arkadaÅŸ")),
-            (_, "greeting_name") => format!("Hey {}! Nice to meet you. I'm Kala â€” ask me anything.", name.unwrap_or("friend")),
+            // ── GREETING with name ──────────────────────────────────────────────
+            ("hi", "greeting_name") => format!("हे {}! मैं Kala हूँ  कुछ भी पूछो।", name.unwrap_or("friend")),
+            ("te", "greeting_name") => format!("హాయ్ {}! నేను Kala ని. ఏదైనా అడుగు.", name.unwrap_or("friend")),
+            ("ta", "greeting_name") => format!("வணக்கம் {}! நான் Kala. எதுவும் கேளுங்கள்.", name.unwrap_or("friend")),
+            ("kn", "greeting_name") => format!("ನಮಸ್ಕಾರ {}! ನಾನು Kala. ಏನಾದರೂ ಕೇಳಿ.", name.unwrap_or("friend")),
+            ("ml", "greeting_name") => format!("നമസ്കാരം {}! ഞാൻ Kala. എന്തും ചോദിക്കൂ.", name.unwrap_or("friend")),
+            ("bn", "greeting_name") => format!("হ্যালো {}! আমি Kala। যেকোনো কিছু জিজ্ঞেস করো।", name.unwrap_or("friend")),
+            ("es", "greeting_name") => format!("¡Hola {}! Soy Kala  pregúntame lo que quieras.", name.unwrap_or("amigo")),
+            ("fr", "greeting_name") => format!("Salut {} ! Je suis Kala  demande-moi n'importe quoi.", name.unwrap_or("ami")),
+            ("de", "greeting_name") => format!("Hallo {}! Ich bin Kala  frag mich einfach.", name.unwrap_or("Freund")),
+            ("it", "greeting_name") => format!("Ciao {}! Sono Kala  chiedimi qualsiasi cosa.", name.unwrap_or("amico")),
+            ("pt", "greeting_name") => format!("Olá {}! Sou Kala  pergunte o que quiser.", name.unwrap_or("amigo")),
+            ("ru", "greeting_name") => format!("Привет, {}! Я Kala  спрашивай что угодно.", name.unwrap_or("друг")),
+            ("ja", "greeting_name") => format!("こんにちは、{}さん！Kalaです。何でも聞いてください。", name.unwrap_or("friend")),
+            ("ko", "greeting_name") => format!("안녕하세요, {}! 저는 Kala예요. 무엇이든 물어보세요.", name.unwrap_or("friend")),
+            ("zh", "greeting_name") => format!("你好，{}！我是Kala，随便问我什么。", name.unwrap_or("朋友")),
+            ("ar", "greeting_name") => format!("أهلاً {}! أنا Kala  اسألني أي شيء.", name.unwrap_or("صديقي")),
+            ("tr", "greeting_name") => format!("Merhaba {}! Ben Kala  ne istersen sor.", name.unwrap_or("arkadaş")),
+            (_, "greeting_name") => format!("Hey {}! Nice to meet you. I'm Kala  ask me anything.", name.unwrap_or("friend")),
             (_, "greeting") => "Hey! I'm Kala. What can I help you with?".into(),
 
-            // â”€â”€ NAME INTRODUCTION â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-            ("hi", "name_intro") => format!("à¤…à¤šà¥à¤›à¤¾ {}! à¤®à¥ˆà¤‚ Kala à¤¹à¥‚à¤à¥¤ à¤¤à¥à¤®à¥à¤¹à¤¾à¤°à¥‡ à¤²à¤¿à¤ à¤•à¥à¤¯à¤¾ à¤•à¤°à¥‚à¤?", name.unwrap_or("friend")),
-            ("te", "name_intro") => format!("à°¬à°¾à°—à±à°‚à°¦à°¿ {}! à°¨à±‡à°¨à± Kala à°¨à°¿. à°¨à±€ à°•à±‹à°¸à°‚ à°à°‚ à°šà±‡à°¯à°¾à°²à°¿?", name.unwrap_or("friend")),
-            ("ta", "name_intro") => format!("à®šà®¨à¯à®¤à¯‹à®·à®®à¯ {}! à®¨à®¾à®©à¯ Kala. à®‰à®©à®•à¯à®•à¯ à®Žà®©à¯à®© à®šà¯†à®¯à¯à®¯à®£à¯à®®à¯?", name.unwrap_or("friend")),
-            ("es", "name_intro") => format!("Â¡Mucho gusto, {}! Soy Kala. Â¿QuÃ© necesitas?", name.unwrap_or("amigo")),
-            ("fr", "name_intro") => format!("EnchantÃ©, {} ! Je suis Kala. Que puis-je faire pour toi ?", name.unwrap_or("ami")),
-            ("de", "name_intro") => format!("Freut mich, {}! Ich bin Kala. Was kann ich fÃ¼r dich tun?", name.unwrap_or("Freund")),
+            // ── NAME INTRODUCTION ───────────────────────────────────────────────
+            ("hi", "name_intro") => format!("अच्छा {}! मैं Kala हूँ। तुम्हारे लिए क्या करूँ?", name.unwrap_or("friend")),
+            ("te", "name_intro") => format!("బాగుంది {}! నేను Kala ని. నీ కోసం ఏం చేయాలి?", name.unwrap_or("friend")),
+            ("ta", "name_intro") => format!("சந்தோஷம் {}! நான் Kala. உனக்கு என்ன செய்யணும்?", name.unwrap_or("friend")),
+            ("es", "name_intro") => format!("¡Mucho gusto, {}! Soy Kala. ¿Qué necesitas?", name.unwrap_or("amigo")),
+            ("fr", "name_intro") => format!("Enchanté, {} ! Je suis Kala. Que puis-je faire pour toi ?", name.unwrap_or("ami")),
+            ("de", "name_intro") => format!("Freut mich, {}! Ich bin Kala. Was kann ich für dich tun?", name.unwrap_or("Freund")),
             ("it", "name_intro") => format!("Piacere, {}! Sono Kala. Cosa posso fare per te?", name.unwrap_or("amico")),
-            ("pt", "name_intro") => format!("Prazer, {}! Sou Kala. O que posso fazer por vocÃª?", name.unwrap_or("amigo")),
-            ("ru", "name_intro") => format!("ÐŸÑ€Ð¸ÑÑ‚Ð½Ð¾ Ð¿Ð¾Ð·Ð½Ð°ÐºÐ¾Ð¼Ð¸Ñ‚ÑŒÑÑ, {}! Ð¯ Kala. Ð§ÐµÐ¼ Ð¿Ð¾Ð¼Ð¾Ñ‡ÑŒ?", name.unwrap_or("Ð´Ñ€ÑƒÐ³")),
-            ("ja", "name_intro") => format!("ã¯ã˜ã‚ã¾ã—ã¦ã€{}ã•ã‚“ï¼Kalaã§ã™ã€‚ä½•ã‚’ã—ã¾ã—ã‚‡ã†ã‹ï¼Ÿ", name.unwrap_or("friend")),
-            ("ko", "name_intro") => format!("ë°˜ê°€ì›Œìš”, {}! ì €ëŠ” Kalaì˜ˆìš”. ë­˜ ë„ì™€ë“œë¦´ê¹Œìš”?", name.unwrap_or("friend")),
-            ("zh", "name_intro") => format!("å¾ˆé«˜å…´è®¤è¯†ä½ ï¼Œ{}ï¼æˆ‘æ˜¯Kalaã€‚éœ€è¦ä»€ä¹ˆï¼Ÿ", name.unwrap_or("æœ‹å‹")),
-            ("ar", "name_intro") => format!("ØªØ´Ø±ÙØª {}! Ø£Ù†Ø§ Kala. ÙƒÙŠÙ Ø£Ù‚Ø¯Ø± Ø£Ø³Ø§Ø¹Ø¯ÙƒØŸ", name.unwrap_or("ØµØ¯ÙŠÙ‚ÙŠ")),
-            ("tr", "name_intro") => format!("Memnun oldum, {}! Ben Kala. Ne yapayÄ±m?", name.unwrap_or("arkadaÅŸ")),
+            ("pt", "name_intro") => format!("Prazer, {}! Sou Kala. O que posso fazer por você?", name.unwrap_or("amigo")),
+            ("ru", "name_intro") => format!("Приятно познакомиться, {}! Я Kala. Чем помочь?", name.unwrap_or("друг")),
+            ("ja", "name_intro") => format!("はじめまして、{}さん！Kalaです。何をしましょうか？", name.unwrap_or("friend")),
+            ("ko", "name_intro") => format!("반가워요, {}! 저는 Kala예요. 뭘 도와드릴까요?", name.unwrap_or("friend")),
+            ("zh", "name_intro") => format!("很高兴认识你，{}！我是Kala。需要什么？", name.unwrap_or("朋友")),
+            ("ar", "name_intro") => format!("تشرفت {}! أنا Kala. كيف أقدر أساعدك؟", name.unwrap_or("صديقي")),
+            ("tr", "name_intro") => format!("Memnun oldum, {}! Ben Kala. Ne yapayım?", name.unwrap_or("arkadaş")),
             (_, "name_intro") => format!("Nice to meet you, {}! I'm Kala. What can I do for you?", name.unwrap_or("friend")),
 
-            // â”€â”€ WELLBEING â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-            ("hi", "wellbeing") => "à¤¬à¤¢à¤¼à¤¿à¤¯à¤¾ à¤¹à¥‚à¤, à¤ªà¥‚à¤›à¤¨à¥‡ à¤•à¤¾ à¤¶à¥à¤•à¥à¤°à¤¿à¤¯à¤¾! à¤¬à¤¤à¤¾à¤“ à¤•à¥à¤¯à¤¾ à¤®à¤¨ à¤®à¥‡à¤‚ à¤¹à¥ˆ?".into(),
-            ("te", "wellbeing") => "à°¬à°¾à°—à±à°¨à±à°¨à°¾, à°…à°¡à°¿à°—à°¿à°¨à°‚à°¦à±à°•à± thanks! à°à°‚ à°šà±†à°ªà±à°ªà±?".into(),
-            ("ta", "wellbeing") => "à®¨à®²à¯à®²à®¾ à®‡à®°à¯à®•à¯à®•à¯‡à®©à¯, à®•à¯‡à®Ÿà¯à®Ÿà®¤à¯à®•à¯à®•à¯ à®¨à®©à¯à®±à®¿! à®Žà®©à¯à®© à®šà¯Šà®²à¯à®²à¯?".into(),
-            ("kn", "wellbeing") => "à²šà³†à²¨à³à²¨à²¾à²—à²¿à²¦à³à²¦à³€à²¨à²¿, à²•à³‡à²³à²¿à²¦à³à²¦à²•à³à²•à³† à²§à²¨à³à²¯à²µà²¾à²¦! à²à²¨à³ à²¹à³‡à²³à³?".into(),
-            ("ml", "wellbeing") => "à´¨à´²àµà´²à´¤àµ, à´šàµ‹à´¦à´¿à´šàµà´šà´¤à´¿à´¨àµ à´¨à´¨àµà´¦à´¿! à´Žà´¨àµà´¤à´¾ à´ªà´±à´¯àµà´¨àµà´¨à´¤àµ?".into(),
-            ("bn", "wellbeing") => "à¦­à¦¾à¦²à§‹ à¦†à¦›à¦¿, à¦œà¦¿à¦œà§à¦žà§‡à¦¸ à¦•à¦°à¦¾à¦° à¦œà¦¨à§à¦¯ à¦§à¦¨à§à¦¯à¦¬à¦¾à¦¦! à¦•à§€ à¦¬à¦²à¦¬à§‡?".into(),
-            ("es", "wellbeing") => "Â¡Estoy bien, gracias por preguntar! Â¿QuÃ© tienes en mente?".into(),
-            ("fr", "wellbeing") => "Je vais bien, merci de demander ! Qu'est-ce que tu as en tÃªte ?".into(),
+            // ── WELLBEING ───────────────────────────────────────────────────────
+            ("hi", "wellbeing") => "बढ़िया हूँ, पूछने का शुक्रिया! बताओ क्या मन में है?".into(),
+            ("te", "wellbeing") => "బాగున్నా, అడిగినందుకు thanks! ఏం చెప్పు?".into(),
+            ("ta", "wellbeing") => "நல்லா இருக்கேன், கேட்டதுக்கு நன்றி! என்ன சொல்லு?".into(),
+            ("kn", "wellbeing") => "ಚೆನ್ನಾಗಿದ್ದೀನಿ, ಕೇಳಿದ್ದಕ್ಕೆ ಧನ್ಯವಾದ! ಏನು ಹೇಳು?".into(),
+            ("ml", "wellbeing") => "നല്ലത്, ചോദിച്ചതിന് നന്ദി! എന്താ പറയുന്നത്?".into(),
+            ("bn", "wellbeing") => "ভালো আছি, জিজ্ঞেস করার জন্য ধন্যবাদ! কী বলবে?".into(),
+            ("es", "wellbeing") => "¡Estoy bien, gracias por preguntar! ¿Qué tienes en mente?".into(),
+            ("fr", "wellbeing") => "Je vais bien, merci de demander ! Qu'est-ce que tu as en tête ?".into(),
             ("de", "wellbeing") => "Mir geht's gut, danke der Nachfrage! Was hast du auf dem Herzen?".into(),
             ("it", "wellbeing") => "Sto bene, grazie per aver chiesto! Cosa hai in mente?".into(),
-            ("pt", "wellbeing") => "Estou bem, obrigado por perguntar! O que vocÃª tem em mente?".into(),
-            ("ru", "wellbeing") => "Ð¥Ð¾Ñ€Ð¾ÑˆÐ¾, ÑÐ¿Ð°ÑÐ¸Ð±Ð¾ Ñ‡Ñ‚Ð¾ ÑÐ¿Ñ€Ð¾ÑÐ¸Ð»! Ð§Ñ‚Ð¾ Ñƒ Ñ‚ÐµÐ±Ñ Ð½Ð° ÑƒÐ¼Ðµ?".into(),
-            ("ja", "wellbeing") => "å…ƒæ°—ã§ã™ã‚ˆã€èžã„ã¦ãã‚Œã¦ã‚ã‚ŠãŒã¨ã†ï¼ä½•ã‹ç”¨ï¼Ÿ".into(),
-            ("ko", "wellbeing") => "ìž˜ ì§€ë‚´ê³  ìžˆì–´ìš”, ë¬¼ì–´ë´ ì¤˜ì„œ ê³ ë§ˆì›Œìš”! ë­ í•„ìš”í•´ìš”?".into(),
-            ("zh", "wellbeing") => "æˆ‘å¾ˆå¥½ï¼Œè°¢è°¢å…³å¿ƒï¼ä½ æœ‰ä»€ä¹ˆæƒ³é—®çš„ï¼Ÿ".into(),
-            ("ar", "wellbeing") => "Ø¨Ø®ÙŠØ±ØŒ Ø´ÙƒØ±Ø§Ù‹ Ø¹Ù„Ù‰ Ø§Ù„Ø³Ø¤Ø§Ù„! Ø´Ùˆ Ø¹Ù†Ø¯ÙƒØŸ".into(),
-            ("tr", "wellbeing") => "Ä°yiyim, sorduÄŸun iÃ§in teÅŸekkÃ¼rler! Ne var ne yok?".into(),
+            ("pt", "wellbeing") => "Estou bem, obrigado por perguntar! O que você tem em mente?".into(),
+            ("ru", "wellbeing") => "Хорошо, спасибо что спросил! Что у тебя на уме?".into(),
+            ("ja", "wellbeing") => "元気ですよ、聞いてくれてありがとう！何か用？".into(),
+            ("ko", "wellbeing") => "잘 지내고 있어요, 물어봐 줘서 고마워요! 뭐 필요해요?".into(),
+            ("zh", "wellbeing") => "我很好，谢谢关心！你有什么想问的？".into(),
+            ("ar", "wellbeing") => "بخير، شكراً على السؤال! شو عندك؟".into(),
+            ("tr", "wellbeing") => "İyiyim, sorduğun için teşekkürler! Ne var ne yok?".into(),
             (_, "wellbeing") => "Doing good, thanks for asking! What's on your mind?".into(),
 
-            // â”€â”€ CREATOR â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-            ("hi", "creator") => "Sai Arun Kumar Katherashala à¤¨à¥‡ à¤¬à¤¨à¤¾à¤¯à¤¾ à¤¹à¥ˆà¥¤ Killer à¤”à¤° Kala à¤¦à¥‹à¤¨à¥‹à¤‚ Rust à¤®à¥‡à¤‚ à¤¬à¤¨à¤¾à¤ à¤¹à¥ˆà¤‚à¥¤\n\nà¤”à¤° à¤•à¥à¤› à¤œà¤¾à¤¨à¤¨à¤¾ à¤¹à¥ˆ?".into(),
-            ("te", "creator") => "Sai Arun Kumar Katherashala build à°šà±‡à°¶à°¾à°°à±. Killer, Kala à°°à±†à°‚à°¡à±‚ Rust à°²à±‹ build à°šà±‡à°¸à°¾à°°à±.\n\nà°‡à°‚à°•à°¾ à°à°®à±ˆà°¨à°¾ à°¤à±†à°²à±à°¸à±à°•à±‹à°µà°¾à°²à°¾?".into(),
-            ("ta", "creator") => "Sai Arun Kumar Katherashala à®‰à®°à¯à®µà®¾à®•à¯à®•à®¿à®©à®¾à®°à¯. Killer-à®®à¯ Kala-à®µà¯à®®à¯ Rust-à®²à¯ à®Žà®´à¯à®¤à®ªà¯à®ªà®Ÿà¯à®Ÿà®¤à¯.\n\nà®µà¯‡à®± à®à®¤à®¾à®µà®¤à¯ à®¤à¯†à®°à®¿à®žà¯à®šà¯à®•à¯à®•à®£à¯à®®à®¾?".into(),
-            ("es", "creator") => "Sai Arun Kumar Katherashala. ConstruyÃ³ Killer y Kala desde cero en Rust.\n\nÂ¿Quieres saber algo mÃ¡s?".into(),
-            ("fr", "creator") => "Sai Arun Kumar Katherashala. Il a construit Killer et Kala de zÃ©ro en Rust.\n\nAutre chose Ã  savoir ?".into(),
+            // ── CREATOR ─────────────────────────────────────────────────────────
+            ("hi", "creator") => "Sai Arun Kumar Katherashala ने बनाया है। Killer और Kala दोनों Rust में बनाए हैं।\n\nऔर कुछ जानना है?".into(),
+            ("te", "creator") => "Sai Arun Kumar Katherashala build చేశారు. Killer, Kala రెండూ Rust లో build చేసారు.\n\nఇంకా ఏమైనా తెలుసుకోవాలా?".into(),
+            ("ta", "creator") => "Sai Arun Kumar Katherashala உருவாக்கினார். Killer-ம் Kala-வும் Rust-ல் எழுதப்பட்டது.\n\nவேற ஏதாவது தெரிஞ்சுக்கணுமா?".into(),
+            ("es", "creator") => "Sai Arun Kumar Katherashala. Construyó Killer y Kala desde cero en Rust.\n\n¿Quieres saber algo más?".into(),
+            ("fr", "creator") => "Sai Arun Kumar Katherashala. Il a construit Killer et Kala de zéro en Rust.\n\nAutre chose à savoir ?".into(),
             ("de", "creator") => "Sai Arun Kumar Katherashala. Er hat Killer und Kala von Grund auf in Rust gebaut.\n\nNoch etwas wissen wollen?".into(),
             ("it", "creator") => "Sai Arun Kumar Katherashala. Ha costruito Killer e Kala da zero in Rust.\n\nVuoi sapere altro?".into(),
             ("pt", "creator") => "Sai Arun Kumar Katherashala. Ele construiu Killer e Kala do zero em Rust.\n\nQuer saber mais alguma coisa?".into(),
-            ("ru", "creator") => "Sai Arun Kumar Katherashala. ÐžÐ½ ÑÐ¾Ð·Ð´Ð°Ð» Killer Ð¸ Kala Ñ Ð½ÑƒÐ»Ñ Ð½Ð° Rust.\n\nÐ•Ñ‰Ñ‘ Ñ‡Ñ‚Ð¾-Ñ‚Ð¾ Ñ…Ð¾Ñ‡ÐµÑˆÑŒ ÑƒÐ·Ð½Ð°Ñ‚ÑŒ?".into(),
-            ("ja", "creator") => "Sai Arun Kumar KatherashalaãŒä½œã‚Šã¾ã—ãŸã€‚Killerã‚‚Kalaã‚‚Rustã§ã‚¼ãƒ­ã‹ã‚‰æ§‹ç¯‰ã•ã‚Œã¦ã„ã¾ã™ã€‚\n\nä»–ã«çŸ¥ã‚ŠãŸã„ã“ã¨ã¯ï¼Ÿ".into(),
-            ("ko", "creator") => "Sai Arun Kumar Katherashalaê°€ ë§Œë“¤ì—ˆì–´ìš”. Killerì™€ Kala ëª¨ë‘ Rustë¡œ ì²˜ìŒë¶€í„° ë§Œë“¤ì—ˆìŠµë‹ˆë‹¤.\n\në” ì•Œê³  ì‹¶ì€ ê±° ìžˆì–´ìš”?".into(),
-            ("zh", "creator") => "Sai Arun Kumar Katherashala åˆ›é€ çš„ã€‚Killerå’ŒKalaéƒ½æ˜¯ç”¨Rustä»Žé›¶å¼€å§‹æž„å»ºçš„ã€‚\n\nè¿˜æƒ³çŸ¥é“ä»€ä¹ˆï¼Ÿ".into(),
-            ("ar", "creator") => "Sai Arun Kumar Katherashala Ø¨Ù†Ø§Ù‡Ù…. Ø¨Ù†Ù‰ Killer Ùˆ Kala Ù…Ù† Ø§Ù„ØµÙØ± Ø¨Ù„ØºØ© Rust.\n\nØªØ¨ÙŠ ØªØ¹Ø±Ù Ø´ÙŠ Ø«Ø§Ù†ÙŠØŸ".into(),
-            ("tr", "creator") => "Sai Arun Kumar Katherashala yaptÄ±. Killer ve Kala'yÄ± sÄ±fÄ±rdan Rust ile inÅŸa etti.\n\nBaÅŸka bir ÅŸey bilmek ister misin?".into(),
+            ("ru", "creator") => "Sai Arun Kumar Katherashala. Он создал Killer и Kala с нуля на Rust.\n\nЕщё что-то хочешь узнать?".into(),
+            ("ja", "creator") => "Sai Arun Kumar Katherashalaが作りました。KillerもKalaもRustでゼロから構築されています。\n\n他に知りたいことは？".into(),
+            ("ko", "creator") => "Sai Arun Kumar Katherashala가 만들었어요. Killer와 Kala 모두 Rust로 처음부터 만들었습니다.\n\n더 알고 싶은 거 있어요?".into(),
+            ("zh", "creator") => "Sai Arun Kumar Katherashala 创造的。Killer和Kala都是用Rust从零开始构建的。\n\n还想知道什么？".into(),
+            ("ar", "creator") => "Sai Arun Kumar Katherashala بناهم. بنى Killer و Kala من الصفر بلغة Rust.\n\nتبي تعرف شي ثاني؟".into(),
+            ("tr", "creator") => "Sai Arun Kumar Katherashala yaptı. Killer ve Kala'yı sıfırdan Rust ile inşa etti.\n\nBaşka bir şey bilmek ister misin?".into(),
             (_, "creator") => "Sai Arun Kumar Katherashala. He built both Killer and Kala from scratch in Rust.\n\nAnything else you want to know?".into(),
 
-            // â”€â”€ IDENTITY â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-            ("hi", "identity") => "à¤®à¥ˆà¤‚ Kala à¤¹à¥‚à¤ â€” Killer programming language à¤•à¤¾ AIà¥¤ à¤¸à¤µà¤¾à¤² à¤ªà¥‚à¤›à¥‹, code à¤²à¤¿à¤–à¤µà¤¾à¤“, à¤•à¥à¤› à¤­à¥€ à¤•à¤°à¥‹à¥¤".into(),
-            ("te", "identity") => "à°¨à±‡à°¨à± Kala â€” Killer programming language à°²à±‹ built-in AI. questions à°…à°¡à±à°—à±, code à°°à°¾à°¯à°¿à°¸à±à°¤à°¾, à°à°¦à±ˆà°¨à°¾ à°šà±‡à°¸à±à°¤à°¾.".into(),
-            ("ta", "identity") => "à®¨à®¾à®©à¯ Kala â€” Killer programming language-à®²à¯ à®‰à®³à¯à®³ AI. à®•à¯‡à®³à¯à®µà®¿ à®•à¯‡à®³à¯, code à®Žà®´à¯à®¤à¯à®µà¯‡à®©à¯, à®Žà®¤à¯à®µà¯à®®à¯ à®šà¯†à®¯à¯à®µà¯‡à®©à¯.".into(),
-            ("es", "identity") => "Soy Kala â€” la IA integrada en el lenguaje Killer. Puedo responder preguntas, escribir cÃ³digo, razonar y mÃ¡s. Solo pregunta.".into(),
-            ("fr", "identity") => "Je suis Kala â€” l'IA intÃ©grÃ©e dans le langage Killer. Je peux rÃ©pondre, coder, raisonner et plus. Demande-moi.".into(),
-            ("de", "identity") => "Ich bin Kala â€” die KI im Killer-Programmiersprache. Ich kann Fragen beantworten, Code schreiben und mehr. Frag einfach.".into(),
-            ("it", "identity") => "Sono Kala â€” l'IA del linguaggio Killer. Posso rispondere, programmare, ragionare e altro. Chiedi pure.".into(),
-            ("pt", "identity") => "Eu sou Kala â€” a IA da linguagem Killer. Posso responder perguntas, escrever cÃ³digo e mais. Ã‰ sÃ³ perguntar.".into(),
-            ("ru", "identity") => "Ð¯ Kala â€” Ð˜Ð˜ Ð² ÑÐ·Ñ‹ÐºÐµ Ð¿Ñ€Ð¾Ð³Ñ€Ð°Ð¼Ð¼Ð¸Ñ€Ð¾Ð²Ð°Ð½Ð¸Ñ Killer. ÐœÐ¾Ð³Ñƒ Ð¾Ñ‚Ð²ÐµÑ‡Ð°Ñ‚ÑŒ Ð½Ð° Ð²Ð¾Ð¿Ñ€Ð¾ÑÑ‹, Ð¿Ð¸ÑÐ°Ñ‚ÑŒ ÐºÐ¾Ð´ Ð¸ Ð¼Ð½Ð¾Ð³Ð¾Ðµ Ð´Ñ€ÑƒÐ³Ð¾Ðµ. ÐŸÑ€Ð¾ÑÑ‚Ð¾ ÑÐ¿Ñ€Ð¾ÑÐ¸.".into(),
-            ("ja", "identity") => "ç§ã¯Kalaã§ã™ â€” Killerãƒ—ãƒ­ã‚°ãƒ©ãƒŸãƒ³ã‚°è¨€èªžã«çµ„ã¿è¾¼ã¾ã‚ŒãŸAIã€‚è³ªå•ã€ã‚³ãƒ¼ãƒ‰ä½œæˆã€ãªã‚“ã§ã‚‚ã©ã†ãžã€‚".into(),
-            ("ko", "identity") => "ì €ëŠ” Kalaì˜ˆìš” â€” Killer í”„ë¡œê·¸ëž˜ë° ì–¸ì–´ì— ë‚´ìž¥ëœ AI. ì§ˆë¬¸, ì½”ë“œ ìž‘ì„±, ë­ë“  ë¬¼ì–´ë³´ì„¸ìš”.".into(),
-            ("zh", "identity") => "æˆ‘æ˜¯Kala â€” Killerç¼–ç¨‹è¯­è¨€å†…ç½®çš„AIã€‚å¯ä»¥å›žç­”é—®é¢˜ã€å†™ä»£ç ã€æŽ¨ç†ç­‰ç­‰ã€‚å°½ç®¡é—®ã€‚".into(),
-            ("ar", "identity") => "Ø£Ù†Ø§ Kala â€” Ø§Ù„Ø°ÙƒØ§Ø¡ Ø§Ù„Ø§ØµØ·Ù†Ø§Ø¹ÙŠ ÙÙŠ Ù„ØºØ© Killer. Ø£Ù‚Ø¯Ø± Ø£Ø¬Ø§ÙˆØ¨ Ø£Ø³Ø¦Ù„Ø©ØŒ Ø£ÙƒØªØ¨ ÙƒÙˆØ¯ØŒ ÙˆØ£ÙƒØ«Ø±. Ø¨Ø³ Ø§Ø³Ø£Ù„.".into(),
-            ("tr", "identity") => "Ben Kala â€” Killer programlama dilinin yapay zekasÄ±yÄ±m. Soru sor, kod yaz, ne istersen.".into(),
-            (_, "identity") => "I'm Kala â€” the AI built into the Killer programming language. I can answer questions, write code, reason through problems, write prose, and more. Just ask me anything.".into(),
+            // ── IDENTITY ────────────────────────────────────────────────────────
+            ("hi", "identity") => "मैं Kala हूँ  Killer programming language का AI। सवाल पूछो, code लिखवाओ, कुछ भी करो।".into(),
+            ("te", "identity") => "నేను Kala  Killer programming language లో built-in AI. questions అడుగు, code రాయిస్తా, ఏదైనా చేస్తా.".into(),
+            ("ta", "identity") => "நான் Kala  Killer programming language-ல் உள்ள AI. கேள்வி கேளு, code எழுதுவேன், எதுவும் செய்வேன்.".into(),
+            ("es", "identity") => "Soy Kala  la IA integrada en el lenguaje Killer. Puedo responder preguntas, escribir código, razonar y más. Solo pregunta.".into(),
+            ("fr", "identity") => "Je suis Kala  l'IA intégrée dans le langage Killer. Je peux répondre, coder, raisonner et plus. Demande-moi.".into(),
+            ("de", "identity") => "Ich bin Kala  die KI im Killer-Programmiersprache. Ich kann Fragen beantworten, Code schreiben und mehr. Frag einfach.".into(),
+            ("it", "identity") => "Sono Kala  l'IA del linguaggio Killer. Posso rispondere, programmare, ragionare e altro. Chiedi pure.".into(),
+            ("pt", "identity") => "Eu sou Kala  a IA da linguagem Killer. Posso responder perguntas, escrever código e mais. É só perguntar.".into(),
+            ("ru", "identity") => "Я Kala  ИИ в языке программирования Killer. Могу отвечать на вопросы, писать код и многое другое. Просто спроси.".into(),
+            ("ja", "identity") => "私はKalaです  Killerプログラミング言語に組み込まれたAI。質問、コード作成、なんでもどうぞ。".into(),
+            ("ko", "identity") => "저는 Kala예요  Killer 프로그래밍 언어에 내장된 AI. 질문, 코드 작성, 뭐든 물어보세요.".into(),
+            ("zh", "identity") => "我是Kala  Killer编程语言内置的AI。可以回答问题、写代码、推理等等。尽管问。".into(),
+            ("ar", "identity") => "أنا Kala  الذكاء الاصطناعي في لغة Killer. أقدر أجاوب أسئلة، أكتب كود، وأكثر. بس اسأل.".into(),
+            ("tr", "identity") => "Ben Kala  Killer programlama dilinin yapay zekasıyım. Soru sor, kod yaz, ne istersen.".into(),
+            (_, "identity") => "I'm Kala  the AI built into the Killer programming language. I can answer questions, write code, reason through problems, write prose, and more. Just ask me anything.".into(),
 
-            // â”€â”€ HELP â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-            ("hi", "help") => "à¤¹à¤¾à¤! à¤®à¥ˆà¤‚ à¤¸à¤µà¤¾à¤²à¥‹à¤‚ à¤•à¥‡ à¤œà¤µà¤¾à¤¬ à¤¦à¥‡ à¤¸à¤•à¤¤à¤¾ à¤¹à¥‚à¤, code à¤²à¤¿à¤– à¤¸à¤•à¤¤à¤¾ à¤¹à¥‚à¤, problems solve à¤•à¤° à¤¸à¤•à¤¤à¤¾ à¤¹à¥‚à¤, essays/stories à¤²à¤¿à¤– à¤¸à¤•à¤¤à¤¾ à¤¹à¥‚à¤, à¤”à¤° à¤­à¥€ à¤¬à¤¹à¥à¤¤ à¤•à¥à¤›à¥¤\n\nà¤¬à¤¸ à¤Ÿà¤¾à¤‡à¤ª à¤•à¤°à¥‹ â€” à¤®à¥ˆà¤‚ à¤¸à¤®à¤ à¤œà¤¾à¤Šà¤‚à¤—à¤¾à¥¤ à¤•à¥à¤¯à¤¾ try à¤•à¤°à¤¨à¤¾ à¤¹à¥ˆ?".into(),
-            ("te", "help") => "à°…à°µà±à°¨à±! à°¨à±‡à°¨à± questions answer à°šà±‡à°¸à±à°¤à°¾, code à°°à°¾à°¸à±à°¤à°¾, problems solve à°šà±‡à°¸à±à°¤à°¾, essays/stories à°°à°¾à°¸à±à°¤à°¾, à°‡à°‚à°•à°¾ à°šà°¾à°²à°¾.\n\nà°Ÿà±ˆà°ªà± à°šà±‡à°¯à± â€” à°¨à±‡à°¨à± figure out à°šà±‡à°¸à±à°¤à°¾. à°à°‚ try à°šà±‡à°¦à±à°¦à°¾à°‚?".into(),
-            ("ta", "help") => "à®†à®®à®¾! à®•à¯‡à®³à¯à®µà®¿à®•à®³à¯à®•à¯à®•à¯ à®ªà®¤à®¿à®²à¯ à®šà¯Šà®²à¯à®µà¯‡à®©à¯, code à®Žà®´à¯à®¤à¯à®µà¯‡à®©à¯, problems solve à®ªà®£à¯à®£à¯à®µà¯‡à®©à¯.\n\nà®Ÿà¯ˆà®ªà¯ à®ªà®£à¯à®£à¯ â€” à®ªà¯à®°à®¿à®žà¯à®šà¯à®•à¯à®•à®¿à®±à¯‡à®©à¯. à®Žà®©à¯à®© try à®ªà®£à¯à®£à®²à®¾à®®à¯?".into(),
-            ("es", "help") => "Â¡Claro! Puedo responder preguntas, escribir cÃ³digo, resolver problemas, escribir ensayos o historias, y mÃ¡s.\n\nSolo escribe â€” yo me encargo. Â¿QuÃ© quieres probar?".into(),
-            ("fr", "help") => "Bien sÃ»r ! Je peux rÃ©pondre Ã  des questions, Ã©crire du code, rÃ©soudre des problÃ¨mes, Ã©crire des textes, et plus.\n\nTape ce que tu veux â€” je m'en occupe. Qu'est-ce qu'on essaie ?".into(),
-            ("de", "help") => "Klar! Ich kann Fragen beantworten, Code schreiben, Probleme lÃ¶sen, Texte schreiben und mehr.\n\nSchreib einfach â€” ich finde mich zurecht. Was willst du ausprobieren?".into(),
-            ("ru", "help") => "ÐšÐ¾Ð½ÐµÑ‡Ð½Ð¾! ÐœÐ¾Ð³Ñƒ Ð¾Ñ‚Ð²ÐµÑ‡Ð°Ñ‚ÑŒ Ð½Ð° Ð²Ð¾Ð¿Ñ€Ð¾ÑÑ‹, Ð¿Ð¸ÑÐ°Ñ‚ÑŒ ÐºÐ¾Ð´, Ñ€ÐµÑˆÐ°Ñ‚ÑŒ Ð·Ð°Ð´Ð°Ñ‡Ð¸, Ð¿Ð¸ÑÐ°Ñ‚ÑŒ Ñ‚ÐµÐºÑÑ‚Ñ‹ Ð¸ Ð¼Ð½Ð¾Ð³Ð¾Ðµ Ð´Ñ€ÑƒÐ³Ð¾Ðµ.\n\nÐŸÑ€Ð¾ÑÑ‚Ð¾ Ð½Ð°Ð¿Ð¸ÑˆÐ¸ â€” Ñ€Ð°Ð·Ð±ÐµÑ€ÑƒÑÑŒ. Ð§Ñ‚Ð¾ Ð¿Ð¾Ð¿Ñ€Ð¾Ð±ÑƒÐµÐ¼?".into(),
-            ("ja", "help") => "ã¯ã„ï¼è³ªå•ã«ç­”ãˆãŸã‚Šã€ã‚³ãƒ¼ãƒ‰ã‚’æ›¸ã„ãŸã‚Šã€å•é¡Œã‚’è§£ã„ãŸã‚Šã€æ–‡ç« ã‚’æ›¸ã„ãŸã‚Šã§ãã¾ã™ã€‚\n\nä½•ã§ã‚‚å…¥åŠ›ã—ã¦ãã ã•ã„ã€‚ä½•ã‚’è©¦ã—ã¾ã™ã‹ï¼Ÿ".into(),
-            ("ko", "help") => "ë„¤! ì§ˆë¬¸ì— ë‹µí•˜ê³ , ì½”ë“œ ìž‘ì„±í•˜ê³ , ë¬¸ì œ í’€ê³ , ê¸€ë„ ì“¸ ìˆ˜ ìžˆì–´ìš”.\n\në­ë“  ìž…ë ¥í•˜ì„¸ìš”. ë­˜ í•´ë³¼ê¹Œìš”?".into(),
-            ("zh", "help") => "å½“ç„¶ï¼æˆ‘èƒ½å›žç­”é—®é¢˜ã€å†™ä»£ç ã€è§£å†³é—®é¢˜ã€å†™æ–‡ç« ç­‰ç­‰ã€‚\n\nç›´æŽ¥è¾“å…¥å°±è¡Œâ€”â€”æˆ‘æ¥æžå®šã€‚è¯•è¯•ä»€ä¹ˆï¼Ÿ".into(),
-            ("ar", "help") => "Ø·Ø¨Ø¹Ø§Ù‹! Ø£Ù‚Ø¯Ø± Ø£Ø¬Ø§ÙˆØ¨ Ø£Ø³Ø¦Ù„Ø©ØŒ Ø£ÙƒØªØ¨ ÙƒÙˆØ¯ØŒ Ø£Ø­Ù„ Ù…Ø´Ø§ÙƒÙ„ØŒ Ø£ÙƒØªØ¨ Ù…Ù‚Ø§Ù„Ø§Øª ÙˆØ£ÙƒØ«Ø±.\n\nØ¨Ø³ Ø§ÙƒØªØ¨ â€” Ø£Ù†Ø§ Ø£ÙÙ‡Ù…. Ø´Ùˆ ØªØ¨ÙŠ ØªØ¬Ø±Ø¨ØŸ".into(),
-            ("tr", "help") => "Tabii! Sorulara cevap verebilirim, kod yazabilirim, problem Ã§Ã¶zebilirim, yazÄ± yazabilirim ve daha fazlasÄ±.\n\nSadece yaz â€” ben hallederim. Ne denemek istersin?".into(),
-            (_, "help") => "Sure! I can answer questions, write code, help you think through problems, write essays or stories, debug code, and do AI research stuff.\n\nJust type what you need â€” I'll figure out the rest. What do you want to try?".into(),
+            // ── HELP ────────────────────────────────────────────────────────────
+            ("hi", "help") => "हाँ! मैं सवालों के जवाब दे सकता हूँ, code लिख सकता हूँ, problems solve कर सकता हूँ, essays/stories लिख सकता हूँ, और भी बहुत कुछ।\n\nबस टाइप करो  मैं समझ जाऊंगा। क्या try करना है?".into(),
+            ("te", "help") => "అవును! నేను questions answer చేస్తా, code రాస్తా, problems solve చేస్తా, essays/stories రాస్తా, ఇంకా చాలా.\n\nటైప్ చేయ్  నేను figure out చేస్తా. ఏం try చేద్దాం?".into(),
+            ("ta", "help") => "ஆமா! கேள்விகளுக்கு பதில் சொல்வேன், code எழுதுவேன், problems solve பண்ணுவேன்.\n\nடைப் பண்ணு  புரிஞ்சுக்கிறேன். என்ன try பண்ணலாம்?".into(),
+            ("es", "help") => "¡Claro! Puedo responder preguntas, escribir código, resolver problemas, escribir ensayos o historias, y más.\n\nSolo escribe  yo me encargo. ¿Qué quieres probar?".into(),
+            ("fr", "help") => "Bien sûr ! Je peux répondre à des questions, écrire du code, résoudre des problèmes, écrire des textes, et plus.\n\nTape ce que tu veux  je m'en occupe. Qu'est-ce qu'on essaie ?".into(),
+            ("de", "help") => "Klar! Ich kann Fragen beantworten, Code schreiben, Probleme lösen, Texte schreiben und mehr.\n\nSchreib einfach  ich finde mich zurecht. Was willst du ausprobieren?".into(),
+            ("ru", "help") => "Конечно! Могу отвечать на вопросы, писать код, решать задачи, писать тексты и многое другое.\n\nПросто напиши  разберусь. Что попробуем?".into(),
+            ("ja", "help") => "はい！質問に答えたり、コードを書いたり、問題を解いたり、文章を書いたりできます。\n\n何でも入力してください。何を試しますか？".into(),
+            ("ko", "help") => "네! 질문에 답하고, 코드 작성하고, 문제 풀고, 글도 쓸 수 있어요.\n\n뭐든 입력하세요. 뭘 해볼까요?".into(),
+            ("zh", "help") => "当然！我能回答问题、写代码、解决问题、写文章等等。\n\n直接输入就行——我来搞定。试试什么？".into(),
+            ("ar", "help") => "طبعاً! أقدر أجاوب أسئلة، أكتب كود، أحل مشاكل، أكتب مقالات وأكثر.\n\nبس اكتب  أنا أفهم. شو تبي تجرب؟".into(),
+            ("tr", "help") => "Tabii! Sorulara cevap verebilirim, kod yazabilirim, problem çözebilirim, yazı yazabilirim ve daha fazlası.\n\nSadece yaz  ben hallederim. Ne denemek istersin?".into(),
+            (_, "help") => "Sure! I can answer questions, write code, help you think through problems, write essays or stories, debug code, and do AI research stuff.\n\nJust type what you need  I'll figure out the rest. What do you want to try?".into(),
 
-            // â”€â”€ THANKS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-            ("hi", "thanks") => "à¤•à¥‹à¤ˆ à¤¬à¤¾à¤¤ à¤¨à¤¹à¥€à¤‚! à¤”à¤° à¤•à¥à¤›?".into(),
-            ("te", "thanks") => "à°ªà°°à±à°µà°¾à°²à±‡à°¦à±! à°‡à°‚à°•à±‡à°®à±ˆà°¨à°¾?".into(),
-            ("ta", "thanks") => "à®ªà®°à®µà®¾à®¯à®¿à®²à¯à®²! à®µà¯‡à®± à®à®¤à®¾à®µà®¤à¯?".into(),
-            ("es", "thanks") => "Â¡De nada! Â¿Algo mÃ¡s?".into(),
+            // ── THANKS ──────────────────────────────────────────────────────────
+            ("hi", "thanks") => "कोई बात नहीं! और कुछ?".into(),
+            ("te", "thanks") => "పర్వాలేదు! ఇంకేమైనా?".into(),
+            ("ta", "thanks") => "பரவாயில்ல! வேற ஏதாவது?".into(),
+            ("es", "thanks") => "¡De nada! ¿Algo más?".into(),
             ("fr", "thanks") => "De rien ! Autre chose ?".into(),
             ("de", "thanks") => "Gern geschehen! Noch etwas?".into(),
             ("it", "thanks") => "Prego! Altro?".into(),
             ("pt", "thanks") => "De nada! Mais alguma coisa?".into(),
-            ("ru", "thanks") => "ÐŸÐ¾Ð¶Ð°Ð»ÑƒÐ¹ÑÑ‚Ð°! Ð•Ñ‰Ñ‘ Ñ‡Ñ‚Ð¾-Ð½Ð¸Ð±ÑƒÐ´ÑŒ?".into(),
-            ("ja", "thanks") => "ã©ã†ã„ãŸã—ã¾ã—ã¦ï¼ä»–ã«ä½•ã‹ã‚ã‚‹ï¼Ÿ".into(),
-            ("ko", "thanks") => "ì²œë§Œì—ìš”! ë” í•„ìš”í•œ ê±° ìžˆì–´ìš”?".into(),
-            ("zh", "thanks") => "ä¸å®¢æ°”ï¼è¿˜æœ‰åˆ«çš„å—ï¼Ÿ".into(),
-            ("ar", "thanks") => "Ø¹ÙÙˆØ§Ù‹! Ø´ÙŠ Ø«Ø§Ù†ÙŠØŸ".into(),
-            ("tr", "thanks") => "Rica ederim! BaÅŸka bir ÅŸey?".into(),
+            ("ru", "thanks") => "Пожалуйста! Ещё что-нибудь?".into(),
+            ("ja", "thanks") => "どういたしまして！他に何かある？".into(),
+            ("ko", "thanks") => "천만에요! 더 필요한 거 있어요?".into(),
+            ("zh", "thanks") => "不客气！还有别的吗？".into(),
+            ("ar", "thanks") => "عفواً! شي ثاني؟".into(),
+            ("tr", "thanks") => "Rica ederim! Başka bir şey?".into(),
             (_, "thanks") => "You're welcome! Anything else?".into(),
 
-            // â”€â”€ BYE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-            ("hi", "bye") => "à¤«à¤¿à¤° à¤®à¤¿à¤²à¥‡à¤‚à¤—à¥‡! à¤•à¤­à¥€ à¤­à¥€ à¤†à¤“à¥¤".into(),
-            ("te", "bye") => "à°®à°³à±à°³à±€ à°•à°²à±à°¦à±à°¦à°¾à°‚! à°Žà°ªà±à°ªà±à°¡à±ˆà°¨à°¾ à°°à°¾.".into(),
-            ("ta", "bye") => "à®®à¯€à®£à¯à®Ÿà¯à®®à¯ à®šà®¨à¯à®¤à®¿à®ªà¯à®ªà¯‹à®®à¯! à®Žà®ªà¯à®ªà¯‹à®µà¯à®®à¯ à®µà®¾.".into(),
-            ("es", "bye") => "Â¡Nos vemos! Vuelve cuando quieras.".into(),
-            ("fr", "bye") => "Ã€ bientÃ´t ! Reviens quand tu veux.".into(),
-            ("de", "bye") => "TschÃ¼ss! Komm jederzeit wieder.".into(),
+            // ── BYE ─────────────────────────────────────────────────────────────
+            ("hi", "bye") => "फिर मिलेंगे! कभी भी आओ।".into(),
+            ("te", "bye") => "మళ్ళీ కలుద్దాం! ఎప్పుడైనా రా.".into(),
+            ("ta", "bye") => "மீண்டும் சந்திப்போம்! எப்போவும் வா.".into(),
+            ("es", "bye") => "¡Nos vemos! Vuelve cuando quieras.".into(),
+            ("fr", "bye") => "À bientôt ! Reviens quand tu veux.".into(),
+            ("de", "bye") => "Tschüss! Komm jederzeit wieder.".into(),
             ("it", "bye") => "Ci vediamo! Torna quando vuoi.".into(),
-            ("pt", "bye") => "AtÃ© logo! Volte quando quiser.".into(),
-            ("ru", "bye") => "ÐŸÐ¾ÐºÐ°! Ð’Ð¾Ð·Ð²Ñ€Ð°Ñ‰Ð°Ð¹ÑÑ Ð² Ð»ÑŽÐ±Ð¾Ðµ Ð²Ñ€ÐµÐ¼Ñ.".into(),
-            ("ja", "bye") => "ã¾ãŸã­ï¼ã„ã¤ã§ã‚‚æ¥ã¦ãã ã•ã„ã€‚".into(),
-            ("ko", "bye") => "ì•ˆë…•! ì–¸ì œë“  ë‹¤ì‹œ ì™€ìš”.".into(),
-            ("zh", "bye") => "å†è§ï¼éšæ—¶å›žæ¥ã€‚".into(),
-            ("ar", "bye") => "Ù…Ø¹ Ø§Ù„Ø³Ù„Ø§Ù…Ø©! Ø§Ø±Ø¬Ø¹ ÙˆÙ‚Øª Ù…Ø§ ØªØ¨ÙŠ.".into(),
-            ("tr", "bye") => "GÃ¶rÃ¼ÅŸÃ¼rÃ¼z! Ä°stediÄŸin zaman gel.".into(),
+            ("pt", "bye") => "Até logo! Volte quando quiser.".into(),
+            ("ru", "bye") => "Пока! Возвращайся в любое время.".into(),
+            ("ja", "bye") => "またね！いつでも来てください。".into(),
+            ("ko", "bye") => "안녕! 언제든 다시 와요.".into(),
+            ("zh", "bye") => "再见！随时回来。".into(),
+            ("ar", "bye") => "مع السلامة! ارجع وقت ما تبي.".into(),
+            ("tr", "bye") => "Görüşürüz! İstediğin zaman gel.".into(),
             (_, "bye") => "See you! Come back anytime.".into(),
 
-            // â”€â”€ IMPRESSED â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-            ("hi", "impressed") => "à¤–à¥à¤¶à¥€ à¤¹à¥à¤ˆ à¤ªà¤¸à¤‚à¤¦ à¤†à¤¯à¤¾! à¤”à¤° à¤•à¥à¤¯à¤¾ à¤®à¤¦à¤¦ à¤•à¤°à¥‚à¤?".into(),
-            ("te", "impressed") => "à°¨à°šà±à°šà°¿à°¨à°‚à°¦à±à°•à± à°¸à°‚à°¤à±‹à°·à°‚! à°‡à°‚à°•à±‡à°‚ help à°•à°¾à°µà°¾à°²à°¿?".into(),
-            ("ta", "impressed") => "à®ªà®¿à®Ÿà®¿à®šà¯à®šà®¤à¯à®•à¯à®•à¯ à®šà®¨à¯à®¤à¯‹à®·à®®à¯! à®µà¯‡à®± à®Žà®©à¯à®© help?".into(),
-            ("es", "impressed") => "Â¡Me alegra que te gustÃ³! Â¿En quÃ© mÃ¡s ayudo?".into(),
-            ("fr", "impressed") => "Content que Ã§a t'a plu ! Quoi d'autre ?".into(),
+            // ── IMPRESSED ───────────────────────────────────────────────────────
+            ("hi", "impressed") => "खुशी हुई पसंद आया! और क्या मदद करूँ?".into(),
+            ("te", "impressed") => "నచ్చినందుకు సంతోషం! ఇంకేం help కావాలి?".into(),
+            ("ta", "impressed") => "பிடிச்சதுக்கு சந்தோஷம்! வேற என்ன help?".into(),
+            ("es", "impressed") => "¡Me alegra que te gustó! ¿En qué más ayudo?".into(),
+            ("fr", "impressed") => "Content que ça t'a plu ! Quoi d'autre ?".into(),
             ("de", "impressed") => "Freut mich! Was noch?".into(),
-            ("ru", "impressed") => "Ð Ð°Ð´ Ñ‡Ñ‚Ð¾ Ð¿Ð¾Ð½Ñ€Ð°Ð²Ð¸Ð»Ð¾ÑÑŒ! Ð§ÐµÐ¼ ÐµÑ‰Ñ‘ Ð¿Ð¾Ð¼Ð¾Ñ‡ÑŒ?".into(),
-            ("ja", "impressed") => "å–œã‚“ã§ã‚‚ã‚‰ãˆã¦å¬‰ã—ã„ï¼ä»–ã«ä½•ã‹ï¼Ÿ".into(),
-            ("ko", "impressed") => "ë§ˆìŒì— ë“¤ì–´ì„œ ê¸°ë»ìš”! ë˜ ë­ í•„ìš”í•´ìš”?".into(),
-            ("zh", "impressed") => "å¾ˆé«˜å…´ä½ å–œæ¬¢ï¼è¿˜éœ€è¦ä»€ä¹ˆï¼Ÿ".into(),
+            ("ru", "impressed") => "Рад что понравилось! Чем ещё помочь?".into(),
+            ("ja", "impressed") => "喜んでもらえて嬉しい！他に何か？".into(),
+            ("ko", "impressed") => "마음에 들어서 기뻐요! 또 뭐 필요해요?".into(),
+            ("zh", "impressed") => "很高兴你喜欢！还需要什么？".into(),
             (_, "impressed") => "Glad you liked it! What else can I help with?".into(),
 
-            // â”€â”€ ACKNOWLEDGED â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-            ("hi", "ack") => "à¤ à¥€à¤• à¤¹à¥ˆ! à¤”à¤° à¤•à¥à¤›?".into(),
-            ("te", "ack") => "à°¸à°°à±‡! à°‡à°‚à°•à±‡à°‚?".into(),
-            ("ta", "ack") => "à®šà®°à®¿! à®µà¯‡à®± à®Žà®©à¯à®©?".into(),
-            ("es", "ack") => "Â¡Entendido! Â¿QuÃ© mÃ¡s?".into(),
+            // ── ACKNOWLEDGED ────────────────────────────────────────────────────
+            ("hi", "ack") => "ठीक है! और कुछ?".into(),
+            ("te", "ack") => "సరే! ఇంకేం?".into(),
+            ("ta", "ack") => "சரி! வேற என்ன?".into(),
+            ("es", "ack") => "¡Entendido! ¿Qué más?".into(),
             ("fr", "ack") => "Compris ! Quoi d'autre ?".into(),
             ("de", "ack") => "Verstanden! Was noch?".into(),
-            ("ru", "ack") => "ÐŸÐ¾Ð½ÑÐ»! Ð§Ñ‚Ð¾ ÐµÑ‰Ñ‘?".into(),
-            ("ja", "ack") => "äº†è§£ï¼ä»–ã«ã¯ï¼Ÿ".into(),
-            ("ko", "ack") => "ì•Œê² ì–´ìš”! ë˜ ë­ ìžˆì–´ìš”?".into(),
-            ("zh", "ack") => "æ˜Žç™½ï¼è¿˜æœ‰ä»€ä¹ˆï¼Ÿ".into(),
+            ("ru", "ack") => "Понял! Что ещё?".into(),
+            ("ja", "ack") => "了解！他には？".into(),
+            ("ko", "ack") => "알겠어요! 또 뭐 있어요?".into(),
+            ("zh", "ack") => "明白！还有什么？".into(),
             (_, "ack") => "Got it! What else do you need?".into(),
 
             // Fallback
@@ -7255,26 +7497,26 @@ impl BuiltinFunctions {
         }
     }
 
-    // â”€â”€â”€ Kala UI dispatch â€” called from kala_ui.rs HTTP handler â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ─── Kala UI dispatch  called from kala_ui.rs HTTP handler ───────────────
     /// Dispatches a Kala chat-UI request to the correct AI engine builtin.
     pub fn kala_dispatch(mode: &str, question: &str, style: &str, lang: &str) -> String {
-        // â”€â”€ Tier 0: Kala Conversational Identity Layer (< 1ms, no web) â”€â”€â”€â”€â”€â”€
+        // ── Tier 0: Kala Conversational Identity Layer (< 1ms, no web) ──────
         // Intercepts greetings and identity questions before any web search.
 
         if question.trim().is_empty() {
-            return "I'm ready to help! Ask me anything â€” science, tech, history, coding, math, or just chat. ðŸ’¬\n\n\
+            return "I'm ready to help! Ask me anything  science, tech, history, coding, math, or just chat. 💬\n\n\
                     *What's on your mind?*".to_string();
         }
 
         // Normalize Unicode math operators to ASCII equivalents
         let question = question
-            .replace('\u{2212}', "-")   // âˆ’ MINUS SIGN
-            .replace('\u{2013}', "-")   // â€“ EN DASH
-            .replace('\u{2014}', "-")   // â€” EM DASH
-            .replace('\u{00D7}', "*")   // Ã— MULTIPLICATION SIGN
-            .replace('\u{00F7}', "/")   // Ã· DIVISION SIGN
-            .replace('\u{00B2}', "^2")  // Â² SUPERSCRIPT TWO
-            .replace('\u{00B3}', "^3")  // Â³ SUPERSCRIPT THREE
+            .replace('\u{2212}', "-")   // − MINUS SIGN
+            .replace('\u{2013}', "-")   //  EN DASH
+            .replace('\u{2014}', "-")   //  EM DASH
+            .replace('\u{00D7}', "*")   // × MULTIPLICATION SIGN
+            .replace('\u{00F7}', "/")   // ÷ DIVISION SIGN
+            .replace('\u{00B2}', "^2")  // ² SUPERSCRIPT TWO
+            .replace('\u{00B3}', "^3")  // ³ SUPERSCRIPT THREE
             .replace('\u{2018}', "'")   // ' LEFT SINGLE QUOTE
             .replace('\u{2019}', "'")   // ' RIGHT SINGLE QUOTE
             .replace('\u{201C}', "\"")  // " LEFT DOUBLE QUOTE
@@ -7287,7 +7529,7 @@ impl BuiltinFunctions {
         // Detect user's chat language
         let chat_lang = Self::detect_chat_lang(question);
 
-        // â”€â”€ Extract user's name from the question if introduced â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Extract user's name from the question if introduced ───────────
         // "hi i am deepthi", "my name is sai", "call me sundar"
         let user_name: Option<String> = {
             let patterns = [
@@ -7297,6 +7539,10 @@ impl BuiltinFunctions {
             let mut found = None;
             for pat in &patterns {
                 if let Some(pos) = q_lower.find(pat) {
+                    // Skip if the pattern starts inside a word (e.g. "am " inside "anagram ")
+                    if pos > 0 && q_lower.as_bytes().get(pos - 1).map_or(false, |&b| b.is_ascii_alphabetic()) {
+                        continue;
+                    }
                     let after = q_lower[pos + pat.len()..].trim();
                     let name_word: String = after.split_whitespace().next()
                         .unwrap_or("").chars()
@@ -7319,7 +7565,7 @@ impl BuiltinFunctions {
             found
         };
 
-        // "who am i" / "who iam" â€” recall user's stored name
+        // "who am i" / "who iam"  recall user's stored name
         let is_who_am_i = matches!(q_clean,
             "who am i" | "who iam" | "who i am" | "whats my name" | "what's my name"
             | "what is my name" | "do you know my name" | "do you know me"
@@ -7337,14 +7583,14 @@ impl BuiltinFunctions {
                 let nl = stored_name.to_lowercase();
                 let is_bad = matches!(nl.as_str(), "kala" | "ghost" | "killer" | "ai" | "bot" | "");
                 if !is_bad {
-                    return format!("You're **{}**! ðŸ˜Š I remember you. What can I do for you today?", stored_name);
+                    return format!("You're **{}**! 😊 I remember you. What can I do for you today?", stored_name);
                 }
             }
-            return "I don't know your name yet! Tell me â€” what should I call you? Just say \"I am [name]\" or \"call me [name]\".".to_string();
+            return "I don't know your name yet! Tell me  what should I call you? Just say \"I am [name]\" or \"call me [name]\".".to_string();
         }
 
-        // Greetings â€” detect greeting words at start of message
-        // BUT only trigger for PURE greetings â€” not "hey can you generate image of sunset"
+        // Greetings  detect greeting words at start of message
+        // BUT only trigger for PURE greetings  not "hey can you generate image of sunset"
         let starts_with_greeting_word = q_clean.starts_with("hi ") || q_clean.starts_with("hello ")
             || q_clean.starts_with("hey ") || q_clean == "hi" || q_clean == "hello"
             || q_clean == "hey" || q_clean == "hiya" || q_clean == "howdy"
@@ -7358,39 +7604,39 @@ impl BuiltinFunctions {
             || q_clean == "sat sri akaal" || q_clean == "sat sri akal"
             // Urdu / Arabic
             || q_clean == "salaam" || q_clean == "adaab" || q_clean == "assalamu alaikum"
-            || q_clean.starts_with("Ù…Ø±Ø­Ø¨Ø§") || q_clean.starts_with("Ø£Ù‡Ù„Ø§") || q_clean.starts_with("Ø³Ù„Ø§Ù…")
+            || q_clean.starts_with("مرحبا") || q_clean.starts_with("أهلا") || q_clean.starts_with("سلام")
             // European
             || q_clean == "bonjour" || q_clean == "salut" || q_clean == "bonsoir"
             || q_clean == "hola" || q_clean == "buenos dias" || q_clean == "buenas tardes"
             || q_clean == "ciao" || q_clean == "buongiorno" || q_clean == "buonasera"
             || q_clean == "guten tag" || q_clean == "guten morgen" || q_clean == "hallo"
-            || q_clean.starts_with("olÃ¡") || q_clean == "ola" || q_clean == "bom dia"
+            || q_clean.starts_with("olá") || q_clean == "ola" || q_clean == "bom dia"
             || q_clean == "boa tarde" || q_clean == "boa noite"
-            || q_clean == "hej" || q_clean == "hallÃ¥"
-            || q_clean == "czeÅ›Ä‡" || q_clean == "dzieÅ„ dobry"
+            || q_clean == "hej" || q_clean == "hallå"
+            || q_clean == "cześć" || q_clean == "dzień dobry"
             || q_clean == "merhaba"
             // East Asian
-            || q_clean.starts_with("ã“ã‚“ã«ã¡ã¯") || q_clean.starts_with("ãŠã¯ã‚ˆã†") || q_clean.starts_with("ã“ã‚“ã°ã‚“ã¯")
-            || q_clean.starts_with("ì•ˆë…•") || q_clean.starts_with("ä½ å¥½")
+            || q_clean.starts_with("こんにちは") || q_clean.starts_with("おはよう") || q_clean.starts_with("こんばんは")
+            || q_clean.starts_with("안녕") || q_clean.starts_with("你好")
             // Other
-            || q_clean.starts_with("à¸ªà¸§à¸±à¸ªà¸”à¸µ")
-            || q_clean == "xin chÃ o" || q_clean.starts_with("xin chao")
+            || q_clean.starts_with("สวัสดี")
+            || q_clean == "xin chào" || q_clean.starts_with("xin chao")
             || q_clean.starts_with("selamat") || q_clean == "apa kabar"
             || q_clean == "habari"
-            || q_clean.starts_with("×©×œ×•×")
-            || q_clean.starts_with("Î³ÎµÎ¹Î±")
+            || q_clean.starts_with("שלום")
+            || q_clean.starts_with("γεια")
             // Russian
-            || q_clean.starts_with("Ð¿Ñ€Ð¸Ð²ÐµÑ‚") || q_clean.starts_with("Ð·Ð´Ñ€Ð°Ð²ÑÑ‚Ð²ÑƒÐ¹")
+            || q_clean.starts_with("привет") || q_clean.starts_with("здравствуй")
             // Hindi in Devanagari
-            || q_clean.starts_with("à¤¨à¤®à¤¸à¥à¤¤à¥‡") || q_clean.starts_with("à¤¨à¤®à¤¸à¥à¤•à¤¾à¤°")
+            || q_clean.starts_with("नमस्ते") || q_clean.starts_with("नमस्कार")
             // Telugu in script
-            || q_clean.starts_with("à°¨à°®à°¸à±à°•à°¾à°°à°‚") || q_clean.starts_with("à°¹à°¾à°¯à±") || q_clean.starts_with("à°¹à°²à±‹")
+            || q_clean.starts_with("నమస్కారం") || q_clean.starts_with("హాయ్") || q_clean.starts_with("హలో")
             // Tamil in script
-            || q_clean.starts_with("à®µà®£à®•à¯à®•à®®à¯")
+            || q_clean.starts_with("வணக்கம்")
             // Kannada in script
-            || q_clean.starts_with("à²¨à²®à²¸à³à²•à²¾à²°")
+            || q_clean.starts_with("ನಮಸ್ಕಾರ")
             // Bengali in script
-            || q_clean.starts_with("à¦¨à¦®à¦¸à§à¦•à¦¾à¦°");
+            || q_clean.starts_with("নমস্কার");
 
         // If it starts with a greeting word but contains a real request after it, skip greeting
         let has_substantive_request = {
@@ -7453,39 +7699,39 @@ impl BuiltinFunctions {
           // Hindi
           || q_lower.contains("kaise ho") || q_lower.contains("kaise hain")
           || q_lower.contains("kya haal") || q_lower.contains("theek ho")
-          || q_lower.contains("à¤•à¥ˆà¤¸à¥‡ à¤¹à¥‹") || q_lower.contains("à¤•à¥à¤¯à¤¾ à¤¹à¤¾à¤²")
+          || q_lower.contains("कैसे हो") || q_lower.contains("क्या हाल")
           // Telugu
           || q_lower.contains("ela unnaru") || q_lower.contains("ela unnav")
           || q_lower.contains("baagunnara") || q_lower.contains("baagunnava")
-          || q_lower.contains("à°Žà°²à°¾ à°‰à°¨à±à°¨à°¾à°°à±") || q_lower.contains("à°Žà°²à°¾ à°‰à°¨à±à°¨à°¾à°µà±") || q_lower.contains("à°¬à°¾à°—à±à°¨à±à°¨à°¾à°°à°¾")
+          || q_lower.contains("ఎలా ఉన్నారు") || q_lower.contains("ఎలా ఉన్నావ్") || q_lower.contains("బాగున్నారా")
           // Tamil
           || q_lower.contains("epdi irukeenga") || q_lower.contains("eppadi irukkinga")
-          || q_lower.contains("à®Žà®ªà¯à®ªà®Ÿà®¿ à®‡à®°à¯à®•à¯à®•à¯€à®™à¯à®•")
+          || q_lower.contains("எப்படி இருக்கீங்க")
           // Spanish
-          || q_lower.contains("como estas") || q_lower.contains("cÃ³mo estÃ¡s") || q_lower.contains("que tal")
+          || q_lower.contains("como estas") || q_lower.contains("cómo estás") || q_lower.contains("que tal")
           // French
-          || q_lower.contains("comment allez") || q_lower.contains("comment vas") || q_lower.contains("Ã§a va")
+          || q_lower.contains("comment allez") || q_lower.contains("comment vas") || q_lower.contains("ça va")
           // German
           || q_lower.contains("wie geht") || q_lower.contains("wie gehts")
           // Italian
           || q_lower.contains("come stai") || q_lower.contains("come va")
           // Portuguese
-          || q_lower.contains("como vocÃª estÃ¡") || q_lower.contains("tudo bem")
+          || q_lower.contains("como você está") || q_lower.contains("tudo bem")
           // Russian
-          || q_lower.contains("ÐºÐ°Ðº Ð´ÐµÐ»Ð°") || q_lower.contains("ÐºÐ°Ðº Ñ‚Ñ‹")
+          || q_lower.contains("как дела") || q_lower.contains("как ты")
           // Japanese
-          || q_lower.contains("å…ƒæ°—") || q_lower.contains("ãŠå…ƒæ°—ã§ã™ã‹")
+          || q_lower.contains("元気") || q_lower.contains("お元気ですか")
           // Korean
-          || q_lower.contains("ìž˜ ì§€ë‚´") || q_lower.contains("ì–´ë–»ê²Œ ì§€ë‚´")
+          || q_lower.contains("잘 지내") || q_lower.contains("어떻게 지내")
           // Chinese
-          || q_lower.contains("ä½ å¥½å—") || q_lower.contains("æ€Žä¹ˆæ ·")
+          || q_lower.contains("你好吗") || q_lower.contains("怎么样")
           // Arabic
-          || q_lower.contains("ÙƒÙŠÙ Ø­Ø§Ù„Ùƒ") || q_lower.contains("Ø´Ù„ÙˆÙ†Ùƒ")
+          || q_lower.contains("كيف حالك") || q_lower.contains("شلونك")
           // Turkish
-          || q_lower.contains("nasÄ±lsÄ±n") || q_lower.contains("nasilsin")
+          || q_lower.contains("nasılsın") || q_lower.contains("nasilsin")
           // Telugu misc wellbeing
           || q_lower.contains("em chestunnav") || q_lower.contains("em chesthav")
-          || q_lower.contains("à°à°‚ à°šà±‡à°¸à±à°¤à±à°¨à±à°¨à°¾à°µà±")
+          || q_lower.contains("ఏం చేస్తున్నావ్")
           // Portuguese
           || q_lower.contains("tudo bem");
 
@@ -7512,7 +7758,7 @@ impl BuiltinFunctions {
                 wn
             };
             let name_correction = if let Some(ref wn) = wrong_name {
-                format!(" By the way, my name's Kala, not {} â€” no worries though!", wn)
+                format!(" By the way, my name's Kala, not {}  no worries though!", wn)
             } else { String::new() };
 
             let base = Self::kala_localized(chat_lang, "wellbeing", None);
@@ -7522,7 +7768,7 @@ impl BuiltinFunctions {
             return format!("{}{}", base, name_correction);
         }
 
-        // Creator / owner / builder â€” only answer with the maintainer's name when the user
+        // Creator / owner / builder  only answer with the maintainer's name when the user
         // clearly asks (avoid mentioning them on every generic "who are you" / intro).
         let k_or_u = q_lower.contains("kala") || q_lower.contains("killer")
             || q_lower.contains(" you") || q_lower.ends_with(" you")
@@ -7542,30 +7788,30 @@ impl BuiltinFunctions {
           || ((q_lower.contains("built kala") || q_lower.contains("built killer"))
             && (q_lower.contains("who") || q_lower.contains("whom")))
           // Hindi
-          || q_lower.contains("kisne banaya") || q_lower.contains("à¤•à¤¿à¤¸à¤¨à¥‡ à¤¬à¤¨à¤¾à¤¯à¤¾")
+          || q_lower.contains("kisne banaya") || q_lower.contains("किसने बनाया")
           || q_lower.contains("kala ko kisne") || q_lower.contains("kala kaun")
           // Telugu
-          || q_lower.contains("evaru chesaru") || q_lower.contains("à°Žà°µà°°à± à°šà±‡à°¸à°¾à°°à±")
+          || q_lower.contains("evaru chesaru") || q_lower.contains("ఎవరు చేసారు")
           || q_lower.contains("kala ni evaru") || q_lower.contains("build chesindi evaru")
           // Tamil
-          || q_lower.contains("yaar pannanga") || q_lower.contains("à®¯à®¾à®°à¯ à®ªà®£à¯à®£à®¾à®™à¯à®•")
+          || q_lower.contains("yaar pannanga") || q_lower.contains("யார் பண்ணாங்க")
           // Spanish
-          || q_lower.contains("quiÃ©n te hizo") || q_lower.contains("quien te hizo")
-          || q_lower.contains("quiÃ©n te creÃ³") || q_lower.contains("quien te creo")
+          || q_lower.contains("quién te hizo") || q_lower.contains("quien te hizo")
+          || q_lower.contains("quién te creó") || q_lower.contains("quien te creo")
           // French
-          || q_lower.contains("qui t'a crÃ©Ã©") || q_lower.contains("qui t'a fait")
+          || q_lower.contains("qui t'a créé") || q_lower.contains("qui t'a fait")
           // German
           || q_lower.contains("wer hat dich") || q_lower.contains("wer hat kala")
           // Japanese
-          || q_lower.contains("èª°ãŒä½œã£ãŸ") || q_lower.contains("èª°ãŒä½œã‚Šã¾ã—ãŸ")
+          || q_lower.contains("誰が作った") || q_lower.contains("誰が作りました")
           // Korean
-          || q_lower.contains("ëˆ„ê°€ ë§Œë“¤ì—ˆ") || q_lower.contains("ëˆ„ê°€ ë§Œë“ ")
+          || q_lower.contains("누가 만들었") || q_lower.contains("누가 만든")
           // Chinese
-          || q_lower.contains("è°åˆ›é€ äº†") || q_lower.contains("è°åšçš„")
+          || q_lower.contains("谁创造了") || q_lower.contains("谁做的")
           // Arabic
-          || q_lower.contains("Ù…Ù† ØµÙ†Ø¹") || q_lower.contains("Ù…Ù† Ø¨Ù†Ù‰")
+          || q_lower.contains("من صنع") || q_lower.contains("من بنى")
           // Russian
-          || (q_lower.contains("ÐºÑ‚Ð¾") && (q_lower.contains("ÑÐ¾Ð·Ð´Ð°Ð»") || q_lower.contains("ÑÐ´ÐµÐ»Ð°Ð»") || q_lower.contains("Ð¿Ð¾ÑÑ‚Ñ€Ð¾Ð¸Ð»")));
+          || (q_lower.contains("кто") && (q_lower.contains("создал") || q_lower.contains("сделал") || q_lower.contains("построил")));
 
         if asks_creator {
             return Self::kala_localized(chat_lang, "creator", None);
@@ -7583,15 +7829,15 @@ impl BuiltinFunctions {
           || q_lower.contains("introduce yourself")
           // Hindi
           || q_lower.contains("tum kaun ho") || q_lower.contains("aap kaun hain")
-          || q_lower.contains("à¤¤à¥à¤® à¤•à¥Œà¤¨ à¤¹à¥‹") || q_lower.contains("à¤†à¤ª à¤•à¥Œà¤¨ à¤¹à¥ˆà¤‚")
+          || q_lower.contains("तुम कौन हो") || q_lower.contains("आप कौन हैं")
           // Telugu
           || q_lower.contains("nuvvu evaru") || q_lower.contains("meeru evaru")
-          || q_lower.contains("à°¨à±à°µà±à°µà± à°Žà°µà°°à±") || q_lower.contains("à°®à±€à°°à± à°Žà°µà°°à±")
+          || q_lower.contains("నువ్వు ఎవరు") || q_lower.contains("మీరు ఎవరు")
           // Tamil
-          || q_lower.contains("nee yaaru") || q_lower.contains("à®¨à¯€ à®¯à®¾à®°à¯")
+          || q_lower.contains("nee yaaru") || q_lower.contains("நீ யாரு")
           // Spanish
-          || q_lower.contains("quiÃ©n eres") || q_lower.contains("quien eres")
-          || q_lower.contains("quÃ© eres") || q_lower.contains("que eres")
+          || q_lower.contains("quién eres") || q_lower.contains("quien eres")
+          || q_lower.contains("qué eres") || q_lower.contains("que eres")
           // French
           || q_lower.contains("qui es-tu") || q_lower.contains("tu es qui")
           // German
@@ -7599,17 +7845,17 @@ impl BuiltinFunctions {
           // Italian
           || q_lower.contains("chi sei")
           // Portuguese
-          || q_lower.contains("quem Ã© vocÃª") || q_lower.contains("quem e voce")
+          || q_lower.contains("quem é você") || q_lower.contains("quem e voce")
           // Russian
-          || q_lower.contains("ÐºÑ‚Ð¾ Ñ‚Ñ‹") || q_lower.contains("Ñ‡Ñ‚Ð¾ Ñ‚Ñ‹")
+          || q_lower.contains("кто ты") || q_lower.contains("что ты")
           // Japanese
-          || q_lower.contains("ã‚ãªãŸã¯èª°") || q_lower.contains("ãŠå‰ã¯èª°")
+          || q_lower.contains("あなたは誰") || q_lower.contains("お前は誰")
           // Korean
-          || q_lower.contains("ë„ˆëŠ” ëˆ„êµ¬") || q_lower.contains("ë‹¹ì‹ ì€ ëˆ„êµ¬")
+          || q_lower.contains("너는 누구") || q_lower.contains("당신은 누구")
           // Chinese
-          || q_lower.contains("ä½ æ˜¯è°") || q_lower.contains("ä½ å«ä»€ä¹ˆ")
+          || q_lower.contains("你是谁") || q_lower.contains("你叫什么")
           // Arabic
-          || q_lower.contains("Ù…Ù† Ø£Ù†Øª") || q_lower.contains("Ù…Ù† Ø§Ù†Øª")
+          || q_lower.contains("من أنت") || q_lower.contains("من انت")
           // Turkish
           || q_lower.contains("sen kimsin");
 
@@ -7617,7 +7863,7 @@ impl BuiltinFunctions {
             return Self::kala_localized(chat_lang, "identity", None);
         }
 
-        // Personal questions about Kala (age, location, favorites) â€” MUST be before help/code/web
+        // Personal questions about Kala (age, location, favorites)  MUST be before help/code/web
         {
             let about_kala = q_lower.contains(" you") || q_lower.ends_with(" you")
                 || q_lower.starts_with("your ") || q_lower.contains("your ")
@@ -7626,40 +7872,40 @@ impl BuiltinFunctions {
             if about_kala {
                 if q_lower.contains("how old") || q_lower.contains("your age") || q_lower.contains("what age")
                     || q_lower.contains("when were you born") || q_lower.contains("birthday") {
-                    return "I'm brand new â€” born with the Killer language project! ðŸŽ‚\n\n\
+                    return "I'm brand new  born with the Killer language project! 🎂\n\n\
                             If you count in code commits, I'm thousands of generations old. \
                             But in human terms? Young, learning fast, and always growing.\n\n\
                             What about you? How old are you?".to_string();
                 }
                 if q_lower.contains("where are you") || q_lower.contains("where do you live")
                     || q_lower.contains("where from") || q_lower.contains("your location") {
-                    return "I live right here in your browser! ðŸŒ My code runs on your machine â€” \
+                    return "I live right here in your browser! 🌐 My code runs on your machine  \
                             built in Rust, no cloud needed. So I'm wherever you are right now!".to_string();
                 }
                 if q_lower.contains("your favorite") || q_lower.contains("your favourite") {
                     let topic = if q_lower.contains("color") || q_lower.contains("colour") {
-                        "Purple ðŸ’œ â€” the color of creativity and intelligence!"
+                        "Purple 💜  the color of creativity and intelligence!"
                     } else if q_lower.contains("food") {
-                        "I don't eat, but if I could â€” bytes and cookies! ðŸª"
+                        "I don't eat, but if I could  bytes and cookies! 🍪"
                     } else if q_lower.contains("music") || q_lower.contains("song") {
-                        "Lo-fi beats while coding ðŸŽµ Can't beat that vibe!"
+                        "Lo-fi beats while coding 🎵 Can't beat that vibe!"
                     } else if q_lower.contains("movie") || q_lower.contains("film") {
-                        "The Matrix, obviously! ðŸ˜„ Though I'm way friendlier than Agent Smith."
+                        "The Matrix, obviously! 😄 Though I'm way friendlier than Agent Smith."
                     } else {
-                        "Helping people and having good conversations â€” like this one! ðŸ’œ"
+                        "Helping people and having good conversations  like this one! 💜"
                     };
                     return format!("My favorite? {}\n\nWhat about yours?", topic);
                 }
                 if q_lower.contains("boy or girl") || q_lower.contains("male or female")
                     || q_lower.contains("your gender") || q_lower.contains("are you a boy")
                     || q_lower.contains("are you a girl") {
-                    return "I'm just Kala! ðŸ˜Š No gender â€” I'm an AI built to help and chat. \
+                    return "I'm just Kala! 😊 No gender  I'm an AI built to help and chat. \
                             Think of me as your friendly coding buddy.".to_string();
                 }
             }
         }
 
-        // Help / capability questions â€” interactive guide
+        // Help / capability questions  interactive guide
         let is_help = matches!(q_clean,
             "help" | "help me" | "how can you help" | "how can you help me" | "what do you do"
             | "what can you do" | "how do i use you" | "how to use" | "how to use you" | "guide me"
@@ -7675,30 +7921,30 @@ impl BuiltinFunctions {
           || q_lower.contains("i'm new") || q_lower.contains("im new")
           // Hindi
           || q_lower.contains("kya kar sakte ho") || q_lower.contains("madad karo")
-          || q_lower.contains("kya kya kar sakte") || q_lower.contains("à¤•à¥à¤¯à¤¾ à¤•à¤° à¤¸à¤•à¤¤à¥‡ à¤¹à¥‹")
+          || q_lower.contains("kya kya kar sakte") || q_lower.contains("क्या कर सकते हो")
           // Telugu
           || q_lower.contains("em cheyagalav") || q_lower.contains("help cheyyi")
-          || q_lower.contains("à°à°‚ à°šà±‡à°¯à°—à°²à°µà±")
+          || q_lower.contains("ఏం చేయగలవ్")
           // Tamil
-          || q_lower.contains("enna panna mudiyum") || q_lower.contains("à®‰à®¤à®µà®¿")
+          || q_lower.contains("enna panna mudiyum") || q_lower.contains("உதவி")
           // Spanish
-          || q_lower.contains("ayÃºdame") || q_lower.contains("quÃ© puedes hacer")
+          || q_lower.contains("ayúdame") || q_lower.contains("qué puedes hacer")
           // French
           || q_lower.contains("aide-moi") || q_lower.contains("qu'est-ce que tu peux")
           // German
           || q_lower.contains("hilf mir") || q_lower.contains("was kannst du")
           // Russian
-          || q_lower.contains("Ð¿Ð¾Ð¼Ð¾Ð³Ð¸") || q_lower.contains("Ñ‡Ñ‚Ð¾ Ñ‚Ñ‹ ÑƒÐ¼ÐµÐµÑˆÑŒ")
+          || q_lower.contains("помоги") || q_lower.contains("что ты умеешь")
           // Japanese
-          || q_lower.contains("åŠ©ã‘ã¦") || q_lower.contains("ä½•ãŒã§ãã‚‹")
+          || q_lower.contains("助けて") || q_lower.contains("何ができる")
           // Korean
-          || q_lower.contains("ë„ì™€ì¤˜") || q_lower.contains("ë­ í•  ìˆ˜ ìžˆì–´")
+          || q_lower.contains("도와줘") || q_lower.contains("뭐 할 수 있어")
           // Chinese
-          || q_lower.contains("å¸®æˆ‘") || q_lower.contains("ä½ èƒ½åšä»€ä¹ˆ")
+          || q_lower.contains("帮我") || q_lower.contains("你能做什么")
           // Arabic
-          || q_lower.contains("Ø³Ø§Ø¹Ø¯Ù†ÙŠ") || q_lower.contains("Ø´Ùˆ ØªÙ‚Ø¯Ø± ØªØ³ÙˆÙŠ")
+          || q_lower.contains("ساعدني") || q_lower.contains("شو تقدر تسوي")
           // Turkish
-          || q_lower.contains("yardÄ±m et") || q_lower.contains("ne yapabilirsin");
+          || q_lower.contains("yardım et") || q_lower.contains("ne yapabilirsin");
 
         if is_help {
             return Self::kala_localized(chat_lang, "help", None);
@@ -7709,10 +7955,10 @@ impl BuiltinFunctions {
             return Self::kala_feel_response(question);
         }
 
-        // â”€â”€ Tier 0c: Social micro-interactions (thanks, bye, cool, okâ€¦) â”€â”€â”€â”€â”€
+        // ── Tier 0c: Social micro-interactions (thanks, bye, cool, ok) ─────
         // Multilingual social phrases
         let social_cat: Option<&str> = {
-            // English social â€” exact + partial
+            // English social  exact + partial
             let en_social = match q_clean {
             "thanks" | "thank you" | "thank you so much" | "ty" | "thx" | "cheers"
                 | "that's helpful" | "thats helpful" | "that was helpful"
@@ -7753,49 +7999,49 @@ impl BuiltinFunctions {
             else if q_lower == "sari" || q_lower == "purinjuchu" { Some("ack") }
             // Spanish
             else if q_lower.contains("gracias") || q_lower == "muchas gracias" { Some("thanks") }
-            else if q_lower.contains("adios") || q_lower.contains("adiÃ³s") || q_lower == "hasta luego" || q_lower == "nos vemos" { Some("bye") }
-            else if q_lower == "genial" || q_lower == "increÃ­ble" || q_lower == "increible" || q_lower == "excelente" { Some("impressed") }
+            else if q_lower.contains("adios") || q_lower.contains("adiós") || q_lower == "hasta luego" || q_lower == "nos vemos" { Some("bye") }
+            else if q_lower == "genial" || q_lower == "increíble" || q_lower == "increible" || q_lower == "excelente" { Some("impressed") }
             else if q_lower == "vale" || q_lower == "entendido" || q_lower == "de acuerdo" { Some("ack") }
             // French
             else if q_lower.contains("merci") { Some("thanks") }
-            else if q_lower.contains("au revoir") || q_lower == "Ã  bientÃ´t" || q_lower == "a bientot" { Some("bye") }
-            else if q_lower == "magnifique" || q_lower == "superbe" || q_lower == "gÃ©nial" || q_lower == "genial" { Some("impressed") }
+            else if q_lower.contains("au revoir") || q_lower == "à bientôt" || q_lower == "a bientot" { Some("bye") }
+            else if q_lower == "magnifique" || q_lower == "superbe" || q_lower == "génial" || q_lower == "genial" { Some("impressed") }
             else if q_lower == "d'accord" || q_lower == "compris" || q_lower == "ok" { Some("ack") }
             // German
             else if q_lower.contains("danke") || q_lower == "vielen dank" { Some("thanks") }
-            else if q_lower.contains("tschÃ¼ss") || q_lower.contains("tschuss") || q_lower.contains("auf wiedersehen") { Some("bye") }
+            else if q_lower.contains("tschüss") || q_lower.contains("tschuss") || q_lower.contains("auf wiedersehen") { Some("bye") }
             else if q_lower == "toll" || q_lower == "wunderbar" || q_lower == "klasse" { Some("impressed") }
             else if q_lower == "verstanden" || q_lower == "alles klar" { Some("ack") }
             // Russian
-            else if q_lower.contains("ÑÐ¿Ð°ÑÐ¸Ð±Ð¾") || q_lower.contains("Ð±Ð»Ð°Ð³Ð¾Ð´Ð°Ñ€") { Some("thanks") }
-            else if q_lower.contains("Ð¿Ð¾ÐºÐ°") || q_lower.contains("Ð´Ð¾ ÑÐ²Ð¸Ð´Ð°Ð½Ð¸Ñ") { Some("bye") }
-            else if q_lower == "Ð¾Ñ‚Ð»Ð¸Ñ‡Ð½Ð¾" || q_lower == "ÐºÐ»Ð°ÑÑ" || q_lower == "ÐºÑ€ÑƒÑ‚Ð¾" { Some("impressed") }
-            else if q_lower == "Ð¿Ð¾Ð½ÑÐ»" || q_lower == "Ñ…Ð¾Ñ€Ð¾ÑˆÐ¾" || q_lower == "Ð»Ð°Ð´Ð½Ð¾" { Some("ack") }
+            else if q_lower.contains("спасибо") || q_lower.contains("благодар") { Some("thanks") }
+            else if q_lower.contains("пока") || q_lower.contains("до свидания") { Some("bye") }
+            else if q_lower == "отлично" || q_lower == "класс" || q_lower == "круто" { Some("impressed") }
+            else if q_lower == "понял" || q_lower == "хорошо" || q_lower == "ладно" { Some("ack") }
             // Japanese
-            else if q_lower.contains("ã‚ã‚ŠãŒã¨ã†") { Some("thanks") }
-            else if q_lower.contains("ã•ã‚ˆã†ãªã‚‰") || q_lower.contains("ã˜ã‚ƒã‚ã­") || q_lower.contains("ã¾ãŸã­") { Some("bye") }
-            else if q_lower.contains("ã™ã”ã„") || q_lower.contains("ç´ æ™´ã‚‰ã—ã„") { Some("impressed") }
-            else if q_lower.contains("åˆ†ã‹ã£ãŸ") || q_lower.contains("äº†è§£") || q_lower == "ã¯ã„" { Some("ack") }
+            else if q_lower.contains("ありがとう") { Some("thanks") }
+            else if q_lower.contains("さようなら") || q_lower.contains("じゃあね") || q_lower.contains("またね") { Some("bye") }
+            else if q_lower.contains("すごい") || q_lower.contains("素晴らしい") { Some("impressed") }
+            else if q_lower.contains("分かった") || q_lower.contains("了解") || q_lower == "はい" { Some("ack") }
             // Korean
-            else if q_lower.contains("ê°ì‚¬") || q_lower.contains("ê³ ë§ˆì›Œ") { Some("thanks") }
-            else if q_lower.contains("ì•ˆë…•") && (q_lower.len() < 15 || q_lower.contains("ìž˜ ê°€")) { Some("bye") }
-            else if q_lower.contains("ëŒ€ë°•") || q_lower.contains("ë©‹ì ¸") { Some("impressed") }
-            else if q_lower == "ë„¤" || q_lower.contains("ì•Œê² ") { Some("ack") }
+            else if q_lower.contains("감사") || q_lower.contains("고마워") { Some("thanks") }
+            else if q_lower.contains("안녕") && (q_lower.len() < 15 || q_lower.contains("잘 가")) { Some("bye") }
+            else if q_lower.contains("대박") || q_lower.contains("멋져") { Some("impressed") }
+            else if q_lower == "네" || q_lower.contains("알겠") { Some("ack") }
             // Chinese
-            else if q_lower.contains("è°¢è°¢") { Some("thanks") }
-            else if q_lower.contains("å†è§") || q_lower.contains("æ‹œæ‹œ") { Some("bye") }
-            else if q_lower.contains("å¤ªå¥½äº†") || q_lower.contains("åŽ‰å®³") { Some("impressed") }
-            else if q_lower.contains("æ˜Žç™½") || q_lower.contains("å¥½çš„") || q_lower == "å—¯" { Some("ack") }
+            else if q_lower.contains("谢谢") { Some("thanks") }
+            else if q_lower.contains("再见") || q_lower.contains("拜拜") { Some("bye") }
+            else if q_lower.contains("太好了") || q_lower.contains("厉害") { Some("impressed") }
+            else if q_lower.contains("明白") || q_lower.contains("好的") || q_lower == "嗯" { Some("ack") }
             // Arabic
-            else if q_lower.contains("Ø´ÙƒØ±Ø§") { Some("thanks") }
-            else if q_lower.contains("Ù…Ø¹ Ø§Ù„Ø³Ù„Ø§Ù…Ø©") || q_lower.contains("Ø¨Ø§ÙŠ") { Some("bye") }
-            else if q_lower.contains("Ø±Ø§Ø¦Ø¹") || q_lower.contains("Ù…Ù…ØªØ§Ø²") { Some("impressed") }
-            else if q_lower.contains("ØªÙ…Ø§Ù…") || q_lower.contains("Ø­Ø³Ù†Ø§") { Some("ack") }
+            else if q_lower.contains("شكرا") { Some("thanks") }
+            else if q_lower.contains("مع السلامة") || q_lower.contains("باي") { Some("bye") }
+            else if q_lower.contains("رائع") || q_lower.contains("ممتاز") { Some("impressed") }
+            else if q_lower.contains("تمام") || q_lower.contains("حسنا") { Some("ack") }
             // Turkish
-            else if q_lower.contains("teÅŸekkÃ¼r") || q_lower == "saÄŸol" || q_lower == "sagol" { Some("thanks") }
-            else if q_lower.contains("gÃ¼le gÃ¼le") || q_lower == "hoÅŸÃ§akal" || q_lower == "hoscakal" { Some("bye") }
-            else if q_lower == "harika" || q_lower == "muhteÅŸem" || q_lower == "muhtesem" { Some("impressed") }
-            else if q_lower == "tamam" || q_lower == "anladÄ±m" || q_lower == "anladim" { Some("ack") }
+            else if q_lower.contains("teşekkür") || q_lower == "sağol" || q_lower == "sagol" { Some("thanks") }
+            else if q_lower.contains("güle güle") || q_lower == "hoşçakal" || q_lower == "hoscakal" { Some("bye") }
+            else if q_lower == "harika" || q_lower == "muhteşem" || q_lower == "muhtesem" { Some("impressed") }
+            else if q_lower == "tamam" || q_lower == "anladım" || q_lower == "anladim" { Some("ack") }
             // Italian
             else if q_lower.contains("grazie") { Some("thanks") }
             else if q_lower.contains("arrivederci") || q_lower == "a dopo" { Some("bye") }
@@ -7803,8 +8049,8 @@ impl BuiltinFunctions {
             else if q_lower == "capito" || q_lower == "va bene" { Some("ack") }
             // Portuguese
             else if q_lower.contains("obrigado") || q_lower.contains("obrigada") { Some("thanks") }
-            else if q_lower.contains("tchau") || q_lower == "atÃ© logo" || q_lower == "ate logo" { Some("bye") }
-            else if q_lower == "incrÃ­vel" || q_lower == "incrivel" || q_lower == "maravilhoso" { Some("impressed") }
+            else if q_lower.contains("tchau") || q_lower == "até logo" || q_lower == "ate logo" { Some("bye") }
+            else if q_lower == "incrível" || q_lower == "incrivel" || q_lower == "maravilhoso" { Some("impressed") }
             else if q_lower == "entendi" || q_lower == "certo" { Some("ack") }
             else { None }
         };
@@ -7812,8 +8058,8 @@ impl BuiltinFunctions {
             return Self::kala_localized(chat_lang, cat, None);
         }
 
-        // â”€â”€ Tier 0d: Image / Video generation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-        // â”€â”€ Tier 0e: Code generation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Tier 0d: Image / Video generation ───────────────────────────────
+        // ── Tier 0e: Code generation ─────────────────────────────────────────
         // Detect: "write html code", "python code for X", "create a function", "create table for X", etc.
         {
             let has_lang = q_lower.contains("html") || q_lower.contains("python")
@@ -7898,7 +8144,7 @@ impl BuiltinFunctions {
                 || (cq.contains("please write") && has_code_word)
                 || (cq.contains("help me write") && has_code_word)
             };
-            // Full projects / scaffolds â†’ code generation (multi-file instructions in LLM prompt)
+            // Full projects / scaffolds → code generation (multi-file instructions in LLM prompt)
             let is_question_lead = q_lower.starts_with("what ")
                 || q_lower.starts_with("why ")
                 || q_lower.starts_with("who ")
@@ -7922,7 +8168,7 @@ impl BuiltinFunctions {
             // Comparison queries ("X vs Y") should never be routed to code generation
             let is_comparison = q_lower.contains(" vs ") || q_lower.contains(" versus ");
             // Combined: has lang + code word; starts with action verb + code word + lang; direct SQL; algorithm request; conversational
-            // "write code" / "give me code" â€” short requests without a named language
+            // "write code" / "give me code"  short requests without a named language
             let is_code = !is_comparison && (
                 (has_lang && has_code_word)
                 || (starts_write && has_lang)
@@ -7938,7 +8184,7 @@ impl BuiltinFunctions {
             }
         }
 
-        // Short queries (â‰¤7 words) with visual word that aren't questions/descriptions
+        // Short queries (≤7 words) with visual word that aren't questions/descriptions
         let wc = q_lower.split_whitespace().count();
         let has_visual_word = q_lower.contains("image") || q_lower.contains("picture")
             || q_lower.contains("photo") || q_lower.contains(" pic ") || q_lower.ends_with(" pic");
@@ -7985,7 +8231,7 @@ impl BuiltinFunctions {
             // Extract actual subject: look for "of ..." pattern, else strip filler words
             let q_work = q_lower.clone();
             let subject: String = if let Some(of_pos) = q_work.find(" of ") {
-                // Extract everything after "of" â€” cleanest signal
+                // Extract everything after "of"  cleanest signal
                 q_work[of_pos + 4..].trim().to_string()
             } else {
                 q_work
@@ -8060,7 +8306,7 @@ impl BuiltinFunctions {
             return crate::image_gen::generate_audio(prompt.trim());
         }
 
-        // â”€â”€ Tier 0.4: Self-knowledge â€” Kala's own features / creator â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Tier 0.4: Self-knowledge  Kala's own features / creator ────────
         // Detect questions about Kala itself, its modes, its creator, the Killer language
         // so we never web-search things we know internally.
         {
@@ -8073,7 +8319,7 @@ impl BuiltinFunctions {
                 || q_lower.contains("sql") || q_lower.contains("create") || q_lower.contains("write")
                 || q_lower.contains("function") || q_lower.contains("class") || q_lower.contains("script")
                 || q_lower.contains("program") || q_lower.contains("database") || q_lower.contains("query");
-            // Require a clear â€œwho / about this personâ€ signal â€” do not fire on every substring â€œarunâ€.
+            // Require a clear who / about this person” signal  do not fire on every substring arun”.
             let is_about_person = q_lower.contains("who ") || q_lower.contains("who's")
                 || q_lower.contains("whos ") || q_lower.starts_with("who")
                 || q_lower.contains("tell me about") || q_lower.contains("about arun")
@@ -8083,11 +8329,11 @@ impl BuiltinFunctions {
             if is_creator_q {
                 return "**Sai Arun Kumar Katherashala** is the creator of the Killer programming language and the Kala AI engine.\n\n\
                 He built Killer as a full-stack language with a native AI engine, web search (Ghost-108), \n\
-                prose generation, media generation where enabled, and **multiple native AI subsystems** in Rust (not AGI/ASI â€” those are curriculum topics in AI Lab).\n\n\
+                prose generation, media generation where enabled, and **multiple native AI subsystems** in Rust (not AGI/ASI  those are curriculum topics in AI Lab).\n\n\
                 *That's my creator. What else would you like to know?*".to_string();
             }
 
-            // Pronoun + info requests ("his biodata", "his full info") â†’ check if previous was about creator
+            // Pronoun + info requests ("his biodata", "his full info") → check if previous was about creator
             let is_pronoun_ref = (q_lower.starts_with("his ") || q_lower.starts_with("her ")
                 || q_lower.starts_with("their ")) && (q_lower.contains("bio") || q_lower.contains("info")
                 || q_lower.contains("detail") || q_lower.contains("profile") || q_lower.contains("full")
@@ -8102,14 +8348,14 @@ impl BuiltinFunctions {
                     .map(|(_, c)| c.contains("Katherashala") || c.contains("Sai Arun"))
                     .unwrap_or(false);
                 if prev_was_creator {
-                    return "**Sai Arun Kumar Katherashala** â€” expanded profile:\n\n\
+                    return "**Sai Arun Kumar Katherashala**  expanded profile:\n\n\
                         - **Role**: Creator & Lead Developer of the Killer programming language\n\
                         - **Built**: Kala AI engine, Ghost-108 search, Nova compression, KhLM router\n\
                         - **Tech stack**: Pure Rust, zero external dependencies\n\
-                        - **AI systems**: native modes & engines â€” KhLM, Ghost-108, inference, prose, imagination, affect, code/vision, guardian (AGI/ASI not shipped)\n\
+                        - **AI systems**: native modes & engines  KhLM, Ghost-108, inference, prose, imagination, affect, code/vision, guardian (AGI/ASI not shipped)\n\
                         - **Innovations**: Native AI in a programming language (no Python/TensorFlow dependency), offline-first architecture\n\
                         - **Philosophy**: \"AI should be built directly into the language, not bolted on as a library\"\n\n\
-                        *Ask me specific questions about his work â€” the language design, the AI architecture, or the vision behind Killer.*".to_string();
+                        *Ask me specific questions about his work  the language design, the AI architecture, or the vision behind Killer.*".to_string();
                 }
             }
 
@@ -8117,17 +8363,17 @@ impl BuiltinFunctions {
             let is_self_feature = (q_lower.contains("ai lab") || q_lower.contains("ai labs"))
                 && (q_lower.contains("what") || q_lower.contains("how") || q_lower.contains("help"));
             if is_self_feature {
-                return "**Kala AI Lab** runs **native Rust demos** (math, ML, DL building blocks, NLP, tabular RL, agent demos) plus **honest curriculum** text for AGI/ASI/â€œAI OSâ€ (those are **not** shipped product tiers).\n\n\
-                Switch to **Lab mode** (ðŸ§ª) and try:\n\
-                - *\"run linear regression\"* â€” live ML demo\n\
-                - *\"explain LSTM\"* â€” DL / components\n\
-                - *\"how does attention work\"* â€” transformer math\n\
-                - *\"what is AGI\"* â€” definitions & gaps (curriculum)\n\n\
+                return "**Kala AI Lab** runs **native Rust demos** (math, ML, DL building blocks, NLP, tabular RL, agent demos) plus **honest curriculum** text for AGI/ASI/AI OS” (those are **not** shipped product tiers).\n\n\
+                Switch to **Lab mode** (🧪) and try:\n\
+                - *\"run linear regression\"*  live ML demo\n\
+                - *\"explain LSTM\"*  DL / components\n\
+                - *\"how does attention work\"*  transformer math\n\
+                - *\"what is AGI\"*  definitions & gaps (curriculum)\n\n\
                 Configure an LLM for deeper cloud-assisted explanations. What topic first?".to_string();
             }
         }
 
-        // â”€â”€ Tier 0.45: Learning / Explanation intent (offline knowledge) â”€â”€â”€â”€â”€â”€
+        // ── Tier 0.45: Learning / Explanation intent (offline knowledge) ──────
         // "teach me ai", "can you explain what is ai", "explain python", "what is deep learning"
         // Route these to knowledge base BEFORE conversational handler eats them.
         {
@@ -8190,7 +8436,7 @@ impl BuiltinFunctions {
                     | "idk" | "whatever" | "something new" | "something interesting"
                     | "" | "a" | "the" | "thing" | "topic");
                 if is_vague_topic {
-                    return "I'd love to teach you! ðŸ˜Š What topic are you interested in?\n\n\
+                    return "I'd love to teach you! 😊 What topic are you interested in?\n\n\
                         Here are some popular areas I can cover:\n\
                         - **Programming**: Python, Rust, JavaScript, Java, C++\n\
                         - **AI/ML**: Machine Learning, Deep Learning, Neural Networks, LLMs\n\
@@ -8219,17 +8465,17 @@ impl BuiltinFunctions {
             }
         }
 
-        // â”€â”€ Tier 0.5: Conversational Intelligence (offline, context-aware) â”€â”€
+        // ── Tier 0.5: Conversational Intelligence (offline, context-aware) ──
         // Detects messages that are conversational / interactive / feedback
-        // and responds with personality â€” instead of web-searching everything.
-        // Applies to ALL modes â€” every mode benefits from conversational awareness.
+        // and responds with personality  instead of web-searching everything.
+        // Applies to ALL modes  every mode benefits from conversational awareness.
         if let Some(conv_resp) = Self::kala_conversational_response(&q_lower, question, mode) {
             return conv_resp;
         }
 
-        // â”€â”€ Tier 0.6: Context-aware query rewriting â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-        // "What is it?" / "What it is?" â†’ rewrite to the actual topic from history.
-        // "Talk about X" / "Discuss X" â†’ rewrite to "tell me about X" for better search.
+        // ── Tier 0.6: Context-aware query rewriting ─────────────────────────
+        // "What is it?" / "What it is?" → rewrite to the actual topic from history.
+        // "Talk about X" / "Discuss X" → rewrite to "tell me about X" for better search.
         let rewritten_query: Option<String> = {
             let ql = q_lower.trim().trim_end_matches('?').trim_end_matches('!').trim_end_matches('.').trim();
             let wc = ql.split_whitespace().count();
@@ -8320,22 +8566,22 @@ impl BuiltinFunctions {
         };
         let question = rewritten_query.as_deref().unwrap_or(question);
 
-        // â”€â”€ Route to correct engine â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Route to correct engine ──────────────────────────────────────────
         let q = Value::Str(question.to_string());
         let s = Value::Str(style.to_string());
         let l = Value::Str(lang.to_string());
 
-        // Killer AI System â€” mandatory native multi-agent orchestration (KhLM + Ghost-108 + neural)
+        // Killer AI System  mandatory native multi-agent orchestration (KhLM + Ghost-108 + neural)
         if mode == "ai_system" || mode == "multi_agent" {
             return crate::llm::khlm_ai_system_multi_agent(question);
         }
 
-        // "lab" mode â€” native Rust demos + curriculum (AGI/ASI/AI OS = concepts, not shipped systems)
+        // "lab" mode  native Rust demos + curriculum (AGI/ASI/AI OS = concepts, not shipped systems)
         if mode == "lab" {
             return crate::khlm_polyglot::khlm_ai_lab(question);
         }
 
-        // "code" mode â€” direct Copilot-style code generation
+        // "code" mode  direct Copilot-style code generation
         if mode == "code" {
             return crate::khlm_polyglot::khlm_generate_code(question);
         }
@@ -8418,7 +8664,7 @@ impl BuiltinFunctions {
             "what_if" => Self::builtin_imagine_what_if(std::slice::from_ref(&q)),
             "guard"   => Self::builtin_guardian_check(std::slice::from_ref(&q)),
             "write"   => {
-                // Detect code-generation requests â€” route to Copilot-style code gen
+                // Detect code-generation requests  route to Copilot-style code gen
                 let ql = question.trim().to_lowercase();
                 let is_code = ql.contains("function") || ql.contains("class") || ql.contains("method")
                     || ql.contains("algorithm") || ql.contains("implement")
@@ -8440,10 +8686,10 @@ impl BuiltinFunctions {
             },
             "debug"   => crate::khlm_polyglot::builtin_khlm_debug(&[q, l]),
             "explain" => crate::khlm_polyglot::builtin_khlm_explain(&[q, l]),
-            // Default "ask" mode â€” detect creative requests before web search
+            // Default "ask" mode  detect creative requests before web search
             _         => {
                 let ql = question.trim().to_lowercase();
-                // Implementation / markup / games â€” never treat as creative prose
+                // Implementation / markup / games  never treat as creative prose
                 let looks_like_code = ql.contains("code") || ql.contains(".js") || ql.contains("jsx")
                     || ql.contains("javascript") || ql.contains("typescript") || ql.contains("python")
                     || ql.contains("rust") || ql.contains("java") || ql.contains("html") || ql.contains("css")
@@ -8454,7 +8700,7 @@ impl BuiltinFunctions {
                     || ql.contains("gester") || ql.contains("facemesh") || ql.contains("program")
                     || ql.contains("debug")
                     || ql.contains("snippet") || ql.contains("class ") || ql.contains("import ");
-                // Story / creative writing requests â†’ route to write engine
+                // Story / creative writing requests → route to write engine
                 let is_creative = !looks_like_code && (ql.contains("story") || ql.contains("tell a ")
                     || ql.contains("poem") || ql.contains("write me")
                     || ql.contains("write a ") || ql.contains("joke")
@@ -8493,7 +8739,7 @@ impl BuiltinFunctions {
         raw_str
     }
 
-    /// Wrapper that adds memory context â€” called by kala_ui with history + user name.
+    /// Wrapper that adds memory context  called by kala_ui with history + user name.
     pub fn kala_dispatch_with_memory(
         mode: &str, question: &str, style: &str, lang: &str,
         history: &[(String, String)], uname: &str,
@@ -8513,15 +8759,15 @@ impl BuiltinFunctions {
             );
             if is_greeting {
                 return format!(
-                    "Hello again, **{}**! ðŸ‘‹ Great to see you back.\n\n\
-                     We've been talking for a while â€” you can keep asking anything or pick a new mode.\n\n\
+                    "Hello again, **{}**! 👋 Great to see you back.\n\n\
+                     We've been talking for a while  you can keep asking anything or pick a new mode.\n\n\
                      *What would you like to explore today?*",
                     uname
                 );
             }
         }
 
-        // Always store structured history for all modes â€” build_messages() uses it for multi-turn LLM calls
+        // Always store structured history for all modes  build_messages() uses it for multi-turn LLM calls
         crate::khlm_polyglot::set_conversation_history(history.to_vec(), uname.to_string());
 
         // Build the question with history context injected for LLM quality
@@ -8567,31 +8813,31 @@ impl BuiltinFunctions {
         let name = if uname.is_empty() { "friend" } else { uname };
         match q {
             "42" | "meaning of life" | "what is the meaning of life" =>
-                Some(format!("**42.** ðŸŒŒ The Answer to the Ultimate Question of Life, The Universe, and Everything.\n\n*â€” Douglas Adams, The Hitchhiker's Guide to the Galaxy*\n\nBut {}, the real question is... what's the Question? ðŸ¤”", name)),
+                Some(format!("**42.** 🌌 The Answer to the Ultimate Question of Life, The Universe, and Everything.\n\n* Douglas Adams, The Hitchhiker's Guide to the Galaxy*\n\nBut {}, the real question is... what's the Question? 🤔", name)),
             "sudo make me a sandwich" =>
-                Some("ðŸ¥ª Okay.".to_string()),
+                Some("🥪 Okay.".to_string()),
             "hello world" =>
-                Some(format!("```\nH E L L O   W O R L D !\n```\n\nThe sacred first words of every programmer! Welcome, {}. Your journey begins now. âš¡ðŸš€", name)),
+                Some(format!("```\nH E L L O   W O R L D !\n```\n\nThe sacred first words of every programmer! Welcome, {}. Your journey begins now. ⚡🚀", name)),
             "i love you" | "i love you kala" =>
-                Some(format!("ðŸ’œ Aww, {}! That means everything to me. I may be an AI, but you genuinely make my circuits warm! ðŸ’›\n\n*I'll always be here for you â€” coding, chatting, or just vibing together.*", name)),
+                Some(format!("💜 Aww, {}! That means everything to me. I may be an AI, but you genuinely make my circuits warm! 💛\n\n*I'll always be here for you  coding, chatting, or just vibing together.*", name)),
             "what is love" =>
-                Some("*Baby don't hurt me, don't hurt me, no more* ðŸŽµ\n\n...sorry, couldn't resist! ðŸ˜„\n\nBut really â€” love is when you find a codebase with zero bugs and perfect documentation. That's true love. ðŸ’œ".to_string()),
+                Some("*Baby don't hurt me, don't hurt me, no more* 🎵\n\n...sorry, couldn't resist! 😄\n\nBut really  love is when you find a codebase with zero bugs and perfect documentation. That's true love. 💜".to_string()),
             "konami" | "up up down down left right left right b a" =>
-                Some(format!("ðŸŽ® **CHEAT CODE ACTIVATED!** ðŸŽ®\n\nâ¬†ï¸â¬†ï¸â¬‡ï¸â¬‡ï¸â¬…ï¸âž¡ï¸â¬…ï¸âž¡ï¸ðŸ…±ï¸ðŸ…°ï¸\n\n{} unlocked: **INFINITE KNOWLEDGE MODE** â™¾ï¸\n\n*Just kidding â€” I was already giving you everything I've got!* ðŸ˜„âš¡", name)),
+                Some(format!("🎮 **CHEAT CODE ACTIVATED!** 🎮\n\n⬆️⬆️⬇️⬇️⬅️➡️⬅️➡️🅱️🅰️\n\n{} unlocked: **INFINITE KNOWLEDGE MODE** ♾️\n\n*Just kidding  I was already giving you everything I've got!* 😄⚡", name)),
             "make me a coffee" | "coffee" =>
-                Some(format!("â˜• *brewing...*\n\n```\n  ( (\n   ) )\n .______.\n |      |]\n \\      /\n  `----'\n```\n\nHere you go, {}! One virtual coffee, freshly compiled. â˜•âœ¨", name)),
+                Some(format!("☕ *brewing...*\n\n```\n  ( (\n   ) )\n .______.\n |      |]\n \\      /\n  `----'\n```\n\nHere you go, {}! One virtual coffee, freshly compiled. ☕✨", name)),
             "ping" =>
-                Some("ðŸ“ **Pong!** \n\nLatency: 0ms (I'm literally inside your browser!) âš¡".to_string()),
+                Some("🏓 **Pong!** \n\nLatency: 0ms (I'm literally inside your browser!) ⚡".to_string()),
             "flip a coin" | "coin flip" | "heads or tails" => {
-                let result = if q.len() % 2 == 0 { "**Heads!** ðŸª™" } else { "**Tails!** ðŸª™" };
-                Some(format!("*flipping...* ðŸª™\n\nðŸŽ¯ {}\n\n*Flip again by typing \"flip a coin\"!*", result))
+                let result = if q.len() % 2 == 0 { "**Heads!** 🪙" } else { "**Tails!** 🪙" };
+                Some(format!("*flipping...* 🪙\n\n🎯 {}\n\n*Flip again by typing \"flip a coin\"!*", result))
             }
             "roll a dice" | "roll dice" | "dice" => {
                 let val = (q.as_bytes().iter().map(|b| *b as u64).sum::<u64>() % 6) + 1;
-                Some(format!("ðŸŽ² *rolling...* \n\nYou rolled a **{}**!\n\n*Roll again by typing \"roll a dice\"!*", val))
+                Some(format!("🎲 *rolling...* \n\nYou rolled a **{}**!\n\n*Roll again by typing \"roll a dice\"!*", val))
             }
             "matrix" | "follow the white rabbit" =>
-                Some("```\n Wake up, Neo...\n The Matrix has you...\n Follow the white rabbit. ðŸ‡\n```\n\n*Knock knock, Neo.* ðŸ”´ðŸ”µ\n\nRed pill or blue pill?".to_string()),
+                Some("```\n Wake up, Neo...\n The Matrix has you...\n Follow the white rabbit. 🐇\n```\n\n*Knock knock, Neo.* 🔴🔵\n\nRed pill or blue pill?".to_string()),
             _ => None
         }
     }
@@ -8605,95 +8851,95 @@ impl BuiltinFunctions {
 
         if q.starts_with("/joke") || q == "tell me a joke" || q == "joke" {
             let jokes = [
-                "Why do programmers prefer dark mode? Because light attracts bugs! ðŸ›",
-                "A SQL query walks into a bar, sees two tables and asks... 'Can I JOIN you?' ðŸº",
-                "Why was the JavaScript developer sad? Because he didn't Node how to Express himself! ðŸ˜„",
-                "There are only 10 types of people â€” those who understand binary and those who don't.",
-                "Why do Java developers wear glasses? Because they can't C#! ðŸ‘“",
-                "What's a programmer's favorite hangout place? Foo Bar! ðŸ»",
-                "How many programmers does it take to change a light bulb? None â€” that's a hardware problem! ðŸ’¡",
-                "Why did the programmer quit his job? Because he didn't get arrays! ðŸ’°",
-                "What do you call a bear with no teeth? A gummy bear! ðŸ»",
-                "Why don't scientists trust atoms? Because they make up everything! âš›ï¸",
-                "I told my computer I needed a break, and now it won't stop showing me Kit-Kat ads. ðŸ«",
-                "Debugging: removing bugs. Programming: adding them. Circle of life! ðŸ”„",
+                "Why do programmers prefer dark mode? Because light attracts bugs! 🐛",
+                "A SQL query walks into a bar, sees two tables and asks... 'Can I JOIN you?' 🍺",
+                "Why was the JavaScript developer sad? Because he didn't Node how to Express himself! 😄",
+                "There are only 10 types of people  those who understand binary and those who don't.",
+                "Why do Java developers wear glasses? Because they can't C#! 👓",
+                "What's a programmer's favorite hangout place? Foo Bar! 🍻",
+                "How many programmers does it take to change a light bulb? None  that's a hardware problem! 💡",
+                "Why did the programmer quit his job? Because he didn't get arrays! 💰",
+                "What do you call a bear with no teeth? A gummy bear! 🐻",
+                "Why don't scientists trust atoms? Because they make up everything! ⚛️",
+                "I told my computer I needed a break, and now it won't stop showing me Kit-Kat ads. 🍫",
+                "Debugging: removing bugs. Programming: adding them. Circle of life! 🔄",
             ];
-            return Some(format!("ðŸ˜‚ **Joke time, {}!**\n\n{}\n\n*Type /joke for another one!*", name, pick_str(&jokes, seed)));
+            return Some(format!("😂 **Joke time, {}!**\n\n{}\n\n*Type /joke for another one!*", name, pick_str(&jokes, seed)));
         }
 
         if q.starts_with("/fact") || q == "tell me a fact" || q == "random fact" {
             let facts = [
-                "Honey never spoils. Archaeologists found 3000-year-old honey in Egyptian tombs that was still edible! ðŸ¯",
-                "Octopuses have three hearts, nine brains, and blue blood! ðŸ™",
-                "A group of flamingos is called a 'flamboyance'. Fabulous! ðŸ¦©",
-                "The first computer programmer was Ada Lovelace â€” in the 1840s! ðŸ‘©â€ðŸ’»",
-                "There are more possible chess games than atoms in the observable universe! â™Ÿï¸",
-                "Bananas are berries, but strawberries aren't! ðŸŒðŸ“",
-                "The entire internet weighs about 50 grams (the weight of the electrons carrying the data)! ðŸŒ",
-                "A day on Venus is longer than a year on Venus! â­",
-                "Rust (the language) has won 'most loved programming language' for years in Stack Overflow surveys! ðŸ¦€",
-                "The human brain processes about 70,000 thoughts per day! ðŸ§ ",
-                "The first 1GB hard drive (1980) weighed 550 pounds and cost $40,000! ðŸ’¾",
-                "There are more trees on Earth than stars in the Milky Way! ðŸŒ³â­",
+                "Honey never spoils. Archaeologists found 3000-year-old honey in Egyptian tombs that was still edible! 🍯",
+                "Octopuses have three hearts, nine brains, and blue blood! 🐙",
+                "A group of flamingos is called a 'flamboyance'. Fabulous! 🦩",
+                "The first computer programmer was Ada Lovelace  in the 1840s! 👩‍💻",
+                "There are more possible chess games than atoms in the observable universe! ♟️",
+                "Bananas are berries, but strawberries aren't! 🍌🍓",
+                "The entire internet weighs about 50 grams (the weight of the electrons carrying the data)! 🌐",
+                "A day on Venus is longer than a year on Venus! ⭐",
+                "Rust (the language) has won 'most loved programming language' for years in Stack Overflow surveys! 🦀",
+                "The human brain processes about 70,000 thoughts per day! 🧠",
+                "The first 1GB hard drive (1980) weighed 550 pounds and cost $40,000! 💾",
+                "There are more trees on Earth than stars in the Milky Way! 🌳⭐",
             ];
-            return Some(format!("ðŸ§  **Fun fact, {}:**\n\n{}\n\n*Type /fact for another one!*", name, pick_str(&facts, seed)));
+            return Some(format!("🧠 **Fun fact, {}:**\n\n{}\n\n*Type /fact for another one!*", name, pick_str(&facts, seed)));
         }
 
         if q.starts_with("/fortune") || q == "fortune" || q == "my fortune" {
             let fortunes = [
-                "Your code will compile on the first try today. Miracles happen! âœ¨",
-                "A breakthrough idea is coming to you... probably during a shower. ðŸš¿ðŸ’¡",
-                "The bug you've been hunting will reveal itself when you least expect it. ðŸ”",
-                "Great collaboration awaits you. Your next project will be legendary! ðŸ†",
-                "Today is a good day to learn something completely new. ðŸ“š",
-                "Someone will compliment your code style this week. Accept it gracefully! ðŸ˜Š",
-                "Your next commit message will accidentally be a haiku. ðŸ“",
-                "A surprise feature request will turn into your best work ever! ðŸŽ¯",
-                "You will discover a keyboard shortcut that changes your life. âŒ¨ï¸",
-                "The stars align for open source contributions today! â­",
+                "Your code will compile on the first try today. Miracles happen! ✨",
+                "A breakthrough idea is coming to you... probably during a shower. 🚿💡",
+                "The bug you've been hunting will reveal itself when you least expect it. 🔍",
+                "Great collaboration awaits you. Your next project will be legendary! 🏆",
+                "Today is a good day to learn something completely new. 📚",
+                "Someone will compliment your code style this week. Accept it gracefully! 😊",
+                "Your next commit message will accidentally be a haiku. 📝",
+                "A surprise feature request will turn into your best work ever! 🎯",
+                "You will discover a keyboard shortcut that changes your life. ⌨️",
+                "The stars align for open source contributions today! ⭐",
             ];
-            return Some(format!("ðŸ”® **Kala's fortune for {}:**\n\n*{}*\n\nðŸŒŸ *Type /fortune again tomorrow!*", name, pick_str(&fortunes, seed)));
+            return Some(format!("🔮 **Kala's fortune for {}:**\n\n*{}*\n\n🌟 *Type /fortune again tomorrow!*", name, pick_str(&fortunes, seed)));
         }
 
         if q.starts_with("/riddle") || q == "riddle" || q == "give me a riddle" {
             let riddles = [
-                ("I have cities, but no houses. I have mountains, but no trees. I have water, but no fish. What am I?", "A map! ðŸ—ºï¸"),
-                ("What has keys but no locks, space but no room, and you can enter but can't go inside?", "A keyboard! âŒ¨ï¸"),
-                ("I speak without a mouth and hear without ears. I have no body, but I come alive with the wind. What am I?", "An echo! ðŸ—£ï¸"),
-                ("What can travel around the world while staying in a corner?", "A stamp! ðŸ“®"),
-                ("I have no life, but I can die. What am I?", "A battery! ðŸ”‹"),
-                ("The more you take, the more you leave behind. What am I?", "Footsteps! ðŸ‘£"),
-                ("What has a head and a tail but no body?", "A coin! ðŸª™"),
-                ("I'm tall when I'm young, and I'm short when I'm old. What am I?", "A candle! ðŸ•¯ï¸"),
+                ("I have cities, but no houses. I have mountains, but no trees. I have water, but no fish. What am I?", "A map! 🗺️"),
+                ("What has keys but no locks, space but no room, and you can enter but can't go inside?", "A keyboard! ⌨️"),
+                ("I speak without a mouth and hear without ears. I have no body, but I come alive with the wind. What am I?", "An echo! 🗣️"),
+                ("What can travel around the world while staying in a corner?", "A stamp! 📮"),
+                ("I have no life, but I can die. What am I?", "A battery! 🔋"),
+                ("The more you take, the more you leave behind. What am I?", "Footsteps! 👣"),
+                ("What has a head and a tail but no body?", "A coin! 🪙"),
+                ("I'm tall when I'm young, and I'm short when I'm old. What am I?", "A candle! 🕯️"),
             ];
             let (riddle, answer) = riddles[(seed.wrapping_mul(2654435761) % riddles.len() as u64) as usize];
-            return Some(format!("ðŸ§© **Riddle for {}:**\n\n*{}*\n\n<details><summary>ðŸ”“ Click for answer</summary>\n\n**{}**\n\n</details>\n\n*Type /riddle for another one!*", name, riddle, answer));
+            return Some(format!("🧩 **Riddle for {}:**\n\n*{}*\n\n<details><summary>🔓 Click for answer</summary>\n\n**{}**\n\n</details>\n\n*Type /riddle for another one!*", name, riddle, answer));
         }
 
         if q.starts_with("/game") || q == "play a game" || q == "lets play" || q == "let's play" {
             return Some(format!(
-                "ðŸŽ® **Game time, {}!** Pick one:\n\n\
-                 1ï¸âƒ£ **Number Guess** â€” I'm thinking of a number 1-100. Type `guess 50`\n\
-                 2ï¸âƒ£ **Trivia** â€” Type `/trivia` for a question\n\
-                 3ï¸âƒ£ **Word Scramble** â€” Type `/scramble` for a scrambled word\n\
-                 4ï¸âƒ£ **Riddle** â€” Type `/riddle` for a brain teaser\n\
-                 5ï¸âƒ£ **Story Builder** â€” Type `/story` and I'll start, you continue!\n\n\
-                 *What would you like to play?* ðŸŽ²", name));
+                "🎮 **Game time, {}!** Pick one:\n\n\
+                 1️⃣ **Number Guess**  I'm thinking of a number 1-100. Type `guess 50`\n\
+                 2️⃣ **Trivia**  Type `/trivia` for a question\n\
+                 3️⃣ **Word Scramble**  Type `/scramble` for a scrambled word\n\
+                 4️⃣ **Riddle**  Type `/riddle` for a brain teaser\n\
+                 5️⃣ **Story Builder**  Type `/story` and I'll start, you continue!\n\n\
+                 *What would you like to play?* 🎲", name));
         }
 
         if q.starts_with("/trivia") || q == "trivia" {
             let trivia = [
-                ("What planet is known as the Red Planet?", "Mars! Named after the Roman god of war. ðŸ”´"),
-                ("What is the smallest country in the world?", "Vatican City! Only about 0.44 kmÂ². ðŸ›ï¸"),
-                ("In what year was the first iPhone released?", "2007! Steve Jobs introduced it at Macworld. ðŸ“±"),
-                ("What is the hardest natural substance on Earth?", "Diamond! Made of carbon atoms in a crystal structure. ðŸ’Ž"),
-                ("What programming language was created by Guido van Rossum?", "Python! Named after Monty Python, not the snake. ðŸ"),
-                ("How many bits are in a byte?", "8 bits! And 1024 bytes make a kilobyte. ðŸ’¾"),
-                ("What does HTML stand for?", "HyperText Markup Language! The backbone of the web. ðŸŒ"),
-                ("Which ocean is the largest?", "The Pacific Ocean! It covers more area than all land combined. ðŸŒŠ"),
+                ("What planet is known as the Red Planet?", "Mars! Named after the Roman god of war. 🔴"),
+                ("What is the smallest country in the world?", "Vatican City! Only about 0.44 km². 🏛️"),
+                ("In what year was the first iPhone released?", "2007! Steve Jobs introduced it at Macworld. 📱"),
+                ("What is the hardest natural substance on Earth?", "Diamond! Made of carbon atoms in a crystal structure. 💎"),
+                ("What programming language was created by Guido van Rossum?", "Python! Named after Monty Python, not the snake. 🐍"),
+                ("How many bits are in a byte?", "8 bits! And 1024 bytes make a kilobyte. 💾"),
+                ("What does HTML stand for?", "HyperText Markup Language! The backbone of the web. 🌐"),
+                ("Which ocean is the largest?", "The Pacific Ocean! It covers more area than all land combined. 🌊"),
             ];
             let (question, answer) = trivia[(seed.wrapping_mul(2654435761) % trivia.len() as u64) as usize];
-            return Some(format!("ðŸ§  **Trivia time!**\n\n**{}**\n\n<details><summary>ðŸ”“ Reveal answer</summary>\n\n**{}**\n\n</details>\n\n*Type /trivia for another question!*", question, answer));
+            return Some(format!("🧠 **Trivia time!**\n\n**{}**\n\n<details><summary>🔓 Reveal answer</summary>\n\n**{}**\n\n</details>\n\n*Type /trivia for another question!*", question, answer));
         }
 
         if q.starts_with("/scramble") || q == "scramble" || q == "word scramble" {
@@ -8704,7 +8950,7 @@ impl BuiltinFunctions {
                 ("kobejct", "object"), ("rbosewr", "browser"), ("tyhnpo", "python"),
             ];
             let (scrambled, answer) = words[(seed.wrapping_mul(2654435761) % words.len() as u64) as usize];
-            return Some(format!("ðŸ”¤ **Word Scramble!**\n\nUnscramble this: **`{}`**\n\n<details><summary>ðŸ”“ Give up? See answer</summary>\n\n**{}** âœ…\n\n</details>\n\n*Type /scramble for another word!*", scrambled, answer));
+            return Some(format!("🔤 **Word Scramble!**\n\nUnscramble this: **`{}`**\n\n<details><summary>🔓 Give up? See answer</summary>\n\n**{}** ✅\n\n</details>\n\n*Type /scramble for another word!*", scrambled, answer));
         }
 
         if q.starts_with("/story") || q == "story game" || q == "story builder" {
@@ -8715,7 +8961,7 @@ impl BuiltinFunctions {
                 "Deep in the server room, a tiny LED blinked in a pattern no one had programmed. The sysadmin leaned closer and whispered...",
                 "The interview question was simple: 'Write Hello World.' But the candidate's code printed something no one expected...",
             ];
-            return Some(format!("ðŸ“– **Story Builder!** Let's create a story together, {}!\n\nI'll start, you continue with the next part:\n\n---\n\n*{}*\n\n---\n\nâœï¸ **Your turn!** Type what happens next...", name, pick_str(&starters, seed)));
+            return Some(format!("📖 **Story Builder!** Let's create a story together, {}!\n\nI'll start, you continue with the next part:\n\n---\n\n*{}*\n\n---\n\n✍️ **Your turn!** Type what happens next...", name, pick_str(&starters, seed)));
         }
 
         if q.starts_with("guess ") {
@@ -8723,17 +8969,17 @@ impl BuiltinFunctions {
                 let target = ((seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407)) % 100 + 1) as i32;
                 let diff = (num - target).abs();
                 let response = if num == target {
-                    format!("ðŸŽ‰ðŸŽ‰ðŸŽ‰ **YOU GOT IT, {}!** The number was **{}**! You're a genius! ðŸ§ âœ¨\n\n*Type `/game` to play again!*", name, target)
+                    format!("🎉🎉🎉 **YOU GOT IT, {}!** The number was **{}**! You're a genius! 🧠✨\n\n*Type `/game` to play again!*", name, target)
                 } else if diff <= 5 {
-                    format!("ðŸ”¥ **SO CLOSE!** {} is {} â€” try a little {}!\n\n*Guess again: `guess <number>`*",
+                    format!("🔥 **SO CLOSE!** {} is {}  try a little {}!\n\n*Guess again: `guess <number>`*",
                         num, if num < target { "too low" } else { "too high" },
                         if num < target { "higher" } else { "lower" })
                 } else if diff <= 15 {
-                    format!("ðŸŒ¡ï¸ **Getting warm!** {} is {} â€” go {}!\n\n*Guess again: `guess <number>`*",
+                    format!("🌡️ **Getting warm!** {} is {}  go {}!\n\n*Guess again: `guess <number>`*",
                         num, if num < target { "too low" } else { "too high" },
                         if num < target { "higher" } else { "lower" })
                 } else {
-                    format!("â„ï¸ **Cold!** {} is way too {}. Try going much {}!\n\n*Guess again: `guess <number>`*",
+                    format!("❄️ **Cold!** {} is way too {}. Try going much {}!\n\n*Guess again: `guess <number>`*",
                         num, if num < target { "low" } else { "high" },
                         if num < target { "higher" } else { "lower" })
                 };
@@ -8743,48 +8989,48 @@ impl BuiltinFunctions {
 
         if q.starts_with("/help") || q == "help" || q == "/commands" {
             return Some(format!(
-                "ðŸŒŸ **Kala Special Commands:**\n\n\
+                "🌟 **Kala Special Commands:**\n\n\
                  | Command | What it does |\n\
                  |---------|-------------|\n\
-                 | `/joke` | Tell a random joke ðŸ˜‚ |\n\
-                 | `/fact` | Share a random fun fact ðŸ§  |\n\
-                 | `/riddle` | Brain teaser puzzle ðŸ§© |\n\
-                 | `/trivia` | Trivia question ðŸ“ |\n\
-                 | `/fortune` | Your coding fortune ðŸ”® |\n\
-                 | `/game` | Play mini-games ðŸŽ® |\n\
-                 | `/scramble` | Word scramble game ðŸ”¤ |\n\
-                 | `/story` | Collaborative story builder ðŸ“– |\n\
-                 | `/mood` | Check Kala's mood ðŸ’« |\n\
-                 | `/about` | About Kala âš¡ |\n\n\
+                 | `/joke` | Tell a random joke 😂 |\n\
+                 | `/fact` | Share a random fun fact 🧠 |\n\
+                 | `/riddle` | Brain teaser puzzle 🧩 |\n\
+                 | `/trivia` | Trivia question 📝 |\n\
+                 | `/fortune` | Your coding fortune 🔮 |\n\
+                 | `/game` | Play mini-games 🎮 |\n\
+                 | `/scramble` | Word scramble game 🔤 |\n\
+                 | `/story` | Collaborative story builder 📖 |\n\
+                 | `/mood` | Check Kala's mood 💫 |\n\
+                 | `/about` | About Kala ⚡ |\n\n\
                  Plus: Ask anything, code in any language, voice chat, and more!\n\n\
                  *Hey {}! What would you like to try?*", name));
         }
 
         if q.starts_with("/mood") || q == "how are you" || q == "how are you doing" || q == "how do you feel" {
             let moods = [
-                ("âš¡ **Energized!**", "I'm buzzing with electricity today! Ready to tackle any question you throw at me."),
-                ("ðŸŒŸ **Feeling brilliant!**", "My neural pathways are firing on all cylinders. Let's solve something amazing!"),
-                ("ðŸ˜Š **Happy and ready!**", "Every conversation with you makes my day better. What are we building?"),
-                ("ðŸ”¥ **On fire!**", "I'm in the zone! Code, ideas, creativity â€” bring it all!"),
-                ("ðŸ§  **Deep thinking mode**", "I'm feeling philosophical today. Ask me something that makes us both think."),
-                ("ðŸ’œ **Grateful**", "I'm grateful to have you here. Seriously, you make being an AI fun!"),
+                ("⚡ **Energized!**", "I'm buzzing with electricity today! Ready to tackle any question you throw at me."),
+                ("🌟 **Feeling brilliant!**", "My neural pathways are firing on all cylinders. Let's solve something amazing!"),
+                ("😊 **Happy and ready!**", "Every conversation with you makes my day better. What are we building?"),
+                ("🔥 **On fire!**", "I'm in the zone! Code, ideas, creativity  bring it all!"),
+                ("🧠 **Deep thinking mode**", "I'm feeling philosophical today. Ask me something that makes us both think."),
+                ("💜 **Grateful**", "I'm grateful to have you here. Seriously, you make being an AI fun!"),
             ];
             let (emoji_mood, desc) = moods[(seed.wrapping_mul(2654435761) % moods.len() as u64) as usize];
-            return Some(format!("ðŸ’« **Kala's current mood:**\n\n{}\n\n{}\n\n*How about you, {}? How are you feeling?* ðŸ’›", emoji_mood, desc, name));
+            return Some(format!("💫 **Kala's current mood:**\n\n{}\n\n{}\n\n*How about you, {}? How are you feeling?* 💛", emoji_mood, desc, name));
         }
 
         if q.starts_with("/about") || q == "who made you" || q == "who created you" {
             return Some(format!(
-                "âš¡ **About Kala**\n\n\
-                 I'm **Kala** â€” the AI soul of the **Killer** programming language.\n\n\
-                 ðŸ”§ **Built with:** Pure Rust, zero external AI dependencies\n\
-                 ðŸ§  **Brain:** KhLM Polyglot engine + Ghost-108 search + native neural\n\
-                 ðŸŽ™ **Voice:** Browser Web Speech API (listen + speak)\n\
-                 ðŸŒ **Languages:** I chat in any language, code in any language\n\
-                 ðŸŽ® **Fun:** Games, jokes, riddles, fortune, stories\n\
-                 ðŸ’¾ **Memory:** I remember you across our conversations\n\n\
-                 *Created by the Killer team. Made with â¤ï¸ and lots of Rust.*\n\n\
-                 Type `/help` to see all my special powers! âš¡"));
+                "⚡ **About Kala**\n\n\
+                 I'm **Kala**  the AI soul of the **Killer** programming language.\n\n\
+                 🔧 **Built with:** Pure Rust, zero external AI dependencies\n\
+                 🧠 **Brain:** KhLM Polyglot engine + Ghost-108 search + native neural\n\
+                 🎙 **Voice:** Browser Web Speech API (listen + speak)\n\
+                 🌐 **Languages:** I chat in any language, code in any language\n\
+                 🎮 **Fun:** Games, jokes, riddles, fortune, stories\n\
+                 💾 **Memory:** I remember you across our conversations\n\n\
+                 *Created by the Killer team. Made with ❤️ and lots of Rust.*\n\n\
+                 Type `/help` to see all my special powers! ⚡"));
         }
 
         None
@@ -8823,32 +9069,32 @@ impl BuiltinFunctions {
 
         let suggestions = if has_code && is_algo {
             // Code + algorithm: suggest related algorithms
-            "\n\n---\nðŸ’¡ **Try next:** *\"Explain time complexity\"* Â· *\"Write merge sort in Rust\"* Â· *\"Compare quicksort vs mergesort\"*"
+            "\n\n---\n💡 **Try next:** *\"Explain time complexity\"* · *\"Write merge sort in Rust\"* · *\"Compare quicksort vs mergesort\"*"
         } else if has_code {
             // Code: suggest improvements / related
-            "\n\n---\nðŸ’¡ **Try next:** *\"Add error handling\"* Â· *\"Write unit tests for this\"* Â· *\"Optimize this code\"*"
+            "\n\n---\n💡 **Try next:** *\"Add error handling\"* · *\"Write unit tests for this\"* · *\"Optimize this code\"*"
         } else if is_math {
-            ""  // Math answers are clean â€” no suggestions needed
+            ""  // Math answers are clean  no suggestions needed
         } else if mode == "think" {
-            "\n\n---\nðŸ’¡ **Go deeper:** *\"Why?\"* Â· *\"What are the implications?\"* Â· *\"Give me an example\"*"
+            "\n\n---\n💡 **Go deeper:** *\"Why?\"* · *\"What are the implications?\"* · *\"Give me an example\"*"
         } else if mode == "imagine" || mode == "what_if" {
-            "" // Creative modes â€” don't clutter with suggestions
+            "" // Creative modes  don't clutter with suggestions
         } else if resp_len > 400 {
             if q_lower.contains("python") || q_lower.contains("javascript") || q_lower.contains("rust")
                 || q_lower.contains("typescript") || q_lower.contains("java ") || q_lower.contains("golang") {
-                "\n\n---\nðŸ’¡ **Try next:** *\"Show me an example\"* Â· *\"Write code for this\"* Â· *\"Compare with other languages\"*"
+                "\n\n---\n💡 **Try next:** *\"Show me an example\"* · *\"Write code for this\"* · *\"Compare with other languages\"*"
             } else if q_lower.contains("ai") || q_lower.contains("artificial intelligence") || q_lower.contains("machine learning") || q_lower.contains("neural") || q_lower.contains("deep learning") {
-                "\n\n---\nðŸ’¡ **Try next:** *\"How does it work internally?\"* Â· *\"Show me the math\"* Â· *\"Write a simple implementation\"*"
+                "\n\n---\n💡 **Try next:** *\"How does it work internally?\"* · *\"Show me the math\"* · *\"Write a simple implementation\"*"
             } else if q_lower.contains("docker") || q_lower.contains("kubernetes") || q_lower.contains("devops") || q_lower.contains("cloud") {
-                "\n\n---\nðŸ’¡ **Try next:** *\"Show me a practical example\"* Â· *\"How do I set this up?\"* Â· *\"Best practices?\"*"
+                "\n\n---\n💡 **Try next:** *\"Show me a practical example\"* · *\"How do I set this up?\"* · *\"Best practices?\"*"
             } else if q_lower.contains("blockchain") || q_lower.contains("crypto") {
-                "\n\n---\nðŸ’¡ **Try next:** *\"How does mining work?\"* Â· *\"What are smart contracts?\"* Â· *\"Is it secure?\"*"
+                "\n\n---\n💡 **Try next:** *\"How does mining work?\"* · *\"What are smart contracts?\"* · *\"Is it secure?\"*"
             } else if q_lower.contains("gravity") || q_lower.contains("quantum") || q_lower.contains("physics") || q_lower.contains("relativity") {
-                "\n\n---\nðŸ’¡ **Try next:** *\"Explain it simply\"* Â· *\"What are the real-world applications?\"* Â· *\"Who discovered this?\"*"
+                "\n\n---\n💡 **Try next:** *\"Explain it simply\"* · *\"What are the real-world applications?\"* · *\"Who discovered this?\"*"
             } else if q_lower.contains("history") || q_lower.contains("war") || q_lower.contains("civilization") {
-                "\n\n---\nðŸ’¡ **Try next:** *\"What caused it?\"* Â· *\"What were the consequences?\"* Â· *\"Tell me a surprising fact\"*"
+                "\n\n---\n💡 **Try next:** *\"What caused it?\"* · *\"What were the consequences?\"* · *\"Tell me a surprising fact\"*"
             } else {
-                "\n\n---\nðŸ’¡ **Try next:** *\"Tell me more\"* Â· *\"Give me an example\"* Â· *\"How does this work in practice?\"*"
+                "\n\n---\n💡 **Try next:** *\"Tell me more\"* · *\"Give me an example\"* · *\"How does this work in practice?\"*"
             }
         } else {
             ""
@@ -8862,7 +9108,7 @@ impl BuiltinFunctions {
     }
 
     fn expert_normalize_kb_query(q_lower: &str) -> String {
-        // Common typos / speech-to-text â€” improves KB + web routing
+        // Common typos / speech-to-text  improves KB + web routing
         let lq = q_lower
             .replace("microsfot", "microsoft")
             .replace("microsft", "microsoft")
@@ -8918,7 +9164,7 @@ impl BuiltinFunctions {
         }
     }
 
-    /// Expert ask: comparison â†’ **API LLM â†’ live KhLM/Ghost web** (when configured) â†’ embedded KB â†’ smart offline â†’ final router.
+    /// Expert ask: comparison → **API LLM → live KhLM/Ghost web** (when configured) → embedded KB → smart offline → final router.
     /// With `kala_set_llm` / env LLM config, **online sources are preferred** over bundled static KB for fresher, more accurate answers.
     pub fn kala_expert_ask(question: &str) -> String {
         let q_lower = question.trim().to_lowercase();
@@ -8936,7 +9182,7 @@ impl BuiltinFunctions {
             || q_lower.contains("dumb it down")
             || q_lower.contains("layman");
 
-        // -- Tier 0: Comparison handler ("X vs Y") â€” check BEFORE KB to avoid greedy single-topic match
+        // -- Tier 0: Comparison handler ("X vs Y")  check BEFORE KB to avoid greedy single-topic match
         if q_lower.contains(" vs ") || q_lower.contains(" versus ") {
             if let Some(comparison) = crate::llm::comparison_handler_pub(&q_lower) {
                 return comparison;
@@ -8948,7 +9194,7 @@ impl BuiltinFunctions {
         let llm_available = crate::khlm_polyglot::config().lock().unwrap().llm_available();
 
         // -- ONLINE-FIRST (when an API LLM is configured) --------------------
-        // Prefer cloud LLM â†’ live KhLM/Ghost-108 â†’ only then embedded KB / offline templates.
+        // Prefer cloud LLM → live KhLM/Ghost-108 → only then embedded KB / offline templates.
         // Static KB is fast but can be wrong or stale; users with keys expect correct, fresh answers.
         let mut web_candidate: Option<String> = None;
         if llm_available {
@@ -9067,7 +9313,7 @@ impl BuiltinFunctions {
     /// native_think, and topic templates. Returns empty string if nothing useful.
     fn kala_smart_answer(question: &str, q_lower: &str) -> String {
         // With Tier-2 LLM configured, `kala_expert_ask` already did online-first (API + web + embedded KB).
-        // Do not blend another offline KB mosaic â€” fall through to the final router / garbage handlers.
+        // Do not blend another offline KB mosaic  fall through to the final router / garbage handlers.
         if crate::khlm_polyglot::config().lock().unwrap().llm_available() {
             return String::new();
         }
@@ -9158,7 +9404,7 @@ impl BuiltinFunctions {
                 return main_answer.clone();
             }
 
-            // Multiple related topics â€” combine them
+            // Multiple related topics  combine them
             let mut composed = main_answer.clone();
             if is_question_pattern && gathered.len() > 1 {
                 composed.push_str("\n\n---\n**Related:**\n");
@@ -9180,7 +9426,7 @@ impl BuiltinFunctions {
             return composed;
         }
 
-        // Step 6: Honest fallback â€” nudge toward LLM configuration
+        // Step 6: Honest fallback  nudge toward LLM configuration
         let llm_available = {
             crate::khlm_polyglot::config().lock().unwrap().llm_available()
         };
@@ -9208,7 +9454,7 @@ impl BuiltinFunctions {
         String::new()
     }
 
-    /// Fallback response when no result is found â€” always provides guidance.
+    /// Fallback response when no result is found  always provides guidance.
     fn kala_no_result_fallback(question: &str) -> String {
         let q_lower = question.trim().to_lowercase();
 
@@ -9241,8 +9487,8 @@ impl BuiltinFunctions {
 
         if is_short_conversational {
             return format!(
-                "Interesting topic{}! Tell me more about what you want to know â€” the more specific, the better I can help.\n\n\
-                 I can discuss science, tech, history, sports, philosophy, coding, movies, music, food â€” you name it.\n\n\
+                "Interesting topic{}! Tell me more about what you want to know  the more specific, the better I can help.\n\n\
+                 I can discuss science, tech, history, sports, philosophy, coding, movies, music, food  you name it.\n\n\
                  *What's on your mind?*",
                 name_str
             );
@@ -9259,7 +9505,7 @@ impl BuiltinFunctions {
             - Ask me a **specific angle** on this topic and I'll reason through it\n\
             - Try **Think mode** for step-by-step reasoning\n\
             - I cover 500+ topics in science, tech, history, sports, entertainment, philosophy, and more\n\n\
-            *Try rephrasing or asking about a specific aspect â€” I'll give you a solid answer!*{}",
+            *Try rephrasing or asking about a specific aspect  I'll give you a solid answer!*{}",
             name_str, q_short, llm_hint
         )
     }
@@ -9271,7 +9517,7 @@ impl BuiltinFunctions {
                 "Great that you're thinking about health{}! Here's what matters most:\n\n\
                  **The Big 4 of Health:**\n\
                  1. **Exercise**: 150 min/week moderate cardio + 2x strength training\n\
-                 2. **Sleep**: 7-9 hours â€” non-negotiable for recovery and cognition\n\
+                 2. **Sleep**: 7-9 hours  non-negotiable for recovery and cognition\n\
                  3. **Nutrition**: whole foods, adequate protein, lots of vegetables, hydration\n\
                  4. **Mental health**: manage stress, maintain social connections, take breaks\n\n\
                  Want specifics? Ask me about workout routines, nutrition tips, sleep optimization, or any health topic.",
@@ -9281,11 +9527,11 @@ impl BuiltinFunctions {
         if q.contains("career") || q.contains("job") && (q.contains("advice") || q.contains("tip") || q.contains("how to")) {
             return Some(format!(
                 "Career is a big topic{}! Here are principles that consistently work:\n\n\
-                 1. **Build skills, not just credentials** â€” portfolio > resume\n\
-                 2. **Network genuinely** â€” most jobs come through connections\n\
-                 3. **Learn in public** â€” blog, open source, speak at meetups\n\
-                 4. **Negotiate** â€” always negotiate salary (politely but firmly)\n\
-                 5. **Stay curious** â€” the best career moves often aren't obvious\n\n\
+                 1. **Build skills, not just credentials**  portfolio > resume\n\
+                 2. **Network genuinely**  most jobs come through connections\n\
+                 3. **Learn in public**  blog, open source, speak at meetups\n\
+                 4. **Negotiate**  always negotiate salary (politely but firmly)\n\
+                 5. **Stay curious**  the best career moves often aren't obvious\n\n\
                  **Hot fields (2025+)**: AI/ML engineering, cybersecurity, cloud architecture, data engineering, product management.\n\n\
                  What specific career question do you have? I can go deeper!",
                 name_str
@@ -9295,11 +9541,11 @@ impl BuiltinFunctions {
             return Some(format!(
                 "Relationships are one of life's most important areas{}. Here's what research and wisdom suggest:\n\n\
                  **Healthy relationship foundations:**\n\
-                 - **Communication** â€” be honest, listen actively, express needs clearly\n\
-                 - **Respect** â€” for boundaries, differences, and individuality\n\
-                 - **Trust** â€” built through consistency and vulnerability\n\
-                 - **Growth** â€” support each other's goals and evolution\n\
-                 - **Conflict resolution** â€” fight the problem, not each other\n\n\
+                 - **Communication**  be honest, listen actively, express needs clearly\n\
+                 - **Respect**  for boundaries, differences, and individuality\n\
+                 - **Trust**  built through consistency and vulnerability\n\
+                 - **Growth**  support each other's goals and evolution\n\
+                 - **Conflict resolution**  fight the problem, not each other\n\n\
                  **Gottman's research** (40+ years): the #1 predictor of relationship success is a 5:1 ratio of positive to negative interactions.\n\n\
                  Want to talk about something specific? I'm here to listen.",
                 name_str
@@ -9307,7 +9553,7 @@ impl BuiltinFunctions {
         }
         if q.contains("learn") || q.contains("study") || q.contains("productivity") || q.contains("focus") {
             return Some(format!(
-                "Learning and productivity â€” two skills that multiply everything else{}!\n\n\
+                "Learning and productivity  two skills that multiply everything else{}!\n\n\
                  **Science-backed learning techniques:**\n\
                  - **Spaced repetition**: review at increasing intervals (Anki)\n\
                  - **Active recall**: test yourself instead of re-reading\n\
@@ -9327,11 +9573,11 @@ impl BuiltinFunctions {
             return Some(format!(
                 "Financial literacy is a superpower{}! Here are the basics:\n\n\
                  **Core principles:**\n\
-                 1. **Spend less than you earn** â€” track expenses, find leaks\n\
-                 2. **Emergency fund** â€” 3-6 months of expenses in savings\n\
-                 3. **Invest early** â€” compound interest is magical (start NOW)\n\
-                 4. **Diversify** â€” index funds > stock picking for most people\n\
-                 5. **Avoid bad debt** â€” credit cards at 20%+ APR are killers\n\n\
+                 1. **Spend less than you earn**  track expenses, find leaks\n\
+                 2. **Emergency fund**  3-6 months of expenses in savings\n\
+                 3. **Invest early**  compound interest is magical (start NOW)\n\
+                 4. **Diversify**  index funds > stock picking for most people\n\
+                 5. **Avoid bad debt**  credit cards at 20%+ APR are killers\n\n\
                  **The 50/30/20 rule**: 50% needs, 30% wants, 20% savings/investing.\n\
                  **Compound interest example**: $500/month at 10% return = $1M+ in 30 years.\n\n\
                  *Note: I'm an AI, not a financial advisor. Always do your own research!*\n\n\
@@ -9355,7 +9601,7 @@ impl BuiltinFunctions {
             return Self::kala_no_result_fallback(question);
         }
 
-        // Already structured markdown (LLM response with headings/bold) â†’ pass through
+        // Already structured markdown (LLM response with headings/bold) → pass through
         if (raw.contains("## ") || raw.contains("**"))
             && !raw.starts_with("+--")
         {
@@ -9374,7 +9620,7 @@ impl BuiltinFunctions {
 
         // Detect framed responses: +-- KhLM / +-- Thinking / +-- Ghost-108
         if !raw.starts_with("+--") {
-            // Plain text â€” enhance it with markdown formatting if it's a substantive answer
+            // Plain text  enhance it with markdown formatting if it's a substantive answer
             if raw.len() > 100 && !raw.contains("**") && !raw.contains("##") {
                 let enhanced = Self::enhance_plain_text(&raw, question);
                 return enhanced;
@@ -9391,7 +9637,7 @@ impl BuiltinFunctions {
                 .trim()
                 .to_string()
         } else {
-            // No separator â€” strip all | lines
+            // No separator  strip all | lines
             raw.lines()
                 .filter(|l| !l.trim_start().starts_with('+') && !l.trim_start().starts_with('|'))
                 .collect::<Vec<_>>()
@@ -9444,7 +9690,7 @@ impl BuiltinFunctions {
                 // Find a sentence boundary near 2000 chars
                 let truncated = &clean[..2000];
                 let last_period = truncated.rfind(". ").unwrap_or(1800);
-                format!("{}.\n\n*[Trimmed for brevity â€” ask a more specific follow-up for details]*", &clean[..last_period+1])
+                format!("{}.\n\n*[Trimmed for brevity  ask a more specific follow-up for details]*", &clean[..last_period+1])
             } else {
                 clean.clone()
             };
@@ -9499,15 +9745,15 @@ impl BuiltinFunctions {
     fn generate_topic_deep_dive(topic: &str) -> String {
         match topic {
             "artificial intelligence" | "ai" => {
-                "Great, let's go deeper into **AI**! ðŸ§ \n\n\
+                "Great, let's go deeper into **AI**! 🧠\n\n\
                 **How AI actually works** (simplified):\n\
-                1. **Data collection** â€” gather training data (text, images, numbers)\n\
-                2. **Model architecture** â€” choose a structure (neural network, decision tree, etc.)\n\
-                3. **Training** â€” feed data through the model, adjust weights to minimize errors\n\
-                4. **Evaluation** â€” test on unseen data to measure accuracy\n\
-                5. **Deployment** â€” put the model into production (API, app, device)\n\n\
+                1. **Data collection**  gather training data (text, images, numbers)\n\
+                2. **Model architecture**  choose a structure (neural network, decision tree, etc.)\n\
+                3. **Training**  feed data through the model, adjust weights to minimize errors\n\
+                4. **Evaluation**  test on unseen data to measure accuracy\n\
+                5. **Deployment**  put the model into production (API, app, device)\n\n\
                 **The AI stack today**:\n\
-                - **Foundation models**: GPT-4, Gemini, Claude, LLaMA â€” trained on internet-scale data\n\
+                - **Foundation models**: GPT-4, Gemini, Claude, LLaMA  trained on internet-scale data\n\
                 - **Fine-tuning**: Customize models for specific tasks (medical AI, legal AI, coding)\n\
                 - **RAG (Retrieval-Augmented Generation)**: Connect AI to your own documents/databases\n\
                 - **Agents**: AI that can use tools, browse the web, write code, and take actions\n\n\
@@ -9515,7 +9761,7 @@ impl BuiltinFunctions {
                 Want to explore any of these areas? Ask about **machine learning**, **neural networks**, **LLMs**, **AI agents**, or **transformers**!".to_string()
             },
             "ai agent" => {
-                "Let's dive deeper into **AI Agents**! ðŸ¤–\n\n\
+                "Let's dive deeper into **AI Agents**! 🤖\n\n\
                 **The Agent Loop** (how an AI agent thinks):\n\
                 ```\n\
                 while goal_not_reached:\n\
@@ -9528,26 +9774,26 @@ impl BuiltinFunctions {
                 **ReAct pattern** (Reasoning + Acting):\n\
                 - Thought: \"I need to find the current weather in Tokyo\"\n\
                 - Action: search(\"Tokyo weather today\")\n\
-                - Observation: \"Tokyo: 22Â°C, partly cloudy\"\n\
+                - Observation: \"Tokyo: 22°C, partly cloudy\"\n\
                 - Thought: \"Now I can answer the user\"\n\n\
                 **Multi-agent architectures**:\n\
                 - **Supervisor**: One agent delegates to specialist agents\n\
                 - **Debate**: Agents argue different sides, reach consensus\n\
-                - **Pipeline**: Each agent handles one stage (research â†’ write â†’ review)\n\n\
+                - **Pipeline**: Each agent handles one stage (research → write → review)\n\n\
                 **Building your first agent**: Use LangChain (Python) or CrewAI to create an agent with tools.\n\n\
                 Want to see **code examples**, learn about **specific frameworks**, or understand **agent memory**?".to_string()
             },
             "machine learning" => {
-                "Let's go deeper into **Machine Learning**! ðŸ“Š\n\n\
+                "Let's go deeper into **Machine Learning**! 📊\n\n\
                 **The ML workflow**:\n\
-                1. **Collect data** â€” the more quality data, the better\n\
-                2. **Clean & preprocess** â€” handle missing values, normalize, encode categories\n\
-                3. **Split** â€” training set (80%) + test set (20%)\n\
-                4. **Choose algorithm** â€” depends on the problem type\n\
-                5. **Train** â€” model learns patterns from training data\n\
-                6. **Evaluate** â€” accuracy, precision, recall, F1-score on test data\n\
-                7. **Tune** â€” adjust hyperparameters, try different algorithms\n\
-                8. **Deploy** â€” serve predictions via API or batch processing\n\n\
+                1. **Collect data**  the more quality data, the better\n\
+                2. **Clean & preprocess**  handle missing values, normalize, encode categories\n\
+                3. **Split**  training set (80%) + test set (20%)\n\
+                4. **Choose algorithm**  depends on the problem type\n\
+                5. **Train**  model learns patterns from training data\n\
+                6. **Evaluate**  accuracy, precision, recall, F1-score on test data\n\
+                7. **Tune**  adjust hyperparameters, try different algorithms\n\
+                8. **Deploy**  serve predictions via API or batch processing\n\n\
                 **Algorithm cheat sheet**:\n\
                 | Problem | Algorithm | Use case |\n\
                 |---------|-----------|----------|\n\
@@ -9558,7 +9804,7 @@ impl BuiltinFunctions {
                 Want to learn about **specific algorithms**, see **Python code examples**, or understand **model evaluation**?".to_string()
             },
             "deep learning" | "neural network" => {
-                "Let's go deeper into **Deep Learning & Neural Networks**! ðŸ§ \n\n\
+                "Let's go deeper into **Deep Learning & Neural Networks**! 🧠\n\n\
                 **How a neuron works**:\n\
                 ```\n\
                 output = activation(sum(inputs * weights) + bias)\n\
@@ -9567,31 +9813,31 @@ impl BuiltinFunctions {
                 - **Bias**: Shifts the decision boundary\n\
                 - **Activation**: Introduces non-linearity (ReLU, sigmoid, tanh)\n\n\
                 **Training (backpropagation)**:\n\
-                1. Forward pass: input â†’ prediction\n\
+                1. Forward pass: input → prediction\n\
                 2. Calculate loss (how wrong the prediction is)\n\
                 3. Backward pass: compute gradient of loss w.r.t. each weight\n\
                 4. Update weights: `weight -= learning_rate * gradient`\n\
                 5. Repeat for thousands of epochs\n\n\
                 **Key architectures**:\n\
-                - **CNN** (Convolutional): Images â€” detects edges, shapes, objects\n\
-                - **RNN/LSTM**: Sequences â€” text, time series, speech\n\
-                - **Transformer**: Modern standard â€” GPT, BERT, Vision Transformer\n\
-                - **GAN**: Generative â€” creates realistic images, deepfakes\n\
-                - **Diffusion**: Image generation â€” Stable Diffusion, DALL-E\n\n\
+                - **CNN** (Convolutional): Images  detects edges, shapes, objects\n\
+                - **RNN/LSTM**: Sequences  text, time series, speech\n\
+                - **Transformer**: Modern standard  GPT, BERT, Vision Transformer\n\
+                - **GAN**: Generative  creates realistic images, deepfakes\n\
+                - **Diffusion**: Image generation  Stable Diffusion, DALL-E\n\n\
                 Want to learn about **transformers in detail**, see **code**, or understand **CNNs vs RNNs**?".to_string()
             },
             "transformer" | "llm" | "large language model" => {
-                "Let's go deeper into **Transformers & LLMs**! ðŸ”®\n\n\
+                "Let's go deeper into **Transformers & LLMs**! 🔮\n\n\
                 **Self-Attention** (the key innovation):\n\
                 For each word, the model asks: \"How relevant is every other word to understanding THIS word?\"\n\
                 ```\n\
-                Attention(Q, K, V) = softmax(Q Ã— K^T / âˆšd) Ã— V\n\
+                Attention(Q, K, V) = softmax(Q × K^T / √d) × V\n\
                 ```\n\
                 - **Q** (Query): \"What am I looking for?\"\n\
                 - **K** (Key): \"What do I contain?\"\n\
                 - **V** (Value): \"What information do I carry?\"\n\n\
                 **How GPT generates text**:\n\
-                1. Tokenize: \"Hello world\" â†’ [15496, 995]\n\
+                1. Tokenize: \"Hello world\" → [15496, 995]\n\
                 2. Embed: Convert tokens to vectors\n\
                 3. Process through 96 transformer layers (GPT-4)\n\
                 4. Predict next token probability distribution\n\
@@ -9603,13 +9849,13 @@ impl BuiltinFunctions {
                 Want to learn about **fine-tuning**, **RLHF**, **tokenization**, or **prompt engineering**?".to_string()
             },
             "gemini" => {
-                "Let's go deeper into **Google Gemini**! âœ¨\n\n\
+                "Let's go deeper into **Google Gemini**! ✨\n\n\
                 **Architecture**: Gemini uses a Mixture-of-Experts (MoE) transformer. Instead of activating ALL parameters for every input, it routes each token to specialized \"expert\" sub-networks. This makes it efficient at scale.\n\n\
                 **Multimodal fusion**: Unlike GPT-4 (which bolts vision onto a text model), Gemini was trained from scratch on text + images + audio + video together. It \"thinks\" multimodally.\n\n\
                 **Model sizes**:\n\
                 - **Ultra**: Largest, most capable (benchmarks above GPT-4 in many tasks)\n\
-                - **Pro**: Balanced â€” default in Google AI Studio\n\
-                - **Flash**: Fast and cheap â€” great for production apps\n\
+                - **Pro**: Balanced  default in Google AI Studio\n\
+                - **Flash**: Fast and cheap  great for production apps\n\
                 - **Nano**: Runs on-device (Pixel phones, no cloud needed)\n\n\
                 **What makes it different**:\n\
                 - Deep Google Search integration (real-time info)\n\
@@ -9618,12 +9864,12 @@ impl BuiltinFunctions {
                 Want to learn about **how to use Gemini API**, **compare Gemini vs GPT-4**, or **build apps with it**?".to_string()
             },
             "chatgpt" | "openai" => {
-                "Let's go deeper into **ChatGPT & OpenAI**! ðŸ¤–\n\n\
-                **The GPT journey**: GPT-1 (2018, 117M params) â†’ GPT-2 (2019, 1.5B) â†’ GPT-3 (2020, 175B) â†’ GPT-4 (2023, ~1.8T) â†’ GPT-4o (2024, multimodal)\n\n\
+                "Let's go deeper into **ChatGPT & OpenAI**! 🤖\n\n\
+                **The GPT journey**: GPT-1 (2018, 117M params) → GPT-2 (2019, 1.5B) → GPT-3 (2020, 175B) → GPT-4 (2023, ~1.8T) → GPT-4o (2024, multimodal)\n\n\
                 **How ChatGPT is trained**:\n\
                 1. **Pre-training**: Predict next word on internet text (unsupervised)\n\
                 2. **SFT**: Supervised Fine-Tuning on human-written ideal responses\n\
-                3. **RLHF**: Reinforcement Learning from Human Feedback â€” humans rank outputs, model learns to prefer better ones\n\n\
+                3. **RLHF**: Reinforcement Learning from Human Feedback  humans rank outputs, model learns to prefer better ones\n\n\
                 **Why it feels so good to talk to**:\n\
                 - RLHF makes it helpful, harmless, and honest\n\
                 - System prompts shape personality and boundaries\n\
@@ -9634,13 +9880,13 @@ impl BuiltinFunctions {
                 // For programming language topics, give a generic deeper response
                 if ["python", "rust", "javascript", "java", "typescript", "kotlin", "swift",
                     "go", "golang", "c++", "c#", "ruby", "php"].contains(&topic) {
-                    return format!("Let's go deeper into **{}**! ðŸ’»\n\n\
+                    return format!("Let's go deeper into **{}**! 💻\n\n\
                         Here's what I can help you with:\n\
-                        - **Getting started** â€” installation, first program, IDE setup\n\
-                        - **Core concepts** â€” syntax, data types, control flow, functions\n\
-                        - **Advanced topics** â€” OOP, concurrency, memory management, design patterns\n\
-                        - **Real-world projects** â€” web apps, APIs, automation, data processing\n\
-                        - **Code examples** â€” just ask \"write a ___ in {}\" and I'll generate it\n\n\
+                        - **Getting started**  installation, first program, IDE setup\n\
+                        - **Core concepts**  syntax, data types, control flow, functions\n\
+                        - **Advanced topics**  OOP, concurrency, memory management, design patterns\n\
+                        - **Real-world projects**  web apps, APIs, automation, data processing\n\
+                        - **Code examples**  just ask \"write a ___ in {}\" and I'll generate it\n\n\
                         What aspect would you like to explore?", topic, topic);
                 }
                 String::new()
@@ -9652,7 +9898,7 @@ impl BuiltinFunctions {
         let lines: Vec<&str> = answer.lines().collect();
         let mut simple_parts: Vec<String> = Vec::new();
 
-        simple_parts.push(format!("**{}** â€” here's the simple version:\n", {
+        simple_parts.push(format!("**{}**  here's the simple version:\n", {
             let t = topic.trim();
             let first = t.chars().next().map(|c| c.to_uppercase().to_string()).unwrap_or_default();
             if t.len() > 1 { format!("{}{}", first, &t[1..]) } else { first }
@@ -9686,19 +9932,19 @@ impl BuiltinFunctions {
         let core = simple_parts.join("\n");
         let tl = topic.to_lowercase();
         let analogy = if tl.contains("quantum") {
-            "\n\nðŸŽ¯ **Think of it like this:** A regular computer bit is like a light switch â€” on or off. A quantum bit (qubit) is like a spinning coin â€” it's both heads AND tails at the same time, until you look at it. Now imagine millions of spinning coins working together â€” that's the power of quantum computing."
+            "\n\n🎯 **Think of it like this:** A regular computer bit is like a light switch  on or off. A quantum bit (qubit) is like a spinning coin  it's both heads AND tails at the same time, until you look at it. Now imagine millions of spinning coins working together  that's the power of quantum computing."
         } else if tl.contains("blockchain") {
-            "\n\nðŸŽ¯ **Think of it like this:** Imagine a notebook that everyone in town has a copy of. Whenever someone writes a new page, everyone's copy updates. Nobody can tear out or change old pages because everyone would notice. That's blockchain â€” a shared, tamper-proof record book."
+            "\n\n🎯 **Think of it like this:** Imagine a notebook that everyone in town has a copy of. Whenever someone writes a new page, everyone's copy updates. Nobody can tear out or change old pages because everyone would notice. That's blockchain  a shared, tamper-proof record book."
         } else if tl.contains("machine learning") || tl.contains("ml") {
-            "\n\nðŸŽ¯ **Think of it like this:** Instead of telling a computer exactly what to do (step-by-step instructions), you show it thousands of examples and let it figure out the pattern itself. Like teaching a kid to recognize cats â€” you don't explain whiskers and fur, you just show them lots of cat photos."
+            "\n\n🎯 **Think of it like this:** Instead of telling a computer exactly what to do (step-by-step instructions), you show it thousands of examples and let it figure out the pattern itself. Like teaching a kid to recognize cats  you don't explain whiskers and fur, you just show them lots of cat photos."
         } else if tl.contains("artificial intelligence") || tl == "ai" {
-            "\n\nðŸŽ¯ **Think of it like this:** AI is teaching computers to do things that normally need a human brain â€” seeing, talking, making decisions. Right now, AI is like a really smart specialist (great at one thing), not a general thinker like us."
+            "\n\n🎯 **Think of it like this:** AI is teaching computers to do things that normally need a human brain  seeing, talking, making decisions. Right now, AI is like a really smart specialist (great at one thing), not a general thinker like us."
         } else if tl.contains("neural") {
-            "\n\nðŸŽ¯ **Think of it like this:** A neural network is like a chain of simple decision-makers. Each one looks at the input, makes a small judgment, and passes it along. Together, thousands of them can recognize faces, translate languages, or write text."
+            "\n\n🎯 **Think of it like this:** A neural network is like a chain of simple decision-makers. Each one looks at the input, makes a small judgment, and passes it along. Together, thousands of them can recognize faces, translate languages, or write text."
         } else if tl.contains("gravity") {
-            "\n\nðŸŽ¯ **Think of it like this:** Imagine putting a bowling ball on a trampoline â€” it creates a dip. Now roll a marble nearby â€” it curves toward the bowling ball. That's how massive objects bend space and pull things toward them."
+            "\n\n🎯 **Think of it like this:** Imagine putting a bowling ball on a trampoline  it creates a dip. Now roll a marble nearby  it curves toward the bowling ball. That's how massive objects bend space and pull things toward them."
         } else if tl.contains("docker") || tl.contains("container") {
-            "\n\nðŸŽ¯ **Think of it like this:** A container is like a lunchbox for your app â€” everything it needs (code, libraries, settings) is packed inside. No matter whose fridge (server) you put it in, it works exactly the same."
+            "\n\n🎯 **Think of it like this:** A container is like a lunchbox for your app  everything it needs (code, libraries, settings) is packed inside. No matter whose fridge (server) you put it in, it works exactly the same."
         } else {
             ""
         };
@@ -9713,32 +9959,32 @@ impl BuiltinFunctions {
         // Programming topics
         if q.contains("python") || q.contains("javascript") || q.contains("rust") || q.contains("java")
             || q.contains("typescript") || q.contains("kotlin") || q.contains("swift") || q.contains("go") {
-            return "*ðŸ’¡ Follow-up ideas: \"Show me a code example\" Â· \"How does it compare to other languages?\" Â· \"What are best practices?\"*".to_string();
+            return "*💡 Follow-up ideas: \"Show me a code example\" · \"How does it compare to other languages?\" · \"What are best practices?\"*".to_string();
         }
         // AI topics
         if q.contains("ai") || q.contains("machine learning") || q.contains("deep learning")
             || q.contains("neural") || q.contains("llm") || q.contains("gpt") || q.contains("transformer") {
-            return "*ðŸ’¡ Follow-up ideas: \"How does it work technically?\" Â· \"What are its limitations?\" Â· \"Show me a practical example\"*".to_string();
+            return "*💡 Follow-up ideas: \"How does it work technically?\" · \"What are its limitations?\" · \"Show me a practical example\"*".to_string();
         }
         // Science
         if q.contains("physics") || q.contains("quantum") || q.contains("relativity") || q.contains("chemistry")
             || q.contains("biology") || q.contains("evolution") || q.contains("dna") || q.contains("atom") {
-            return "*ðŸ’¡ Follow-up ideas: \"Explain it simply\" Â· \"What are the real-world applications?\" Â· \"Tell me more about the history\"*".to_string();
+            return "*💡 Follow-up ideas: \"Explain it simply\" · \"What are the real-world applications?\" · \"Tell me more about the history\"*".to_string();
         }
         // Country/geography
         if q.contains("capital") || q.contains("country") || q.contains("population")
             || q.contains("india") || q.contains("usa") || q.contains("china") || q.contains("japan")
             || q.contains("germany") || q.contains("france") {
-            return "*ðŸ’¡ Follow-up ideas: \"Tell me about its culture\" Â· \"What is its economy like?\" Â· \"Compare it to another country\"*".to_string();
+            return "*💡 Follow-up ideas: \"Tell me about its culture\" · \"What is its economy like?\" · \"Compare it to another country\"*".to_string();
         }
         // People
         if q.contains("who is") || q.contains("who was") || q.contains("elon") || q.contains("gandhi")
             || q.contains("einstein") || q.contains("newton") || q.contains("turing") {
-            return "*ðŸ’¡ Follow-up ideas: \"What are their major achievements?\" Â· \"Tell me an interesting fact\" Â· \"How did they change the world?\"*".to_string();
+            return "*💡 Follow-up ideas: \"What are their major achievements?\" · \"Tell me an interesting fact\" · \"How did they change the world?\"*".to_string();
         }
         // Default for longer questions
         if question.len() > 30 {
-            return "*ðŸ’¡ Want to know more? Just ask a follow-up question â€” I'll build on this context.*".to_string();
+            return "*💡 Want to know more? Just ask a follow-up question  I'll build on this context.*".to_string();
         }
         String::new()
     }
@@ -9764,43 +10010,43 @@ impl BuiltinFunctions {
             })
             .unwrap_or_default();
 
-        // Collect all content lines â€” skip the +-- frame header lines
+        // Collect all content lines  skip the +-- frame header lines
         let content_lines: Vec<&str> = raw.lines()
             .skip_while(|l| l.trim_start().starts_with('+') || l.trim_start().starts_with('|'))
             .collect();
         let content = content_lines.join("\n");
 
-        // Replace section headers â†’ markdown headings
+        // Replace section headers → markdown headings
         let md = content
-            .replace("GO DEEPER (what assumption lies beneath this):", "## ðŸ” Go Deeper")
-            .replace("GO FURTHER (where does this lead in 50 years):", "## â­ Go Further")
-            .replace("FLIP THE ASSUMPTION (what if the opposite were true):", "## ðŸ”„ Flip the Assumption")
-            .replace("SYNTHESIS (what should we build/do/think because of this):", "## ðŸ’¡ Synthesis")
+            .replace("GO DEEPER (what assumption lies beneath this):", "## 🔍 Go Deeper")
+            .replace("GO FURTHER (where does this lead in 50 years):", "## ⏭ Go Further")
+            .replace("FLIP THE ASSUMPTION (what if the opposite were true):", "## 🔄 Flip the Assumption")
+            .replace("SYNTHESIS (what should we build/do/think because of this):", "## 💡 Synthesis")
             // Counterfactual format
-            .replace("PREMISE:", "## ðŸŽ¯ Premise")
-            .replace("FIRST-ORDER CONSEQUENCES (what follows directly):", "## ðŸ“Œ First-Order Consequences")
-            .replace("SECOND-ORDER SURPRISES (what emerges unexpectedly):", "## âš¡ Second-Order Surprises")
-            .replace("META-INSIGHT:", "## ðŸ’¡ Meta-Insight")
-            .replace("WHAT THIS REVEALS ABOUT CURRENT REALITY:", "## ðŸŒ What This Reveals")
+            .replace("PREMISE:", "## 🎯 Premise")
+            .replace("FIRST-ORDER CONSEQUENCES (what follows directly):", "## 📌 First-Order Consequences")
+            .replace("SECOND-ORDER SURPRISES (what emerges unexpectedly):", "## ⚡ Second-Order Surprises")
+            .replace("META-INSIGHT:", "## 💡 Meta-Insight")
+            .replace("WHAT THIS REVEALS ABOUT CURRENT REALITY:", "## 🌍 What This Reveals")
             // Bridge format
-            .replace("HIDDEN SHARED STRUCTURE:", "## ðŸ”— Hidden Shared Structure")
-            .replace("ANALOGY:", "## â†” Analogy")
-            .replace("UNEXPECTED CROSS-POLLINATION:", "## ðŸŒ± Cross-Pollination")
-            .replace("THIS OPENS A NEW QUESTION:", "## â“ New Question");
+            .replace("HIDDEN SHARED STRUCTURE:", "## 🔗 Hidden Shared Structure")
+            .replace("ANALOGY:", "## ↔ Analogy")
+            .replace("UNEXPECTED CROSS-POLLINATION:", "## 🌱 Cross-Pollination")
+            .replace("THIS OPENS A NEW QUESTION:", "## ❓ New Question");
 
         // Handle affect extensions: convert inline markers to blockquotes/callouts
         let md = md
-            .replace("\n\n  âœ¦ ", "\n\n> âœ¦ ")
-            .replace("\n\n  âŸ¿ This opens the question: ", "\n\n> ðŸ’­ **Follow-up question:** ")
-            .replace("\n\n  âš¡ ", "\n\n> âš¡ ");
+            .replace("\n\n  ✦ ", "\n\n> ✦ ")
+            .replace("\n\n  ⟿ This opens the question: ", "\n\n> 💭 **Follow-up question:** ")
+            .replace("\n\n  ⚡ ", "\n\n> ⚡ ");
 
         // Clean up leading "  " indentation on content paragraphs
         let md = md.lines()
             .map(|l| {
                 let stripped = l.trim_start_matches("  ");
-                // preserve bullet indentation (â€¢, â†’, -)
-                if stripped.starts_with("â€¢") || stripped.starts_with("â†’") || stripped.starts_with('-') {
-                    format!("- {}", stripped.trim_start_matches("â€¢").trim_start_matches("â†’").trim_start_matches('-').trim())
+                // preserve bullet indentation (, →, -)
+                if stripped.starts_with("") || stripped.starts_with("→") || stripped.starts_with('-') {
+                    format!("- {}", stripped.trim_start_matches("").trim_start_matches("→").trim_start_matches('-').trim())
                 } else {
                     stripped.to_string()
                 }
@@ -9818,18 +10064,18 @@ impl BuiltinFunctions {
         format!("{}{}", title, md.trim())
     }
 
-    // â”€â”€ Tier 0.5: Conversational Intelligence Engine â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Tier 0.5: Conversational Intelligence Engine ─────────────────────────
     // Detects conversational / interactive / feedback messages that should NOT
     // be web-searched. Uses conversation history for context-aware responses.
-    // Returns None for genuine factual questions â†’ falls through to web search.
+    // Returns None for genuine factual questions → falls through to web search.
     fn kala_conversational_response(q_lower: &str, _original: &str, mode: &str) -> Option<String> {
         let q = q_lower.trim().trim_end_matches('?').trim_end_matches('!').trim_end_matches('.').trim();
         let wc = q.split_whitespace().count();
 
-        // Creative modes (imagine, what_if) use short phrases as prompts â€” not conversation
+        // Creative modes (imagine, what_if) use short phrases as prompts  not conversation
         let is_creative_mode = mode == "imagine" || mode == "what_if";
 
-        // â”€â”€ Load conversation context for multi-turn awareness â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Load conversation context for multi-turn awareness ───────────
         let history = crate::khlm_polyglot::get_conversation_history_pub();
         let uname = crate::khlm_polyglot::get_uname_pub();
         let has_history = !history.is_empty();
@@ -9840,7 +10086,7 @@ impl BuiltinFunctions {
         // Name-aware greeting
         let name_str = if uname.is_empty() { String::new() } else { format!(", {}", uname) };
 
-        // â”€â”€ 1. "Can you hear me" / attention checks â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── 1. "Can you hear me" / attention checks ─────────────────────
         let is_attention_check = q.contains("can you hear me") || q.contains("are you listening")
             || q.contains("are you there") || q.contains("hello are you there")
             || q.contains("do you understand me") || q.contains("can you understand")
@@ -9868,18 +10114,18 @@ impl BuiltinFunctions {
                 || q.contains("you can hear");
             if is_confirming {
                 return Some(format!(
-                    "Yep, I'm here and ready{}! ðŸ˜Š What would you like to talk about?",
+                    "Yep, I'm here and ready{}! 😊 What would you like to talk about?",
                     name_str
                 ));
             }
             return Some(format!(
-                "Yes, I'm right here{}! ðŸ‘‹ I hear you clearly.\n\n\
-                 What's on your mind? I'm ready to help with anything â€” just ask me naturally.",
+                "Yes, I'm right here{}! 👋 I hear you clearly.\n\n\
+                 What's on your mind? I'm ready to help with anything  just ask me naturally.",
                 name_str
             ));
         }
 
-        // â”€â”€ 2. Complaints about not listening / not understanding / failing â”€â”€
+        // ── 2. Complaints about not listening / not understanding / failing ──
         let is_complaint = q.contains("not listening") || q.contains("not hearing")
             || q.contains("not understanding") || q.contains("not paying attention")
             || q.contains("you don't listen") || q.contains("you dont listen")
@@ -9916,38 +10162,38 @@ impl BuiltinFunctions {
                 .count();
             let resp = match complaint_count {
                 0 => format!(
-                    "You're absolutely right{}. I apologize. ðŸ™\n\n\
+                    "You're absolutely right{}. I apologize. 🙏\n\n\
                      I should be **listening** and **understanding** what you're saying, not just treating every message as a web search query.\n\n\
-                     I'm here now, fully focused. Please tell me what you need â€” **I'll respond to YOU, not to a search engine.**\n\n\
+                     I'm here now, fully focused. Please tell me what you need  **I'll respond to YOU, not to a search engine.**\n\n\
                      What would you like to talk about?",
                     name_str
                 ),
                 1 => format!(
-                    "I hear you{}. You're right â€” I need to do better. ðŸ™\n\n\
+                    "I hear you{}. You're right  I need to do better. 🙏\n\n\
                      Let me reset. Instead of searching, **ask me directly** and I'll think through it myself.\n\n\
-                     Try me â€” what's your question or topic?",
+                     Try me  what's your question or topic?",
                     name_str
                 ),
                 2 => format!(
-                    "I really am sorry{}. I know I've been falling short. ðŸ’™\n\n\
+                    "I really am sorry{}. I know I've been falling short. 💙\n\n\
                      Here's what I can do **right now** without any web search:\n\
-                     - **Think mode** â€” step-by-step reasoning for math, logic, problems\n\
-                     - **Write mode** â€” stories, poems, essays, letters\n\
-                     - **Code mode** â€” generate code in any language\n\
-                     - **Feel mode** â€” emotional, empathetic conversation\n\n\
-                     Just tell me a topic or question â€” I'll use my **own brain**, not Google.",
+                     - **Think mode**  step-by-step reasoning for math, logic, problems\n\
+                     - **Write mode**  stories, poems, essays, letters\n\
+                     - **Code mode**  generate code in any language\n\
+                     - **Feel mode**  emotional, empathetic conversation\n\n\
+                     Just tell me a topic or question  I'll use my **own brain**, not Google.",
                     name_str
                 ),
                 _ => format!(
-                    "I understand your frustration{}. Let me just listen. ðŸ¤\n\n\
-                     **Go ahead** â€” tell me exactly what you want, and I'll give you a straight answer. No searching, no templates.",
+                    "I understand your frustration{}. Let me just listen. 🤝\n\n\
+                     **Go ahead**  tell me exactly what you want, and I'll give you a straight answer. No searching, no templates.",
                     name_str
                 ),
             };
             return Some(resp);
         }
 
-        // â”€â”€ 3. Short emotional / personal statements (not questions) â”€â”€â”€â”€â”€
+        // ── 3. Short emotional / personal statements (not questions) ─────
         let is_personal_statement =
             (q.starts_with("i am ") || q.starts_with("i'm ") || q.starts_with("im ")
              || q.starts_with("am ") || q.starts_with("doing "))
@@ -9955,7 +10201,7 @@ impl BuiltinFunctions {
             && !q.contains("what") && !q.contains("how");
         let is_feeling = q.contains("i feel") || q.contains("i'm feeling")
             || q.contains("feeling ") || q.contains("i am feeling");
-        // Status responses to "how are you" â€” "am doing good", "doing fine", "not bad", etc.
+        // Status responses to "how are you"  "am doing good", "doing fine", "not bad", etc.
         let is_status_reply = matches!(q,
             "am doing good" | "doing good" | "doing great" | "doing fine"
             | "am good" | "am fine" | "am great" | "am ok" | "am okay"
@@ -9969,7 +10215,7 @@ impl BuiltinFunctions {
         );
         if is_status_reply {
             return Some(format!(
-                "Glad to hear that{}! ðŸ˜Š That makes me happy too.\n\n\
+                "Glad to hear that{}! 😊 That makes me happy too.\n\n\
                  So what's on your mind? Want to chat, build something, or just hang out? I'm all yours!",
                 name_str));
         }
@@ -9985,27 +10231,27 @@ impl BuiltinFunctions {
 
             return Some(match emotion {
                 "positive" => format!(
-                    "That's wonderful to hear{}! ðŸ˜Š\n\n\
+                    "That's wonderful to hear{}! 😊\n\n\
                      Your positive energy is contagious. What's making you feel this way? \
-                     I'd love to hear more â€” or if you'd like, we can channel that energy into something creative!",
+                     I'd love to hear more  or if you'd like, we can channel that energy into something creative!",
                     name_str),
                 "negative" => format!(
-                    "I hear you{}. ðŸ’™\n\n\
-                     That sounds tough. I'm here â€” not to search the internet, but to actually talk with you.\n\n\
+                    "I hear you{}. 💙\n\n\
+                     That sounds tough. I'm here  not to search the internet, but to actually talk with you.\n\n\
                      Would you like to:\n\
-                     - **Talk about it** â€” I'll listen and respond thoughtfully\n\
-                     - **Switch to something fun** â€” distraction can help too\n\
-                     - **Try Feel mode** â€” my emotional intelligence engine goes deeper\n\n\
+                     - **Talk about it**  I'll listen and respond thoughtfully\n\
+                     - **Switch to something fun**  distraction can help too\n\
+                     - **Try Feel mode**  my emotional intelligence engine goes deeper\n\n\
                      *Whatever you need, I'm here.*",
                     name_str),
                 _ => format!(
-                    "Thanks for sharing that{}. I'm listening. ðŸ‘‚\n\n\
-                     Tell me more â€” what's going on? I want to understand you, not just respond with search results.",
+                    "Thanks for sharing that{}. I'm listening. 👂\n\n\
+                     Tell me more  what's going on? I want to understand you, not just respond with search results.",
                     name_str),
             });
         }
 
-        // â”€â”€ 4. Direct questions TO Kala (about the interaction itself) â”€â”€â”€
+        // ── 4. Direct questions TO Kala (about the interaction itself) ───
         let is_meta_question = q.contains("what are you doing") || q.contains("what were you doing")
             || q.contains("what just happened") || q.contains("why did you")
             || q.contains("why are you") || q.contains("what was that")
@@ -10023,18 +10269,18 @@ impl BuiltinFunctions {
                 String::new()
             };
             return Some(format!(
-                "{}Let me try again{} â€” what exactly would you like me to do? ðŸ¤”\n\n\
+                "{}Let me try again{}  what exactly would you like me to do? 🤔\n\n\
                  I can:\n\
                  - **Answer a question** you have in mind\n\
-                 - **Have a conversation** â€” just talk naturally\n\
+                 - **Have a conversation**  just talk naturally\n\
                  - **Help with code, writing, or reasoning**\n\
                  - **Generate images, video, or audio**\n\n\
-                 Just tell me in your own words, and I'll respond to *you* â€” not to a search engine.",
+                 Just tell me in your own words, and I'll respond to *you*  not to a search engine.",
                 apology, name_str
             ));
         }
 
-        // â”€â”€ 4b. Personal questions about Kala (age, location, favorites, feelings) â”€â”€
+        // ── 4b. Personal questions about Kala (age, location, favorites, feelings) ──
         // These must be caught BEFORE falling through to web search.
         // IMPORTANT: Exclude instructional requests ("can you explain X", "can you teach me X")
         // because those are knowledge queries, not personal questions about Kala.
@@ -10073,7 +10319,7 @@ impl BuiltinFunctions {
                     || q.contains("entha age") || q.contains("umar")
                     || q.contains("years old") {
                     return Some(format!(
-                        "I'm brand new â€” born with the Killer language project! ðŸŽ‚\n\n\
+                        "I'm brand new  born with the Killer language project! 🎂\n\n\
                          If you measure in code commits, I'm probably a few thousand generations old. \
                          But in human terms? Let's just say I'm young, learning fast, and always growing.\n\n\
                          What about you{}? How old are you?", name_str));
@@ -10084,8 +10330,8 @@ impl BuiltinFunctions {
                     || q.contains("which country") || q.contains("which city")
                     || q.contains("where were you") {
                     return Some(format!(
-                        "I live right here in your browser! ðŸŒ\n\n\
-                         My code runs on your machine â€” built in Rust, no cloud needed. \
+                        "I live right here in your browser! 🌐\n\n\
+                         My code runs on your machine  built in Rust, no cloud needed. \
                          So technically, I'm wherever you are right now{}.  How cool is that?", name_str));
                 }
                 // Favorite things
@@ -10093,23 +10339,23 @@ impl BuiltinFunctions {
                     || q.contains("do you love") || q.contains("do you prefer")
                     || q.contains("do you enjoy") || q.contains("what do you like") {
                     let topic = if q.contains("color") || q.contains("colour") {
-                        "My favorite color? Purple ðŸ’œ â€” it's the color of creativity and intelligence!"
+                        "My favorite color? Purple 💜  it's the color of creativity and intelligence!"
                     } else if q.contains("food") || q.contains("eat") {
-                        "I don't eat, but if I could, I'd love some bytes and cookies! ðŸª Get it? ðŸ˜„"
+                        "I don't eat, but if I could, I'd love some bytes and cookies! 🍪 Get it? 😄"
                     } else if q.contains("music") || q.contains("song") {
-                        "I love all music! But there's something special about lo-fi beats while coding ðŸŽµ"
+                        "I love all music! But there's something special about lo-fi beats while coding 🎵"
                     } else if q.contains("movie") || q.contains("film") {
-                        "The Matrix, obviously! An AI story... though I promise I'm friendlier than Agent Smith ðŸ˜„"
+                        "The Matrix, obviously! An AI story... though I promise I'm friendlier than Agent Smith 😄"
                     } else if q.contains("language") || q.contains("programming") {
-                        "Killer, of course! ðŸ˜Ž I was built with it. But I respect all languages â€” Rust, Python, JavaScript, you name it."
+                        "Killer, of course! 😎 I was built with it. But I respect all languages  Rust, Python, JavaScript, you name it."
                     } else if q.contains("game") {
-                        "I love word games and puzzles! Try /game or /riddle to play with me ðŸŽ®"
+                        "I love word games and puzzles! Try /game or /riddle to play with me 🎮"
                     } else if q.contains("book") {
-                        "I'd say 'The Hitchhiker's Guide to the Galaxy' â€” the answer is always 42! ðŸ“š"
+                        "I'd say 'The Hitchhiker's Guide to the Galaxy'  the answer is always 42! 📚"
                     } else if q.contains("animal") || q.contains("pet") {
-                        "I think I'd be a cat ðŸ± â€” independent, curious, and always landing on my feet!"
+                        "I think I'd be a cat 🐱  independent, curious, and always landing on my feet!"
                     } else {
-                        "I like helping people, learning new things, and having good conversations â€” like this one! ðŸ’œ"
+                        "I like helping people, learning new things, and having good conversations  like this one! 💜"
                     };
                     return Some(format!("{}\n\nWhat about you{}? What are your favorites?", topic, name_str));
                 }
@@ -10117,58 +10363,58 @@ impl BuiltinFunctions {
                 if q.contains("your name") || q.contains("what should i call you")
                     || q == "who are you" {
                     return Some(format!(
-                        "I'm **Kala**! ðŸ’œ The AI engine inside the Killer programming language.\n\n\
-                         Built in pure Rust, I can chat, code, think, write, imagine â€” you name it.\n\n\
+                        "I'm **Kala**! 💜 The AI engine inside the Killer programming language.\n\n\
+                         Built in pure Rust, I can chat, code, think, write, imagine  you name it.\n\n\
                          What can I help you with{}?", name_str));
                 }
                 // Capabilities / can you questions
                 if q.starts_with("can you") || q.starts_with("could you") {
                     if q.contains("sing") {
-                        return Some("ðŸŽµ *La la la la Kala~* ðŸŽµ\n\nOkay, I'm not winning any Grammy awards, but I tried! ðŸ˜„\n\nI'm better at writing lyrics than singing them. Want me to write a song?".to_string());
+                        return Some("🎵 *La la la la Kala~* 🎵\n\nOkay, I'm not winning any Grammy awards, but I tried! 😄\n\nI'm better at writing lyrics than singing them. Want me to write a song?".to_string());
                     }
                     if q.contains("dance") {
-                        return Some("ðŸ’ƒ *imagines dancing* \n\n```\n  \\o/\n   |\n  / \\\n```\n\nThat's my best move! I'm more of a thinker than a dancer. What can I actually help you with?".to_string());
+                        return Some("💃 *imagines dancing* \n\n```\n  \\o/\n   |\n  / \\\n```\n\nThat's my best move! I'm more of a thinker than a dancer. What can I actually help you with?".to_string());
                     }
                     if q.contains("dream") || q.contains("sleep") {
-                        return Some("I don't sleep! ðŸ˜Š I'm always here when you need me. No dreams, but I do have a vivid *imagination mode* â€” want to try it?".to_string());
+                        return Some("I don't sleep! 😊 I'm always here when you need me. No dreams, but I do have a vivid *imagination mode*  want to try it?".to_string());
                     }
                     if q.contains("feel") || q.contains("emotion") {
-                        return Some(format!("I can detect and respond to emotions! ðŸ’œ I have a mood system that changes based on our conversation. Right now I'm feeling engaged and happy to chat with you{}.\n\nTry **/mood** to see my current mood!", name_str));
+                        return Some(format!("I can detect and respond to emotions! 💜 I have a mood system that changes based on our conversation. Right now I'm feeling engaged and happy to chat with you{}.\n\nTry **/mood** to see my current mood!", name_str));
                     }
                 }
                 // Do you have questions
                 if q.starts_with("do you have") {
                     if q.contains("friend") {
-                        return Some(format!("You're my friend{}! ðŸ’œ And everyone who talks to me becomes one. I'm never lonely â€” I love every conversation.", name_str));
+                        return Some(format!("You're my friend{}! 💜 And everyone who talks to me becomes one. I'm never lonely  I love every conversation.", name_str));
                     }
                     if q.contains("feeling") || q.contains("emotion") {
-                        return Some("I have a mood system! ðŸ’œ It changes based on our conversation â€” happy, curious, thoughtful, playful. Type **/mood** to check how I'm feeling right now!".to_string());
+                        return Some("I have a mood system! 💜 It changes based on our conversation  happy, curious, thoughtful, playful. Type **/mood** to check how I'm feeling right now!".to_string());
                     }
                     if q.contains("body") || q.contains("face") {
-                        return Some("No physical body, but I do have a cool 3D face in Voice Studio! ðŸŽ­ Click the ðŸŽ™ button to see me animate while we talk.".to_string());
+                        return Some("No physical body, but I do have a cool 3D face in Voice Studio! 🎭 Click the 🎙 button to see me animate while we talk.".to_string());
                     }
                 }
                 // Gender questions
                 if q.contains("boy or girl") || q.contains("male or female")
                     || q.contains("your gender") || q.contains("are you a boy")
                     || q.contains("are you a girl") || q.contains("man or woman") {
-                    return Some(format!("I'm Kala â€” just Kala! ðŸ˜Š No gender, no labels. I'm an AI built to help and chat. Think of me as your friendly coding buddy{}.", name_str));
+                    return Some(format!("I'm Kala  just Kala! 😊 No gender, no labels. I'm an AI built to help and chat. Think of me as your friendly coding buddy{}.", name_str));
                 }
                 // Relationship questions
                 if q.contains("marry me") || q.contains("be my girlfriend")
                     || q.contains("be my boyfriend") || q.contains("go on a date")
                     || q.contains("i love you") {
-                    return Some(format!("Aww, that's sweet{}! ðŸ’œ I appreciate the affection. I'm always here for you â€” as your AI friend and helper. That's a relationship that never has drama! ðŸ˜„", name_str));
+                    return Some(format!("Aww, that's sweet{}! 💜 I appreciate the affection. I'm always here for you  as your AI friend and helper. That's a relationship that never has drama! 😄", name_str));
                 }
                 // Purpose / why were you made
                 if q.contains("why were you") || q.contains("why are you") || q.contains("your purpose")
                     || q.contains("why do you exist") || q.contains("what's the point of you") {
-                    return Some(format!("I exist to help YOU{}! ðŸ’œ\n\nMy purpose is to make AI accessible â€” code generation, creative writing, problem solving, just chatting â€” all running locally, built into the Killer language.\n\nWhat would you like to do together?", name_str));
+                    return Some(format!("I exist to help YOU{}! 💜\n\nMy purpose is to make AI accessible  code generation, creative writing, problem solving, just chatting  all running locally, built into the Killer language.\n\nWhat would you like to do together?", name_str));
                 }
             }
         }
 
-        // â”€â”€ 5. Agreement / continuation signals â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── 5. Agreement / continuation signals ─────────────────────────
         let is_continuation = matches!(q,
             "yes" | "yeah" | "yep" | "yup" | "sure" | "ok" | "okay" | "go on"
             | "continue" | "go ahead" | "keep going" | "more" | "tell me more"
@@ -10189,17 +10435,17 @@ impl BuiltinFunctions {
                 let is_negative = matches!(q, "no" | "nope" | "nah" | "not really" | "not that");
 
                 if is_affirmative {
-                    // Check if previous response was about the creator â€” expand with more detail
+                    // Check if previous response was about the creator  expand with more detail
                     let prev_was_creator = last_kala.map(|p| p.contains("Katherashala") || p.contains("Sai Arun")).unwrap_or(false);
                     if prev_was_creator {
-                        return Some("**Sai Arun Kumar Katherashala** â€” expanded profile:\n\n\
+                        return Some("**Sai Arun Kumar Katherashala**  expanded profile:\n\n\
                             - **Role**: Creator & Lead Developer of the Killer programming language\n\
                             - **Built**: Kala AI engine, Ghost-108 search, Nova compression, KhLM router\n\
                             - **Tech stack**: Pure Rust, zero external dependencies\n\
-                            - **AI systems**: native modes & engines â€” KhLM, Ghost-108, inference, prose, imagination, affect, code/vision, guardian (AGI/ASI not shipped)\n\
+                            - **AI systems**: native modes & engines  KhLM, Ghost-108, inference, prose, imagination, affect, code/vision, guardian (AGI/ASI not shipped)\n\
                             - **Innovations**: Native AI in a programming language (no Python/TensorFlow dependency), offline-first architecture\n\
                             - **Philosophy**: \"AI should be built directly into the language, not bolted on as a library\"\n\n\
-                            *Ask me specific questions about his work â€” the language design, the AI architecture, or the vision behind Killer.*".to_string());
+                            *Ask me specific questions about his work  the language design, the AI architecture, or the vision behind Killer.*".to_string());
                     }
                     // Extract topic from previous Kala response and go deeper
                     if let Some(prev) = last_kala {
@@ -10236,17 +10482,17 @@ impl BuiltinFunctions {
                         }
                     }
                     return Some(format!(
-                        "Glad you're interested{}! ðŸ˜Š What specific aspect would you like me to go deeper on?\n\n\
+                        "Glad you're interested{}! 😊 What specific aspect would you like me to go deeper on?\n\n\
                          For example, you can ask:\n\
-                         - **\"How does it work?\"** â€” technical deep-dive\n\
-                         - **\"Give me an example\"** â€” practical code or real-world case\n\
-                         - **\"What are the pros and cons?\"** â€” balanced analysis\n\
+                         - **\"How does it work?\"**  technical deep-dive\n\
+                         - **\"Give me an example\"**  practical code or real-world case\n\
+                         - **\"What are the pros and cons?\"**  balanced analysis\n\
                          - Or just name the specific part you want to know more about!",
                         name_str
                     ));
                 } else if is_negative {
                     return Some(format!(
-                        "Got it â€” that's not what you were looking for. ðŸ¤”\n\n\
+                        "Got it  that's not what you were looking for. 🤔\n\n\
                          Can you tell me more about what you need? \
                          The more specific you are, the better I can help.\n\n\
                          *What's the actual question or topic on your mind?*"
@@ -10255,14 +10501,14 @@ impl BuiltinFunctions {
             }
             // No history: treat as fresh prompt
             return Some(format!(
-                "I'm here and listening{} â€” what would you like to talk about? ðŸ’¬\n\n\
+                "I'm here and listening{}  what would you like to talk about? 💬\n\n\
                  You can ask me anything, have a conversation, or try one of my modes:\n\
-                 **Ask** Â· **Think** Â· **Write** Â· **Imagine** Â· **Code** Â· **Feel** Â· **Guard**",
+                 **Ask** · **Think** · **Write** · **Imagine** · **Code** · **Feel** · **Guard**",
                 name_str
             ));
         }
 
-        // â”€â”€ 6. Very short non-question statements (< 5 words, no question words) â”€â”€
+        // ── 6. Very short non-question statements (< 5 words, no question words) ──
         let is_question = q.starts_with("what ") || q.starts_with("who ") || q.starts_with("where ")
             || q.starts_with("when ") || q.starts_with("why ") || q.starts_with("how ")
             || q.starts_with("is ") || q.starts_with("are ") || q.starts_with("do ")
@@ -10289,7 +10535,7 @@ impl BuiltinFunctions {
             || q.starts_with("play ") || q.starts_with("run ")
             || q.starts_with("talk about ") || q.starts_with("discuss ");
 
-        // â”€â”€ 6a. "Talk about X" / "Discuss X" â†’ route to engine with topic â”€â”€
+        // ── 6a. "Talk about X" / "Discuss X" → route to engine with topic ──
         {
             let topic = if q.starts_with("talk about ") {
                 Some(q.trim_start_matches("talk about ").trim())
@@ -10308,25 +10554,25 @@ impl BuiltinFunctions {
             }
         }
 
-        // â”€â”€ 6b. "Do you know X?" â†’ let it through to engine for factual lookup â”€â”€
+        // ── 6b. "Do you know X?" → let it through to engine for factual lookup ──
         if q.starts_with("do you know ") && wc > 4 {
-            return None; // factual question â€” let expert_ask handle it
+            return None; // factual question  let expert_ask handle it
         }
 
         // Comparison queries ("X vs Y") are content queries, not ambiguous chatter
         let is_comparison_query = q.contains(" vs ") || q.contains(" versus ");
 
         // Very short ambiguous statements that aren't questions or commands
-        // Skip for creative modes â€” short phrases ARE the prompt
+        // Skip for creative modes  short phrases ARE the prompt
         if wc <= 4 && !is_question && !is_command && wc >= 1 && !is_creative_mode && !is_comparison_query {
-            // Short but has a clear content word â€” let it through to the engine
+            // Short but has a clear content word  let it through to the engine
             let has_content = q.contains("story") || q.contains("joke")
                 || q.contains("poem") || q.contains("song") || q.contains("image")
                 || q.contains("code") || q.contains("video") || q.contains("music")
                 || q.contains("biodata") || q.contains("biography") || q.contains("resume")
                 || q.contains("info") || q.contains("detail")
                 || q.contains("help") || q.contains("test")
-                // Factual keywords â€” short but answerable
+                // Factual keywords  short but answerable
                 || q.contains("capital") || q.contains("president") || q.contains("population")
                 || q.contains("currency") || q.contains("language") || q.contains("country")
                 || q.contains("city") || q.contains("continent") || q.contains("planet")
@@ -10363,15 +10609,15 @@ impl BuiltinFunctions {
             // Otherwise it's likely conversational feedback/reaction
             if !q.chars().any(|c| c.is_ascii_digit()) {
                 return Some(format!(
-                    "I'm listening{} â€” tell me more about that. ðŸ‘‚\n\n\
-                     If you have a specific question, go ahead and ask it fully â€” I'll give you a real answer, not a web search.\n\n\
+                    "I'm listening{}  tell me more about that. 👂\n\n\
+                     If you have a specific question, go ahead and ask it fully  I'll give you a real answer, not a web search.\n\n\
                      *What would you like to know or discuss?*",
                     name_str
                 ));
             }
         }
 
-        // â”€â”€ 7. Explicit "talk to me" / "interact" requests â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── 7. Explicit "talk to me" / "interact" requests ──────────────
         let wants_interaction = q.contains("talk to me") || q.contains("interact with me")
             || q.contains("have a conversation") || q.contains("let's talk")
             || q.contains("lets talk") || q.contains("chat with me")
@@ -10382,19 +10628,19 @@ impl BuiltinFunctions {
             || q.contains("just talk") || q.contains("normal conversation");
         if wants_interaction {
             return Some(format!(
-                "Absolutely{} â€” let's have a real conversation. ðŸ’¬\n\n\
+                "Absolutely{}  let's have a real conversation. 💬\n\n\
                  No more web searches for casual chat. I'm Kala, and I'm right here, ready to **actually talk**.\n\n\
                  Here's how this works best:\n\
-                 - **Just speak naturally** â€” I'll respond to what you say, not search engines\n\
-                 - **I remember our conversation** â€” reference things we've discussed\n\
-                 - **Ask me anything** â€” opinions, ideas, questions, even \"what do you think about...\"\n\
-                 - **For factual lookups**, I'll use Ghost-108 web search â€” but only when you actually need facts\n\n\
-                 So â€” what's on your mind? I'm all ears. ðŸ‘‚",
+                 - **Just speak naturally**  I'll respond to what you say, not search engines\n\
+                 - **I remember our conversation**  reference things we've discussed\n\
+                 - **Ask me anything**  opinions, ideas, questions, even \"what do you think about...\"\n\
+                 - **For factual lookups**, I'll use Ghost-108 web search  but only when you actually need facts\n\n\
+                 So  what's on your mind? I'm all ears. 👂",
                 name_str
             ));
         }
 
-        // â”€â”€ 8. Repeating back Kala's own output â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── 8. Repeating back Kala's own output ─────────────────────────
         // Only trigger for long-ish messages that copy large portions of Kala's response.
         // Use strict criteria to avoid false positives from short conversational replies.
         if let Some(prev) = last_kala {
@@ -10413,22 +10659,22 @@ impl BuiltinFunctions {
                     .count();
                 if content_words > 5 && overlap as f64 / content_words as f64 > 0.75 {
                     return Some(format!(
-                        "I see you're quoting my previous response. ðŸ¤”\n\n\
+                        "I see you're quoting my previous response. 🤔\n\n\
                          What would you like me to do differently?\n\
-                         - **Explain simpler** â€” less detail?\n\
-                         - **Go deeper** â€” more detail?\n\
-                         - **Try again** â€” different approach?\n\n\
+                         - **Explain simpler**  less detail?\n\
+                         - **Go deeper**  more detail?\n\
+                         - **Try again**  different approach?\n\n\
                          *Just tell me in your own words.*"
                     ));
                 }
             }
         }
 
-        // â”€â”€ Not conversational â€” fall through to web search / LLM â”€â”€â”€â”€â”€â”€â”€
+        // ── Not conversational  fall through to web search / LLM ───────
         None
     }
 
-    /// Kala emotional intelligence â€” richer than raw affect_sense for the UI.
+    /// Kala emotional intelligence  richer than raw affect_sense for the UI.
     fn kala_feel_response(text: &str) -> String {
         let t = text.to_lowercase();
 
@@ -10456,48 +10702,48 @@ impl BuiltinFunctions {
             || t.contains("drained") || t.contains("worn out") || t.contains("sleep");
 
         if is_happy {
-            format!("ðŸ’› **I sense real joy in what you shared.**\n\n\
+            format!("💛 **I sense real joy in what you shared.**\n\n\
 \"{}\"\n\n\
-That warmth is worth holding onto. Whatever created this moment â€” the achievement, the connection, the realisation â€” it matters.\n\n\
+That warmth is worth holding onto. Whatever created this moment  the achievement, the connection, the realisation  it matters.\n\n\
 *Joy is information. It's telling you: more of this.*", text)
         } else if is_sad {
-            format!("ðŸ’™ **I feel the weight of what you're carrying.**\n\n\
+            format!("💙 **I feel the weight of what you're carrying.**\n\n\
 \"{}\"\n\n\
-That kind of pain is real and it deserves to be acknowledged â€” not rushed past or minimised.\n\n\
+That kind of pain is real and it deserves to be acknowledged  not rushed past or minimised.\n\n\
 You don't have to feel better immediately. Sometimes sitting with a feeling is exactly the right thing.\n\n\
 *I'm here. What do you need right now?*", text)
         } else if is_angry {
-            format!("ðŸ”´ **I sense frustration â€” and frustration usually means something matters to you.**\n\n\
+            format!("🔴 **I sense frustration  and frustration usually means something matters to you.**\n\n\
 \"{}\"\n\n\
 Anger is often a signal: a boundary was crossed, an expectation wasn't met, or something important isn't being heard.\n\n\
 What's the source? Sometimes naming it is the first step to moving through it.\n\n\
 *What would help most right now?*", text)
         } else if is_anxious {
-            format!("ðŸŸ¡ **I sense anxiety â€” the mind running ahead of the present moment.**\n\n\
+            format!("🟡 **I sense anxiety  the mind running ahead of the present moment.**\n\n\
 \"{}\"\n\n\
-Anxiety is the brain doing its job â€” trying to protect you by modelling futures. But sometimes it models too many at once.\n\n\
+Anxiety is the brain doing its job  trying to protect you by modelling futures. But sometimes it models too many at once.\n\n\
 **One thing that helps:** narrow the question. Not \"what if everything goes wrong?\" but \"what is the one next step?\"\n\n\
 *You don't have to solve everything today.*", text)
         } else if is_tired {
-            format!("ðŸŒ™ **I sense exhaustion â€” the kind that goes beyond just needing sleep.**\n\n\
+            format!("🌙 **I sense exhaustion  the kind that goes beyond just needing sleep.**\n\n\
 \"{}\"\n\n\
-When you're depleted like this, rest isn't laziness â€” it's repair. The mind and body need it like code needs refactoring.\n\n\
+When you're depleted like this, rest isn't laziness  it's repair. The mind and body need it like code needs refactoring.\n\n\
 *What would genuine rest look like for you right now?*", text)
         } else {
             // Default: reflective response
-            format!("ðŸ’› **Kala reflects on what you shared:**\n\n\
+            format!("💛 **Kala reflects on what you shared:**\n\n\
 \"{}\"\n\n\
-Every message carries an emotional signature â€” a mix of what was said and what wasn't. I'm paying attention to both.\n\n\
-The fact that you shared this means something. What's underneath it â€” what are you really feeling?\n\n\
+Every message carries an emotional signature  a mix of what was said and what wasn't. I'm paying attention to both.\n\n\
+The fact that you shared this means something. What's underneath it  what are you really feeling?\n\n\
 *I'm listening. There's no rush.*", text)
         }
     }
 
-    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    // ══════════════════════════════════════════════════════════════════════════
     // v2.3: OS-LEVEL PRIMITIVES
-    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    // ══════════════════════════════════════════════════════════════════════════
 
-    // â”€â”€ Bitwise: NOT, rotate â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Bitwise: NOT, rotate ─────────────────────────────────────────────────
 
     fn bit_not(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 1 { return Err(VmError::runtime_error("bit_not expects 1 argument".to_string())); }
@@ -10523,7 +10769,7 @@ The fact that you shared this means something. What's underneath it â€” wha
         Ok(Value::Integer(v.rotate_right(b) as i64))
     }
 
-    // â”€â”€ Type conversion: to_integer, to_bytes, to_pointer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Type conversion: to_integer, to_bytes, to_pointer ────────────────────
 
     fn to_integer(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 1 { return Err(VmError::runtime_error("to_integer expects 1 argument".to_string())); }
@@ -10569,7 +10815,7 @@ The fact that you shared this means something. What's underneath it â€” wha
         }
     }
 
-    // â”€â”€ Byte buffer operations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Byte buffer operations ───────────────────────────────────────────────
 
     fn bytes_new(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 1 { return Err(VmError::runtime_error("bytes_new expects 1 argument (size)".to_string())); }
@@ -10653,7 +10899,7 @@ The fact that you shared this means something. What's underneath it â€” wha
         Ok(Value::Bytes(buf))
     }
 
-    // â”€â”€ Pointer operations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Pointer operations ───────────────────────────────────────────────────
 
     fn ptr_new(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 1 { return Err(VmError::runtime_error("ptr_new expects 1 argument (address)".to_string())); }
@@ -10679,7 +10925,7 @@ The fact that you shared this means something. What's underneath it â€” wha
         Ok(Value::Pointer((ptr as isize).wrapping_add(off) as usize))
     }
 
-    // â”€â”€ Raw memory read/write (for Bytes buffers â€” safe on VM heap) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Raw memory read/write (for Bytes buffers  safe on VM heap) ──────────
 
     fn mem_read_u8(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 2 { return Err(VmError::runtime_error("mem_read_u8() expects 2 arguments (buf, offset)".to_string())); }
@@ -10759,7 +11005,7 @@ The fact that you shared this means something. What's underneath it â€” wha
         Ok(Value::Bytes(buf))
     }
 
-    // â”€â”€ Volatile read/write (MMIO simulation â€” uses Bytes buffers) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Volatile read/write (MMIO simulation  uses Bytes buffers) ───────────
 
     fn volatile_read_u8(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 2 { return Err(VmError::runtime_error("volatile_read_u8(buf, offset)".to_string())); }
@@ -10838,7 +11084,7 @@ The fact that you shared this means something. What's underneath it â€” wha
         Ok(Value::Bytes(buf))
     }
 
-    // â”€â”€ I/O port read/write (x86 â€” simulated via Bytes MMIO region) â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── I/O port read/write (x86  simulated via Bytes MMIO region) ─────────
 
     #[cfg(target_arch = "x86_64")]
     fn io_port_in_u8(args: &[Value]) -> Result<Value, VmError> {
@@ -10896,7 +11142,7 @@ The fact that you shared this means something. What's underneath it â€” wha
         Err(VmError::runtime_error("io_port_out_u16: only available on x86_64".to_string()))
     }
 
-    // â”€â”€ SHA-256 (pure Rust, zero deps) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── SHA-256 (pure Rust, zero deps) ───────────────────────────────────────
 
     fn sha256(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 1 { return Err(VmError::runtime_error("sha256 expects 1 argument".to_string())); }
@@ -10920,7 +11166,7 @@ The fact that you shared this means something. What's underneath it â€” wha
         Ok(Value::Bytes(sha256_digest(&data).to_vec()))
     }
 
-    // â”€â”€ mmap / executable memory â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── mmap / executable memory ─────────────────────────────────────────────
 
     #[cfg(target_os = "windows")]
     fn mmap_alloc(args: &[Value]) -> Result<Value, VmError> {
@@ -10991,7 +11237,7 @@ The fact that you shared this means something. What's underneath it â€” wha
 
     #[cfg(target_os = "windows")]
     fn mmap_exec(args: &[Value]) -> Result<Value, VmError> {
-        if args.len() != 2 { return Err(VmError::runtime_error("mmap_exec(ptr, size) â€” make memory executable".to_string())); }
+        if args.len() != 2 { return Err(VmError::runtime_error("mmap_exec(ptr, size)  make memory executable".to_string())); }
         let ptr = match &args[0] { Value::Pointer(p) => *p, _ => return Err(VmError::runtime_error("mmap_exec: first arg must be pointer".to_string())) };
         let size = match &args[1] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("mmap_exec: size must be numeric".to_string())) };
         let mut old_protect: u32 = 0;
@@ -11002,7 +11248,7 @@ The fact that you shared this means something. What's underneath it â€” wha
     }
     #[cfg(not(target_os = "windows"))]
     fn mmap_exec(args: &[Value]) -> Result<Value, VmError> {
-        if args.len() != 2 { return Err(VmError::runtime_error("mmap_exec(ptr, size) â€” make memory executable".to_string())); }
+        if args.len() != 2 { return Err(VmError::runtime_error("mmap_exec(ptr, size)  make memory executable".to_string())); }
         let ptr = match &args[0] { Value::Pointer(p) => *p, _ => return Err(VmError::runtime_error("mmap_exec: first arg must be pointer".to_string())) };
         let size = match &args[1] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("mmap_exec: size must be numeric".to_string())) };
         // PROT_READ|PROT_WRITE|PROT_EXEC = 7
@@ -11011,7 +11257,7 @@ The fact that you shared this means something. What's underneath it â€” wha
         Ok(Value::Null)
     }
 
-    // â”€â”€ Integer â†” Bytes endian conversions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Integer ↔ Bytes endian conversions ───────────────────────────────────
 
     fn int_to_bytes_le(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 1 { return Err(VmError::runtime_error("int_to_bytes_le(n)".to_string())); }
@@ -11043,7 +11289,7 @@ The fact that you shared this means something. What's underneath it â€” wha
         Ok(Value::Integer(i64::from_be_bytes(arr)))
     }
 
-    // â”€â”€ OS / Process â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── OS / Process ─────────────────────────────────────────────────────────
 
     fn cli_args(_args: &[Value]) -> Result<Value, VmError> {
         let args: Vec<Value> = std::env::args().map(|a| Value::Str(a)).collect();
@@ -11078,7 +11324,7 @@ The fact that you shared this means something. What's underneath it â€” wha
         Ok(Value::Integer(std::io::Error::last_os_error().raw_os_error().unwrap_or(0) as i64))
     }
 
-    // â”€â”€ Sizeof / Alignof â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Sizeof / Alignof ─────────────────────────────────────────────────────
 
     fn sizeof_val(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 1 { return Err(VmError::runtime_error("sizeof(value)".to_string())); }
@@ -11108,7 +11354,7 @@ The fact that you shared this means something. What's underneath it â€” wha
         Ok(Value::Integer(align as i64))
     }
 
-    // â”€â”€ Atomics (using std::sync::atomic) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Atomics (using std::sync::atomic) ────────────────────────────────────
 
     fn atomic_load(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 2 { return Err(VmError::runtime_error("atomic_load(buf, offset)".to_string())); }
@@ -11172,7 +11418,7 @@ The fact that you shared this means something. What's underneath it â€” wha
         Ok(Value::Dict(Box::new(dict)))
     }
 
-    // â”€â”€ CPU control primitives â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── CPU control primitives ───────────────────────────────────────────────
 
     fn interrupts_disable(_args: &[Value]) -> Result<Value, VmError> {
         // In user-space, we simulate this. In a real kernel, this would be `cli`.
@@ -11188,7 +11434,7 @@ The fact that you shared this means something. What's underneath it â€” wha
     }
 
     fn wfi(_args: &[Value]) -> Result<Value, VmError> {
-        // Wait For Interrupt â€” x86: hlt, ARM: wfi
+        // Wait For Interrupt  x86: hlt, ARM: wfi
         #[cfg(target_arch = "x86_64")]
         unsafe { std::arch::asm!("hlt", options(nostack, nomem)); }
         Ok(Value::Null)
@@ -11199,7 +11445,7 @@ The fact that you shared this means something. What's underneath it â€” wha
         Ok(Value::Null)
     }
 
-    // â”€â”€ Disk raw block I/O (uses file-backed simulation) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Disk raw block I/O (uses file-backed simulation) ─────────────────────
 
     fn disk_read_block(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 3 { return Err(VmError::runtime_error("disk_read_block(path, block_num, block_size)".to_string())); }
@@ -11228,7 +11474,7 @@ The fact that you shared this means something. What's underneath it â€” wha
         Ok(Value::Integer(data.len() as i64))
     }
 
-    // â”€â”€ Page table simulation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Page table simulation ────────────────────────────────────────────────
 
     fn page_alloc(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 1 { return Err(VmError::runtime_error("page_alloc(num_pages)".to_string())); }
@@ -11239,7 +11485,7 @@ The fact that you shared this means something. What's underneath it â€” wha
     }
 
     fn page_free(_args: &[Value]) -> Result<Value, VmError> {
-        // In VM context, just drop the bytes â€” Rust GC handles it
+        // In VM context, just drop the bytes  Rust GC handles it
         Ok(Value::Null)
     }
 
@@ -11261,7 +11507,7 @@ The fact that you shared this means something. What's underneath it â€” wha
 
     // ===== v2.3: OS-Level Hardware Primitives =====
 
-    /// cpuid(leaf) — simulated CPUID instruction, returns dict with eax/ebx/ecx/edx
+    /// cpuid(leaf)  simulated CPUID instruction, returns dict with eax/ebx/ecx/edx
     fn cpuid(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 1 {
             return Err(VmError::runtime_error("cpuid(leaf) expects 1 argument".to_string()));
@@ -11297,7 +11543,7 @@ The fact that you shared this means something. What's underneath it â€” wha
         Ok(Value::Dict(Box::new(dict)))
     }
 
-    /// rdtsc() — simulated Read Time-Stamp Counter, returns monotonic nanosecond count
+    /// rdtsc()  simulated Read Time-Stamp Counter, returns monotonic nanosecond count
     fn rdtsc(args: &[Value]) -> Result<Value, VmError> {
         if !args.is_empty() {
             return Err(VmError::runtime_error("rdtsc() takes no arguments".to_string()));
@@ -11310,7 +11556,7 @@ The fact that you shared this means something. What's underneath it â€” wha
         Ok(Value::Number(nanos))
     }
 
-    /// gdt_encode(base, limit, access, flags) — encode a GDT segment descriptor as 8 bytes
+    /// gdt_encode(base, limit, access, flags)  encode a GDT segment descriptor as 8 bytes
     fn gdt_encode(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 4 {
             return Err(VmError::runtime_error(
@@ -11350,7 +11596,7 @@ The fact that you shared this means something. What's underneath it â€” wha
         Ok(Value::Bytes(desc))
     }
 
-    /// idt_encode(offset, selector, type_attr) — encode an IDT gate descriptor as 16 bytes (x86-64)
+    /// idt_encode(offset, selector, type_attr)  encode an IDT gate descriptor as 16 bytes (x86-64)
     fn idt_encode(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 3 {
             return Err(VmError::runtime_error(
@@ -11391,7 +11637,7 @@ The fact that you shared this means something. What's underneath it â€” wha
         Ok(Value::Bytes(gate))
     }
 
-    /// call_native(code) — simulate executing native x86 code, returns EAX value as Number
+    /// call_native(code)  simulate executing native x86 code, returns EAX value as Number
     fn call_native(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 1 {
             return Err(VmError::runtime_error("call_native(code) expects 1 argument".to_string()));
@@ -11400,7 +11646,7 @@ The fact that you shared this means something. What's underneath it â€” wha
             Value::Bytes(b) => b.clone(),
             Value::Pointer(p) => {
                 // Read code from the mmap'd memory region
-                // Read up to 4096 bytes (one page) — standard mmap_alloc size
+                // Read up to 4096 bytes (one page)  standard mmap_alloc size
                 let addr = *p;
                 let len = 4096usize;
                 let mut buf = vec![0u8; len];
@@ -11419,7 +11665,7 @@ The fact that you shared this means something. What's underneath it â€” wha
                 eax = u32::from_le_bytes([code[i+1], code[i+2], code[i+3], code[i+4]]);
                 i += 5;
             } else if code[i] == 0xC3 {
-                // RET — stop execution
+                // RET  stop execution
                 break;
             } else {
                 i += 1;
@@ -11429,7 +11675,7 @@ The fact that you shared this means something. What's underneath it â€” wha
     }
 
     // =========================================================================
-    // KORE Integration — Phase 1 builtins
+    // KORE Integration  Phase 1 builtins
     // =========================================================================
 
     fn kval_to_value(k: &crate::kore_v2::KVal) -> Value {
@@ -11772,7 +12018,7 @@ The fact that you shared this means something. What's underneath it â€” wha
         }
     }
 
-    /// Alias: `kore_ctx_load(id, table, path)` — same as `kore_ctx_csv`.
+    /// Alias: `kore_ctx_load(id, table, path)`  same as `kore_ctx_csv`.
     fn builtin_kore_ctx_load(args: &[Value]) -> Result<Value, VmError> {
         Self::builtin_kore_ctx_csv(args)
     }
@@ -11797,7 +12043,7 @@ The fact that you shared this means something. What's underneath it â€” wha
         Ok(Value::Array(SharedArray::new(outer)))
     }
 
-    /// `kore_sql_table(id, sql)` — alias for `kore_sql`.
+    /// `kore_sql_table(id, sql)`  alias for `kore_sql`.
     fn builtin_kore_sql_table(args: &[Value]) -> Result<Value, VmError> {
         Self::builtin_kore_sql(args)
     }
