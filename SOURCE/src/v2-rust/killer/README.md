@@ -311,6 +311,32 @@ if area > 40 { println("not printed: not certain") }    # does not run
 - Plain numbers are exact (margin 0), so they mix freely with uncertain values.
 - The margin is a worst-case bound (interval arithmetic), not a statistical standard deviation.
 
+### Statistical values: `gauss(mean, sigma)`
+
+`believe` gives a guaranteed worst-case range. When your errors are *statistical* (independent,
+normally distributed, like repeated measurements), use `gauss`: errors add in quadrature, so the
+result is tighter than the worst case.
+
+```killer
+a = gauss(10, 3)
+b = gauss(20, 4)
+println(a + b)                # 30 ± 5σ     (sqrt(3² + 4²), not 3 + 4)
+println(a < b)                # T_POS:  the means are 2 combined sigmas apart
+println(a > 5)                # T_ZERO: only 1.67 sigmas, so undecided
+println(prob_gt(b, a))        # 0.9772...   P(b > a)
+
+total = gauss(0, 0)
+for i in range(9) { total = total + gauss(10, 1) }
+println(total)                # 90 ± 3σ     (sigma grows as sqrt(n), not n)
+```
+
+- Comparisons are decided only when the means differ by at least 1.96 combined sigmas (about 95%
+  confidence); otherwise they return `T_ZERO`. `prob_gt(a, b)` / `prob_lt(a, b)` give the probability.
+- Read the parts with `unc_value(x)` and `unc_sigma(x)`.
+- Errors are assumed **independent**, so `x - x` is not zero. Division and `sqrt` are first-order
+  approximations and are refused when the divisor / argument is not clearly away from zero.
+- Interval (`±`) and statistical (`gauss`) values cannot be mixed in one expression; that is an error.
+
 ## Known limitations
 
 - The JIT is x86-64 only and covers pure numeric code; everything else is interpreted.

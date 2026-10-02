@@ -603,6 +603,10 @@ impl BuiltinFunctions {
             "unc_margin"   => Self::uncertain_part(args, 1),
             "unc_lo"       => Self::uncertain_part(args, 2),
             "unc_hi"       => Self::uncertain_part(args, 3),
+            "gauss"        => Self::gauss_new(args),
+            "unc_sigma"    => Self::gauss_sigma(args),
+            "prob_gt"      => Self::prob_cmp(args, false),
+            "prob_lt"      => Self::prob_cmp(args, true),
             "ffi_open"     => Self::ffi_open(args),
             "ffi_call"     => Self::ffi_call(args),
             "ffi_close"    => Self::ffi_close(args),
@@ -1408,6 +1412,7 @@ impl BuiltinFunctions {
             Value::Bytes(_) => "bytes",
             Value::Pointer(_) => "pointer",
             Value::Uncertain { .. } => "uncertain",
+            Value::Gauss { .. } => "gauss",
             Value::Set(_) => "set",
         };
         Ok(Value::Str(type_name.to_string()))
@@ -1944,6 +1949,9 @@ impl BuiltinFunctions {
             Value::Uncertain { value, margin } => {
                 crate::uncertain::sqrt(*value, *margin).map_err(VmError::runtime_error)
             }
+            Value::Gauss { mean, sigma } => {
+                crate::uncertain::sqrt_gauss(*mean, *sigma).map_err(VmError::runtime_error)
+            }
             _ => Err(VmError::runtime_error(
                 "sqrt() expects a number".to_string(),
             )),
@@ -2045,6 +2053,7 @@ impl BuiltinFunctions {
         match &args[0] {
             Value::Number(n) => Ok(Value::Number(n.abs())),
             Value::Uncertain { value, margin } => Ok(crate::uncertain::abs(*value, *margin)),
+            Value::Gauss { mean, sigma } => Ok(crate::uncertain::abs_gauss(*mean, *sigma)),
             _ => Err(VmError::runtime_error(
                 "abs() expects a number".to_string(),
             )),
@@ -4688,6 +4697,37 @@ impl BuiltinFunctions {
         }
     }
 
+    /// gauss(mean, sigma) -> statistical value (independent normal error)
+    fn gauss_new(args: &[Value]) -> Result<Value, VmError> {
+        match args {
+            [Value::Number(m), Value::Number(s)] if m.is_finite() && s.is_finite() => {
+                Ok(Value::Gauss { mean: *m, sigma: s.abs() })
+            }
+            _ => Err(VmError::runtime_error("gauss(mean, sigma) expects two finite numbers".to_string())),
+        }
+    }
+
+    /// unc_sigma(x): standard deviation of a gauss value (0 for exact numbers)
+    fn gauss_sigma(args: &[Value]) -> Result<Value, VmError> {
+        match args {
+            [Value::Gauss { sigma, .. }] => Ok(Value::Number(*sigma)),
+            [Value::Number(_)] => Ok(Value::Number(0.0)),
+            _ => Err(VmError::runtime_error("unc_sigma expects a gauss value".to_string())),
+        }
+    }
+
+    /// prob_gt(a, b) / prob_lt(a, b): probability that a > b (or a < b) for gauss values
+    fn prob_cmp(args: &[Value], less: bool) -> Result<Value, VmError> {
+        match args {
+            [a, b] => {
+                let p = crate::uncertain::prob_greater(a, b)
+                    .map_err(|e| VmError::runtime_error(format!("prob_gt/prob_lt {}", e)))?;
+                Ok(Value::Number(if less { 1.0 - p } else { p }))
+            }
+            _ => Err(VmError::runtime_error("prob_gt(a, b) expects two values".to_string())),
+        }
+    }
+
     /// uncertain(value, margin) -> value ± margin
     fn uncertain_new(args: &[Value]) -> Result<Value, VmError> {
         match args {
@@ -4703,6 +4743,10 @@ impl BuiltinFunctions {
         let (v, m) = match args {
             [Value::Uncertain { value, margin }] => (*value, *margin),
             [Value::Number(n)] => (*n, 0.0),
+            [Value::Gauss { mean, sigma }] if which == 0 => (*mean, *sigma),
+            [Value::Gauss { .. }] => {
+                return Err(VmError::runtime_error("a gauss value has no hard bounds: use unc_value and unc_sigma".to_string()))
+            }
             _ => return Err(VmError::runtime_error("expects one uncertain value or number".to_string())),
         };
         Ok(Value::Number(match which {

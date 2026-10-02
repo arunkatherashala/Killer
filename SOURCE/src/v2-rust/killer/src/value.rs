@@ -454,6 +454,8 @@ pub enum Value {
     Pointer(usize),
     /// `believe x = 72 ± 3` — value with known uncertainty margin
     Uncertain { value: f64, margin: f64 },
+    /// Statistical uncertainty: independent normally distributed error (`gauss(mean, sigma)`)
+    Gauss { mean: f64, sigma: f64 },
     /// Unordered unique-value collection (set semantics)
     Set(Box<std::collections::BTreeSet<SetKey>>),
     Null,
@@ -542,6 +544,7 @@ impl Display for Value {
             Value::Bytes(b) => write!(f, "<bytes[{}]>", b.len()),
             Value::Pointer(p) => write!(f, "0x{:016x}", p),
             Value::Uncertain { value, margin } => write!(f, "{} ± {}", value, margin),
+            Value::Gauss { mean, sigma } => write!(f, "{} ± {}σ", mean, sigma),
             Value::Set(s) => {
                 let items: Vec<String> = s.iter().map(|k| format!("{}", k.to_value())).collect();
                 write!(f, "{{{}}}", items.join(", "))
@@ -573,6 +576,7 @@ impl Value {
             Value::Bytes(_) => "bytes",
             Value::Pointer(_) => "pointer",
             Value::Uncertain { .. } => "uncertain",
+            Value::Gauss { .. } => "gauss",
             Value::Set(_) => "set",
             Value::QualityWrapped(_) => "quality",
             Value::Null => "null",

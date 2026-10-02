@@ -99,3 +99,41 @@ fn plain_boolean_logic_is_unchanged() {
     let src = "println(true && false)\nprintln(true || false)\nprintln(!true)\nprintln(1 < 2 && 2 < 3)\n";
     assert_eq!(run(src), "false\ntrue\nfalse\ntrue");
 }
+
+#[test]
+fn gauss_values_combine_in_quadrature() {
+    let src = "a = gauss(10, 3)\nb = gauss(20, 4)\nprintln(a + b)\nprintln(b - a)\nprintln(a * 2)\nprintln(unc_value(a + b))\nprintln(unc_sigma(a + b))\n";
+    assert_eq!(run(src), "30 \u{b1} 5\u{3c3}\n10 \u{b1} 5\u{3c3}\n20 \u{b1} 6\u{3c3}\n30\n5");
+}
+
+#[test]
+fn gauss_comparisons_need_about_95_percent_confidence() {
+    // sigma of a - b is 5: a < b is 2 sigma (decided), a > 5 is only 1.67 sigma (undecided)
+    let src = "a = gauss(10, 3)\nb = gauss(20, 4)\nprintln(a < b)\nprintln(a > b)\nprintln(a > 5)\nprintln(a > 0)\n";
+    assert_eq!(run(src), "T_POS\nT_NEG\nT_ZERO\nT_POS");
+}
+
+#[test]
+fn gauss_probabilities_and_conditions() {
+    let src = "a = gauss(10, 3)\nb = gauss(20, 4)\np = prob_gt(b, a)\nprintln(p > 0.9772)\nprintln(p < 0.9773)\nprintln(prob_lt(b, a) < 0.0228)\nif a > 0 {\n  println(\"positive\")\n}\nif a > 5 {\n  println(\"not printed\")\n}\n";
+    assert_eq!(run(src), "true\ntrue\ntrue\npositive");
+}
+
+#[test]
+fn gauss_accumulates_over_a_loop() {
+    // nine independent measurements: sigma grows as sqrt(n) = 3, not n = 9
+    let src = "total = gauss(0, 0)\nfor i in range(9) {\n  total = total + gauss(10, 1)\n}\nprintln(unc_value(total))\nprintln(unc_sigma(total) > 2.999)\nprintln(unc_sigma(total) < 3.001)\n";
+    assert_eq!(run(src), "90\ntrue\ntrue");
+}
+
+#[test]
+fn interval_and_gauss_cannot_be_mixed() {
+    let src = "believe a = 10 \u{b1} 1\nb = gauss(10, 1)\nprintln(\"before\")\nprintln(a + b)\nprintln(\"after\")\n";
+    assert_eq!(run(src), "before"); // the mixed expression is an error, nothing after it runs
+}
+
+#[test]
+fn gauss_works_in_fused_slot_comparisons_and_kleene_logic() {
+    let src = "fn f() {\n  x = gauss(5, 1)\n  y = x > 0\n  z = x > 5\n  println(y && z)\n  println(y || z)\n  println(!z)\n}\nf()\n";
+    assert_eq!(run(src), "T_ZERO\nT_POS\nT_ZERO");
+}

@@ -2476,6 +2476,7 @@ impl VirtualMachine {
                                 Value::Bytes(_) => "bytes",
                                 Value::Pointer(_) => "pointer",
                                 Value::Uncertain { .. } => "uncertain",
+                                Value::Gauss { .. } => "gauss",
                                 Value::Set(_) => "set",
                             };
                             Value::Str(type_name.to_string())
@@ -5259,6 +5260,7 @@ impl VirtualMachine {
             Value::Bytes(b) => !b.is_empty(),
             Value::Pointer(p) => *p != 0,
             Value::Uncertain { value, margin } => *value > *margin,
+            Value::Gauss { mean, sigma } => *mean > crate::uncertain::Z95 * sigma.abs(),
             Value::Set(s) => !s.is_empty(),
         }
     }
