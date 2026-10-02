@@ -1,0 +1,998 @@
+[
+ {
+  "category": "Basics",
+  "name": "arithmetic precedence",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Basics",
+  "name": "power operator **",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Basics",
+  "name": "modulo",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Basics",
+  "name": "floor division //",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 1: unclosed `(` or `[` in function signature"
+ },
+ {
+  "category": "Basics",
+  "name": "float sum prints like IEEE",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Basics",
+  "name": "string repetition",
+  "status": "ERROR",
+  "detail": "ERROR: Runtime error: Type error in '*': left operand must be a number, got string"
+ },
+ {
+  "category": "Basics",
+  "name": "boolean && || !",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Basics",
+  "name": "boolean keywords and/or/not",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 1: unsupported expression `true and false`"
+ },
+ {
+  "category": "Basics",
+  "name": "chained comparison",
+  "status": "WRONG",
+  "detail": "got 'false', expected 'true'"
+ },
+ {
+  "category": "Basics",
+  "name": "ternary expression",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 2: unsupported expression `2 ? \"big\" : \"small\"`"
+ },
+ {
+  "category": "Basics",
+  "name": "python-style conditional expr",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 2: unsupported expression `\"big\" if x`"
+ },
+ {
+  "category": "Basics",
+  "name": "multiple assignment",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 1: unsupported Killer subset statement `a, b = 1, 2`"
+ },
+ {
+  "category": "Basics",
+  "name": "swap via tuple",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 3: unsupported Killer subset statement `a, b = b, a`"
+ },
+ {
+  "category": "Basics",
+  "name": "augmented assignment",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 2: unsupported Killer subset statement `x += 5`"
+ },
+ {
+  "category": "Basics",
+  "name": "increment ++",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 2: unsupported Killer subset statement `x++`"
+ },
+ {
+  "category": "Basics",
+  "name": "null handling",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Basics",
+  "name": "array equality",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Basics",
+  "name": "string equality and ordering",
+  "status": "ERROR",
+  "detail": "ERROR: Runtime error: Cannot convert value to number"
+ },
+ {
+  "category": "Basics",
+  "name": "bitwise operators",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 1: unsupported expression `6 & 3`"
+ },
+ {
+  "category": "Basics",
+  "name": "big integers",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Basics",
+  "name": "hex literal",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 1: unsupported expression `0xFF`"
+ },
+ {
+  "category": "Control flow",
+  "name": "if / else if / else",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Control flow",
+  "name": "elif keyword",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 4: unsupported Killer subset statement `elif x < 10`"
+ },
+ {
+  "category": "Control flow",
+  "name": "while loop",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Control flow",
+  "name": "for over range",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Control flow",
+  "name": "range with step",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Control flow",
+  "name": "break and continue",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Control flow",
+  "name": "nested loops",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Control flow",
+  "name": "do-while",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 4: expected `{` after condition (found `println(i)`)"
+ },
+ {
+  "category": "Control flow",
+  "name": "C-style for",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 2: unsupported Killer subset statement `for (i = 0`"
+ },
+ {
+  "category": "Control flow",
+  "name": "for over dict keys",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Control flow",
+  "name": "enumerate",
+  "status": "ERROR",
+  "detail": "ERROR: Runtime error: Undefined variable `i`"
+ },
+ {
+  "category": "Control flow",
+  "name": "match statement",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 2: unsupported Killer subset statement `match x`"
+ },
+ {
+  "category": "Control flow",
+  "name": "switch statement",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 2: unsupported Killer subset statement `switch x`"
+ },
+ {
+  "category": "Control flow",
+  "name": "while true + break",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Functions",
+  "name": "define and call",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Functions",
+  "name": "recursion",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Functions",
+  "name": "deep recursion 5000",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Functions",
+  "name": "default argument",
+  "status": "WRONG",
+  "detail": "got 'null Sai\\nYo Sai', expected 'Hi Sai\\nYo Sai'"
+ },
+ {
+  "category": "Functions",
+  "name": "variadic arguments",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 1: Parse error: Line 1: invalid parameter name `...xs`"
+ },
+ {
+  "category": "Functions",
+  "name": "return multiple values",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 4: unsupported Killer subset statement `a, b = two()`"
+ },
+ {
+  "category": "Functions",
+  "name": "no explicit return",
+  "status": "ERROR",
+  "detail": "ERROR: Runtime error: Stack underflow"
+ },
+ {
+  "category": "Functions",
+  "name": "function stored in variable",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 5: unknown function `f`"
+ },
+ {
+  "category": "Functions",
+  "name": "lambda expression",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 2: `return` is only valid inside a function"
+ },
+ {
+  "category": "Functions",
+  "name": "arrow lambda",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 1: unsupported expression `(a) =`"
+ },
+ {
+  "category": "Functions",
+  "name": "closure keeps state",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 10: unknown function `c`"
+ },
+ {
+  "category": "Functions",
+  "name": "function passed as argument",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 2: unknown function `f`"
+ },
+ {
+  "category": "Functions",
+  "name": "map with lambda",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 1: unsupported expression `fn(x) { return x * 10 }`"
+ },
+ {
+  "category": "Functions",
+  "name": "map with named function",
+  "status": "ERROR",
+  "detail": "ERROR: Runtime error: Undefined variable `d`"
+ },
+ {
+  "category": "Functions",
+  "name": "filter and reduce",
+  "status": "ERROR",
+  "detail": "ERROR: Runtime error: Undefined variable `even`"
+ },
+ {
+  "category": "Functions",
+  "name": "decorator",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 3: unknown function `f`"
+ },
+ {
+  "category": "Functions",
+  "name": "function in dict",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 5: unsupported expression `d[\"say\"]()`"
+ },
+ {
+  "category": "Functions",
+  "name": "read global from function",
+  "status": "ERROR",
+  "detail": "ERROR: Runtime error: Undefined variable `g`"
+ },
+ {
+  "category": "Functions",
+  "name": "write global from function",
+  "status": "ERROR",
+  "detail": "ERROR: Runtime error: Undefined variable `total`"
+ },
+ {
+  "category": "Functions",
+  "name": "global keyword",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 2: Parse error: Line 3: unsupported Killer subset statement `global total`"
+ },
+ {
+  "category": "Functions",
+  "name": "keyword arguments",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 4: unsupported expression `b = 1`"
+ },
+ {
+  "category": "Functions",
+  "name": "mutual recursion",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "OOP",
+  "name": "class, init and method",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "OOP",
+  "name": "state mutation through methods",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "OOP",
+  "name": "inheritance and override",
+  "status": "WRONG",
+  "detail": "got 'null barks', expected 'Rex barks'"
+ },
+ {
+  "category": "OOP",
+  "name": "inherited method + init",
+  "status": "WRONG",
+  "detail": "got 'null makes a sound\\nnull fetches', expected 'Rex makes a sound\\nRex fetches'"
+ },
+ {
+  "category": "OOP",
+  "name": "super method call",
+  "status": "ERROR",
+  "detail": "ERROR: Runtime error: Undefined variable `super`"
+ },
+ {
+  "category": "OOP",
+  "name": "super in init",
+  "status": "ERROR",
+  "detail": "ERROR: Runtime error: Undefined variable `super`"
+ },
+ {
+  "category": "OOP",
+  "name": "objects are references",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "OOP",
+  "name": "list of objects",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "OOP",
+  "name": "polymorphism",
+  "status": "WRONG",
+  "detail": "got 'null\\nmeow', expected 'a makes a sound\\nmeow'"
+ },
+ {
+  "category": "OOP",
+  "name": "operator overloading __add__",
+  "status": "WRONG",
+  "detail": "got 'null', expected '3'"
+ },
+ {
+  "category": "OOP",
+  "name": "custom toString when printed",
+  "status": "WRONG",
+  "detail": "got '<P instance>', expected 'P(1)'"
+ },
+ {
+  "category": "OOP",
+  "name": "instanceof / type check",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 10: unsupported expression `a instanceof Animal`"
+ },
+ {
+  "category": "OOP",
+  "name": "static / class method",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 1: Parse error: Line 2: expected method definition (kfn) inside class, got `static fn twice(x)`"
+ },
+ {
+  "category": "OOP",
+  "name": "method chaining",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 11: unsupported Killer subset statement `b.add(\"a\").add(\"b\")`"
+ },
+ {
+  "category": "OOP",
+  "name": "field default and missing field",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Collections",
+  "name": "list basics",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Collections",
+  "name": "negative index",
+  "status": "WRONG",
+  "detail": "got '1', expected '3'"
+ },
+ {
+  "category": "Collections",
+  "name": "slicing",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 2: unsupported expression `1:3`"
+ },
+ {
+  "category": "Collections",
+  "name": "slice function",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Collections",
+  "name": "pop and insert",
+  "status": "ERROR",
+  "detail": "ERROR: Runtime error: (at instruction 11): Runtime error: hash_map_insert: first arg must be a Dict"
+ },
+ {
+  "category": "Collections",
+  "name": "sort and reverse",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Collections",
+  "name": "membership with in",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 1: unsupported expression `2 in`"
+ },
+ {
+  "category": "Collections",
+  "name": "contains function",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Collections",
+  "name": "list comprehension",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Collections",
+  "name": "list comprehension with filter",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Collections",
+  "name": "nested lists",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Collections",
+  "name": "list concatenation",
+  "status": "ERROR",
+  "detail": "ERROR: Runtime error: Cannot add these types"
+ },
+ {
+  "category": "Collections",
+  "name": "sum min max",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Collections",
+  "name": "dict basics",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Collections",
+  "name": "dict missing key is null",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Collections",
+  "name": "dict membership",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 2: unsupported expression `\"a\" in d`"
+ },
+ {
+  "category": "Collections",
+  "name": "dict delete",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 2: unknown function `delete`"
+ },
+ {
+  "category": "Collections",
+  "name": "dict values and items",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Collections",
+  "name": "dict comprehension",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 1: unsupported expression `2 for k in range(3)`"
+ },
+ {
+  "category": "Collections",
+  "name": "nested dict",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Collections",
+  "name": "set operations",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 1: unknown function `set`"
+ },
+ {
+  "category": "Collections",
+  "name": "tuple literal",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 1: unsupported expression `1, 2, 3`"
+ },
+ {
+  "category": "Collections",
+  "name": "sorted with key function",
+  "status": "ERROR",
+  "detail": "ERROR: Runtime error: Undefined variable `neg`"
+ },
+ {
+  "category": "Collections",
+  "name": "zip",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Strings",
+  "name": "length upper lower",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Strings",
+  "name": "string indexing",
+  "status": "ERROR",
+  "detail": "ERROR: Runtime error: Cannot index hello with 1"
+ },
+ {
+  "category": "Strings",
+  "name": "string slicing",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 2: unsupported expression `1:3`"
+ },
+ {
+  "category": "Strings",
+  "name": "split and join",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Strings",
+  "name": "replace and strip",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Strings",
+  "name": "find / index_of",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Strings",
+  "name": "startswith endswith",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Strings",
+  "name": "string contains",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Strings",
+  "name": "str() and number parse",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Strings",
+  "name": "f-string interpolation",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 2: unsupported expression `f\"n is {n}\"`"
+ },
+ {
+  "category": "Strings",
+  "name": "k-string interpolation",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Strings",
+  "name": "escape sequences",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Strings",
+  "name": "single-quoted strings",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 1: unsupported expression `'hi'`"
+ },
+ {
+  "category": "Strings",
+  "name": "multiline string",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 1: unsupported expression `\"\"\"a`"
+ },
+ {
+  "category": "Strings",
+  "name": "reverse a string",
+  "status": "ERROR",
+  "detail": "ERROR: Runtime error: (at instruction 1): Runtime error: reverse() expects an array"
+ },
+ {
+  "category": "Strings",
+  "name": "character codes",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 1: unknown function `ord`"
+ },
+ {
+  "category": "Strings",
+  "name": "unicode",
+  "status": "WRONG",
+  "detail": "got '6', expected '5'"
+ },
+ {
+  "category": "Strings",
+  "name": "format with padding",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 1: unknown function `pad_left`"
+ },
+ {
+  "category": "Strings",
+  "name": "iterate characters",
+  "status": "ERROR",
+  "detail": "ERROR: Runtime error: Cannot index abc with 0"
+ },
+ {
+  "category": "Math",
+  "name": "sqrt pow abs",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Math",
+  "name": "floor ceil round",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Math",
+  "name": "int and float conversion",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 2: unknown function `float`"
+ },
+ {
+  "category": "Math",
+  "name": "trig",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Math",
+  "name": "constants pi and e",
+  "status": "ERROR",
+  "detail": "ERROR: Runtime error: Undefined variable `PI`"
+ },
+ {
+  "category": "Math",
+  "name": "random in range",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Math",
+  "name": "log and exp",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 1: unknown function `log`"
+ },
+ {
+  "category": "Math",
+  "name": "gcd",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 1: unknown function `gcd`"
+ },
+ {
+  "category": "Math",
+  "name": "division by zero is an error",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Math",
+  "name": "integer vs float printing",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Errors",
+  "name": "try / catch / throw",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 2: unsupported Killer subset statement `throw \"boom\"`"
+ },
+ {
+  "category": "Errors",
+  "name": "catch a runtime error",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 3: unsupported Killer subset statement `catch e`"
+ },
+ {
+  "category": "Errors",
+  "name": "finally always runs",
+  "status": "ERROR",
+  "detail": "ERROR: Runtime error: Undefined variable `try`"
+ },
+ {
+  "category": "Errors",
+  "name": "catch then finally",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 2: unsupported Killer subset statement `throw \"x\"`"
+ },
+ {
+  "category": "Errors",
+  "name": "custom error value",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 2: unsupported Killer subset statement `throw {\"code\": 42}`"
+ },
+ {
+  "category": "Errors",
+  "name": "error propagates through calls",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 1: Parse error: Line 2: unsupported Killer subset statement `throw \"deep\"`"
+ },
+ {
+  "category": "Errors",
+  "name": "assert passes",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 1: unknown function `assert`"
+ },
+ {
+  "category": "Errors",
+  "name": "undefined variable is an error",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Errors",
+  "name": "script exits non-zero on error",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Iterators",
+  "name": "generator with yield",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 1: Parse error: Line 2: unsupported Killer subset statement `yield 1`"
+ },
+ {
+  "category": "Iterators",
+  "name": "range materialises",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Iterators",
+  "name": "zip in for",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Iterators",
+  "name": "iterate dict items",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Iterators",
+  "name": "reversed iteration",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Modules & I/O",
+  "name": "import another file",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 2: unknown function `helper_add`"
+ },
+ {
+  "category": "Modules & I/O",
+  "name": "write and read a file",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Modules & I/O",
+  "name": "file exists",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Modules & I/O",
+  "name": "json round trip",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 1: unsupported expression `'{\"a\": 1, \"b\": [1, 2]}'`"
+ },
+ {
+  "category": "Modules & I/O",
+  "name": "read environment variable",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 1: unknown function `env`"
+ },
+ {
+  "category": "Modules & I/O",
+  "name": "current time is a number",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Modules & I/O",
+  "name": "regex match",
+  "status": "WRONG",
+  "detail": "got 'false', expected 'true'"
+ },
+ {
+  "category": "Modules & I/O",
+  "name": "command line args available",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 1: unknown function `args`"
+ },
+ {
+  "category": "Modules & I/O",
+  "name": "sleep",
+  "status": "ERROR",
+  "detail": "ERROR: Runtime error: (at instruction 1): Runtime error: unknown function 'sleep' -- did you mean 'len'?"
+ },
+ {
+  "category": "Concurrency",
+  "name": "async function and await",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Concurrency",
+  "name": "spawn and await",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Concurrency",
+  "name": "async_spawn / async_await builtins",
+  "status": "ERROR",
+  "detail": "ERROR: Runtime error: Undefined variable `w`"
+ },
+ {
+  "category": "Concurrency",
+  "name": "channels",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Concurrency",
+  "name": "mutex",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 1: unknown function `mutex_new`"
+ },
+ {
+  "category": "Types",
+  "name": "type annotations run",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Types",
+  "name": "type error is caught early",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Types",
+  "name": "typeof / type()",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Types",
+  "name": "conversion between types",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 2: unknown function `bool`"
+ },
+ {
+  "category": "Types",
+  "name": "null coalescing",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Types",
+  "name": "optional chaining",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Killer-specific",
+  "name": "uncertain arithmetic",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Killer-specific",
+  "name": "three-valued comparison",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Killer-specific",
+  "name": "gauss quadrature",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Killer-specific",
+  "name": "trit constants",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Killer-specific",
+  "name": "native JIT result matches",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Killer-specific",
+  "name": "C FFI call",
+  "status": "PASS",
+  "detail": ""
+ },
+ {
+  "category": "Killer-specific",
+  "name": "statistics builtins",
+  "status": "ERROR",
+  "detail": "ERROR: Parse error: Line 1: unknown function `mean`"
+ }
+]

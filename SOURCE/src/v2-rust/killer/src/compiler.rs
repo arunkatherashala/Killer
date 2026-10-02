@@ -5148,6 +5148,17 @@ fn patch_pending_calls(state: &mut CompilerState) -> Result<(), VmError> {
         "page_alloc", "page_free", "page_map",
         // v2.3: OS-level hardware primitives
         "cpuid", "rdtsc", "gdt_encode", "idt_encode", "call_native",
+        // Standard-library builtins that were implemented in builtin.rs but not callable from scripts
+        "appendFile", "async_all", "async_await", "async_chain", "async_map", "async_race",
+        "async_reject", "async_resolve", "async_sleep", "async_spawn", "async_timeout", "await_future",
+        "chan_close", "chan_new", "chan_recv", "chan_send", "chan_try_recv", "date_add",
+        "date_day", "date_diff", "date_format", "date_month", "date_now", "date_parse", "date_year",
+        "deleteFile", "entries", "fileCopy", "fileExists", "fileSize", "filter", "http_delete",
+        "http_get_json", "http_patch", "http_put", "http_with_headers", "join_thread", "json_encode",
+        "json_parse", "listDir", "map", "mkdir", "pathBasename", "pathDirname", "pathExtension",
+        "pathJoin", "readBytes", "reduce", "renameFile", "set_add", "set_clear", "set_difference",
+        "set_from_array", "set_has", "set_intersection", "set_new", "set_remove", "set_size",
+        "set_to_array", "set_union", "spawn_thread", "timestamp", "writeBytes",
     ];
 
     for pending in &state.pending_calls {

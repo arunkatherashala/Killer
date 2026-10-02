@@ -1,0 +1,207 @@
+"""Language-parity probes for Killer.
+
+Each probe is (category, name, killer_source, expected_stdout[, extra_files]).
+The source is written the way a programmer coming from Python/JS/Java would naturally write it,
+using Killer's brace syntax. `expected` is what the equivalent mainstream-language program prints.
+A probe passes only if Killer's stdout matches exactly (after trimming trailing whitespace).
+"""
+
+P = []
+
+
+def probe(category, name, code, expected, files=None):
+    P.append((category, name, code.strip("\n"), expected.strip("\n"), files or {}))
+
+
+# ---------------------------------------------------------------- Basics & operators
+probe("Basics", "arithmetic precedence", "println(2 + 3 * 4 - 6 / 2)", "11")
+probe("Basics", "power operator **", "println(2 ** 10)", "1024")
+probe("Basics", "modulo", "println(17 % 5)", "2")
+probe("Basics", "floor division //", "println(7 // 2)", "3")
+probe("Basics", "float sum prints like IEEE", "println(0.1 + 0.2)", "0.30000000000000004")
+probe("Basics", "string repetition", 'println("ab" * 3)', "ababab")
+probe("Basics", "boolean && || !", "println(true && false)\nprintln(true || false)\nprintln(!true)", "false\ntrue\nfalse")
+probe("Basics", "boolean keywords and/or/not", "println(true and false)\nprintln(not false)", "false\ntrue")
+probe("Basics", "chained comparison", "println(1 < 2 < 3)", "true")
+probe("Basics", "ternary expression", 'x = 5\nprintln(x > 2 ? "big" : "small")', "big")
+probe("Basics", "python-style conditional expr", 'x = 5\nprintln("big" if x > 2 else "small")', "big")
+probe("Basics", "multiple assignment", "a, b = 1, 2\nprintln(a + b)", "3")
+probe("Basics", "swap via tuple", "a = 1\nb = 2\na, b = b, a\nprintln(a)\nprintln(b)", "2\n1")
+probe("Basics", "augmented assignment", "x = 10\nx += 5\nx -= 3\nx *= 2\nx /= 4\nprintln(x)", "6")
+probe("Basics", "increment ++", "x = 1\nx++\nprintln(x)", "2")
+probe("Basics", "null handling", "x = null\nprintln(x == null)", "true")
+probe("Basics", "array equality", "println([1, 2] == [1, 2])", "true")
+probe("Basics", "string equality and ordering", 'println("a" < "b")\nprintln("x" == "x")', "true\ntrue")
+probe("Basics", "bitwise operators", "println(6 & 3)\nprintln(6 | 3)\nprintln(6 ^ 3)\nprintln(1 << 4)\nprintln(32 >> 2)", "2\n7\n5\n16\n8")
+probe("Basics", "big integers", "println(2 ** 62)", "4611686018427387904")
+probe("Basics", "hex literal", "println(0xFF)", "255")
+
+# ---------------------------------------------------------------- Control flow
+probe("Control flow", "if / else if / else", "x = 7\nif x < 5 {\n  println(\"low\")\n} else if x < 10 {\n  println(\"mid\")\n} else {\n  println(\"high\")\n}", "mid")
+probe("Control flow", "elif keyword", "x = 7\nif x < 5 {\n  println(\"low\")\n} elif x < 10 {\n  println(\"mid\")\n}", "mid")
+probe("Control flow", "while loop", "i = 0\nwhile i < 3 {\n  i = i + 1\n}\nprintln(i)", "3")
+probe("Control flow", "for over range", "t = 0\nfor i in range(5) {\n  t = t + i\n}\nprintln(t)", "10")
+probe("Control flow", "range with step", "for i in range(0, 10, 3) {\n  println(i)\n}", "0\n3\n6\n9")
+probe("Control flow", "break and continue", "for i in range(6) {\n  if i == 1 {\n    continue\n  }\n  if i == 4 {\n    break\n  }\n  println(i)\n}", "0\n2\n3")
+probe("Control flow", "nested loops", "n = 0\nfor i in range(3) {\n  for j in range(3) {\n    n = n + 1\n  }\n}\nprintln(n)", "9")
+probe("Control flow", "do-while", "i = 0\ndo {\n  i = i + 1\n} while i < 3\nprintln(i)", "3")
+probe("Control flow", "C-style for", "t = 0\nfor (i = 0; i < 4; i++) {\n  t = t + i\n}\nprintln(t)", "6")
+probe("Control flow", "for over dict keys", 'd = {"a": 1, "b": 2}\nfor k in keys(d) {\n  println(k)\n}', "a\nb")
+probe("Control flow", "enumerate", 'for i, x in enumerate(["a", "b"]) {\n  println(str(i) + x)\n}', "0a\n1b")
+probe("Control flow", "match statement", 'x = 2\nmatch x {\n  1 => println("one")\n  2 => println("two")\n  _ => println("other")\n}', "two")
+probe("Control flow", "switch statement", 'x = 2\nswitch x {\n  case 1:\n    println("one")\n  case 2:\n    println("two")\n}', "two")
+probe("Control flow", "while true + break", "i = 0\nwhile true {\n  i = i + 1\n  if i > 3 {\n    break\n  }\n}\nprintln(i)", "4")
+
+# ---------------------------------------------------------------- Functions
+probe("Functions", "define and call", "fn add(a, b) {\n  return a + b\n}\nprintln(add(2, 3))", "5")
+probe("Functions", "recursion", "fn fact(n) {\n  if n <= 1 {\n    return 1\n  }\n  return n * fact(n - 1)\n}\nprintln(fact(10))", "3628800")
+probe("Functions", "deep recursion 5000", "fn d(n) {\n  if n == 0 {\n    return 0\n  }\n  return 1 + d(n - 1)\n}\nprintln(d(5000))", "5000")
+probe("Functions", "default argument", "fn greet(name, greeting = \"Hi\") {\n  return greeting + \" \" + name\n}\nprintln(greet(\"Sai\"))\nprintln(greet(\"Sai\", \"Yo\"))", "Hi Sai\nYo Sai")
+probe("Functions", "variadic arguments", "fn total(...xs) {\n  t = 0\n  for x in xs {\n    t = t + x\n  }\n  return t\n}\nprintln(total(1, 2, 3))", "6")
+probe("Functions", "return multiple values", "fn two() {\n  return [1, 2]\n}\na, b = two()\nprintln(a + b)", "3")
+probe("Functions", "no explicit return", "fn f() {\n  x = 1\n}\nprintln(f())", "null")
+probe("Functions", "function stored in variable", "fn double(a) {\n  return a * 2\n}\nf = double\nprintln(f(4))", "8")
+probe("Functions", "lambda expression", "f = fn(a) {\n  return a * 3\n}\nprintln(f(4))", "12")
+probe("Functions", "arrow lambda", "f = (a) => a * 3\nprintln(f(4))", "12")
+probe("Functions", "closure keeps state", "fn make() {\n  n = 0\n  fn inc() {\n    n = n + 1\n    return n\n  }\n  return inc\n}\nc = make()\nprintln(c())\nprintln(c())", "1\n2")
+probe("Functions", "function passed as argument", "fn apply(f, x) {\n  return f(x)\n}\nfn sq(a) {\n  return a * a\n}\nprintln(apply(sq, 7))", "49")
+probe("Functions", "map with lambda", "println(map([1, 2, 3], fn(x) {\n  return x * 10\n}))", "[10, 20, 30]")
+probe("Functions", "map with named function", "fn d(a) {\n  return a * 2\n}\nprintln(map([1, 2, 3], d))", "[2, 4, 6]")
+probe("Functions", "filter and reduce", "fn even(x) {\n  return x % 2 == 0\n}\nfn add(a, b) {\n  return a + b\n}\nprintln(filter([1, 2, 3, 4], even))\nprintln(reduce([1, 2, 3, 4], add, 0))", "[2, 4]\n10")
+probe("Functions", "decorator", "fn loud(f) {\n  fn wrapper(x) {\n    return f(x) + 1\n  }\n  return wrapper\n}\n@loud\nfn base(x) {\n  return x * 2\n}\nprintln(base(5))", "11")
+probe("Functions", "function in dict", 'fn hello() {\n  return "hi"\n}\nd = {"say": hello}\nprintln(d["say"]())', "hi")
+probe("Functions", "read global from function", "g = 5\nfn f() {\n  return g + 1\n}\nprintln(f())", "6")
+probe("Functions", "write global from function", "total = 0\nfn add(n) {\n  total = total + n\n}\nadd(5)\nadd(6)\nprintln(total)", "11")
+probe("Functions", "global keyword", "total = 0\nfn add(n) {\n  global total\n  total = total + n\n}\nadd(5)\nprintln(total)", "5")
+probe("Functions", "keyword arguments", "fn f(a, b) {\n  return a - b\n}\nprintln(f(b = 1, a = 10))", "9")
+probe("Functions", "mutual recursion", "fn even(n) {\n  if n == 0 {\n    return true\n  }\n  return odd(n - 1)\n}\nfn odd(n) {\n  if n == 0 {\n    return false\n  }\n  return even(n - 1)\n}\nprintln(even(10))", "true")
+
+# ---------------------------------------------------------------- Classes / OOP
+OOP = "class Animal {\n  fn init(name) {\n    this.name = name\n  }\n  fn speak() {\n    return this.name + \" makes a sound\"\n  }\n}\n"
+probe("OOP", "class, init and method", OOP + 'a = new Animal("Rex")\nprintln(a.speak())', "Rex makes a sound")
+probe("OOP", "state mutation through methods", "class C {\n  fn init() {\n    this.n = 0\n  }\n  fn inc() {\n    this.n = this.n + 1\n  }\n}\nc = new C()\nc.inc()\nc.inc()\nprintln(c.n)", "2")
+probe("OOP", "inheritance and override", OOP + 'class Dog extends Animal {\n  fn speak() {\n    return this.name + " barks"\n  }\n}\nd = new Dog("Rex")\nprintln(d.speak())', "Rex barks")
+probe("OOP", "inherited method + init", OOP + 'class Dog extends Animal {\n  fn fetch() {\n    return this.name + " fetches"\n  }\n}\nd = new Dog("Rex")\nprintln(d.speak())\nprintln(d.fetch())', "Rex makes a sound\nRex fetches")
+probe("OOP", "super method call", OOP + 'class Dog extends Animal {\n  fn speak() {\n    return super.speak() + " loudly"\n  }\n}\nd = new Dog("Rex")\nprintln(d.speak())', "Rex makes a sound loudly")
+probe("OOP", "super in init", OOP + 'class Dog extends Animal {\n  fn init(name, breed) {\n    super.init(name)\n    this.breed = breed\n  }\n}\nd = new Dog("Rex", "lab")\nprintln(d.name + d.breed)', "Rexlab")
+probe("OOP", "objects are references", OOP + 'a = new Animal("A")\nb = a\nb.name = "B"\nprintln(a.name)', "B")
+probe("OOP", "list of objects", OOP + 'xs = [new Animal("a"), new Animal("b")]\nfor x in xs {\n  println(x.name)\n}', "a\nb")
+probe("OOP", "polymorphism", OOP + 'class Cat extends Animal {\n  fn speak() {\n    return "meow"\n  }\n}\nxs = [new Animal("a"), new Cat("c")]\nfor x in xs {\n  println(x.speak())\n}', "a makes a sound\nmeow")
+probe("OOP", "operator overloading __add__", "class V {\n  fn init(x) {\n    this.x = x\n  }\n  fn __add__(o) {\n    return new V(this.x + o.x)\n  }\n}\nr = new V(1) + new V(2)\nprintln(r.x)", "3")
+probe("OOP", "custom toString when printed", 'class P {\n  fn init() {\n    this.x = 1\n  }\n  fn toString() {\n    return "P(1)"\n  }\n}\nprintln(new P())', "P(1)")
+probe("OOP", "instanceof / type check", OOP + 'a = new Animal("a")\nprintln(a instanceof Animal)', "true")
+probe("OOP", "static / class method", "class M {\n  static fn twice(x) {\n    return x * 2\n  }\n}\nprintln(M.twice(4))", "8")
+probe("OOP", "method chaining", "class B {\n  fn init() {\n    this.s = \"\"\n  }\n  fn add(x) {\n    this.s = this.s + x\n    return this\n  }\n}\nb = new B()\nb.add(\"a\").add(\"b\")\nprintln(b.s)", "ab")
+probe("OOP", "field default and missing field", OOP + 'a = new Animal("a")\nprintln(a.missing)', "null")
+
+# ---------------------------------------------------------------- Collections
+probe("Collections", "list basics", "a = [3, 1, 2]\npush(a, 4)\nprintln(len(a))\nprintln(a[0])\nprintln(a[3])", "4\n3\n4")
+probe("Collections", "negative index", "a = [1, 2, 3]\nprintln(a[-1])", "3")
+probe("Collections", "slicing", "a = [1, 2, 3, 4, 5]\nprintln(a[1:3])", "[2, 3]")
+probe("Collections", "slice function", "println(slice([1, 2, 3, 4, 5], 1, 3))", "[2, 3]")
+probe("Collections", "pop and insert", "a = [1, 2, 3]\nprintln(pop(a))\ninsert(a, 0, 9)\nprintln(a)", "3\n[9, 1, 2]")
+probe("Collections", "sort and reverse", "a = [3, 1, 2]\nprintln(sorted(a))\nprintln(reverse(a))", "[1, 2, 3]\n[2, 1, 3]")
+probe("Collections", "membership with in", "println(2 in [1, 2, 3])\nprintln(5 in [1, 2, 3])", "true\nfalse")
+probe("Collections", "contains function", "println(contains([1, 2, 3], 2))", "true")
+probe("Collections", "list comprehension", "println([x * x for x in range(4)])", "[0, 1, 4, 9]")
+probe("Collections", "list comprehension with filter", "println([x for x in range(8) if x % 2 == 0])", "[0, 2, 4, 6]")
+probe("Collections", "nested lists", "m = [[1, 2], [3, 4]]\nprintln(m[1][0])", "3")
+probe("Collections", "list concatenation", "println([1, 2] + [3])", "[1, 2, 3]")
+probe("Collections", "sum min max", "println(sum([1, 2, 3]))\nprintln(min(4, 2, 9))\nprintln(max(4, 2, 9))", "6\n2\n9")
+probe("Collections", "dict basics", 'd = {"a": 1}\nd["b"] = 2\nprintln(d["a"] + d["b"])\nprintln(len(keys(d)))', "3\n2")
+probe("Collections", "dict missing key is null", 'd = {"a": 1}\nprintln(d["zz"] == null)', "true")
+probe("Collections", "dict membership", 'd = {"a": 1}\nprintln("a" in d)\nprintln("z" in d)', "true\nfalse")
+probe("Collections", "dict delete", 'd = {"a": 1, "b": 2}\ndelete(d, "a")\nprintln(len(keys(d)))', "1")
+probe("Collections", "dict values and items", 'd = {"a": 1, "b": 2}\nprintln(values(d))\nprintln(len(entries(d)))', "[1, 2]\n2")
+probe("Collections", "dict comprehension", "println({k: k * 2 for k in range(3)})", "{0: 0, 1: 2, 2: 4}")
+probe("Collections", "nested dict", 'd = {"a": {"b": 5}}\nprintln(d["a"]["b"])', "5")
+probe("Collections", "set operations", "s = set([1, 2, 2, 3])\nprintln(len(s))", "3")
+probe("Collections", "tuple literal", "t = (1, 2, 3)\nprintln(t[1])", "2")
+probe("Collections", "sorted with key function", "fn neg(x) {\n  return 0 - x\n}\nprintln(sorted([1, 3, 2], neg))", "[3, 2, 1]")
+probe("Collections", "zip", "println(zip([1, 2], [3, 4]))", "[[1, 3], [2, 4]]")
+
+# ---------------------------------------------------------------- Strings
+probe("Strings", "length upper lower", 'println(len("hello"))\nprintln(upper("abc"))\nprintln(lower("ABC"))', "5\nABC\nabc")
+probe("Strings", "string indexing", 's = "hello"\nprintln(s[1])', "e")
+probe("Strings", "string slicing", 's = "hello"\nprintln(s[1:3])', "el")
+probe("Strings", "split and join", 'parts = split("a,b,c", ",")\nprintln(len(parts))\nprintln(join(parts, "-"))', "3\na-b-c")
+probe("Strings", "replace and strip", 'println(replace("a-b", "-", "+"))\nprintln(trim("  x  "))', "a+b\nx")
+probe("Strings", "find / index_of", 'println(index_of("hello", "l"))', "2")
+probe("Strings", "startswith endswith", 'println(starts_with("hello", "he"))\nprintln(ends_with("hello", "lo"))', "true\ntrue")
+probe("Strings", "string contains", 'println(contains("hello", "ell"))', "true")
+probe("Strings", "str() and number parse", 'println(str(42) + "!")\nprintln(int("12") + 1)', "42!\n13")
+probe("Strings", "f-string interpolation", 'n = 5\nprintln(f"n is {n}")', "n is 5")
+probe("Strings", "k-string interpolation", 'n = 5\nprintln(k"n is {n}")', "n is 5")
+probe("Strings", "escape sequences", 'println("a\\tb")', "a\tb")
+probe("Strings", "single-quoted strings", "println('hi')", "hi")
+probe("Strings", "multiline string", 's = """a\nb"""\nprintln(len(s))', "3")
+probe("Strings", "reverse a string", 'println(reverse("abc"))', "cba")
+probe("Strings", "character codes", 'println(ord("a"))\nprintln(chr(98))', "97\nb")
+probe("Strings", "unicode", 'println(len("héllo"))', "5")
+probe("Strings", "format with padding", 'println(pad_left("7", 3, "0"))', "007")
+probe("Strings", "iterate characters", 'for c in "abc" {\n  println(c)\n}', "a\nb\nc")
+
+# ---------------------------------------------------------------- Numbers & math
+probe("Math", "sqrt pow abs", "println(sqrt(16))\nprintln(pow(2, 8))\nprintln(abs(0 - 5))", "4\n256\n5")
+probe("Math", "floor ceil round", "println(floor(2.7))\nprintln(ceil(2.1))\nprintln(round(2.5))", "2\n3\n3")
+probe("Math", "int and float conversion", 'println(int(3.9))\nprintln(float("2.5") + 1)', "3\n3.5")
+probe("Math", "trig", "println(round(sin(0) * 100))\nprintln(round(cos(0) * 100))", "0\n100")
+probe("Math", "constants pi and e", "println(round(PI * 100))", "314")
+probe("Math", "random in range", "r = random()\nprintln(r >= 0 && r < 1)", "true")
+probe("Math", "log and exp", "println(round(log(100) / log(10)))", "2")
+probe("Math", "gcd", "println(gcd(12, 18))", "6")
+probe("Math", "division by zero is an error", "println(1 / 0)", "ERROR")
+probe("Math", "integer vs float printing", "println(10 / 4)\nprintln(10 / 5)", "2.5\n2")
+
+# ---------------------------------------------------------------- Errors
+probe("Errors", "try / catch / throw", 'try {\n  throw "boom"\n} catch e {\n  println("caught " + str(e))\n}', "caught boom")
+probe("Errors", "catch a runtime error", 'try {\n  x = 1 / 0\n} catch e {\n  println("caught")\n}', "caught")
+probe("Errors", "finally always runs", 'try {\n  println("a")\n} finally {\n  println("b")\n}', "a\nb")
+probe("Errors", "catch then finally", 'try {\n  throw "x"\n} catch e {\n  println("c")\n} finally {\n  println("f")\n}', "c\nf")
+probe("Errors", "custom error value", 'try {\n  throw {"code": 42}\n} catch e {\n  println(e["code"])\n}', "42")
+probe("Errors", "error propagates through calls", 'fn bad() {\n  throw "deep"\n}\nfn mid() {\n  bad()\n}\ntry {\n  mid()\n} catch e {\n  println("got " + str(e))\n}', "got deep")
+probe("Errors", "assert passes", "assert(1 == 1)\nprintln(\"ok\")", "ok")
+probe("Errors", "undefined variable is an error", "println(never_defined)", "ERROR")
+probe("Errors", "script exits non-zero on error", "println(1 / 0)", "ERROR")
+
+# ---------------------------------------------------------------- Iterators / generators
+probe("Iterators", "generator with yield", "fn gen() {\n  yield 1\n  yield 2\n}\nfor x in gen() {\n  println(x)\n}", "1\n2")
+probe("Iterators", "range materialises", "println(range(3))", "[0, 1, 2]")
+probe("Iterators", "zip in for", "for p in zip([1, 2], [3, 4]) {\n  println(p[0] + p[1])\n}", "4\n6")
+probe("Iterators", "iterate dict items", 'd = {"a": 1}\nfor e in entries(d) {\n  println(e[0] + str(e[1]))\n}', "a1")
+probe("Iterators", "reversed iteration", "for x in reverse([1, 2, 3]) {\n  println(x)\n}", "3\n2\n1")
+
+# ---------------------------------------------------------------- Modules & I/O
+probe("Modules & I/O", "import another file", 'import "helper.killer"\nprintln(helper_add(2, 3))', "5", {"helper.killer": "fn helper_add(a, b) {\n  return a + b\n}\n"})
+probe("Modules & I/O", "write and read a file", 'writeFile("out.tmp", "hello")\nprintln(readFile("out.tmp"))', "hello")
+probe("Modules & I/O", "file exists", 'writeFile("e.tmp", "x")\nprintln(fileExists("e.tmp"))', "true")
+probe("Modules & I/O", "json round trip", 'd = json_parse(\'{"a": 1, "b": [1, 2]}\')\nprintln(d["b"][1])\nprintln(json_stringify(d["b"]))', "2\n[1,2]")
+probe("Modules & I/O", "read environment variable", 'println(env("PATH") != null)', "true")
+probe("Modules & I/O", "current time is a number", "t = timestamp()\nprintln(t > 0)", "true")
+probe("Modules & I/O", "regex match", 'println(regex_match("[0-9]+", "abc123"))', "true")
+probe("Modules & I/O", "command line args available", "println(len(args()) >= 0)", "true")
+probe("Modules & I/O", "sleep", "sleep(1)\nprintln(\"ok\")", "ok")
+
+# ---------------------------------------------------------------- Concurrency
+probe("Concurrency", "async function and await", "async fn f() {\n  return 5\n}\nx = await f()\nprintln(x)", "5")
+probe("Concurrency", "spawn and await", "fn w() {\n  return 7\n}\nh = spawn w()\nprintln(await h)", "7")
+probe("Concurrency", "async_spawn / async_await builtins", "fn w() {\n  return 3\n}\nh = async_spawn(w)\nprintln(async_await(h))", "3")
+probe("Concurrency", "channels", "ch = chan_new()\nchan_send(ch, 5)\nprintln(chan_recv(ch))", "5")
+probe("Concurrency", "mutex", "m = mutex_new(1)\nprintln(mutex_get(m))", "1")
+
+# ---------------------------------------------------------------- Types
+probe("Types", "type annotations run", "fn add(a: number, b: number) -> number {\n  return a + b\n}\nprintln(add(1, 2))", "3")
+probe("Types", "type error is caught early", 'fn add(a: number, b: number) -> number {\n  return a + b\n}\nadd("x", 2)', "ERROR")
+probe("Types", "typeof / type()", 'println(type(5))\nprintln(type("a"))\nprintln(type([1]))', "number\nstring\narray")
+probe("Types", "conversion between types", 'println(str(1) + str(true))\nprintln(bool(0))', "1true\nfalse")
+probe("Types", "null coalescing", "x = null\nprintln(x ?? 5)", "5")
+probe("Types", "optional chaining", "x = null\nprintln(x?.a)", "null")
+
+# ---------------------------------------------------------------- Killer-specific features
+probe("Killer-specific", "uncertain arithmetic", "believe a = 10 ± 1\nbelieve b = 20 ± 2\nprintln(a + b)", "30 ± 3")
+probe("Killer-specific", "three-valued comparison", "believe a = 10 ± 1\nprintln(a > 5)\nprintln(a > 10)", "T_POS\nT_ZERO")
+probe("Killer-specific", "gauss quadrature", "println(gauss(10, 3) + gauss(20, 4))", "30 ± 5σ")
+probe("Killer-specific", "trit constants", "println(T_POS)\nprintln(trit_and(T_POS, T_ZERO))", "T_POS\nT_ZERO")
+probe("Killer-specific", "native JIT result matches", "fn fib(n) {\n  if n <= 1 {\n    return n\n  }\n  return fib(n - 1) + fib(n - 2)\n}\nprintln(fib(25))", "75025")
+probe("Killer-specific", "C FFI call", 'lib = ffi_open("msvcrt.dll")\nprintln(ffi_call(lib, "strlen", "s>l", "killer"))', "6")
+probe("Killer-specific", "statistics builtins", "println(mean([1, 2, 3, 4]))", "2.5")
