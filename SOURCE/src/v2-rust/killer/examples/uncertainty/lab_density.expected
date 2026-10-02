@@ -1,0 +1,11 @@
+== statistical errors ==
+volume  (cm^3): 50.1 +/- 0.59
+density (g/cm^3): 2.7 +/- 0.03
+consistent with aluminium (cannot be told apart)
+definitely not steel
+definitely not titanium
+P(density > 2.70) = 0.55
+== guaranteed bounds ==
+density is certainly between 2.64 and 2.77
+certainly denser than 2.5
+cannot guarantee it is denser than aluminium

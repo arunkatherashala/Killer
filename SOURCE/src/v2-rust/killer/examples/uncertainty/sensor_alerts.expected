@@ -1,0 +1,12 @@
+63 .. 67  ->  ok
+69 .. 75  ->  CHECK SENSOR
+77 .. 79  ->  CHECK SENSOR
+77 .. 81  ->  CHECK SENSOR
+82 .. 88  ->  ALARM
+85 .. 95  ->  ALARM
+alarms: 2, need a re-check: 3
+temperature high: T_ZERO
+pressure high:    T_POS
+both:             T_ZERO
+either:           T_POS
+not hot:          T_ZERO

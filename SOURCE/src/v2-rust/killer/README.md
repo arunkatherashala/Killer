@@ -337,6 +337,25 @@ println(total)                # 90 ± 3σ     (sigma grows as sqrt(n), not n)
   approximations and are refused when the divisor / argument is not clearly away from zero.
 - Interval (`±`) and statistical (`gauss`) values cannot be mixed in one expression; that is an error.
 
+### Examples
+
+Runnable programs in [`examples/uncertainty/`](examples/uncertainty/) (each has a checked-in
+`.expected` output that the test suite verifies):
+
+| Program | Shows |
+|---------|-------|
+| `lab_density.killer` | identifying a metal from measurements, statistical vs guaranteed errors, `T_ZERO` as "cannot be told apart" |
+| `sensor_alerts.killer` | a thermostat that only alarms when sure and asks for a re-check otherwise; Kleene `&&` `||` `!` |
+| `shipping_weight.killer` | will a batch exceed a truck's capacity?, errors adding in quadrature, `prob_gt` |
+| `project_budget.killer` | a cost estimate as ranges checked against several budgets, with a 10% contingency |
+
+```
+killer_super examples/uncertainty/sensor_alerts.killer --run
+```
+
+The constants `T_POS`, `T_ZERO` and `T_NEG` are plain names. Use `x == T_ZERO` to test for "undecided"
+(an `if` on a three-valued result runs only for `T_POS`).
+
 ## Known limitations
 
 - The JIT is x86-64 only and covers pure numeric code; everything else is interpreted.

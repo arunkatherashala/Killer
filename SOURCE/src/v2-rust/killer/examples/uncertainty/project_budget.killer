@@ -1,0 +1,30 @@
+# A project estimate where every task cost is a range, checked against a budget.
+# Intervals are guarantees: the real cost WILL be inside the range we compute.
+
+fn verdict(total, budget) {
+  if total <= budget {
+    return "within budget, guaranteed"
+  }
+  if total > budget {
+    return "over budget, guaranteed"
+  }
+  return "cannot tell: tighten the estimates"
+}
+
+believe design  = 12000 ± 1500
+believe build   = 40000 ± 6000
+believe testing = 9000  ± 1000
+believe launch  = 5000  ± 500
+
+total = design + build + testing + launch
+println("estimated total: " + str(unc_value(total)) + " +/- " + str(unc_margin(total)))
+println("real cost will be between " + str(unc_lo(total)) + " and " + str(unc_hi(total)))
+
+for budget in [80000, 70000, 60000, 50000] {
+  println("budget " + str(budget) + ": " + verdict(total, budget))
+}
+
+# Contingency: add 10% to every task and see what that does to the guarantee.
+padded = total * 1.1
+println("with 10% contingency: " + str(unc_lo(padded)) + " .. " + str(unc_hi(padded)))
+println("budget 70000: " + verdict(padded, 70000))

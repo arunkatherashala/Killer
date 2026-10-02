@@ -1,0 +1,46 @@
+# A thermostat that only acts when it is SURE, and asks for a re-check when it is not.
+# Each reading is a range (sensor accuracy), so comparisons come back as certain / unknown.
+
+fn classify(t) {
+  if t > 80 {
+    return "ALARM"
+  }
+  if t < 70 {
+    return "ok"
+  }
+  return "CHECK SENSOR"
+}
+
+readings = [
+  uncertain(65, 2),
+  uncertain(72, 3),
+  uncertain(78, 1),
+  uncertain(79, 2),
+  uncertain(85, 3),
+  uncertain(90, 5)
+]
+
+alarms = 0
+checks = 0
+for r in readings {
+  verdict = classify(r)
+  println(str(unc_lo(r)) + " .. " + str(unc_hi(r)) + "  ->  " + verdict)
+  if verdict == "ALARM" {
+    alarms = alarms + 1
+  }
+  if verdict == "CHECK SENSOR" {
+    checks = checks + 1
+  }
+}
+println("alarms: " + str(alarms) + ", need a re-check: " + str(checks))
+
+# Combining conditions keeps the doubt: unknown AND certain is still unknown.
+temp     = uncertain(78, 4)
+pressure = uncertain(5.0, 0.2)
+hot      = temp > 75        # unknown: the range is 74 .. 82
+high     = pressure > 4     # certain: 4.8 .. 5.2
+println("temperature high: " + str(hot))
+println("pressure high:    " + str(high))
+println("both:             " + str(hot && high))
+println("either:           " + str(hot || high))
+println("not hot:          " + str(!hot))

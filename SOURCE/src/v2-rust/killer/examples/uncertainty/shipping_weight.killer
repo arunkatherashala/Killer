@@ -1,0 +1,44 @@
+# Will this batch of parcels exceed the truck's capacity?
+# Each parcel weight is measured with some error; independent errors add in quadrature.
+
+fn r1(x) {
+  return round(x * 10) / 10
+}
+
+weights = [
+  gauss(48.0, 1.5),
+  gauss(52.5, 2.0),
+  gauss(47.0, 1.0),
+  gauss(61.0, 2.5),
+  gauss(55.5, 1.5),
+  gauss(43.0, 1.0),
+  gauss(50.0, 2.0),
+  gauss(58.0, 2.0)
+]
+
+capacity = 420
+total = gauss(0, 0)
+for w in weights {
+  total = total + w
+}
+
+println("parcels: " + str(len(weights)))
+println("total weight: " + str(r1(unc_value(total))) + " +/- " + str(r1(unc_sigma(total))) + " kg")
+println("capacity: " + str(capacity) + " kg")
+
+if total < capacity {
+  println("SAFE: under capacity with 95% confidence")
+} else {
+  if total > capacity {
+    println("OVERLOADED: over capacity with 95% confidence")
+  } else {
+    println("TOO CLOSE TO CALL: re-weigh the parcels")
+  }
+}
+println("chance of overload: " + str(r1(prob_gt(total, capacity) * 100)) + "%")
+
+# Adding one more parcel changes the picture.
+extra = gauss(30.0, 1.0)
+bigger = total + extra
+println("with one more parcel: " + str(r1(unc_value(bigger))) + " +/- " + str(r1(unc_sigma(bigger))) + " kg")
+println("chance of overload: " + str(r1(prob_gt(bigger, capacity) * 100)) + "%")

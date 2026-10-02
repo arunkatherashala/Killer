@@ -1,0 +1,59 @@
+# Which metal is this plate?  Density = mass / (length * width * thickness).
+# Every measurement has an error, so the result is a range, not a number.
+
+fn r2(x) {
+  return round(x * 100) / 100
+}
+
+fn show(label, v) {
+  println(label + ": " + str(r2(unc_value(v))) + " +/- " + str(r2(unc_sigma(v))))
+}
+
+# Statistical errors (independent measurements): they combine in quadrature.
+mass      = gauss(135.5, 0.5)     # grams
+length    = gauss(10.02, 0.05)    # cm
+width     = gauss(5.01, 0.05)     # cm
+thickness = gauss(0.998, 0.004)   # cm
+
+volume  = length * width * thickness
+density = mass / volume
+
+println("== statistical errors ==")
+show("volume  (cm^3)", volume)
+show("density (g/cm^3)", density)
+
+aluminium = 2.70
+steel     = 7.85
+titanium  = 4.51
+
+# `if` runs only on a certain answer.  For "cannot be told apart" test for T_ZERO explicitly:
+# == gives T_ZERO when the measurement is consistent with the value, T_NEG when it is not.
+same_as_aluminium = density == aluminium
+if same_as_aluminium == T_ZERO {
+  println("consistent with aluminium (cannot be told apart)")
+}
+if density != steel {
+  println("definitely not steel")
+}
+if density != titanium {
+  println("definitely not titanium")
+}
+println("P(density > 2.70) = " + str(r2(prob_gt(density, aluminium))))
+
+# Worst-case guarantees: the same plate, but the errors are hard bounds.
+println("== guaranteed bounds ==")
+believe bmass      = 135.5 ± 0.5
+believe blength    = 10.02 ± 0.05
+believe bwidth     = 5.01 ± 0.05
+believe bthickness = 0.998 ± 0.004
+
+bdensity = bmass / (blength * bwidth * bthickness)
+println("density is certainly between " + str(r2(unc_lo(bdensity))) + " and " + str(r2(unc_hi(bdensity))))
+if bdensity > 2.5 {
+  println("certainly denser than 2.5")
+}
+if bdensity > aluminium {
+  println("certainly denser than aluminium")
+} else {
+  println("cannot guarantee it is denser than aluminium")
+}
