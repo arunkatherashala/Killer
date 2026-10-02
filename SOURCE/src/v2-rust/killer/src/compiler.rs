@@ -3489,6 +3489,20 @@ fn compile_expr_str(
     }
 
     if is_valid_name(expr) {
+        // The three-valued constants are plain names (`c = T_ZERO`), as the docs say.
+        // A variable that shadows one of them still wins.
+        let trit = match expr {
+            "T_POS" => Some(1),
+            "T_ZERO" => Some(0),
+            "T_NEG" => Some(-1),
+            _ => None,
+        };
+        if let Some(v) = trit {
+            if !context.slot_map.contains_key(expr) && !context.params.contains_key(expr) {
+                state.instructions.push(Instruction::ConstTrit(v));
+                return Ok(());
+            }
+        }
         // PERF: emit slot load for known locals, fallback to named load otherwise
         if let Some(&slot) = context.slot_map.get(expr) {
             state.instructions.push(Instruction::LoadSlot(slot));

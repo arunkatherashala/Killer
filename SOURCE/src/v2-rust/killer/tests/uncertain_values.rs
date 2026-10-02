@@ -137,3 +137,9 @@ fn gauss_works_in_fused_slot_comparisons_and_kleene_logic() {
     let src = "fn f() {\n  x = gauss(5, 1)\n  y = x > 0\n  z = x > 5\n  println(y && z)\n  println(y || z)\n  println(!z)\n}\nf()\n";
     assert_eq!(run(src), "T_ZERO\nT_POS\nT_ZERO");
 }
+
+#[test]
+fn trit_constants_are_plain_names() {
+    let src = "x = T_POS\nprintln(x)\nprintln(x == T_POS)\nprintln(T_ZERO)\nbelieve a = 10 \u{b1} 1\nt = a > 10\nprintln(t == T_ZERO)\nfn f(T_ZERO) {\n  return T_ZERO\n}\nprintln(f(7))\n";
+    assert_eq!(run(src), "T_POS\ntrue\nT_ZERO\ntrue\n7");
+}
