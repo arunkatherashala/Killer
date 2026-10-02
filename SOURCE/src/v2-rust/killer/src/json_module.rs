@@ -70,7 +70,7 @@ impl JsonModule {
                 for (k, v) in obj {
                     dict.insert(k.clone(), Self::json_to_value(v));
                 }
-                Value::Dict(Box::new(dict))
+                Value::Dict(crate::value::SharedDict::new(dict))
             },
         }
     }

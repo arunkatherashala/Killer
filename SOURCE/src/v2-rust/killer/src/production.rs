@@ -210,7 +210,7 @@ pub fn builtin_regex_find(args: &[Value]) -> Result<Value, VmError> {
             d.insert("match".to_string(), Value::Str(matched));
             d.insert("start".to_string(), Value::Number(s as f64));
             d.insert("end".to_string(), Value::Number(e as f64));
-            Ok(Value::Dict(Box::new(d)))
+            Ok(Value::Dict(crate::value::SharedDict::new(d)))
         }
         None => Ok(Value::Null),
     }
@@ -528,7 +528,7 @@ fn val_to_json(v: &Value) -> String {
         Value::Str(s) => format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\"")),
         Value::Dict(d) => {
             let items: Vec<String> = d.iter()
-                .map(|(k,v)| format!("\"{}\":{}", k, val_to_json(v)))
+                .map(|(k,v)| format!("\"{}\":{}", k, val_to_json(&v)))
                 .collect();
             format!("{{{}}}", items.join(","))
         }

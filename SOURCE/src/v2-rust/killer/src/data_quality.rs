@@ -557,7 +557,7 @@ impl DataQuality {
         match &self.value {
             Value::Object(obj) => {
                 let has_all_fields = required_fields.iter().all(|field| {
-                    obj.fields.contains_key(field)
+                    obj.has_field(field)
                 });
                 
                 if has_all_fields {
@@ -569,7 +569,7 @@ impl DataQuality {
                     self.validity = 0.0;
                     self.status = QualityStatus::Invalid;
                     let missing: Vec<&String> = required_fields.iter()
-                        .filter(|f| !obj.fields.contains_key(*f))
+                        .filter(|f| !obj.has_field(*f))
                         .collect();
                     self.errors.push(format!("Missing required object fields: {:?}", missing));
                 }
@@ -586,11 +586,11 @@ impl DataQuality {
     pub fn validate_object_all_fields_not_null(&mut self) {
         match &self.value {
             Value::Object(obj) => {
-                let has_nulls = obj.fields.values().any(|v| {
+                let has_nulls = obj.fields().values().any(|v| {
                     matches!(v, Value::Null) || v.to_string() == "null" || v.to_string().is_empty()
                 });
                 
-                if !has_nulls && !obj.fields.is_empty() {
+                if !has_nulls && !obj.fields().is_empty() {
                     self.completeness = 1.0;
                     self.accuracy = 1.0;
                     self.status = QualityStatus::Valid;
@@ -613,7 +613,7 @@ impl DataQuality {
     pub fn validate_object_max_fields(&mut self, max_fields: usize) {
         match &self.value {
             Value::Object(obj) => {
-                let field_count = obj.fields.len();
+                let field_count = obj.fields().len();
                 
                 if field_count <= max_fields {
                     self.validity = 1.0;
@@ -636,7 +636,7 @@ impl DataQuality {
     pub fn validate_object_min_fields(&mut self, min_fields: usize) {
         match &self.value {
             Value::Object(obj) => {
-                let field_count = obj.fields.len();
+                let field_count = obj.fields().len();
                 
                 if field_count >= min_fields {
                     self.completeness = 1.0;
@@ -659,7 +659,7 @@ impl DataQuality {
     pub fn validate_object_class(&mut self, expected_class: &str) {
         match &self.value {
             Value::Object(obj) => {
-                if obj.class_name == expected_class {
+                if obj.class_name() == expected_class {
                     self.consistency = 1.0;
                     self.validity = 1.0;
                     self.status = QualityStatus::Valid;
@@ -667,7 +667,7 @@ impl DataQuality {
                     self.consistency = 0.0;
                     self.validity = 0.0;
                     self.status = QualityStatus::Invalid;
-                    self.errors.push(format!("Object class is '{}', expected '{}'", obj.class_name, expected_class));
+                    self.errors.push(format!("Object class is '{}', expected '{}'", obj.class_name(), expected_class));
                 }
             }
             _ => {
@@ -1186,7 +1186,7 @@ mod tests {
         dict.insert("email".to_string(), Value::Str("alice@test.com".to_string()));
         dict.insert("age".to_string(), Value::Number(30.0));
         
-        let mut dq = DataQuality::new(Value::Dict(Box::new(dict)));
+        let mut dq = DataQuality::new(Value::Dict(crate::value::SharedDict::new(dict)));
         dq.validate_dict_required_keys(vec!["name".to_string(), "email".to_string()]);
         
         assert!(dq.is_valid());
@@ -1198,7 +1198,7 @@ mod tests {
         let mut dict = HashMap::new();
         dict.insert("name".to_string(), Value::Str("Alice".to_string()));
         
-        let mut dq = DataQuality::new(Value::Dict(Box::new(dict)));
+        let mut dq = DataQuality::new(Value::Dict(crate::value::SharedDict::new(dict)));
         dq.validate_dict_required_keys(vec!["name".to_string(), "email".to_string()]);
         
         assert!(!dq.is_valid());
@@ -1211,7 +1211,7 @@ mod tests {
         dict.insert("name".to_string(), Value::Str("Alice".to_string()));
         dict.insert("email".to_string(), Value::Str("alice@test.com".to_string()));
         
-        let mut dq = DataQuality::new(Value::Dict(Box::new(dict)));
+        let mut dq = DataQuality::new(Value::Dict(crate::value::SharedDict::new(dict)));
         dq.validate_dict_no_empty_values();
         
         assert!(dq.is_valid());
@@ -1224,7 +1224,7 @@ mod tests {
         dict.insert("name".to_string(), Value::Str("Alice".to_string()));
         dict.insert("email".to_string(), Value::Str("".to_string()));
         
-        let mut dq = DataQuality::new(Value::Dict(Box::new(dict)));
+        let mut dq = DataQuality::new(Value::Dict(crate::value::SharedDict::new(dict)));
         dq.validate_dict_no_empty_values();
         
         assert!(!dq.is_valid());
@@ -1236,7 +1236,7 @@ mod tests {
         dict.insert("name".to_string(), Value::Str("Alice".to_string()));
         dict.insert("email".to_string(), Value::Str("alice@test.com".to_string()));
         
-        let mut dq = DataQuality::new(Value::Dict(Box::new(dict)));
+        let mut dq = DataQuality::new(Value::Dict(crate::value::SharedDict::new(dict)));
         dq.validate_dict_max_size(5);
         
         assert!(dq.is_valid());
@@ -1250,7 +1250,7 @@ mod tests {
         dict.insert("email".to_string(), Value::Str("alice@test.com".to_string()));
         dict.insert("age".to_string(), Value::Number(30.0));
         
-        let mut dq = DataQuality::new(Value::Dict(Box::new(dict)));
+        let mut dq = DataQuality::new(Value::Dict(crate::value::SharedDict::new(dict)));
         dq.validate_dict_max_size(2);
         
         assert!(!dq.is_valid());
@@ -1270,7 +1270,7 @@ mod tests {
         obj.fields.insert("name".to_string(), Value::Str("Alice".to_string()));
         obj.fields.insert("email".to_string(), Value::Str("alice@test.com".to_string()));
         
-        let mut dq = DataQuality::new(Value::Object(Box::new(obj)));
+        let mut dq = DataQuality::new(Value::Object(crate::value::SharedObject::new(obj)));
         dq.validate_object_required_fields(vec!["id".to_string(), "name".to_string()]);
         
         assert!(dq.is_valid());
@@ -1287,7 +1287,7 @@ mod tests {
         };
         obj.fields.insert("id".to_string(), Value::Number(456.0));
         
-        let mut dq = DataQuality::new(Value::Object(Box::new(obj)));
+        let mut dq = DataQuality::new(Value::Object(crate::value::SharedObject::new(obj)));
         dq.validate_object_required_fields(vec!["id".to_string(), "email".to_string()]);
         
         assert!(!dq.is_valid());
@@ -1305,7 +1305,7 @@ mod tests {
         obj.fields.insert("name".to_string(), Value::Str("Bob".to_string()));
         obj.fields.insert("email".to_string(), Value::Str("bob@test.com".to_string()));
         
-        let mut dq = DataQuality::new(Value::Object(Box::new(obj)));
+        let mut dq = DataQuality::new(Value::Object(crate::value::SharedObject::new(obj)));
         dq.validate_object_all_fields_not_null();
         
         assert!(dq.is_valid());
@@ -1323,7 +1323,7 @@ mod tests {
         obj.fields.insert("name".to_string(), Value::Str("Alice".to_string()));
         obj.fields.insert("email".to_string(), Value::Null);
         
-        let mut dq = DataQuality::new(Value::Object(Box::new(obj)));
+        let mut dq = DataQuality::new(Value::Object(crate::value::SharedObject::new(obj)));
         dq.validate_object_all_fields_not_null();
         
         assert!(!dq.is_valid());
@@ -1341,7 +1341,7 @@ mod tests {
         obj.fields.insert("id".to_string(), Value::Number(789.0));
         obj.fields.insert("name".to_string(), Value::Str("Charlie".to_string()));
         
-        let mut dq = DataQuality::new(Value::Object(Box::new(obj)));
+        let mut dq = DataQuality::new(Value::Object(crate::value::SharedObject::new(obj)));
         dq.validate_object_max_fields(5);
         
         assert!(dq.is_valid());
@@ -1360,7 +1360,7 @@ mod tests {
         obj.fields.insert("name".to_string(), Value::Str("David".to_string()));
         obj.fields.insert("email".to_string(), Value::Str("david@test.com".to_string()));
         
-        let mut dq = DataQuality::new(Value::Object(Box::new(obj)));
+        let mut dq = DataQuality::new(Value::Object(crate::value::SharedObject::new(obj)));
         dq.validate_object_max_fields(2);
         
         assert!(!dq.is_valid());
@@ -1378,7 +1378,7 @@ mod tests {
         obj.fields.insert("name".to_string(), Value::Str("Eve".to_string()));
         obj.fields.insert("email".to_string(), Value::Str("eve@test.com".to_string()));
         
-        let mut dq = DataQuality::new(Value::Object(Box::new(obj)));
+        let mut dq = DataQuality::new(Value::Object(crate::value::SharedObject::new(obj)));
         dq.validate_object_min_fields(2);
         
         assert!(dq.is_valid());
@@ -1395,7 +1395,7 @@ mod tests {
         };
         obj.fields.insert("id".to_string(), Value::Number(303.0));
         
-        let mut dq = DataQuality::new(Value::Object(Box::new(obj)));
+        let mut dq = DataQuality::new(Value::Object(crate::value::SharedObject::new(obj)));
         dq.validate_object_min_fields(3);
         
         assert!(!dq.is_valid());
@@ -1411,7 +1411,7 @@ mod tests {
         };
         obj.fields.insert("id".to_string(), Value::Number(404.0));
         
-        let mut dq = DataQuality::new(Value::Object(Box::new(obj)));
+        let mut dq = DataQuality::new(Value::Object(crate::value::SharedObject::new(obj)));
         dq.validate_object_class("User");
         
         assert!(dq.is_valid());
@@ -1428,7 +1428,7 @@ mod tests {
         };
         obj.fields.insert("id".to_string(), Value::Number(505.0));
         
-        let mut dq = DataQuality::new(Value::Object(Box::new(obj)));
+        let mut dq = DataQuality::new(Value::Object(crate::value::SharedObject::new(obj)));
         dq.validate_object_class("User");
         
         assert!(!dq.is_valid());

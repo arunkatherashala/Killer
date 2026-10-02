@@ -52,19 +52,28 @@ static MATH_SINGLETON: LazyLock<Value> = LazyLock::new(|| {
     let mut m = HashMap::new();
     m.insert("PI".to_string(), Value::Number(std::f64::consts::PI));
     m.insert("E".to_string(), Value::Number(std::f64::consts::E));
-    Value::Dict(Box::new(m))
+    Value::Dict(crate::value::SharedDict::new(m))
 });
 
 static PHYSICS_SINGLETON: LazyLock<Value> = LazyLock::new(|| {
     let mut m = HashMap::new();
     m.insert("G".to_string(), Value::Number(9.81));
     m.insert("PI".to_string(), Value::Number(std::f64::consts::PI));
-    Value::Dict(Box::new(m))
+    Value::Dict(crate::value::SharedDict::new(m))
 });
 
 static ARRAY_SINGLETON: LazyLock<Value> = LazyLock::new(|| {
-    Value::Dict(Box::new(HashMap::new()))
+    Value::Dict(crate::value::SharedDict::new(HashMap::new()))
 });
+
+fn wrap_builtin_error(e: VmError, instr_idx: usize) -> VmError {
+    let msg = e.to_string();
+    if msg.starts_with("Line ") || msg.starts_with("(at instruction") {
+        e
+    } else {
+        VmError::runtime_error(format!("(at instruction {}): {}", instr_idx, msg))
+    }
+}
 
 const ARG_NAMES: [&str; 16] = [
     "arg0", "arg1", "arg2", "arg3", "arg4", "arg5", "arg6", "arg7",
@@ -82,7 +91,7 @@ struct ClassInfo {
 #[allow(dead_code)]
 pub struct VirtualMachine {
     pub stack: Vec<Value>,
-    pub scopes: Vec<HashMap<String, Value>>,
+    pub scopes: Vec<crate::fast_hash::FastMap<String, Value>>,
     pub call_stack: Vec<usize>,
     pub ip: usize,
     // Integer-indexed local variable frames for fast O(1) slot access.
@@ -121,6 +130,7 @@ pub struct VirtualMachine {
     // NATIVE JIT: x86-64 machine code for hot loops (March 27, 2026)
     jit_engine: JitEngine,  // Detects hot loops + compiles to native x86-64
     fn_jit: crate::jit_fn::FnJit,  // pure numeric functions -> native x86-64
+    method_names: std::collections::HashSet<String>,  // every method name any class defines
 
     // v2.2: Shared program reference for spawned threads
     current_program: Option<std::sync::Arc<Program>>,
@@ -179,6 +189,7 @@ impl Default for VirtualMachine {
             exec_start: None,
             jit_engine: JitEngine::new(),
             fn_jit: crate::jit_fn::FnJit::new(),
+            method_names: std::collections::HashSet::new(),
             current_program: None,
             capabilities: CapabilitySet::trusted_local(),
             reactive_graph: HashMap::new(),
@@ -233,6 +244,7 @@ impl VirtualMachine {
             exec_start: None,
             jit_engine: JitEngine::new(),
             fn_jit: crate::jit_fn::FnJit::new(),
+            method_names: std::collections::HashSet::new(),
             current_program: None,
             capabilities: CapabilitySet::trusted_local(),
             reactive_graph: HashMap::new(),
@@ -367,7 +379,7 @@ impl VirtualMachine {
 
     /// Return a clone of all global-scope variables (used by ImportPkg to merge exports)
     pub fn get_globals(&self) -> HashMap<String, Value> {
-        self.scopes.first().cloned().unwrap_or_default()
+        self.scopes.first().map(|s| s.iter().map(|(k, v)| (k.clone(), v.clone())).collect()).unwrap_or_default()
     }
 
     /// When set, [`run`](Self::run) enforces [`ExecutionBudget`] (steps every opcode; wall clock on backward branches).
@@ -433,6 +445,7 @@ impl VirtualMachine {
         // Filled on first SpawnCall* if needed (see `program_arc_for_spawn`).
         self.current_program = None;
         self.fn_jit.reset();
+        self.method_names = program.method_bytecode.keys().map(|(_, m)| m.clone()).collect();
         self.ip = 0;
         self.stack.clear();
         self.call_stack.clear();
@@ -508,18 +521,24 @@ impl VirtualMachine {
             let _ = self.store_var(name, Value::Str(name.clone()));
         }
 
+        let mut gc_poll: u32 = 0;
         while self.ip < program.instructions.len() {
             self.enforce_step_budget()?;
 
-            // GC: check if the global alloc counter crossed a new interval boundary.
-            let current_epoch = crate::gc::GC_ALLOC_COUNT.with(|c| *c.borrow() / crate::gc::GC_INTERVAL);
-            if current_epoch > self.gc_alloc_epoch {
-                self.gc_alloc_epoch = current_epoch;
-                // Collect all live values as roots.
-                let roots = self.stack.iter().chain(
-                    self.scopes.iter().flat_map(|s| s.values())
-                ).cloned();
-                crate::gc::gc_collect(roots);
+            // GC: check if the global alloc counter crossed a new interval boundary
+            // (polled every 256 instructions; the interval is 50,000 allocations).
+            gc_poll = gc_poll.wrapping_add(1);
+            if gc_poll & 0xFF == 0 {
+                let current_epoch = crate::gc::GC_ALLOC_COUNT.with(|c| *c.borrow() / crate::gc::GC_INTERVAL);
+                if current_epoch > self.gc_alloc_epoch {
+                    self.gc_alloc_epoch = current_epoch;
+                    // Collect all live values as roots.
+                    let roots = self.stack.iter()
+                        .chain(self.scopes.iter().flat_map(|s| s.values()))
+                        .chain(self.locals_stack.iter().flat_map(|f| f.iter()))
+                        .cloned();
+                    crate::gc::gc_collect(roots);
+                }
             }
 
             let instr_idx = self.ip;
@@ -614,6 +633,78 @@ impl VirtualMachine {
                         frame.resize(idx + 1, Value::Null);
                     }
                     frame[idx] = value;
+                }
+                Instruction::ForNext { iter, idx, var, body, exit } => {
+                    let (iter_i, idx_i) = (*iter as usize, *idx as usize);
+                    // 0 = element ready, 1 = finished, 2 = not an array (generic path)
+                    let mut outcome = 2u8;
+                    let mut next_idx = 0.0f64;
+                    let mut elem = Value::Null;
+                    if let Some(frame) = self.locals_stack.last() {
+                        if let (Some(Value::Number(n)), Some(Value::Array(a))) = (frame.get(idx_i), frame.get(iter_i)) {
+                            let k = *n as usize;
+                            if k < a.len() {
+                                elem = a.get(k).unwrap_or(Value::Null);
+                                next_idx = *n + 1.0;
+                                outcome = 0;
+                            } else {
+                                outcome = 1;
+                            }
+                        }
+                    }
+                    match outcome {
+                        0 => {
+                            if let Some(frame) = self.locals_stack.last_mut() {
+                                frame[idx_i] = Value::Number(next_idx);
+                            }
+                            self.store_local(var, elem);
+                            self.ip = *body;
+                            continue;
+                        }
+                        1 => {
+                            self.ip = *exit;
+                            continue;
+                        }
+                        _ => {}
+                    }
+                }
+                Instruction::GetField(name) => {
+                    let intact = matches!(
+                        program.instructions.get(self.ip + 1),
+                        Some(Instruction::CallMethodDynamic { method_name, arg_count: 0 }) if method_name == name
+                    );
+                    if intact && !self.method_names.contains(name.as_str()) {
+                        if let Some(Value::Object(o)) = self.stack.last() {
+                            if let Some(v) = o.get_field(name) {
+                                self.stack.pop();
+                                self.stack.push(v);
+                                self.ip += 2;
+                                continue;
+                            }
+                        }
+                    }
+                    // otherwise fall through to the generic CallMethodDynamic
+                }
+                Instruction::AppendSlot(slot) => {
+                    let idx = *slot as usize;
+                    // Fast path only while the compiler's `Add; StoreSlot(slot)` pair is intact.
+                    let intact = matches!(program.instructions.get(self.ip + 1), Some(Instruction::Add))
+                        && matches!(program.instructions.get(self.ip + 2), Some(Instruction::StoreSlot(s)) if *s == *slot);
+                    if intact {
+                        if let (Some(frame), Some(Value::Str(r))) = (self.locals_stack.last_mut(), self.stack.last()) {
+                            if let Some(Value::Str(l)) = frame.get_mut(idx) {
+                                l.push_str(r);
+                                self.stack.pop();
+                                self.ip += 3;
+                                continue;
+                            }
+                        }
+                    }
+                    // Slow path: stack becomes [slot value, term] so the generic Add runs next.
+                    let rhs = self.pop_value()?;
+                    let lhs = self.locals_stack.last().and_then(|f| f.get(idx)).cloned().unwrap_or(Value::Null);
+                    self.stack.push(lhs);
+                    self.stack.push(rhs);
                 }
                 Instruction::LoadSlot(slot) => {
                     let idx = *slot as usize;
@@ -805,7 +896,7 @@ impl VirtualMachine {
                             (Value::Object(obj), rhs_val) => {
                                 // Try to find __add__ method
                                 if let Some(result) = self.try_call_operator_method(
-                                    obj.class_name.clone(), 
+                                    obj.class_name().clone(), 
                                     "__add__", 
                                     vec![rhs_val.clone()],
                                     program
@@ -813,7 +904,7 @@ impl VirtualMachine {
                                     self.stack.push(result);
                                 } else {
                                     return Err(VmError::runtime_error(
-                                        format!("Cannot add: {} does not define __add__ method", obj.class_name)
+                                        format!("Cannot add: {} does not define __add__ method", obj.class_name())
                                     ));
                                 }
                             }
@@ -881,7 +972,7 @@ impl VirtualMachine {
                     match &lhs {
                         Value::Object(obj) => {
                             if let Some(result) = self.try_call_operator_method(
-                                obj.class_name.clone(), 
+                                obj.class_name().clone(), 
                                 "__sub__", 
                                 vec![rhs],
                                 program
@@ -889,7 +980,7 @@ impl VirtualMachine {
                                 self.stack.push(result);
                             } else {
                                 return Err(VmError::runtime_error(
-                                    format!("Cannot subtract: {} does not define __sub__ method", obj.class_name)
+                                    format!("Cannot subtract: {} does not define __sub__ method", obj.class_name())
                                 ));
                             }
                         }
@@ -924,7 +1015,7 @@ impl VirtualMachine {
                     match &lhs {
                         Value::Object(obj) => {
                             if let Some(result) = self.try_call_operator_method(
-                                obj.class_name.clone(), 
+                                obj.class_name().clone(), 
                                 "__mul__", 
                                 vec![rhs],
                                 program
@@ -932,7 +1023,7 @@ impl VirtualMachine {
                                 self.stack.push(result);
                             } else {
                                 return Err(VmError::runtime_error(
-                                    format!("Cannot multiply: {} does not define __mul__ method", obj.class_name)
+                                    format!("Cannot multiply: {} does not define __mul__ method", obj.class_name())
                                 ));
                             }
                         }
@@ -971,7 +1062,7 @@ impl VirtualMachine {
                     match &lhs {
                         Value::Object(obj) => {
                             if let Some(result) = self.try_call_operator_method(
-                                obj.class_name.clone(), 
+                                obj.class_name().clone(), 
                                 "__div__", 
                                 vec![rhs],
                                 program
@@ -979,7 +1070,7 @@ impl VirtualMachine {
                                 self.stack.push(result);
                             } else {
                                 return Err(VmError::runtime_error(
-                                    format!("Cannot divide: {} does not define __div__ method", obj.class_name)
+                                    format!("Cannot divide: {} does not define __div__ method", obj.class_name())
                                 ));
                             }
                         }
@@ -1089,7 +1180,7 @@ impl VirtualMachine {
                     match &lhs {
                         Value::Object(obj) => {
                             if let Some(result) = self.try_call_operator_method(
-                                obj.class_name.clone(), 
+                                obj.class_name().clone(), 
                                 "__eq__", 
                                 vec![rhs.clone()],
                                 program
@@ -1125,7 +1216,7 @@ impl VirtualMachine {
                     match &lhs {
                         Value::Object(obj) => {
                             if let Some(result) = self.try_call_operator_method(
-                                obj.class_name.clone(), 
+                                obj.class_name().clone(), 
                                 "__ne__", 
                                 vec![rhs.clone()],
                                 program
@@ -1165,7 +1256,7 @@ impl VirtualMachine {
                     match &lhs {
                         Value::Object(obj) => {
                             if let Some(result) = self.try_call_operator_method(
-                                obj.class_name.clone(), 
+                                obj.class_name().clone(), 
                                 "__gt__", 
                                 vec![rhs],
                                 program
@@ -1178,7 +1269,7 @@ impl VirtualMachine {
                                 self.stack.push(Value::Bool(bool_result));
                             } else {
                                 return Err(VmError::runtime_error(
-                                    format!("Cannot compare: {} does not define __gt__ method", obj.class_name)
+                                    format!("Cannot compare: {} does not define __gt__ method", obj.class_name())
                                 ));
                             }
                         }
@@ -1198,7 +1289,7 @@ impl VirtualMachine {
                     match &lhs {
                         Value::Object(obj) => {
                             if let Some(result) = self.try_call_operator_method(
-                                obj.class_name.clone(), 
+                                obj.class_name().clone(), 
                                 "__ge__", 
                                 vec![rhs],
                                 program
@@ -1211,7 +1302,7 @@ impl VirtualMachine {
                                 self.stack.push(Value::Bool(bool_result));
                             } else {
                                 return Err(VmError::runtime_error(
-                                    format!("Cannot compare: {} does not define __ge__ method", obj.class_name)
+                                    format!("Cannot compare: {} does not define __ge__ method", obj.class_name())
                                 ));
                             }
                         }
@@ -1233,7 +1324,7 @@ impl VirtualMachine {
                         match &lhs {
                             Value::Object(obj) => {
                                 if let Some(result) = self.try_call_operator_method(
-                                    obj.class_name.clone(),
+                                    obj.class_name().clone(),
                                     "__lt__",
                                     vec![rhs],
                                     program
@@ -1246,7 +1337,7 @@ impl VirtualMachine {
                                     self.stack.push(Value::Bool(bool_result));
                                 } else {
                                     return Err(VmError::runtime_error(
-                                        format!("Cannot compare: {} does not define __lt__ method", obj.class_name)
+                                        format!("Cannot compare: {} does not define __lt__ method", obj.class_name())
                                     ));
                                 }
                             }
@@ -1266,7 +1357,7 @@ impl VirtualMachine {
                     match &lhs {
                         Value::Object(obj) => {
                             if let Some(result) = self.try_call_operator_method(
-                                obj.class_name.clone(), 
+                                obj.class_name().clone(), 
                                 "__le__", 
                                 vec![rhs],
                                 program
@@ -1279,7 +1370,7 @@ impl VirtualMachine {
                                 self.stack.push(Value::Bool(bool_result));
                             } else {
                                 return Err(VmError::runtime_error(
-                                    format!("Cannot compare: {} does not define __le__ method", obj.class_name)
+                                    format!("Cannot compare: {} does not define __le__ method", obj.class_name())
                                 ));
                             }
                         }
@@ -1777,31 +1868,25 @@ impl VirtualMachine {
                 Instruction::Call { target, arg_count } => {
                     self.ensure_jump_target(program, *target)?;
 
-                    if *arg_count <= 4 && self.stack.len() >= *arg_count
+                    if *arg_count <= 8 && self.stack.len() >= *arg_count
                         && self.execution_budget.is_none()
                         && crate::security::current_capabilities().allow_native_jit
                     {
                         let base = self.stack.len() - *arg_count;
-                        let mut native_args = [0f64; 4];
-                        let mut all_numbers = true;
-                        for (i, v) in self.stack[base..].iter().enumerate() {
-                            match v {
-                                Value::Number(x) => native_args[i] = *x,
-                                _ => { all_numbers = false; break; }
-                            }
-                        }
-                        if all_numbers {
-                            if let Some(r) = self.fn_jit.try_call(
-                                &program.instructions,
-                                &program.function_arities,
-                                *target,
-                                &native_args[..*arg_count],
-                            ) {
-                                self.stack.truncate(base);
-                                self.stack.push(Value::Number(r));
-                                self.ip += 1;
-                                continue;
-                            }
+                        if let Some(r) = self.fn_jit.try_call(
+                            &program.instructions,
+                            &program.function_arities,
+                            *target,
+                            &self.stack[base..],
+                            &|name: &str| {
+                                self.variable_cache.cache.get_index(name).is_some()
+                                    || self.scopes.iter().any(|sc| sc.contains_key(name))
+                            },
+                        ) {
+                            self.stack.truncate(base);
+                            self.stack.push(Value::Number(r));
+                            self.ip += 1;
+                            continue;
                         }
                     }
 
@@ -2009,7 +2094,7 @@ impl VirtualMachine {
                         };
                         dict.insert(key, value);
                     }
-                    self.stack.push(Value::Dict(Box::new(dict)));
+                    self.stack.push(Value::Dict(crate::value::SharedDict::new(dict)));
                 }
                 Instruction::NewQuality => {
                     let value = self.pop_value()?;
@@ -2028,7 +2113,7 @@ impl VirtualMachine {
                         }
                         (Value::Dict(dict), Value::Str(key)) => {
                             self.stack
-                                .push(dict.get(key).cloned().unwrap_or(Value::Null));
+                                .push(dict.get(key).unwrap_or(Value::Null));
                         }
                         (Value::Dict(dict), idx) => {
                             let key = match idx {
@@ -2036,11 +2121,11 @@ impl VirtualMachine {
                                 _ => format!("{idx}"),
                             };
                             self.stack
-                                .push(dict.get(&key).cloned().unwrap_or(Value::Null));
+                                .push(dict.get(&key).unwrap_or(Value::Null));
                         }
                         (Value::Object(obj), Value::Str(key)) => {
                             self.stack
-                                .push(obj.fields.get(key).cloned().unwrap_or(Value::Null));
+                                .push(obj.get_field(key).unwrap_or(Value::Null));
                         }
                         _ => {
                             return Err(VmError::runtime_error(format!(
@@ -2075,7 +2160,7 @@ impl VirtualMachine {
                             self.store_var(name, Value::Dict(dict))?;
                         }
                         (Value::Object(mut obj), Value::Str(key)) => {
-                            obj.fields.insert(key.clone(), value);
+                            obj.set_field(key.clone(), value);
                             self.store_var(name, Value::Object(obj))?;
                         }
                         _ => {
@@ -2135,7 +2220,7 @@ impl VirtualMachine {
                             frame[si] = Value::Dict(dict);
                         }
                         (Value::Object(mut obj), Value::Str(key)) => {
-                            obj.fields.insert(key.clone(), value);
+                            obj.set_field(key.clone(), value);
                             let frame = self.locals_stack.last_mut().ok_or_else(|| {
                                 VmError::runtime_error("No locals frame".to_string())
                             })?;
@@ -2196,7 +2281,7 @@ impl VirtualMachine {
                         d.insert("compiled_loops".to_string(), Value::Number(compiled as f64));
                         d.insert("hot_threshold".to_string(), Value::Number(threshold as f64));
                         d.insert("active".to_string(), Value::Bool(compiled > 0));
-                        self.stack.push(Value::Dict(Box::new(d)));
+                        self.stack.push(Value::Dict(crate::value::SharedDict::new(d)));
                         self.ip += 1;
                         continue;
                     }
@@ -2206,7 +2291,7 @@ impl VirtualMachine {
                         d.insert("tracked_arrays".to_string(), Value::Number(tracked as f64));
                         d.insert("total_allocs".to_string(), Value::Number(allocs as f64));
                         d.insert("interval".to_string(), Value::Number(crate::gc::GC_INTERVAL as f64));
-                        self.stack.push(Value::Dict(Box::new(d)));
+                        self.stack.push(Value::Dict(crate::value::SharedDict::new(d)));
                         self.ip += 1;
                         continue;
                     }
@@ -2301,7 +2386,7 @@ impl VirtualMachine {
                                 Value::Str(_) => "string",
                                 Value::Array(_) => "array",
                                 Value::Dict(_) => "dict",
-                                Value::Object(obj) => &obj.class_name,
+                                Value::Object(obj) => &obj.class_name(),
                                 Value::Class(cls) => &cls.name,
                                 Value::Function { .. } => "function",
                                 Value::Generator(_) => "generator",
@@ -2359,7 +2444,7 @@ impl VirtualMachine {
                                 Value::Dict(dict) => {
                                     let keys: Vec<Value> = dict
                                         .keys()
-                                        .map(|k| Value::Str(k.clone()))
+                                        .into_iter().map(|k| Value::Str(k.clone()))
                                         .collect();
                                     Value::from(keys)
                                 }
@@ -2376,7 +2461,7 @@ impl VirtualMachine {
                             }
                             match &args[0] {
                                 Value::Dict(dict) => {
-                                    let values: Vec<Value> = dict.values().cloned().collect();
+                                    let values: Vec<Value> = dict.values().into_iter().collect();
                                     Value::from(values)
                                 }
                                 _ => return Err(VmError::runtime_error(
@@ -2394,7 +2479,7 @@ impl VirtualMachine {
                                 Value::Dict(dict) => {
                                     let keys: Vec<Value> = dict
                                         .keys()
-                                        .map(|k| Value::Str(k.clone()))
+                                        .into_iter().map(|k| Value::Str(k.clone()))
                                         .collect();
                                     Value::from(keys)
                                 }
@@ -3273,7 +3358,7 @@ impl VirtualMachine {
                                 Value::Dict(dict) => {
                                     let keys: Vec<Value> = dict
                                         .keys()
-                                        .map(|k| Value::Str(k.clone()))
+                                        .into_iter().map(|k| Value::Str(k.clone()))
                                         .collect();
                                     Value::from(keys)
                                 }
@@ -3318,20 +3403,29 @@ impl VirtualMachine {
                     };
                     self.stack.push(result);
                 }
+                // Allocation-free paths for the very common 1- and 2-argument builtins.
+                Instruction::CallBuiltinId(id, 1) => {
+                    let a = self.pop_value()?;
+                    let result = BuiltinFunctions::call_by_id(*id, std::slice::from_ref(&a))
+                        .map_err(|e| wrap_builtin_error(e, instr_idx))?;
+                    self.stack.push(result);
+                }
+                Instruction::CallBuiltinId(id, 2) => {
+                    let b = self.pop_value()?;
+                    let a = self.pop_value()?;
+                    let args = [a, b];
+                    let result = BuiltinFunctions::call_by_id(*id, &args)
+                        .map_err(|e| wrap_builtin_error(e, instr_idx))?;
+                    self.stack.push(result);
+                }
                 Instruction::CallBuiltinId(id, arg_count) => {
                     let mut args = Vec::with_capacity(*arg_count);
                     for _ in 0..*arg_count {
                         args.push(self.pop_value()?);
                     }
                     args.reverse();
-                    let result = BuiltinFunctions::call_by_id(*id, &args).map_err(|e| {
-                        let msg = e.to_string();
-                        if msg.starts_with("Line ") || msg.starts_with("(at instruction") {
-                            e
-                        } else {
-                            VmError::runtime_error(format!("(at instruction {}): {}", instr_idx, msg))
-                        }
-                    })?;
+                    let result = BuiltinFunctions::call_by_id(*id, &args)
+                        .map_err(|e| wrap_builtin_error(e, instr_idx))?;
                     self.stack.push(result);
                 }
                 Instruction::DefineClass { name, parent } => {
@@ -3407,7 +3501,7 @@ impl VirtualMachine {
                         self.call_stack.push(self.ip + 1);
                         self.push_scope();
                         self.locals_stack.push(Vec::new());
-                        self.store_local("this", Value::Object(Box::new(instance)));
+                        self.store_local("this", Value::Object(crate::value::SharedObject::new(instance)));
                         for (idx, arg) in ctor_args.into_iter().enumerate() {
                             self.store_local(&format!("arg{}", idx), arg);
                         }
@@ -3453,7 +3547,7 @@ impl VirtualMachine {
                     }
 
                     // Push the object to the stack
-                    self.stack.push(Value::Object(Box::new(instance)));
+                    self.stack.push(Value::Object(crate::value::SharedObject::new(instance)));
                 }
                 Instruction::CallMethod { object_name: _, method_name: _, arg_count: _ } => {
                     // TODO: Implement method calling with proper dispatch
@@ -3474,7 +3568,7 @@ impl VirtualMachine {
                     match &object {
                         Value::Object(obj_inst) => {
                             // Instance method dispatch - walk inheritance chain
-                            let mut current_class = obj_inst.class_name.clone();
+                            let mut current_class = obj_inst.class_name().clone();
                             #[allow(unused_assignments)]
                             let mut method_bytecode_start: Option<usize> = None;
                             let mut visited = std::collections::HashSet::new();
@@ -3504,7 +3598,7 @@ impl VirtualMachine {
                                     
                                     // OPTIMIZATION: Cache resolved method for future fast-path
                                     self.call_site_cache.cache_method_resolution(
-                                        &obj_inst.class_name,
+                                        &obj_inst.class_name(),
                                         method_name,
                                         bytecode_start,
                                         *arg_count
@@ -3524,7 +3618,7 @@ impl VirtualMachine {
                                 // No parent or method not found anywhere.
                                 // Fall back to field/property access for zero-arg calls: obj.field
                                 if args.is_empty() {
-                                    if let Some(value) = obj_inst.fields.get(method_name) {
+                                    if let Some(value) = obj_inst.get_field(method_name) {
                                         self.stack.push(value.clone());
                                     } else {
                                         self.stack.push(Value::Null);
@@ -3566,11 +3660,11 @@ impl VirtualMachine {
                             } else if method_name == "keys" && args.is_empty() {
                                 let keys: Vec<Value> = dict
                                     .keys()
-                                    .map(|k| Value::Str(k.clone()))
+                                    .into_iter().map(|k| Value::Str(k.clone()))
                                     .collect();
                                 self.stack.push(Value::from(keys));
                             } else if method_name == "values" && args.is_empty() {
-                                let values: Vec<Value> = dict.values().cloned().collect();
+                                let values: Vec<Value> = dict.values().into_iter().collect();
                                 self.stack.push(Value::from(values));
                             } else if method_name == "entries" && args.is_empty() {
                                 let mut entries = Vec::new();
@@ -4571,7 +4665,7 @@ impl VirtualMachine {
                                     for (k, v) in quality_obj.get_all_metrics() {
                                         metrics_dict.insert(k, Value::Number(v));
                                     }
-                                    self.stack.push(Value::Dict(Box::new(metrics_dict)));
+                                    self.stack.push(Value::Dict(crate::value::SharedDict::new(metrics_dict)));
                                 }
                                 "get_trim_score" => {
                                     if !args.is_empty() {
@@ -4587,7 +4681,7 @@ impl VirtualMachine {
                                     for (k, v) in quality_obj.get_trim_metrics() {
                                         trim_dict.insert(k, Value::Number(v));
                                     }
-                                    self.stack.push(Value::Dict(Box::new(trim_dict)));
+                                    self.stack.push(Value::Dict(crate::value::SharedDict::new(trim_dict)));
                                 }
                                 "get_guarantees" => {
                                     if !args.is_empty() {
@@ -5111,7 +5205,7 @@ impl VirtualMachine {
     }
 
     fn push_scope(&mut self) {
-        self.scopes.push(HashMap::new());
+        self.scopes.push(Default::default());
     }
 
     /// Store a variable directly into the current (topmost) scope without
@@ -5264,7 +5358,7 @@ impl VirtualMachine {
             // We need to construct the object from just the class name
             // This is a limitation - we don't have the actual object instance here
             // For now, create a minimal one with just the class_name
-            let this_obj = Value::Object(Box::new(ObjectInstance {
+            let this_obj = Value::Object(crate::value::SharedObject::new(ObjectInstance {
                 class_name: class_name.clone(),
                 fields: std::collections::HashMap::new(),
             }));
@@ -5324,6 +5418,11 @@ impl VirtualMachine {
                             Instruction::Store(name) => {
                                 if let Ok(val) = self.pop_value() {
                                     let _ = self.store_var(name, val);
+                                }
+                            }
+                            Instruction::StoreLocal(name) => {
+                                if let Ok(val) = self.pop_value() {
+                                    self.store_local(name, val);
                                 }
                             }
                             Instruction::StoreSlot(slot) => {
@@ -5611,7 +5710,7 @@ impl VirtualMachine {
                                     arr.get(*n as usize).unwrap_or(Value::Null)
                                 }
                                 (Value::Dict(dict), Value::Str(key)) => {
-                                    dict.get(key).cloned().unwrap_or(Value::Null)
+                                    dict.get(key).unwrap_or(Value::Null)
                                 }
                                 _ => Value::Null,
                             };
@@ -5752,7 +5851,7 @@ impl VirtualMachine {
                                         // Method call on dict
                                         if method_name == "get" && args.len() == 1 {
                                             if let Value::Str(key) = &args[0] {
-                                                self.stack.push(dict.get(key).cloned().unwrap_or(Value::Null));
+                                                self.stack.push(dict.get(key).unwrap_or(Value::Null));
                                             }
                                         } else {
                                             return Err(VmError::runtime_error(format!(
@@ -5764,7 +5863,7 @@ impl VirtualMachine {
                                 }
                                 Value::Object(obj_inst) => {
                                     // Handle object property access
-                                    if let Some(value) = obj_inst.fields.get(method_name) {
+                                    if let Some(value) = obj_inst.get_field(method_name) {
                                         self.stack.push(value.clone());
                                     } else {
                                         self.stack.push(Value::Null);

@@ -95,7 +95,7 @@ fn zip_min_length() {
 
 #[test]
 fn dict_get_default() {
-    let d = Value::Dict(Box::new(HashMap::from([("a".into(), n(1.0))])));
+    let d = Value::Dict(killer_native::value::SharedDict::new(HashMap::from([("a".into(), n(1.0))])));
     let out = BuiltinFunctions::call("get", &[d.clone(), s("a")]).unwrap();
     assert_eq!(out, n(1.0));
     let out2 = BuiltinFunctions::call("get", &[d.clone(), s("missing")]).unwrap();
@@ -106,7 +106,7 @@ fn dict_get_default() {
 
 #[test]
 fn dict_setdefault_pair() {
-    let d = Value::Dict(Box::new(HashMap::from([("a".into(), n(1.0))])));
+    let d = Value::Dict(killer_native::value::SharedDict::new(HashMap::from([("a".into(), n(1.0))])));
     let out = BuiltinFunctions::call("setdefault", &[d.clone(), s("a"), n(99.0)]).unwrap();
     let Value::Array(parts) = out else { panic!("not array") };
     assert_eq!(parts.len(), 2);
@@ -121,7 +121,7 @@ fn copy_array_dict() {
     let a = arr(vec![n(1.0)]);
     let c = BuiltinFunctions::call("copy", &[a.clone()]).unwrap();
     assert_eq!(c, a);
-    let d = Value::Dict(Box::new(HashMap::from([("x".into(), n(0.0))])));
+    let d = Value::Dict(killer_native::value::SharedDict::new(HashMap::from([("x".into(), n(0.0))])));
     let c2 = BuiltinFunctions::call("copy", &[d.clone()]).unwrap();
     assert_eq!(c2, d);
 }

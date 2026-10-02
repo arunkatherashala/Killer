@@ -147,8 +147,8 @@ impl ScopeVariableCache {
             return;
         }
 
-        // Check if variable is in hot list
-        if self.hot_vars.contains(&var_name.to_string()) {
+        // Check if variable is in hot list (compare as &str: no allocation on the hot path)
+        if self.hot_vars.iter().any(|v| v == var_name) {
             self.hits += 1;
         } else if self.hot_vars.len() < 32 {
             // Add to hot variables
@@ -158,7 +158,7 @@ impl ScopeVariableCache {
 
     /// Check if variable is likely in current scope (for optimization hints)
     pub fn is_likely_local(&self, var_name: &str) -> bool {
-        self.hot_vars.contains(&var_name.to_string())
+        self.hot_vars.iter().any(|v| v == var_name)
     }
 
     /// Get cache effectiveness

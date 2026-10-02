@@ -416,7 +416,7 @@ fn parse_json_to_value(s: &str) -> Value {
 fn parse_json_object(s: &str) -> Value {
     let inner = s.trim().trim_start_matches('{').trim_end_matches('}').trim();
     let mut dict = std::collections::HashMap::new();
-    if inner.is_empty() { return Value::Dict(Box::new(dict)); }
+    if inner.is_empty() { return Value::Dict(crate::value::SharedDict::new(dict)); }
     for pair in split_json_items(inner) {
         if let Some(colon) = pair.find(':') {
             let key_raw = pair[..colon].trim().trim_matches('"');
@@ -424,7 +424,7 @@ fn parse_json_object(s: &str) -> Value {
             dict.insert(key_raw.to_string(), parse_json_to_value(val_raw));
         }
     }
-    Value::Dict(Box::new(dict))
+    Value::Dict(crate::value::SharedDict::new(dict))
 }
 
 fn parse_json_array(s: &str) -> Value {

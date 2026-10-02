@@ -1158,7 +1158,7 @@ pub fn nova_stream_open(args: &[Value]) -> Result<Value, VmError> {
     );
     map.insert("_meta".to_string(),    Value::Str(meta_str));
 
-    Ok(Value::Dict(Box::new(map)))
+    Ok(Value::Dict(crate::value::SharedDict::new(map)))
 }
 
 /// nova_stream_col(reader, col_name) → Array
@@ -1180,7 +1180,7 @@ pub fn nova_stream_col(args: &[Value]) -> Result<Value, VmError> {
 
     // Extract metadata from handle
     let nrows = match reader.get("nrows") {
-        Some(Value::Number(n)) => *n as usize,
+        Some(Value::Number(n)) => n as usize,
         _ => return Err(VmError::runtime_error("nova_stream_col: invalid reader (missing nrows)".to_string())),
     };
     let columns = match reader.get("columns") {
@@ -1191,8 +1191,8 @@ pub fn nova_stream_col(args: &[Value]) -> Result<Value, VmError> {
         Some(Value::Str(s)) => s.clone(),
         _ => return Err(VmError::runtime_error("nova_stream_col: invalid reader (missing path)".to_string())),
     };
-    let meta_str = match reader.get("_meta") {
-        Some(Value::Str(s)) => s.as_str(),
+    let meta_owned = match reader.get("_meta") {
+        Some(Value::Str(s)) => s,
         _ => return Err(VmError::runtime_error("nova_stream_col: invalid reader (missing _meta)".to_string())),
     };
 
@@ -1212,6 +1212,7 @@ pub fn nova_stream_col(args: &[Value]) -> Result<Value, VmError> {
     let payload = lz77_decompress(&data[payload_start..payload_end.min(data.len())]);
 
     // Parse column metadata
+    let meta_str = meta_owned.as_str();
     let meta_parts: Vec<&str> = meta_str.split(';').collect();
     let meta_entry = meta_parts.get(col_idx)
         .ok_or_else(|| VmError::runtime_error("nova_stream_col: metadata index out of range".to_string()))?;
@@ -1276,7 +1277,7 @@ pub fn nova_stream_batch(args: &[Value]) -> Result<Value, VmError> {
                     .unwrap_or(Value::Null);
                 row_map.insert(name.clone(), val);
             }
-            batch.push(Value::Dict(Box::new(row_map)));
+            batch.push(Value::Dict(crate::value::SharedDict::new(row_map)));
         }
         batches.push(Value::from(batch));
         row = end;
@@ -1322,7 +1323,7 @@ pub fn nova_stream_cols(args: &[Value]) -> Result<Value, VmError> {
         result_map.insert(want.clone(), Value::from(vals));
     }
 
-    Ok(Value::Dict(Box::new(result_map)))
+    Ok(Value::Dict(crate::value::SharedDict::new(result_map)))
 }
 
 /// nova_read_all(path) → Map  (col_name → Array of values)
@@ -1344,7 +1345,7 @@ pub fn nova_read_all(args: &[Value]) -> Result<Value, VmError> {
     for (name, col) in col_names.into_iter().zip(cols.into_iter()) {
         map.insert(name, Value::from(col));
     }
-    Ok(Value::Dict(Box::new(map)))
+    Ok(Value::Dict(crate::value::SharedDict::new(map)))
 }
 
 /// nova_stats(path, col_name) → Map  {count, min, max, sum, mean, nulls}
@@ -1416,7 +1417,7 @@ pub fn nova_stats(args: &[Value]) -> Result<Value, VmError> {
     map.insert("max".to_string(),    Value::Number(max));
     map.insert("sum".to_string(),    Value::Number(sum));
     map.insert("mean".to_string(),   Value::Number(mean));
-    Ok(Value::Dict(Box::new(map)))
+    Ok(Value::Dict(crate::value::SharedDict::new(map)))
 }
 
 /// nova_filter(path, col_name, value) → Array of row indices (0-based) where col == value

@@ -252,7 +252,7 @@ pub fn builtin_permission_check_all(args: &[Value]) -> Result<Value, VmError> {
         result.insert(name, Value::Bool(granted));
     }
 
-    Ok(Value::Dict(Box::new(result)))
+    Ok(Value::Dict(crate::value::SharedDict::new(result)))
 }
 
 /// permission_request(name) → bool
@@ -324,7 +324,7 @@ pub fn builtin_permission_request_all(args: &[Value]) -> Result<Value, VmError> 
         }
     }
 
-    Ok(Value::Dict(Box::new(result)))
+    Ok(Value::Dict(crate::value::SharedDict::new(result)))
 }
 
 /// notification_show(title, text) → id (Number)
@@ -382,7 +382,7 @@ pub fn builtin_device_info(args: &[Value]) -> Result<Value, VmError> {
         dict.insert("brand".into(), Value::Str("Killer".to_string()));
     }
 
-    Ok(Value::Dict(Box::new(dict)))
+    Ok(Value::Dict(crate::value::SharedDict::new(dict)))
 }
 
 /// storage_path() → string (app internal storage directory)

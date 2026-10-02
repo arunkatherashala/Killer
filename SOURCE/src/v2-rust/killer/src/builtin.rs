@@ -1325,8 +1325,9 @@ impl BuiltinFunctions {
             )),
         };
 
-        let (end, step) = if args.len() == 1 {
-            (start, 1i64)
+        // range(n) is range(0, n), as in Python.
+        let (start, end, step) = if args.len() == 1 {
+            (0i64, start, 1i64)
         } else if args.len() == 2 {
             let end = match &args[1] {
                 Value::Number(n) => *n as i64,
@@ -1334,7 +1335,7 @@ impl BuiltinFunctions {
                     "range() end must be a number".to_string(),
                 )),
             };
-            (end, 1i64)
+            (start, end, 1i64)
         } else {
             let end = match &args[1] {
                 Value::Number(n) => *n as i64,
@@ -1348,7 +1349,7 @@ impl BuiltinFunctions {
                     "range() step must be a number".to_string(),
                 )),
             };
-            (end, step)
+            (start, end, step)
         };
 
         if step == 0 {
@@ -1387,7 +1388,7 @@ impl BuiltinFunctions {
             Value::Str(_) => "string",
             Value::Array(_) => "array",
             Value::Dict(_) => "dict",
-            Value::Object(obj) => &obj.class_name,
+            Value::Object(obj) => &obj.class_name(),
             Value::Class(cls) => &cls.name,
             Value::Function { .. } => "function",
             Value::Generator(_) => "generator",
@@ -1449,7 +1450,7 @@ impl BuiltinFunctions {
             Value::Dict(dict) => {
                 let keys: Vec<Value> = dict
                     .keys()
-                    .map(|k| Value::Str(k.clone()))
+                    .into_iter().map(|k| Value::Str(k.clone()))
                     .collect();
                 Ok(Value::from(keys))
             }
@@ -1467,7 +1468,7 @@ impl BuiltinFunctions {
         }
         match &args[0] {
             Value::Dict(dict) => {
-                let values: Vec<Value> = dict.values().cloned().collect();
+                let values: Vec<Value> = dict.values().into_iter().collect();
                 Ok(Value::from(values))
             }
             _ => Err(VmError::runtime_error(
@@ -1486,7 +1487,7 @@ impl BuiltinFunctions {
             Value::Dict(dict) => {
                 let keys: Vec<Value> = dict
                     .keys()
-                    .map(|k| Value::Str(k.clone()))
+                    .into_iter().map(|k| Value::Str(k.clone()))
                     .collect();
                 Ok(Value::from(keys))
             }
@@ -1623,8 +1624,9 @@ impl BuiltinFunctions {
             (Value::Array(arr), val) => {
                 Ok(Value::Bool(arr.contains(val)))
             }
+            (Value::Dict(dict), Value::Str(key)) => Ok(Value::Bool(dict.contains_key(key))),
             _ => Err(VmError::runtime_error(
-                "contains() expects string or array".to_string(),
+                "contains() expects string, array or dict".to_string(),
             )),
         }
     }
@@ -2864,7 +2866,7 @@ impl BuiltinFunctions {
             Value::Dict(dict) => {
                 let keys: Vec<Value> = dict
                     .keys()
-                    .map(|k| Value::Str(k.clone()))
+                    .into_iter().map(|k| Value::Str(k.clone()))
                     .collect();
                 Ok(Value::from(keys))
             }
@@ -2989,7 +2991,7 @@ impl BuiltinFunctions {
                 listener.insert("address".to_string(), Value::Str(addr.clone()));
                 listener.insert("id".to_string(), Value::Number(1000.0)); // Mock handle ID
                 
-                Ok(Value::Dict(Box::new(listener)))
+                Ok(Value::Dict(crate::value::SharedDict::new(listener)))
             }
             _ => Err(VmError::runtime_error(
                 "TcpListener_bind(): address must be string".to_string(),
@@ -3011,7 +3013,7 @@ impl BuiltinFunctions {
         stream.insert("remote_addr".to_string(), Value::Str("127.0.0.1:9999".to_string()));
         stream.insert("id".to_string(), Value::Number(2000.0)); // Mock handle ID
         
-        Ok(Value::Dict(Box::new(stream)))
+        Ok(Value::Dict(crate::value::SharedDict::new(stream)))
     }
     
     fn tcp_stream_read(args: &[Value]) -> Result<Value, VmError> {
@@ -3031,7 +3033,7 @@ impl BuiltinFunctions {
                 let mut result = std::collections::HashMap::new();
                 result.insert("bytes_read".to_string(), Value::Number(num_bytes as f64));
                 result.insert("data".to_string(), Value::Str(data));
-                Ok(Value::Dict(Box::new(result)))
+                Ok(Value::Dict(crate::value::SharedDict::new(result)))
             }
             _ => Err(VmError::runtime_error(
                 "TcpStream_read(): size must be number".to_string(),
@@ -3344,7 +3346,7 @@ impl BuiltinFunctions {
         result.insert("weekday".to_string(), Value::Number(dt.weekday() as f64));
         result.insert("iso_string".to_string(), Value::Str(dt.to_iso_string()));
         
-        Ok(Value::Dict(Box::new(result)))
+        Ok(Value::Dict(crate::value::SharedDict::new(result)))
     }
 
     fn parse_datetime(args: &[Value]) -> Result<Value, VmError> {
@@ -3380,7 +3382,7 @@ impl BuiltinFunctions {
                 result.insert("weekday".to_string(), Value::Number(dt.weekday() as f64));
                 result.insert("iso_string".to_string(), Value::Str(dt.to_iso_string()));
                 
-                Ok(Value::Dict(Box::new(result)))
+                Ok(Value::Dict(crate::value::SharedDict::new(result)))
             }
             Err(e) => Err(VmError::runtime_error(
                 format!("parse_datetime(): {}", e)
@@ -3417,7 +3419,7 @@ impl BuiltinFunctions {
 
         // Extract seconds and nanos from datetime dict
         let seconds = match dt_dict.get("seconds") {
-            Some(Value::Number(n)) => *n as i64,
+            Some(Value::Number(n)) => n as i64,
             _ => {
                 return Err(VmError::runtime_error(
                     "format_datetime(): invalid DateTime object".to_string(),
@@ -3426,7 +3428,7 @@ impl BuiltinFunctions {
         };
 
         let nanos = match dt_dict.get("nanos") {
-            Some(Value::Number(n)) => *n as u32,
+            Some(Value::Number(n)) => n as u32,
             _ => 0,
         };
 
@@ -3446,7 +3448,7 @@ impl BuiltinFunctions {
         fn secs(v: &Value) -> Result<i64, VmError> {
             match v {
                 Value::Dict(d) => match d.get("seconds") {
-                    Some(Value::Number(n)) => Ok(*n as i64),
+                    Some(Value::Number(n)) => Ok(n as i64),
                     _ => Err(VmError::runtime_error("date_diff: datetime dict must have 'seconds' key")),
                 },
                 Value::Number(n) => Ok(*n as i64),
@@ -3474,7 +3476,7 @@ impl BuiltinFunctions {
     fn date_add(args: &[Value]) -> Result<Value, VmError> {
         let secs_base = match args.first() {
             Some(Value::Dict(d)) => match d.get("seconds") {
-                Some(Value::Number(n)) => *n as i64,
+                Some(Value::Number(n)) => n as i64,
                 _ => return Err(VmError::runtime_error("date_add: first arg must be a datetime dict")),
             },
             Some(Value::Number(n)) => *n as i64,
@@ -3495,7 +3497,7 @@ impl BuiltinFunctions {
         let mut d = std::collections::HashMap::new();
         d.insert("seconds".to_string(), Value::Number(new_secs as f64));
         d.insert("nanos".to_string(), Value::Number(0.0));
-        Ok(Value::Dict(Box::new(d)))
+        Ok(Value::Dict(crate::value::SharedDict::new(d)))
     }
 
     /// date_year(dt) → Number
@@ -3528,7 +3530,7 @@ impl BuiltinFunctions {
     fn dt_secs(args: &[Value]) -> Result<i64, VmError> {
         match args.first() {
             Some(Value::Dict(d)) => match d.get("seconds") {
-                Some(Value::Number(n)) => Ok(*n as i64),
+                Some(Value::Number(n)) => Ok(n as i64),
                 _ => Err(VmError::runtime_error("expected datetime dict with 'seconds' key")),
             },
             Some(Value::Number(n)) => Ok(*n as i64),
@@ -3656,7 +3658,7 @@ impl BuiltinFunctions {
                 result.insert("status".to_string(), Value::Number(response.status_code as f64));
                 result.insert("body".to_string(), Value::Str(response.body));
                 result.insert("type".to_string(), Value::Str("HttpResponse".to_string()));
-                Ok(Value::Dict(Box::new(result)))
+                Ok(Value::Dict(crate::value::SharedDict::new(result)))
             }
             Err(e) => Err(VmError::runtime_error(format!("http_get(): {}", e))),
         }
@@ -3711,7 +3713,7 @@ impl BuiltinFunctions {
                 result.insert("status".to_string(), Value::Number(response.status_code as f64));
                 result.insert("body".to_string(), Value::Str(response.body));
                 result.insert("type".to_string(), Value::Str("HttpResponse".to_string()));
-                Ok(Value::Dict(Box::new(result)))
+                Ok(Value::Dict(crate::value::SharedDict::new(result)))
             }
             Err(e) => Err(VmError::runtime_error(format!("http_post(): {}", e))),
         }
@@ -3751,7 +3753,7 @@ impl BuiltinFunctions {
                         result.insert(key, Value::Str(value));
                     }
                 }
-                Ok(Value::Dict(Box::new(result)))
+                Ok(Value::Dict(crate::value::SharedDict::new(result)))
             }
             Err(e) => Err(VmError::runtime_error(format!("parse_json(): {}", e))),
         }
@@ -3825,7 +3827,7 @@ impl BuiltinFunctions {
         result.insert("port".to_string(), Value::Number(server.port as f64));
         result.insert("running".to_string(), Value::Bool(false));
         
-        Ok(Value::Dict(Box::new(result)))
+        Ok(Value::Dict(crate::value::SharedDict::new(result)))
     }
 
     fn http_server_listen(args: &[Value]) -> Result<Value, VmError> {
@@ -3943,7 +3945,7 @@ impl BuiltinFunctions {
                     for (key, value) in row {
                         row_dict.insert(key, Value::Str(value));
                     }
-                    result.push(Value::Dict(Box::new(row_dict)));
+                    result.push(Value::Dict(crate::value::SharedDict::new(row_dict)));
                 }
                 Ok(Value::from(result))
             }
@@ -4070,7 +4072,7 @@ impl BuiltinFunctions {
                     result_dict.insert(k, Value::Str(v));
                 }
                 result_dict.insert("__type".to_string(), Value::Str("WebSocket".to_string()));
-                Ok(Value::Dict(Box::new(result_dict)))
+                Ok(Value::Dict(crate::value::SharedDict::new(result_dict)))
             }
             _ => Err(VmError::runtime_error(
                 "websocket_new(): argument must be a URL string".to_string(),
@@ -4098,7 +4100,7 @@ impl BuiltinFunctions {
                     result_dict.insert(k, Value::Str(v));
                 }
                 result_dict.insert("__type".to_string(), Value::Str("WebSocketServer".to_string()));
-                Ok(Value::Dict(Box::new(result_dict)))
+                Ok(Value::Dict(crate::value::SharedDict::new(result_dict)))
             }
             _ => Err(VmError::runtime_error(
                 "websocket_server_new(): arguments must be (host: string, port: number)".to_string(),
@@ -4149,7 +4151,7 @@ impl BuiltinFunctions {
                     ("message".to_string(), Value::Str(message.clone())),
                     ("timestamp".to_string(), Value::Str("2026-03-14T00:00:00".to_string())),
                 ]);
-                Ok(Value::Dict(Box::new(result)))
+                Ok(Value::Dict(crate::value::SharedDict::new(result)))
             }
             _ => Err(VmError::runtime_error(
                 "ws_send(): arguments must be (websocket, message: string)".to_string(),
@@ -4173,7 +4175,7 @@ impl BuiltinFunctions {
                     ("data".to_string(), Value::Str("[simulated message]".to_string())),
                     ("timestamp".to_string(), Value::Str("2026-03-14T00:00:00".to_string())),
                 ]);
-                Ok(Value::Dict(Box::new(result)))
+                Ok(Value::Dict(crate::value::SharedDict::new(result)))
             }
             _ => Err(VmError::runtime_error(
                 "ws_receive(): argument must be a WebSocket object".to_string(),
@@ -4241,7 +4243,7 @@ impl BuiltinFunctions {
                     ),
                 );
                 result.insert("type".to_string(), Value::Str("Trait".to_string()));
-                Ok(Value::Dict(Box::new(result)))
+                Ok(Value::Dict(crate::value::SharedDict::new(result)))
             }
             _ => Err(VmError::runtime_error(
                 "trait_new(): first argument must be a trait name".to_string(),
@@ -4264,7 +4266,7 @@ impl BuiltinFunctions {
                 result.insert("for_type".to_string(), Value::Str(for_type.clone()));
                 result.insert("type".to_string(), Value::Str("TraitImpl".to_string()));
                 result.insert("status".to_string(), Value::Str("implemented".to_string()));
-                Ok(Value::Dict(Box::new(result)))
+                Ok(Value::Dict(crate::value::SharedDict::new(result)))
             }
             _ => Err(VmError::runtime_error(
                 "trait_impl(): arguments must be (trait: string, for_type: string)".to_string(),
@@ -4326,7 +4328,7 @@ impl BuiltinFunctions {
                 result.insert("method".to_string(), Value::Str(method_name.clone()));
                 result.insert("trait".to_string(), Value::Str(resolution.0.to_string()));
                 result.insert("resolved".to_string(), Value::Bool(true));
-                Ok(Value::Dict(Box::new(result)))
+                Ok(Value::Dict(crate::value::SharedDict::new(result)))
             }
             _ => Err(VmError::runtime_error(
                 "trait_resolve(): arguments must be (type: string, method: string)".to_string(),
@@ -4349,7 +4351,7 @@ impl BuiltinFunctions {
         };
         let options = if args.len() > 1 {
             match &args[1] {
-                Value::Dict(d) => (**d).clone(),
+                Value::Dict(d) => d.to_map(),
                 _ => std::collections::HashMap::new(),
             }
         } else {
@@ -4419,8 +4421,8 @@ impl BuiltinFunctions {
                 result.insert("confidence".to_string(), Value::Number(r.confidence));
                 let scores: std::collections::HashMap<String, Value> = r.all_scores
                     .into_iter().map(|(k, v)| (k, Value::Number(v))).collect();
-                result.insert("all_scores".to_string(), Value::Dict(Box::new(scores)));
-                Value::Dict(Box::new(result))
+                result.insert("all_scores".to_string(), Value::Dict(crate::value::SharedDict::new(scores)));
+                Value::Dict(crate::value::SharedDict::new(result))
             })
             .map_err(VmError::runtime_error)
     }
@@ -4447,7 +4449,7 @@ impl BuiltinFunctions {
         };
         let mut runtime = crate::ai::AIRuntime::new();
         runtime.ai_extract(&text, schema, &model)
-            .map(|d| Value::Dict(Box::new(d)))
+            .map(|d| Value::Dict(crate::value::SharedDict::new(d)))
             .map_err(VmError::runtime_error)
     }
 
@@ -4461,12 +4463,12 @@ impl BuiltinFunctions {
             _ => return Err(VmError::runtime_error("ai_local_infer: model_path must be a string".to_string())),
         };
         let input = match &args[1] {
-            Value::Dict(d) => (**d).clone(),
+            Value::Dict(d) => d.to_map(),
             _ => return Err(VmError::runtime_error("ai_local_infer: input must be a dictionary".to_string())),
         };
         let mut runtime = crate::ai::AIRuntime::new();
         runtime.ai_local_infer(&model_path, input)
-            .map(|d| Value::Dict(Box::new(d)))
+            .map(|d| Value::Dict(crate::value::SharedDict::new(d)))
             .map_err(VmError::runtime_error)
     }
 
@@ -4480,7 +4482,7 @@ impl BuiltinFunctions {
             _ => return Err(VmError::runtime_error("ai_provider_set: provider must be a string".to_string())),
         };
         let config = match &args[1] {
-            Value::Dict(d) => (**d).clone(),
+            Value::Dict(d) => d.to_map(),
             _ => return Err(VmError::runtime_error("ai_provider_set: config must be a dictionary".to_string())),
         };
         let mut runtime = crate::ai::AIRuntime::new();
@@ -4506,7 +4508,7 @@ impl BuiltinFunctions {
                 m.insert("status".to_string(), Value::Str("not_configured".to_string()));
                 m
             });
-        Ok(Value::Dict(Box::new(info)))
+        Ok(Value::Dict(crate::value::SharedDict::new(info)))
     }
 
     fn ai_cache_enable(args: &[Value]) -> Result<Value, VmError> {
@@ -5832,7 +5834,7 @@ impl BuiltinFunctions {
         m.insert("hex_len".into(), Value::Number(hex_str.len() as f64));
         m.insert("hex_pct".into(), Value::Str(pct(hex_str.len())));
         m.insert("best_algo".into(), Value::Str("b64".to_string()));
-        Ok(Value::Dict(Box::new(m)))
+        Ok(Value::Dict(crate::value::SharedDict::new(m)))
     }
 
     // -------------------------------------------------------------------------
@@ -5856,7 +5858,7 @@ impl BuiltinFunctions {
                 m.insert("message".into(),      Value::Str(issue.message));
                 m.insert("fix_hint".into(),     Value::Str(issue.fix_hint));
                 m.insert("auto_fixable".into(), Value::Bool(issue.auto_fixable));
-                Value::Dict(Box::new(m))
+                Value::Dict(crate::value::SharedDict::new(m))
             })
             .collect();
         Ok(Value::from(arr))
@@ -5882,10 +5884,10 @@ impl BuiltinFunctions {
                     cm.insert("original".into(),    Value::Str(ch.original));
                     cm.insert("replacement".into(), Value::Str(ch.replacement));
                     cm.insert("reason".into(),      Value::Str(ch.reason));
-                    Value::Dict(Box::new(cm))
+                    Value::Dict(crate::value::SharedDict::new(cm))
                 }).collect();
                 m.insert("changes".into(), Value::from(changes));
-                Value::Dict(Box::new(m))
+                Value::Dict(crate::value::SharedDict::new(m))
             })
             .collect();
         Ok(Value::from(arr))
@@ -5920,7 +5922,7 @@ impl BuiltinFunctions {
                 m.insert("title".into(),       Value::Str(s.title));
                 m.insert("description".into(), Value::Str(s.description));
                 m.insert("priority".into(),    Value::Str(s.priority.as_str().to_string()));
-                Value::Dict(Box::new(m))
+                Value::Dict(crate::value::SharedDict::new(m))
             })
             .collect();
         Ok(Value::from(arr))
@@ -5951,7 +5953,7 @@ impl BuiltinFunctions {
                 m.insert("impact".into(),     Value::Str(h.impact.as_str().to_string()));
                 m.insert("message".into(),    Value::Str(h.message));
                 m.insert("suggestion".into(), Value::Str(h.suggestion));
-                Value::Dict(Box::new(m))
+                Value::Dict(crate::value::SharedDict::new(m))
             })
             .collect();
         Ok(Value::from(arr))
@@ -5982,7 +5984,7 @@ impl BuiltinFunctions {
             m.insert("severity".into(), Value::Str(issue.severity.as_str().to_string()));
             m.insert("line".into(),     Value::Number(issue.line as f64));
             m.insert("message".into(),  Value::Str(issue.message));
-            Value::Dict(Box::new(m))
+            Value::Dict(crate::value::SharedDict::new(m))
         }).collect();
 
         let changes_arr: Vec<Value> = result.all_changes.into_iter().map(|ch| {
@@ -5991,7 +5993,7 @@ impl BuiltinFunctions {
             m.insert("original".into(),    Value::Str(ch.original));
             m.insert("replacement".into(), Value::Str(ch.replacement));
             m.insert("reason".into(),      Value::Str(ch.reason));
-            Value::Dict(Box::new(m))
+            Value::Dict(crate::value::SharedDict::new(m))
         }).collect();
 
         let mut out = std::collections::HashMap::new();
@@ -6001,7 +6003,7 @@ impl BuiltinFunctions {
         out.insert("summary".into(),      Value::Str(result.summary));
         out.insert("changes".into(),      Value::from(changes_arr));
         out.insert("remaining".into(),    Value::from(final_issues_arr));
-        Ok(Value::Dict(Box::new(out)))
+        Ok(Value::Dict(crate::value::SharedDict::new(out)))
     }
 
     /// `watch(expr_name, value)` → Null
@@ -6587,7 +6589,7 @@ impl BuiltinFunctions {
 
     /// hash_map_new() → Dict
     fn hm_new(_args: &[Value]) -> Result<Value, VmError> {
-        Ok(Value::Dict(Box::new(std::collections::HashMap::new())))
+        Ok(Value::Dict(crate::value::SharedDict::new(std::collections::HashMap::new())))
     }
 
     /// hash_map_insert(map, key, value) → Dict
@@ -6602,11 +6604,11 @@ impl BuiltinFunctions {
                 format!("hash_map_insert: key must be Str or Number, got {:?}", other))),
         };
         let mut map = match &args[0] {
-            Value::Dict(d) => *d.clone(),
+            Value::Dict(d) => d.clone().to_map(),
             _ => return Err(VmError::runtime_error("hash_map_insert: first arg must be a Dict")),
         };
         map.insert(key, args[2].clone());
-        Ok(Value::Dict(Box::new(map)))
+        Ok(Value::Dict(crate::value::SharedDict::new(map)))
     }
 
     /// hash_map_get(map, key) → Value | Null
@@ -6624,7 +6626,7 @@ impl BuiltinFunctions {
             Value::Dict(d) => d,
             _ => return Err(VmError::runtime_error("hash_map_get: first arg must be a Dict")),
         };
-        Ok(map.get(&key).cloned().unwrap_or(Value::Null))
+        Ok(map.get(&key).unwrap_or(Value::Null))
     }
 
     /// Python `dict.get(key)` / `get(map, key[, default])`.
@@ -6658,7 +6660,7 @@ impl BuiltinFunctions {
         };
         Ok(map
             .get(&key)
-            .cloned()
+            
             .unwrap_or_else(|| args[2].clone()))
     }
 
@@ -6680,7 +6682,7 @@ impl BuiltinFunctions {
             }
         };
         let mut map = match &args[0] {
-            Value::Dict(d) => *d.clone(),
+            Value::Dict(d) => d.clone().to_map(),
             _ => {
                 return Err(VmError::runtime_error(
                     "setdefault: first argument must be a Dict".to_string(),
@@ -6694,7 +6696,7 @@ impl BuiltinFunctions {
             map.insert(key, def.clone());
             def
         };
-        Ok(Value::from(vec![Value::Dict(Box::new(map)), val]))
+        Ok(Value::from(vec![Value::Dict(crate::value::SharedDict::new(map)), val]))
     }
 
     /// hash_map_contains(map, key) → Bool
@@ -6727,11 +6729,11 @@ impl BuiltinFunctions {
                 format!("hash_map_remove: key must be Str or Number, got {:?}", other))),
         };
         let mut map = match &args[0] {
-            Value::Dict(d) => *d.clone(),
+            Value::Dict(d) => d.clone().to_map(),
             _ => return Err(VmError::runtime_error("hash_map_remove: first arg must be a Dict")),
         };
         map.remove(&key);
-        Ok(Value::Dict(Box::new(map)))
+        Ok(Value::Dict(crate::value::SharedDict::new(map)))
     }
 
     /// hash_map_size(map) → Number
@@ -6755,7 +6757,7 @@ impl BuiltinFunctions {
             Value::Dict(d) => d,
             _ => return Err(VmError::runtime_error("hash_map_keys: arg must be a Dict")),
         };
-        let mut keys: Vec<Value> = map.keys().map(|k| Value::Str(k.clone())).collect();
+        let mut keys: Vec<Value> = map.keys().into_iter().map(|k| Value::Str(k.clone())).collect();
         keys.sort_by(|a, b| {
             if let (Value::Str(sa), Value::Str(sb)) = (a, b) { sa.cmp(sb) }
             else { std::cmp::Ordering::Equal }
@@ -6773,9 +6775,9 @@ impl BuiltinFunctions {
             _ => return Err(VmError::runtime_error("hash_map_values: arg must be a Dict")),
         };
         // return values in sorted-key order for determinism
-        let mut pairs: Vec<(&String, &Value)> = map.iter().collect();
-        pairs.sort_by_key(|(k, _)| k.as_str());
-        let vals: Vec<Value> = pairs.into_iter().map(|(_, v)| v.clone()).collect();
+        let mut pairs: Vec<(String, Value)> = map.iter().collect();
+        pairs.sort_by(|a, b| a.0.cmp(&b.0));
+        let vals: Vec<Value> = pairs.into_iter().map(|(_, v)| v).collect();
         Ok(Value::from(vals))
     }
 
@@ -6958,13 +6960,13 @@ impl BuiltinFunctions {
                     )),
                 };
                 let to = match d.get("to") {
-                    Some(Value::Number(n)) => *n as usize,
+                    Some(Value::Number(n)) => n as usize,
                     _ => return Err(VmError::runtime_error(
                         "dijkstra: edge missing numeric 'to' field",
                     )),
                 };
                 let weight = match d.get("weight") {
-                    Some(Value::Number(n)) => *n as i64,
+                    Some(Value::Number(n)) => n as i64,
                     None => 1,
                     _ => return Err(VmError::runtime_error(
                         "dijkstra: edge 'weight' must be a Number",
@@ -11392,14 +11394,14 @@ The fact that you shared this means something. What's underneath it  what are 
                 dict.insert("success".to_string(), Value::Bool(true));
                 dict.insert("old".to_string(), Value::Integer(v as i64));
                 dict.insert("buf".to_string(), Value::Bytes(buf));
-                Ok(Value::Dict(Box::new(dict)))
+                Ok(Value::Dict(crate::value::SharedDict::new(dict)))
             }
             Err(v) => {
                 let mut dict = std::collections::HashMap::new();
                 dict.insert("success".to_string(), Value::Bool(false));
                 dict.insert("old".to_string(), Value::Integer(v as i64));
                 dict.insert("buf".to_string(), Value::Bytes(buf));
-                Ok(Value::Dict(Box::new(dict)))
+                Ok(Value::Dict(crate::value::SharedDict::new(dict)))
             }
         }
     }
@@ -11415,7 +11417,7 @@ The fact that you shared this means something. What's underneath it  what are 
         let mut dict = std::collections::HashMap::new();
         dict.insert("old".to_string(), Value::Integer(old as i64));
         dict.insert("buf".to_string(), Value::Bytes(buf));
-        Ok(Value::Dict(Box::new(dict)))
+        Ok(Value::Dict(crate::value::SharedDict::new(dict)))
     }
 
     // ── CPU control primitives ───────────────────────────────────────────────
@@ -11540,7 +11542,7 @@ The fact that you shared this means something. What's underneath it  what are 
                 dict.insert("edx".to_string(), Value::Number(0.0));
             }
         }
-        Ok(Value::Dict(Box::new(dict)))
+        Ok(Value::Dict(crate::value::SharedDict::new(dict)))
     }
 
     /// rdtsc()  simulated Read Time-Stamp Counter, returns monotonic nanosecond count
@@ -11828,7 +11830,7 @@ The fact that you shared this means something. What's underneath it  what are 
                 map.insert("added".to_string(),   Value::Number(added as f64));
                 map.insert("removed".to_string(), Value::Number(removed as f64));
                 map.insert("changed".to_string(), Value::Number(changed as f64));
-                Ok(Value::Dict(Box::new(map)))
+                Ok(Value::Dict(crate::value::SharedDict::new(map)))
             }
             Err(e) => Err(VmError::runtime_error(format!("kore_diff error: {}", e))),
         }
@@ -11897,7 +11899,7 @@ The fact that you shared this means something. What's underneath it  what are 
                 map.insert("max".to_string(),        Value::Number(stats.max_i64 as f64));
                 map.insert("min_str".to_string(),    Value::Str(stats.min_str.clone()));
                 map.insert("max_str".to_string(),    Value::Str(stats.max_str.clone()));
-                Ok(Value::Dict(Box::new(map)))
+                Ok(Value::Dict(crate::value::SharedDict::new(map)))
             }
             None => Err(VmError::runtime_error(format!("kore2_stats: column '{}' not found", col))),
         }

@@ -112,9 +112,9 @@ impl ClassifyResult {
             .iter()
             .map(|(k, v)| (k.clone(), Value::Number(*v)))
             .collect();
-        map.insert("all_scores".to_string(), Value::Dict(Box::new(scores)));
+        map.insert("all_scores".to_string(), Value::Dict(crate::value::SharedDict::new(scores)));
 
-        Value::Dict(Box::new(map))
+        Value::Dict(crate::value::SharedDict::new(map))
     }
 }
 

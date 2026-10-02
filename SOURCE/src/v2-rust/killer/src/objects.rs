@@ -71,7 +71,7 @@ impl ObjectManager {
         match object {
             Value::Object(obj_inst) => {
                 // Walk inheritance chain
-                let mut current_class = obj_inst.class_name.clone();
+                let mut current_class = obj_inst.class_name().clone();
                 let mut visited = std::collections::HashSet::new();
 
                 loop {
@@ -99,7 +99,7 @@ impl ObjectManager {
                     // No parent or method not found
                     // Fall back to field access for zero-arg calls
                     if args.is_empty() {
-                        if obj_inst.fields.contains_key(method_name) {
+                        if obj_inst.has_field(method_name) {
                             return Ok(None);
                         }
                     }

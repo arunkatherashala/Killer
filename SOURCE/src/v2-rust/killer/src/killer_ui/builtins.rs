@@ -54,7 +54,7 @@ pub fn builtin_ui_core_version(_args: &[Value]) -> Result<Value, VmError> {
         "label".to_string(),
         Value::Str(format!("killer_ui/{}", super::KILLER_UI_ENGINE_VERSION)),
     );
-    Ok(Value::Dict(Box::new(d)))
+    Ok(Value::Dict(crate::value::SharedDict::new(d)))
 }
 
 /// One headless frame from the canonical demo engine (`example_parallel`).
@@ -66,12 +66,12 @@ pub fn builtin_ui_headless_tick(_args: &[Value]) -> Result<Value, VmError> {
         cooked.insert(k, Value::Number(v));
     }
     let mut out = HashMap::new();
-    out.insert("cooked".to_string(), Value::Dict(Box::new(cooked)));
+    out.insert("cooked".to_string(), Value::Dict(crate::value::SharedDict::new(cooked)));
     out.insert(
         "events_pending".to_string(),
         Value::Number(frame.pending_events.len() as f64),
     );
-    Ok(Value::Dict(Box::new(out)))
+    Ok(Value::Dict(crate::value::SharedDict::new(out)))
 }
 
 /// Same as [`builtin_ui_headless_tick`] but returns one **JSON string** (`killer_ui_engine_version`, `cooked`, `events`, `events_pending`).
@@ -144,7 +144,7 @@ pub fn builtin_ui_render_screenshot(args: &[Value]) -> Result<Value, VmError> {
     let drawn = fb.pixels.chunks_exact(4).filter(|c| c[0] != 0 || c[1] != 0 || c[2] != 0).count();
     d.insert("drawn_pixels".to_string(), Value::Number(drawn as f64));
     d.insert("status".to_string(), Value::Str("rendered".to_string()));
-    Ok(Value::Dict(Box::new(d)))
+    Ok(Value::Dict(crate::value::SharedDict::new(d)))
 }
 
 // ========================================================================
@@ -603,7 +603,7 @@ mod tests {
         let Value::Dict(d) = v else {
             panic!("expected dict");
         };
-        assert_eq!(d.get("major"), Some(&Value::Number(2.0)));
+        assert_eq!(d.get("major"), Some(Value::Number(2.0)));
         assert!(matches!(d.get("label"), Some(Value::Str(s)) if s.starts_with("killer_ui/")));
     }
 
@@ -618,7 +618,7 @@ mod tests {
             panic!("expected cooked dict");
         };
         let sum = match c.get("sum").unwrap() {
-            Value::Number(n) => *n,
+            Value::Number(n) => n,
             _ => panic!("sum not a number"),
         };
         assert!((sum - 3.0).abs() < 1e-9);

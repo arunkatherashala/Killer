@@ -140,7 +140,7 @@ pub fn builtin_tcp_listener_new(args: &[Value]) -> Result<Value, VmError> {
                     // Return as object with methods
                     let mut obj = std::collections::HashMap::new();
                     obj.insert("__listener_ptr".to_string(), Value::Str(format!("{:p}", &listener)));
-                    Ok(Value::Dict(Box::new(obj)))
+                    Ok(Value::Dict(crate::value::SharedDict::new(obj)))
                 }
                 Err(e) => Err(VmError::runtime_error(e)),
             }
@@ -162,7 +162,7 @@ pub fn builtin_tcp_listener_accept(args: &[Value]) -> Result<Value, VmError> {
     // For now, return a mock stream
     let mut stream_obj = std::collections::HashMap::new();
     stream_obj.insert("remote_addr".to_string(), Value::Str("127.0.0.1:12345".to_string()));
-    Ok(Value::Dict(Box::new(stream_obj)))
+    Ok(Value::Dict(crate::value::SharedDict::new(stream_obj)))
 }
 
 pub fn builtin_tcp_stream_read(args: &[Value]) -> Result<Value, VmError> {

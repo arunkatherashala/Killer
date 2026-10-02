@@ -55,19 +55,19 @@ impl StackManager {
             let mut math_obj = std::collections::HashMap::new();
             math_obj.insert("PI".to_string(), Value::Number(std::f64::consts::PI));
             math_obj.insert("E".to_string(), Value::Number(std::f64::consts::E));
-            return Ok(Value::Dict(Box::new(math_obj)));
+            return Ok(Value::Dict(crate::value::SharedDict::new(math_obj)));
         }
         
         if name == "Physics" {
             let mut physics_obj = std::collections::HashMap::new();
             physics_obj.insert("G".to_string(), Value::Number(9.81));  // Gravitational constant
             physics_obj.insert("PI".to_string(), Value::Number(std::f64::consts::PI));
-            return Ok(Value::Dict(Box::new(physics_obj)));
+            return Ok(Value::Dict(crate::value::SharedDict::new(physics_obj)));
         }
 
         if name == "Array" {
             // Marker object for static helpers like Array.isArray(...)
-            return Ok(Value::Dict(Box::new(std::collections::HashMap::new())));
+            return Ok(Value::Dict(crate::value::SharedDict::new(std::collections::HashMap::new())));
         }
 
         // Walk up scope chain looking for the variable

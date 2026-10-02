@@ -16,6 +16,18 @@ pub enum Instruction {
     // Fast-path variable access using compile-time integer slot index.
     // Avoids string hashing on every Load/Store in hot loops.
     StoreSlot(u16),
+    /// Fast path for `slot = slot + <string term>`: expects `Add; StoreSlot(slot)` to follow.
+    /// If the slot and the top of stack are both strings, appends in place and skips those two.
+    AppendSlot(u16),
+    /// Fast path for property reads `obj.name`: must be followed by `CallMethodDynamic { name, 0 }`.
+    /// If the top of stack is an object with that field and no class defines a method called
+    /// `name`, replaces the object with the field value and skips the call.
+    GetField(String),
+    /// One step of `for var in iterable`. `iter` holds the iterable, `idx` the next index.
+    /// For an array: when `idx < len`, stores the element into `var`, advances `idx`, and jumps
+    /// to `body`; otherwise jumps to `exit`. Any other iterable falls through (ip+1) into the
+    /// generic compiled sequence, which does the same with `len` / `IndexRead`.
+    ForNext { iter: u16, idx: u16, var: String, body: usize, exit: usize },
     LoadSlot(u16),
     // Fused OPTIMIZED instructions for common patterns:
     //   AddSlotConst(slot, n)  = LoadSlot + ConstNum + Add + StoreSlot

@@ -159,7 +159,7 @@ pub fn format_response(response: &str) -> Value {
 
 /// Format error response
 pub fn format_error(error: &str) -> Value {
-    Value::Dict(Box::new({
+    Value::Dict(crate::value::SharedDict::new({
         let mut map = HashMap::new();
         map.insert("error".to_string(), Value::Str(error.to_string()));
         map.insert(

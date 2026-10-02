@@ -242,6 +242,162 @@ impl PartialEq for ObjectInstance {
     }
 }
 
+
+/// Reference-counted, interior-mutable dictionary. Cloning a `Value::Dict` shares storage, so a
+/// dict passed to a function or stored in two variables is the same dict (like arrays, Python and
+/// JS), and reading a dict variable is O(1) instead of a deep copy.
+#[derive(Clone)]
+pub struct SharedDict(Rc<RefCell<HashMap<String, Value>>>);
+
+impl SharedDict {
+    pub fn new(map: HashMap<String, Value>) -> Self {
+        SharedDict(Rc::new(RefCell::new(map)))
+    }
+    pub fn empty() -> Self {
+        Self::new(HashMap::new())
+    }
+    #[inline]
+    pub fn rc_ptr(&self) -> usize {
+        Rc::as_ptr(&self.0) as usize
+    }
+    #[inline]
+    pub fn get(&self, key: &str) -> Option<Value> {
+        self.0.borrow().get(key).cloned()
+    }
+    #[inline]
+    pub fn contains_key(&self, key: &str) -> bool {
+        self.0.borrow().contains_key(key)
+    }
+    #[inline]
+    pub fn insert(&self, key: String, value: Value) -> Option<Value> {
+        self.0.borrow_mut().insert(key, value)
+    }
+    pub fn remove(&self, key: &str) -> Option<Value> {
+        self.0.borrow_mut().remove(key)
+    }
+    pub fn clear(&self) {
+        self.0.borrow_mut().clear();
+    }
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.0.borrow().len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.0.borrow().is_empty()
+    }
+    /// Snapshot of the keys.
+    pub fn keys(&self) -> Vec<String> {
+        self.0.borrow().keys().cloned().collect()
+    }
+    /// Snapshot of the values.
+    pub fn values(&self) -> Vec<Value> {
+        self.0.borrow().values().cloned().collect()
+    }
+    /// Snapshot of the entries (safe to hold while the dict is modified).
+    pub fn iter(&self) -> std::vec::IntoIter<(String, Value)> {
+        self.0.borrow().iter().map(|(k, v)| (k.clone(), v.clone())).collect::<Vec<_>>().into_iter()
+    }
+    /// Copy of the underlying map (values themselves are shared handles where they are arrays/dicts).
+    pub fn to_map(&self) -> HashMap<String, Value> {
+        self.0.borrow().clone()
+    }
+    /// New, independent dict with the same entries.
+    pub fn copy(&self) -> SharedDict {
+        SharedDict::new(self.to_map())
+    }
+    pub fn extend<I: IntoIterator<Item = (String, Value)>>(&self, iter: I) {
+        self.0.borrow_mut().extend(iter);
+    }
+    pub fn borrow(&self) -> std::cell::Ref<'_, HashMap<String, Value>> {
+        self.0.borrow()
+    }
+    pub fn borrow_mut(&self) -> std::cell::RefMut<'_, HashMap<String, Value>> {
+        self.0.borrow_mut()
+    }
+}
+
+impl Debug for SharedDict {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        match self.0.try_borrow() {
+            Ok(m) => write!(f, "{:?}", *m),
+            Err(_) => write!(f, "{{..}}"),
+        }
+    }
+}
+
+impl PartialEq for SharedDict {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.0, &other.0) || *self.0.borrow() == *other.0.borrow()
+    }
+}
+
+impl From<HashMap<String, Value>> for SharedDict {
+    fn from(map: HashMap<String, Value>) -> Self {
+        SharedDict::new(map)
+    }
+}
+
+impl FromIterator<(String, Value)> for SharedDict {
+    fn from_iter<I: IntoIterator<Item = (String, Value)>>(iter: I) -> Self {
+        SharedDict::new(iter.into_iter().collect())
+    }
+}
+
+/// Reference-counted object instance: methods mutate the same object the caller holds.
+#[derive(Clone)]
+pub struct SharedObject(Rc<RefCell<ObjectInstance>>);
+
+impl SharedObject {
+    pub fn new(inst: ObjectInstance) -> Self {
+        SharedObject(Rc::new(RefCell::new(inst)))
+    }
+    #[inline]
+    pub fn rc_ptr(&self) -> usize {
+        Rc::as_ptr(&self.0) as usize
+    }
+    pub fn class_name(&self) -> String {
+        self.0.borrow().class_name.clone()
+    }
+    pub fn get_field(&self, name: &str) -> Option<Value> {
+        self.0.borrow().fields.get(name).cloned()
+    }
+    pub fn has_field(&self, name: &str) -> bool {
+        self.0.borrow().fields.contains_key(name)
+    }
+    pub fn set_field(&self, name: String, value: Value) {
+        self.0.borrow_mut().fields.insert(name, value);
+    }
+    /// Copy of the fields map.
+    pub fn fields(&self) -> HashMap<String, Value> {
+        self.0.borrow().fields.clone()
+    }
+    /// Independent copy of the whole instance.
+    pub fn snapshot(&self) -> ObjectInstance {
+        self.0.borrow().clone()
+    }
+    pub fn borrow(&self) -> std::cell::Ref<'_, ObjectInstance> {
+        self.0.borrow()
+    }
+    pub fn borrow_mut(&self) -> std::cell::RefMut<'_, ObjectInstance> {
+        self.0.borrow_mut()
+    }
+}
+
+impl Debug for SharedObject {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        match self.0.try_borrow() {
+            Ok(o) => write!(f, "{:?}", *o),
+            Err(_) => write!(f, "<object>"),
+        }
+    }
+}
+
+impl PartialEq for SharedObject {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.0, &other.0) || *self.0.borrow() == *other.0.borrow()
+    }
+}
+
 // v2.2: Async future handle -----------------------------------------------
 /// Newtype wrapper so Value can still derive PartialEq (futures are never equal)
 #[derive(Debug, Clone)]
@@ -261,8 +417,8 @@ pub enum Value {
     Bool(bool),
     Str(String),
     Array(SharedArray),
-    Dict(Box<HashMap<String, Value>>),
-    Object(Box<ObjectInstance>),
+    Dict(SharedDict),
+    Object(SharedObject),
     Class(Box<ClassDef>),
     Function {
         params: Vec<String>,
@@ -355,7 +511,7 @@ impl Display for Value {
                 }
                 write!(f, "}}")
             }
-            Value::Object(obj) => write!(f, "<{} instance>", obj.class_name),
+            Value::Object(obj) => write!(f, "<{} instance>", obj.class_name()),
             Value::Class(class) => write!(f, "<class {}>", class.name),
             Value::Function { params, .. } => write!(f, "<function({})>", params.join(", ")),
             Value::Generator(_) => write!(f, "<generator>"),

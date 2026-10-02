@@ -332,7 +332,7 @@ pub fn builtin_phone_get_call_info(args: &[Value]) -> Result<Value, VmError> {
         dict.insert("app".into(), Value::Str(String::new()));
     }
 
-    Ok(Value::Dict(Box::new(dict)))
+    Ok(Value::Dict(crate::value::SharedDict::new(dict)))
 }
 
 /// phone_set_auto_record(bool) → null

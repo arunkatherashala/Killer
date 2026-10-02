@@ -572,7 +572,7 @@ pub fn builtin_secure_check_integrity(args: &[Value]) -> Result<Value, VmError> 
         dict.insert("platform".into(), Value::Str("desktop".to_string()));
     }
 
-    Ok(Value::Dict(Box::new(dict)))
+    Ok(Value::Dict(crate::value::SharedDict::new(dict)))
 }
 
 /// evidence_hash(recording_data) → dict {sha256, timestamp, chain_position}
@@ -615,7 +615,7 @@ pub fn builtin_evidence_hash(args: &[Value]) -> Result<Value, VmError> {
     dict.insert("chain_hash".into(), Value::Str(chain_hash));
     dict.insert("chain_position".into(), Value::Number(position as f64));
 
-    Ok(Value::Dict(Box::new(dict)))
+    Ok(Value::Dict(crate::value::SharedDict::new(dict)))
 }
 
 /// secure_wipe_recordings() → number (count of files wiped)

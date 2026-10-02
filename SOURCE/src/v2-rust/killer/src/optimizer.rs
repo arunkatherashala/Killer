@@ -537,6 +537,10 @@ fn fuse_slot_patterns(instructions: &[Instruction]) -> (Vec<Instruction>, Vec<us
             Instruction::TailCall { target, .. } => {
                 *target = old_to_new[(*target).min(n)];
             }
+            Instruction::ForNext { body, exit, .. } => {
+                *body = old_to_new[(*body).min(n)];
+                *exit = old_to_new[(*exit).min(n)];
+            }
             Instruction::SpawnCallDirect { target, .. } => {
                 // Spawn targets also shift when earlier instructions are fused
                 *target = old_to_new[(*target).min(n)];

@@ -313,7 +313,18 @@ pub fn compile_killer_subset(source: &str) -> Result<Program, VmError> {
     // already called it explicitly.  This matches the common pattern of Killer
     // programs that define kfn main() without an explicit call at the bottom.
     if let Some(meta) = state.functions.get("main").cloned() {
-        if meta.arity == 0 {
+        // Function bodies are laid out behind a `Jump` that skips them; calls to `main` from
+        // inside its own body (recursion) do not count as an explicit top-level call.
+        let main_end = match meta.start.checked_sub(1).and_then(|i| state.instructions.get(i)) {
+            Some(Instruction::Jump(end)) => *end,
+            _ => usize::MAX,
+        };
+        let outside_main = |i: usize| !(i >= meta.start && i < main_end);
+        let called_explicitly = state.pending_calls.iter().any(|p| p.function_name == "main" && outside_main(p.instruction_index))
+            || state.instructions.iter().enumerate().any(|(i, ins)| {
+                matches!(ins, Instruction::Call { target, .. } if *target == meta.start) && outside_main(i)
+            });
+        if meta.arity == 0 && !called_explicitly {
             state.instructions.push(Instruction::Call {
                 target: meta.start,
                 arg_count: 0,
@@ -2524,27 +2535,48 @@ fn compile_for_each_line_statement(
     *cursor = end_phys + 1;
     expect_open_brace(lines, cursor, line_no, "for")?;
 
-    // Unique names to avoid collision with nested loops
-    let iter_var = format!("__for_iter_{}", state.instructions.len());
-    let idx_var  = format!("__for_idx_{}",  state.instructions.len());
+    // The hidden iterator and index live in frame slots (fast); only the user-visible loop
+    // variable stays a named binding so closures can still capture it.
+    let iter_slot = context.next_slot;
+    let idx_slot = iter_slot.saturating_add(1);
+    context.next_slot = idx_slot.saturating_add(1);
 
     // Evaluate the iterable once and store it
     compile_expr_str(iter_expr, line_no, state, context)?;
-    state.instructions.push(Instruction::Store(iter_var.clone()));
+    state.instructions.push(Instruction::StoreSlot(iter_slot));
 
     // idx = 0
     state.instructions.push(Instruction::ConstNum(0.0));
-    state.instructions.push(Instruction::Store(idx_var.clone()));
+    state.instructions.push(Instruction::StoreSlot(idx_slot));
 
+    // `continue` jumps here, so the step must advance the index itself.
     let loop_start = state.instructions.len();
+    let for_next_idx = loop_start;
+    state.instructions.push(Instruction::ForNext {
+        iter: iter_slot,
+        idx: idx_slot,
+        var: var_name.to_string(),
+        body: usize::MAX,
+        exit: usize::MAX,
+    });
 
-    // while idx < len(iter)
-    state.instructions.push(Instruction::Load(idx_var.clone()));
-    state.instructions.push(Instruction::Load(iter_var.clone()));
+    // Generic path (non-array iterables): while idx < len(iter) { var = iter[idx]; idx += 1 }
+    state.instructions.push(Instruction::LoadSlot(idx_slot));
+    state.instructions.push(Instruction::LoadSlot(iter_slot));
     state.instructions.push(Instruction::CallBuiltin("len".to_string(), 1));
     state.instructions.push(Instruction::Lt);
     let jump_false_idx = state.instructions.len();
     state.instructions.push(Instruction::JumpIfFalse(usize::MAX));
+    state.instructions.push(Instruction::LoadSlot(iter_slot));
+    state.instructions.push(Instruction::LoadSlot(idx_slot));
+    state.instructions.push(Instruction::IndexRead);
+    state.instructions.push(Instruction::StoreLocal(var_name.to_string()));
+    state.instructions.push(Instruction::LoadSlot(idx_slot));
+    state.instructions.push(Instruction::ConstNum(1.0));
+    state.instructions.push(Instruction::Add);
+    state.instructions.push(Instruction::StoreSlot(idx_slot));
+
+    let body_start = state.instructions.len();
 
     context.loop_stack.push(LoopContext {
         loop_start,
@@ -2552,24 +2584,16 @@ fn compile_for_each_line_statement(
         scope_depth_at_start: context.runtime_scope_depth,
     });
 
-    // var = iter[idx]
-    state.instructions.push(Instruction::Load(iter_var.clone()));
-    state.instructions.push(Instruction::Load(idx_var.clone()));
-    state.instructions.push(Instruction::IndexRead);
-    state.instructions.push(Instruction::Store(var_name.to_string()));
-
     // body
     compile_block(lines, cursor, state, context, true, true)?;
-
-    // idx = idx + 1
-    state.instructions.push(Instruction::Load(idx_var.clone()));
-    state.instructions.push(Instruction::ConstNum(1.0));
-    state.instructions.push(Instruction::Add);
-    state.instructions.push(Instruction::Store(idx_var.clone()));
 
     state.instructions.push(Instruction::Jump(loop_start));
     let loop_end = state.instructions.len();
     state.instructions[jump_false_idx] = Instruction::JumpIfFalse(loop_end);
+    if let Instruction::ForNext { body, exit, .. } = &mut state.instructions[for_next_idx] {
+        *body = body_start;
+        *exit = loop_end;
+    }
 
     if let Some(loop_ctx) = context.loop_stack.pop() {
         for break_idx in loop_ctx.break_jumps {
@@ -2712,7 +2736,17 @@ fn compile_simple_statement(
     }
 
     if parse_call_expr(stmt).is_some() {
+        let before = state.instructions.len();
         compile_expr_str(stmt, line_no, state, context)?;
+        // A builtin call always pushes exactly one result. As a statement inside a loop that
+        // value would otherwise pile up on the stack every iteration (memory growth, slower GC
+        // root scans), so discard it. User functions may push nothing, so they are left alone.
+        if !context.loop_stack.is_empty()
+            && state.instructions.len() > before
+            && matches!(state.instructions.last(), Some(Instruction::CallBuiltin(_, _)))
+        {
+            state.instructions.push(Instruction::Pop);
+        }
         return Ok(());
     }
 
@@ -2778,6 +2812,19 @@ fn compile_simple_statement(
                 .instructions
                 .push(Instruction::Store(format!("arg{}", param_index)));
             return Ok(());
+        }
+
+        // `s = s + "lit" + str(x)`: append to the string in place instead of copying it each time.
+        if let Some(&slot) = context.slot_map.get(name) {
+            if let Some(terms) = string_append_terms(name, expr) {
+                for term in terms {
+                    compile_expr_str(term, line_no, state, context)?;
+                    state.instructions.push(Instruction::AppendSlot(slot));
+                    state.instructions.push(Instruction::Add);
+                    state.instructions.push(Instruction::StoreSlot(slot));
+                }
+                return Ok(());
+            }
         }
 
         compile_expr_str(expr, line_no, state, context)?;
@@ -3300,6 +3347,7 @@ fn compile_expr_str(
         let field = field.trim();
         if is_valid_name(field) {
             state.instructions.push(Instruction::Load("this".to_string()));
+            state.instructions.push(Instruction::GetField(field.to_string()));
             state.instructions.push(Instruction::CallMethodDynamic {
                 method_name: field.to_string(),
                 arg_count: 0,
@@ -3336,6 +3384,11 @@ fn compile_expr_str(
         // Compile arguments
         for arg in &args {
             compile_expr_str(arg, line_no, state, context)?;
+        }
+        // `obj.name` without parentheses is a property read: try the field fast path first.
+        let after_receiver = expr.trim().get(receiver.len()..).unwrap_or("");
+        if args.is_empty() && !after_receiver.contains('(') {
+            state.instructions.push(Instruction::GetField(method_name.to_string()));
         }
         state.instructions.push(Instruction::CallMethodDynamic {
             method_name: method_name.to_string(),
@@ -4048,6 +4101,90 @@ fn find_assignment_equals(stmt: &str) -> Option<usize> {
         }
     }
     None
+}
+
+/// For `name + "a" + str(x)` return the terms after `name` when every term is statically a
+/// string (a plain string literal or a `str(...)` call). Anything else returns `None`, so numeric
+/// `total = total + i` and mixed-type chains keep their normal evaluation order and semantics.
+fn string_append_terms<'a>(name: &str, expr: &'a str) -> Option<Vec<&'a str>> {
+    let rest = expr.trim().strip_prefix(name)?;
+    if rest.chars().next().map_or(false, |c| c.is_alphanumeric() || c == '_') {
+        return None;
+    }
+    let rest = rest.trim_start().strip_prefix('+')?;
+    if rest.starts_with('+') || rest.starts_with('=') {
+        return None;
+    }
+    let mut terms: Vec<&str> = Vec::new();
+    let mut depth = 0i32;
+    let mut quote: Option<char> = None;
+    let mut escaped = false;
+    let mut start = 0usize;
+    for (i, c) in rest.char_indices() {
+        if let Some(q) = quote {
+            if escaped {
+                escaped = false;
+            } else if c == '\\' {
+                escaped = true;
+            } else if c == q {
+                quote = None;
+            }
+            continue;
+        }
+        match c {
+            '"' | '\'' => quote = Some(c),
+            '(' | '[' | '{' => depth += 1,
+            ')' | ']' | '}' => depth -= 1,
+            '+' if depth == 0 => {
+                terms.push(rest[start..i].trim());
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    terms.push(rest[start..].trim());
+    if terms.iter().all(|t| is_static_string_term(t)) { Some(terms) } else { None }
+}
+
+fn is_static_string_term(term: &str) -> bool {
+    let chars: Vec<char> = term.chars().collect();
+    if chars.len() >= 2 && chars[0] == '"' && chars[chars.len() - 1] == '"' {
+        let mut escaped = false;
+        for (i, c) in chars.iter().enumerate().skip(1) {
+            if escaped {
+                escaped = false;
+            } else if *c == '\\' {
+                escaped = true;
+            } else if *c == '"' {
+                return i == chars.len() - 1; // the first unescaped quote must be the last char
+            }
+        }
+        return false;
+    }
+    if term.starts_with("str(") && term.ends_with(')') {
+        let mut depth = 0i32;
+        let mut quote: Option<char> = None;
+        for (i, c) in chars.iter().enumerate().skip(3) {
+            if let Some(q) = quote {
+                if *c == q {
+                    quote = None;
+                }
+                continue;
+            }
+            match c {
+                '"' | '\'' => quote = Some(*c),
+                '(' => depth += 1,
+                ')' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return i == chars.len() - 1;
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    false
 }
 
 fn split_assignment(stmt: &str) -> Option<(&str, &str)> {

@@ -437,12 +437,12 @@ pub fn builtin_mic_record_start(args: &[Value]) -> Result<Value, VmError> {
     let source = if !args.is_empty() {
         if let Value::Dict(dict) = &args[0] {
             if let Some(Value::Str(src_name)) = dict.get("source") {
-                AudioSource::from_name(src_name).unwrap_or(AudioSource::VoiceCommunication)
+                AudioSource::from_name(&src_name).unwrap_or(AudioSource::VoiceCommunication)
             } else {
                 AudioSource::VoiceCommunication
             }
         } else if let Value::Str(src_name) = &args[0] {
-            AudioSource::from_name(src_name).unwrap_or(AudioSource::VoiceCommunication)
+            AudioSource::from_name(&src_name).unwrap_or(AudioSource::VoiceCommunication)
         } else {
             AudioSource::VoiceCommunication
         }
@@ -544,7 +544,7 @@ pub fn builtin_mic_status(args: &[Value]) -> Result<Value, VmError> {
     dict.insert("recording".into(), Value::Bool(!mgr.active_streams.is_empty()));
     dict.insert("count".into(), Value::Number(mgr.active_streams.len() as f64));
     dict.insert("source".into(), Value::Str(mgr.active_source.name().into()));
-    Ok(Value::Dict(Box::new(dict)))
+    Ok(Value::Dict(crate::value::SharedDict::new(dict)))
 }
 
 /// mic_list_sources() → array of source name strings
