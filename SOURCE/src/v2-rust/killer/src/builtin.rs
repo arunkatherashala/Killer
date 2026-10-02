@@ -42,7 +42,7 @@ unsafe fn libc_mprotect(addr: *mut u8, length: usize, prot: i32) -> i32 {
 }
 
 // ── Pure Rust SHA-256 (zero external deps) ───────────────────────────────────
-fn sha256_digest(data: &[u8]) -> [u8; 32] {
+pub(crate) fn sha256_digest(data: &[u8]) -> [u8; 32] {
     const K: [u32; 64] = [
         0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
         0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
@@ -870,6 +870,9 @@ impl BuiltinFunctions {
             // hash_map_values(map)               → Array of values
             // insert(map, key, value)            → Dict (friendly alias)
             "hash_map_new"      => Self::hm_new(args),
+            "insert" if matches!(args.first(), Some(Value::Array(_))) => {
+                return crate::lang_builtins::call("insert", args).expect("insert is owned by lang_builtins");
+            }
             "hash_map_insert" | "insert" => Self::hm_insert(args),
             "hash_map_get"      => Self::hm_get(args),
             // Python-style dict: get(map, key[, default]), setdefault(map, key, default) → [newMap, value]
@@ -1244,6 +1247,9 @@ impl BuiltinFunctions {
             "kore_model_free"    => Self::builtin_kore_model_free(args),
 
             _ => {
+                if let Some(result) = crate::lang_builtins::call(name, args) {
+                    return result;
+                }
                 let all_builtins: &[&str] = &[
                     "print", "println", "len", "type", "str", "int", "float", "bool",
                     "push", "pop", "append", "slice", "sort", "reverse", "keys", "values",
@@ -1313,7 +1319,9 @@ impl BuiltinFunctions {
         match &args[0] {
             Value::Array(arr) => Ok(Value::Number(arr.len() as f64)),
             Value::Dict(dict) => Ok(Value::Number(dict.len() as f64)),
-            Value::Str(s) => Ok(Value::Number(s.len() as f64)),
+            Value::Str(s) => Ok(Value::Number(crate::lang_builtins::char_len(s) as f64)),
+            Value::Set(set) => Ok(Value::Number(set.len() as f64)),
+            Value::Bytes(b) => Ok(Value::Number(b.len() as f64)),
             _ => Err(VmError::runtime_error(
                 format!("length expects array, dict, or string, got {}", args[0]),
             )),
@@ -1804,7 +1812,7 @@ impl BuiltinFunctions {
         }
         match &args[0] {
             Value::Array(a) => Ok(Value::Array(a.deep_copy())),
-            Value::Dict(d) => Ok(Value::Dict(d.clone())),
+            Value::Dict(d) => Ok(Value::Dict(d.copy())),
             _ => Err(VmError::runtime_error(
                 "copy() expects an array or dict".to_string(),
             )),
@@ -3879,7 +3887,7 @@ impl BuiltinFunctions {
 
         // v3.0: Simulate server listening
         // In v3.1+, this would block on actual socket
-        let mut result = server_dict.clone();
+        let result = server_dict.copy();
         result.insert("running".to_string(), Value::Bool(true));
         
         Ok(Value::Dict(result))
@@ -4138,7 +4146,7 @@ impl BuiltinFunctions {
             Value::Dict(ws_dict) => {
                 // Simulate connection for v3.0
                 if ws_dict.contains_key("url") {
-                    let mut result = ws_dict.clone();
+                    let result = ws_dict.copy();
                     result.insert("state".to_string(), Value::Str("connected".to_string()));
                     Ok(Value::Dict(result))
                 } else {
@@ -4212,7 +4220,7 @@ impl BuiltinFunctions {
         match &args[0] {
             Value::Dict(ws_dict) => {
                 // Simulate disconnection for v3.0
-                let mut result = ws_dict.clone();
+                let result = ws_dict.copy();
                 result.insert("state".to_string(), Value::Str("disconnected".to_string()));
                 Ok(Value::Dict(result))
             }

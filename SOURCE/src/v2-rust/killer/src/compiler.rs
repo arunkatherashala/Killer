@@ -5603,6 +5603,11 @@ fn patch_pending_calls(state: &mut CompilerState) -> Result<(), VmError> {
         // Native GGUF inference
         "llm_chat", "llm_ask", "llm_info", "llm_complete", "llm_embed",
         "ffi_open", "ffi_call", "ffi_close", "ffi_alloc", "ffi_free", "ffi_poke", "ffi_peek",
+        "ord", "chr", "pad_left", "pad_right", "repeat", "strip", "lstrip", "rstrip", "startsWith", "endsWith",
+        "base64_encode", "base64_decode", "hmac_sha256", "float", "bool", "log", "log2", "log10", "exp", "cbrt",
+        "trunc", "sign", "atan2", "hypot", "asin", "acos", "atan", "sinh", "cosh", "tanh", "degrees", "radians",
+        "gcd", "lcm", "mean", "median", "variance", "stdev", "pvariance", "pstdev", "env", "args", "exit",
+        "sleep", "assert", "set", "delete", "insert",
         "uncertain", "unc_value", "unc_margin", "unc_lo", "unc_hi", "gauss", "unc_sigma", "prob_gt", "prob_lt",
         // Ghost Agent (web search + local LLM)
         "ghost_ask",

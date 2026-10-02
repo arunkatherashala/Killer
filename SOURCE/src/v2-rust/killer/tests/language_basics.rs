@@ -349,3 +349,9 @@ fn comprehensions_support_destructuring_and_several_clauses() {
     let src = "pairs = [[1, 2], [3, 4]]\nprintln([a + b for a, b in pairs])\nprintln([[a, b] for a in range(2) for b in range(3) if a < b])\nm = [[1, 2], [3, 4], [5, 6]]\nprintln([c for row in m for c in row])\nprintln([c * 2 for row in m if len(row) == 2 for c in row if c > 2])\nprintln([i for i in range(10) if i % 2 == 0 if i > 3])\nprintln([[c * 2 for c in row] for row in m])\n";
     assert_eq!(run(src), "[3, 7]\n[[0, 1], [0, 2], [1, 2]]\n[1, 2, 3, 4, 5, 6]\n[6, 8, 10, 12]\n[4, 6, 8]\n[[2, 4], [6, 8], [10, 12]]");
 }
+
+#[test]
+fn everyday_builtins_are_callable_from_scripts() {
+    let src = "println(ord(\"a\"))\nprintln(chr(66))\nprintln(pad_left(\"7\", 3, \"0\"))\nprintln(gcd(12, 18))\nprintln(lcm(4, 6))\nprintln(mean([1, 2, 3, 4]))\nprintln(median([3, 1, 2]))\nprintln(log2(8))\nprintln(bool(\"\"))\nprintln(base64_encode(\"foobar\"))\nprintln(base64_decode(\"Zm9vYmFy\"))\nprintln(len(set([1, 2, 2, 3])))\nprintln(float(\"2.5\"))\nxs = [1, 2, 3]\ninsert(xs, 0, 9)\nprintln(xs)\n";
+    assert_eq!(run(src), "97\nB\n007\n6\n12\n2.5\n2\n3\nfalse\nZm9vYmFy\nfoobar\n3\n2.5\n[9, 1, 2, 3]");
+}

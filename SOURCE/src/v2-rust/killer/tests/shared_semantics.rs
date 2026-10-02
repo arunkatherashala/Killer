@@ -69,3 +69,9 @@ fn a_method_with_the_same_name_as_a_property_read_still_wins() {
     let src = "class A {\n  fn init() {\n    this.size = 99\n  }\n  fn size() {\n    return 5\n  }\n}\na = new A()\nprintln(a.size())\n";
     assert_eq!(run(src), "5");
 }
+
+#[test]
+fn copy_makes_an_independent_dict_and_array() {
+    let src = "d = {\"a\": 1}\ne = copy(d)\ne[\"a\"] = 99\ne[\"b\"] = 2\nprintln(d[\"a\"])\nprintln(len(keys(d)))\nxs = [1, 2]\nys = copy(xs)\nys[0] = 7\nprintln(xs[0])\n";
+    assert_eq!(run(src), "1\n1\n1");
+}

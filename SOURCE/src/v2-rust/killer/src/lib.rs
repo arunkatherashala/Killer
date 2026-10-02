@@ -338,7 +338,8 @@ pub mod time_machine;
 
 // -- LLM Integration (native, zero external deps) -----------------------------
 pub mod exprsplit;             // top-level operator splitting for the expression parser
-pub mod sugar;                 // surface syntax sugar rewritten to core Killer before compiling
+pub mod lang_builtins;         // everyday builtins: ord/chr, padding, logs, stats, base64, sets
+pub mod sugar;               // surface syntax sugar rewritten to core Killer before compiling
 pub mod uncertain;             // interval arithmetic and three-valued comparison for `believe` values
 
 pub mod fast_hash;             // FNV hasher for VM scope maps
