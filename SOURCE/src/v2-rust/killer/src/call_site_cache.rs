@@ -37,9 +37,21 @@ pub struct CachedFunction {
     pub hits: usize,
 }
 
+/// The most recent successful method lookup, checked by plain string comparison (no allocation,
+/// no hashing) before the map: hot call sites call the same method over and over.
+#[derive(Debug)]
+struct LastMethodHit {
+    class_name: String,
+    method_name: String,
+    argument_count: usize,
+    start: usize,
+    params: Vec<String>,
+}
+
 /// Call site cache for method and function dispatch
 #[derive(Debug)]
 pub struct CallSiteCache {
+    last_method: Option<LastMethodHit>,
     method_cache: HashMap<(String, String), CachedMethod>,
     function_cache: HashMap<String, CachedFunction>,
     total_method_calls: usize,
@@ -52,6 +64,7 @@ impl CallSiteCache {
     /// Create a new call site cache
     pub fn new() -> Self {
         CallSiteCache {
+            last_method: None,
             method_cache: HashMap::new(),
             function_cache: HashMap::new(),
             total_method_calls: 0,
@@ -67,30 +80,42 @@ impl CallSiteCache {
     pub fn lookup_method(&mut self, class_name: &str, method_name: &str, arg_count: usize) -> Option<(usize, &[String])> {
         self.total_method_calls += 1;
 
-        let key = (class_name.to_string(), method_name.to_string());
+        // Fast path: same method as the previous successful lookup.
+        let repeat = matches!(&self.last_method, Some(l)
+            if l.argument_count == arg_count && l.class_name == class_name && l.method_name == method_name);
+        if repeat {
+            self.method_cache_hits += 1;
+            let l = self.last_method.as_ref()?;
+            return Some((l.start, l.params.as_slice()));
+        }
 
+        let key = (class_name.to_string(), method_name.to_string());
+        let mut found: Option<(usize, Vec<String>)> = None;
         if let Some(cached) = self.method_cache.get_mut(&key) {
             if cached.argument_count == arg_count {
                 cached.hits += 1;
                 self.method_cache_hits += 1;
+                if let Some(start) = cached.bytecode_start {
+                    found = Some((start, cached.param_names.clone().unwrap_or_default()));
+                }
             }
         }
-
-        self.method_cache.get(&key).and_then(|cached| {
-            if cached.argument_count != arg_count {
-                return None;
-            }
-            let start = cached.bytecode_start?;
-            match cached.param_names.as_ref() {
-                Some(params) => Some((start, params.as_slice())),
-                None => Some((start, &[] as &[String])),
-            }
-        })
+        let (start, params) = found?;
+        self.last_method = Some(LastMethodHit {
+            class_name: class_name.to_string(),
+            method_name: method_name.to_string(),
+            argument_count: arg_count,
+            start,
+            params,
+        });
+        let l = self.last_method.as_ref()?;
+        Some((l.start, l.params.as_slice()))
     }
 
     /// Record a method call site (without full resolution data).
     /// For full inline caching, use `store_method_resolution` instead.
     pub fn record_method(&mut self, class_name: String, method_name: String, arg_count: usize) {
+        self.last_method = None;
         let key = (class_name.clone(), method_name.clone());
         self.method_cache.insert(key, CachedMethod {
             class_name,
@@ -112,6 +137,7 @@ impl CallSiteCache {
         bytecode_start: usize,
         params: Vec<String>,
     ) {
+        self.last_method = None;
         let key = (class_name.to_string(), method_name.to_string());
         let arg_count = params.len();
         self.method_cache.insert(key, CachedMethod {
@@ -134,6 +160,7 @@ impl CallSiteCache {
         bytecode_start: usize,
         param_count: usize,
     ) {
+        self.last_method = None;
         let key = (class_name.to_string(), method_name.to_string());
         self.method_cache.insert(key, CachedMethod {
             class_name: class_name.to_string(),
@@ -157,6 +184,7 @@ impl CallSiteCache {
 
     /// Remove all cached entries for a given class (needed when classes are redefined).
     pub fn invalidate_class(&mut self, class_name: &str) {
+        self.last_method = None;
         self.method_cache.retain(|_, cached| cached.class_name != class_name);
     }
 
@@ -217,6 +245,7 @@ impl CallSiteCache {
 
     /// Clear all caches (for class redefinition)
     pub fn clear(&mut self) {
+        self.last_method = None;
         self.method_cache.clear();
         self.function_cache.clear();
         self.total_method_calls = 0;

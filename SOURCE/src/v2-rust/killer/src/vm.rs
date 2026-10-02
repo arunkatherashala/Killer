@@ -2223,7 +2223,7 @@ impl VirtualMachine {
                             }
                         }
                         (Value::Dict(mut dict), Value::Str(key)) => {
-                            dict.insert(key.clone(), value);
+                            dict.set(key, value);
                             self.store_var(name, Value::Dict(dict))?;
                         }
                         (Value::Dict(mut dict), idx) => {
@@ -2271,7 +2271,7 @@ impl VirtualMachine {
                             }
                         }
                         (Value::Dict(mut dict), Value::Str(key)) => {
-                            dict.insert(key.clone(), value);
+                            dict.set(key, value);
                             let frame = self.locals_stack.last_mut().ok_or_else(|| {
                                 VmError::runtime_error("No locals frame".to_string())
                             })?;
@@ -3721,7 +3721,7 @@ impl VirtualMachine {
 
                                 // Store parameters
                                 for (index, arg) in args.into_iter().enumerate() {
-                                    self.store_local(&format!("arg{index}"), arg);
+                                    if index < ARG_NAMES.len() { self.store_local(ARG_NAMES[index], arg); } else { self.store_local_owned(format!("arg{index}"), arg); }
                                 }
 
                                 // Jump to method
@@ -4043,7 +4043,7 @@ impl VirtualMachine {
                                 self.locals_stack.push(Vec::new());  // new locals frame for static method
 
                                 for (index, arg) in args.into_iter().enumerate() {
-                                    self.store_local(&format!("arg{index}"), arg);
+                                    if index < ARG_NAMES.len() { self.store_local(ARG_NAMES[index], arg); } else { self.store_local_owned(format!("arg{index}"), arg); }
                                 }
 
                                 self.ip = bytecode_start;
@@ -5332,7 +5332,13 @@ impl VirtualMachine {
             }
         }
         if let Some(scope) = self.scopes.last_mut() {
-            scope.insert(name.to_string(), value);
+            // update an existing binding in place: no key allocation (hot in `for` loops and calls)
+            match scope.get_mut(name) {
+                Some(slot) => *slot = value,
+                None => {
+                    scope.insert(name.to_string(), value);
+                }
+            }
         }
     }
 
@@ -5344,7 +5350,12 @@ impl VirtualMachine {
             }
         }
         if let Some(scope) = self.scopes.last_mut() {
-            scope.insert(name, value);
+            match scope.get_mut(name.as_str()) {
+                Some(slot) => *slot = value,
+                None => {
+                    scope.insert(name, value);
+                }
+            }
         }
     }
 
@@ -5842,7 +5853,7 @@ impl VirtualMachine {
                                     }
                                 }
                                 (Value::Dict(dict), Value::Str(key)) => {
-                                    dict.insert(key.clone(), val);
+                                    dict.set(key, val);
                                 }
                                 _ => {}
                             }
@@ -5870,7 +5881,7 @@ impl VirtualMachine {
                                     }
                                 }
                                 (Value::Dict(mut dict), Value::Str(key)) => {
-                                    dict.insert(key.clone(), val);
+                                    dict.set(key, val);
                                     if let Some(frame) = self.locals_stack.last_mut() {
                                         if si >= frame.len() {
                                             frame.resize(si + 1, Value::Null);

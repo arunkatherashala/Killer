@@ -247,14 +247,14 @@ impl PartialEq for ObjectInstance {
 /// dict passed to a function or stored in two variables is the same dict (like arrays, Python and
 /// JS), and reading a dict variable is O(1) instead of a deep copy.
 #[derive(Clone)]
-pub struct SharedDict(Rc<RefCell<HashMap<String, Value>>>);
+pub struct SharedDict(Rc<RefCell<crate::fast_hash::FastMap<String, Value>>>);
 
 impl SharedDict {
     pub fn new(map: HashMap<String, Value>) -> Self {
-        SharedDict(Rc::new(RefCell::new(map)))
+        SharedDict(Rc::new(RefCell::new(map.into_iter().collect())))
     }
     pub fn empty() -> Self {
-        Self::new(HashMap::new())
+        SharedDict(Rc::new(RefCell::new(Default::default())))
     }
     #[inline]
     pub fn rc_ptr(&self) -> usize {
@@ -271,6 +271,17 @@ impl SharedDict {
     #[inline]
     pub fn insert(&self, key: String, value: Value) -> Option<Value> {
         self.0.borrow_mut().insert(key, value)
+    }
+    /// Set `key`, reusing the existing key allocation when it is already present.
+    #[inline]
+    pub fn set(&self, key: &str, value: Value) {
+        let mut m = self.0.borrow_mut();
+        match m.get_mut(key) {
+            Some(slot) => *slot = value,
+            None => {
+                m.insert(key.to_string(), value);
+            }
+        }
     }
     pub fn remove(&self, key: &str) -> Option<Value> {
         self.0.borrow_mut().remove(key)
@@ -299,7 +310,7 @@ impl SharedDict {
     }
     /// Copy of the underlying map (values themselves are shared handles where they are arrays/dicts).
     pub fn to_map(&self) -> HashMap<String, Value> {
-        self.0.borrow().clone()
+        self.0.borrow().iter().map(|(k, v)| (k.clone(), v.clone())).collect()
     }
     /// New, independent dict with the same entries.
     pub fn copy(&self) -> SharedDict {
@@ -308,10 +319,10 @@ impl SharedDict {
     pub fn extend<I: IntoIterator<Item = (String, Value)>>(&self, iter: I) {
         self.0.borrow_mut().extend(iter);
     }
-    pub fn borrow(&self) -> std::cell::Ref<'_, HashMap<String, Value>> {
+    pub fn borrow(&self) -> std::cell::Ref<'_, crate::fast_hash::FastMap<String, Value>> {
         self.0.borrow()
     }
-    pub fn borrow_mut(&self) -> std::cell::RefMut<'_, HashMap<String, Value>> {
+    pub fn borrow_mut(&self) -> std::cell::RefMut<'_, crate::fast_hash::FastMap<String, Value>> {
         self.0.borrow_mut()
     }
 }
