@@ -48,6 +48,8 @@ impl Ty {
 #[derive(Debug, Clone)]
 struct FnSig {
     params: Vec<Ty>,
+    /// parameters without a default: the minimum number of arguments a call must pass
+    required: usize,
     ret: Ty,
     annotated: bool,
 }
@@ -272,7 +274,41 @@ struct Header {
     params: Vec<(String, Option<Ty>)>,
     ret: Option<Ty>,
     rebuilt: String, // header without annotations
+    required: usize,
     annotated: bool,
+}
+
+/// Index of the first `=` outside quotes/brackets that is an assignment, not `==`, `<=`, `>=`, `!=`, `=>`.
+fn find_top_level_eq(s: &str) -> Option<usize> {
+    let b = s.as_bytes();
+    let (mut depth, mut quote) = (0i32, 0u8);
+    let mut i = 0;
+    while i < b.len() {
+        let c = b[i];
+        if quote != 0 {
+            if c == 92 {
+                i += 1;
+            } else if c == quote {
+                quote = 0;
+            }
+        } else {
+            match c {
+                34 | 39 => quote = c,
+                b'(' | b'[' | b'{' => depth += 1,
+                b')' | b']' | b'}' => depth -= 1,
+                b'=' if depth == 0 => {
+                    let prev = if i > 0 { b[i - 1] } else { 0 };
+                    let next = if i + 1 < b.len() { b[i + 1] } else { 0 };
+                    if !matches!(prev, b'=' | b'<' | b'>' | b'!') && next != b'=' && next != b'>' {
+                        return Some(i);
+                    }
+                }
+                _ => {}
+            }
+        }
+        i += 1;
+    }
+    None
 }
 
 /// Parse `fn name(a: t, b) -> t {` (indent already trimmed).
@@ -293,20 +329,40 @@ fn parse_header(trimmed: &str) -> Option<Result<Header, String>> {
     let close = matching(&chars, open)?;
     let inner: String = chars[open + 1..close].iter().collect();
     let mut params = Vec::new();
+    let mut rebuilt_params: Vec<String> = Vec::new();
+    let mut required: Option<usize> = None;
     let mut annotated = false;
     for raw in split_args(&inner) {
-        match raw.split_once(':') {
-            Some((n, t)) => {
+        // `name: type = default` / `name = default`: peel the default off first, because the
+        // default expression may itself contain ':' (a dict or a string)
+        let (head, default) = match find_top_level_eq(&raw) {
+            Some(i) => (raw[..i].trim().to_string(), Some(raw[i + 1..].trim().to_string())),
+            None => (raw.trim().to_string(), None),
+        };
+        if default.is_some() && required.is_none() {
+            required = Some(params.len());
+        }
+        let with_default = |name: &str| match &default {
+            Some(d) => format!("{} = {}", name, d),
+            None => name.to_string(),
+        };
+        match head.split_once(':') {
+            Some((n, t)) if n.trim().chars().all(is_ident_char) && !n.trim().is_empty() => {
                 let n = n.trim().to_string();
                 match Ty::parse(t) {
                     Some(ty) => {
                         annotated = true;
+                        rebuilt_params.push(with_default(&n));
                         params.push((n, Some(ty)));
                     }
                     None => return Some(Err(format!("unknown type '{}' for parameter '{}'", t.trim(), n))),
                 }
             }
-            None => params.push((raw.trim().to_string(), None)),
+            _ => {
+                let n = head.clone();
+                rebuilt_params.push(with_default(&n));
+                params.push((n, None));
+            }
         }
     }
     let rest: String = chars[close + 1..].iter().collect();
@@ -324,11 +380,11 @@ fn parse_header(trimmed: &str) -> Option<Result<Header, String>> {
     } else {
         (None, rest.clone())
     };
-    let plain: Vec<String> = params.iter().map(|(n, _)| n.clone()).collect();
     let prefix: String = chars[..open].iter().collect();
     let tail = if ret.is_some() && !tail.is_empty() { format!(" {}", tail) } else { tail };
-    let rebuilt = format!("{}({}){}", prefix, plain.join(", "), tail);
-    Some(Ok(Header { keyword_len: kw, name, params, ret, rebuilt, annotated }))
+    let rebuilt = format!("{}({}){}", prefix, rebuilt_params.join(", "), tail);
+    let required = required.unwrap_or(params.len());
+    Some(Ok(Header { keyword_len: kw, name, params, ret, rebuilt, required, annotated }))
 }
 
 /// `name: type = expr` → (name, type, expr)
@@ -396,10 +452,13 @@ fn check_calls(line: &str, lineno: usize, env: &Env, fns: &HashMap<String, FnSig
                         if let Some(close) = matching(&chars, j) {
                             let inner: String = chars[j + 1..close].iter().collect();
                             let args = split_args(&inner);
-                            if args.len() != sig.params.len() {
+                            if args.len() < sig.required || args.len() > sig.params.len() {
                                 errs.push(format!(
                                     "type error (line {}): {}() takes {} argument(s), got {}",
-                                    lineno, name, sig.params.len(), args.len()
+                                    lineno,
+                                    name,
+                                    if sig.required == sig.params.len() { sig.params.len().to_string() } else { format!("{} to {}", sig.required, sig.params.len()) },
+                                    args.len()
                                 ));
                             } else {
                                 for (k, (a, p)) in args.iter().zip(&sig.params).enumerate() {
@@ -440,6 +499,7 @@ pub fn process(source: &str) -> Result<String, VmError> {
                     h.name.clone(),
                     FnSig {
                         params: h.params.iter().map(|(_, t)| t.unwrap_or(Ty::Any)).collect(),
+                        required: h.required,
                         ret: h.ret.unwrap_or(Ty::Any),
                         annotated: h.annotated,
                     },
@@ -614,6 +674,35 @@ mod tests {
         assert!(e.contains("expects number, got string"), "{}", e);
         let ok = "fn dbl(a: number) -> number {\n  return a * 2\n}\nprintln(dbl(dbl(3) + 1))\n";
         assert!(process(ok).is_ok());
+    }
+
+    #[test]
+    fn defaults_are_kept_and_make_arguments_optional() {
+        let src = "fn greet(name: string, greeting: string = \"Hi: there\", opts = {\"a\": 1}) -> string {
+  return greeting
+}
+greet(\"x\")
+greet(\"x\", \"y\")
+";
+        let out = process(src).unwrap();
+        assert!(out.contains("fn greet(name, greeting = \"Hi: there\", opts = {\"a\": 1}) {"), "{}", out);
+        // omitting defaulted parameters is fine, omitting the required one is not
+        assert!(err("fn f(a: number, b: number = 2) -> number {
+  return a
+}
+f()
+").contains("takes 1 to 2 argument(s), got 0"));
+        assert!(err("fn f(a: number, b: number = 2) -> number {
+  return a
+}
+f(1, 2, 3)
+").contains("got 3"));
+        assert!(process("fn f(a: number, b: number = 2) -> number {
+  return a
+}
+f(1)
+f(1, 5)
+").is_ok());
     }
 
     #[test]

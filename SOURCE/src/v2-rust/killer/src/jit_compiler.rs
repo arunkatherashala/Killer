@@ -69,6 +69,7 @@ impl JitCompiler {
                 | Instruction::CallBuiltin(_, _)
                 | Instruction::DefineClass { .. }
                 | Instruction::NewObject(_)
+                | Instruction::NewObjectN(..)
                 | Instruction::TryEnter { .. } => {
                     // These are complex and shouldn't be JIT compiled
                     return false;

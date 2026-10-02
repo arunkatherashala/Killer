@@ -3547,6 +3547,55 @@ impl VirtualMachine {
                         ));
                     }
                 }
+                Instruction::NewObjectN(class_name, arg_count) => {
+                    if !self.classes.contains_key(class_name) {
+                        return Err(VmError::runtime_error(format!("Class {} not defined", class_name)));
+                    }
+                    let mut ctor_args: Vec<Value> = Vec::with_capacity(*arg_count);
+                    for _ in 0..*arg_count {
+                        ctor_args.push(self.pop_value()?);
+                    }
+                    ctor_args.reverse();
+
+                    // nearest `init` along class -> parent -> grandparent ...
+                    let mut found: Option<usize> = None;
+                    let mut current = class_name.clone();
+                    for _ in 0..64 {
+                        if let Some(&start) = program.method_bytecode.get(&(current.clone(), "init".to_string())) {
+                            found = Some(start);
+                            break;
+                        }
+                        match program.classes.get(&current) {
+                            Some((Some(parent), _)) => current = parent.clone(),
+                            _ => break,
+                        }
+                    }
+
+                    let instance = ObjectInstance { class_name: class_name.clone(), fields: HashMap::new() };
+                    let object = Value::Object(crate::value::SharedObject::new(instance));
+                    match found {
+                        Some(start) => {
+                            let arity = program.function_arities.get(&start).copied().unwrap_or(ctor_args.len());
+                            self.call_stack.push(self.ip + 1);
+                            self.push_scope();
+                            self.locals_stack.push(Vec::new());
+                            self.store_local("this", object);
+                            let passed = ctor_args.len();
+                            for (idx, arg) in ctor_args.into_iter().enumerate() {
+                                if idx < ARG_NAMES.len() { self.store_local(ARG_NAMES[idx], arg); } else { self.store_local_owned(format!("arg{idx}"), arg); }
+                            }
+                            for idx in passed..arity {
+                                if idx < ARG_NAMES.len() { self.store_local(ARG_NAMES[idx], Value::Null); } else { self.store_local_owned(format!("arg{idx}"), Value::Null); }
+                            }
+                            self.ip = start;
+                            continue; // init's Ret pushes the object
+                        }
+                        None => {
+                            // no constructor anywhere: arguments are ignored, like JavaScript
+                            self.stack.push(object);
+                        }
+                    }
+                }
                 Instruction::NewObject(class_name) => {
                     // Create a new instance of the class
                     // First check that the class exists
@@ -3733,8 +3782,15 @@ impl VirtualMachine {
                                 self.store_local("this", object);
 
                                 // Store parameters
+                                let n_passed = args.len();
                                 for (index, arg) in args.into_iter().enumerate() {
                                     if index < ARG_NAMES.len() { self.store_local(ARG_NAMES[index], arg); } else { self.store_local_owned(format!("arg{index}"), arg); }
+                                }
+                                {
+                                    let arity = program.function_arities.get(&method_bytecode_start).copied().unwrap_or(0);
+                                    for index in n_passed..arity {
+                                        if index < ARG_NAMES.len() { self.store_local(ARG_NAMES[index], Value::Null); } else { self.store_local_owned(format!("arg{index}"), Value::Null); }
+                                    }
                                 }
 
                                 // Jump to method
@@ -4055,8 +4111,15 @@ impl VirtualMachine {
                                 self.push_scope();
                                 self.locals_stack.push(Vec::new());  // new locals frame for static method
 
+                                let n_passed = args.len();
                                 for (index, arg) in args.into_iter().enumerate() {
                                     if index < ARG_NAMES.len() { self.store_local(ARG_NAMES[index], arg); } else { self.store_local_owned(format!("arg{index}"), arg); }
+                                }
+                                {
+                                    let arity = program.function_arities.get(&bytecode_start).copied().unwrap_or(0);
+                                    for index in n_passed..arity {
+                                        if index < ARG_NAMES.len() { self.store_local(ARG_NAMES[index], Value::Null); } else { self.store_local_owned(format!("arg{index}"), Value::Null); }
+                                    }
                                 }
 
                                 self.ip = bytecode_start;

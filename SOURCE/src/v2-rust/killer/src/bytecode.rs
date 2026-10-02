@@ -152,6 +152,9 @@ pub enum Instruction {
     CallBuiltinId(u16, usize),
     DefineClass { name: String, parent: Option<String> },
     NewObject(String),
+    /// `new Class(args)` from script source: pops exactly `arg_count` arguments and runs the
+    /// nearest `init` up the inheritance chain (padding omitted arguments with null).
+    NewObjectN(String, usize),
     CallMethod { object_name: String, method_name: String, arg_count: usize },
     CallMethodDynamic { method_name: String, arg_count: usize },
     NewQuality,

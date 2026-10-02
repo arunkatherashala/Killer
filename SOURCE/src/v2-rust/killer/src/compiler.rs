@@ -3331,7 +3331,7 @@ fn compile_expr_str(
             for arg in &args {
                 compile_expr_str(arg, line_no, state, context)?;
             }
-            state.instructions.push(Instruction::NewObject(class_name));
+            state.instructions.push(Instruction::NewObjectN(class_name, args.len()));
             return Ok(());
         }
     }
@@ -4530,7 +4530,7 @@ fn compile_fn_definition(
     let start = *cursor;
     let line_no = lines[start].0;
     let (sig_line, end_phys) = merge_multiline_signature_header(lines, start)?;
-    let (name, params) = parse_function_signature(&sig_line, line_no)?;
+    let (name, params, defaults) = parse_function_signature_full(&sig_line, line_no)?;
 
     if state.functions.contains_key(&name) {
         return Err(VmError::parse_error_simple(format!(
@@ -4571,6 +4571,7 @@ fn compile_fn_definition(
         fn_context.params.insert(param, index);
     }
 
+    emit_default_prologue(&defaults, line_no, state, &mut fn_context)?;
     compile_block(lines, cursor, state, &mut fn_context, true, false)?;
 
     if !matches!(state.instructions.last(), Some(Instruction::Ret)) {
@@ -4637,7 +4638,7 @@ fn compile_class_definition(
 
         if mline.starts_with("kfn ") || mline.starts_with("fn ") {
             let (sig_line, end_phys) = merge_multiline_signature_header(lines, *cursor)?;
-            let (method_name, params) = parse_function_signature(&sig_line, *mline_no)?;
+            let (method_name, params, method_defaults) = parse_function_signature_full(&sig_line, *mline_no)?;
             *cursor = end_phys + 1;
             expect_open_brace(lines, cursor, *mline_no, "method")?;
 
@@ -4663,6 +4664,7 @@ fn compile_class_definition(
                 method_context.params.insert(param.clone(), index);
             }
 
+            emit_default_prologue(&method_defaults, *mline_no, state, &mut method_context)?;
             compile_block(lines, cursor, state, &mut method_context, true, false)?;
 
             // Implicit return: init returns "this", other methods return null
@@ -4701,6 +4703,13 @@ fn compile_class_definition(
 }
 
 fn parse_function_signature(line: &str, line_no: usize) -> Result<(String, Vec<String>), VmError> {
+    let (name, params, _defaults) = parse_function_signature_full(line, line_no)?;
+    Ok((name, params))
+}
+
+/// Like [`parse_function_signature`], but also returns `(parameter index, default expression)`
+/// for every parameter written `name = default`.
+fn parse_function_signature_full(line: &str, line_no: usize) -> Result<(String, Vec<String>, Vec<(usize, String)>), VmError> {
     let rest = line
         .strip_prefix("fn ")
         .or_else(|| line.strip_prefix("kfn "))
@@ -4763,8 +4772,13 @@ fn parse_function_signature(line: &str, line_no: usize) -> Result<(String, Vec<S
 
     let params_text = rest[open + 1..close].trim();
     let mut params = Vec::new();
+    let mut defaults: Vec<(usize, String)> = Vec::new();
     if !params_text.is_empty() {
-        for raw in params_text.split(',') {
+        let pieces = split_arguments(params_text).ok_or_else(|| {
+            VmError::parse_error_simple(format!("Line {}: unbalanced brackets in parameter list", line_no))
+        })?;
+        for raw in pieces.iter().map(|s| s.as_str()) {
+            let (raw, default_expr) = split_default(raw);
             let raw_trim = raw.trim();
             // `x: Type` → `x` ; Killer-style `x int` / `x Type` → first identifier token
             let name_part = if raw_trim.contains(':') {
@@ -4793,11 +4807,78 @@ fn parse_function_signature(line: &str, line_no: usize) -> Result<(String, Vec<S
                     line_no, name_part
                 )));
             }
+            if let Some(d) = default_expr {
+                defaults.push((params.len(), d.to_string()));
+            } else if let Some((last, _)) = defaults.last() {
+                if *last < params.len() {
+                    return Err(VmError::parse_error_simple(format!(
+                        "Line {}: parameter `{}` without a default follows a parameter with one",
+                        line_no, name_part
+                    )));
+                }
+            }
             params.push(name_part.to_string());
         }
     }
 
-    Ok((name.to_string(), params))
+    Ok((name.to_string(), params, defaults))
+}
+
+/// Split `name = default` at the first top-level `=` (not `==`, `<=`, `>=`, `!=`, `=>`).
+fn split_default(raw: &str) -> (&str, Option<&str>) {
+    let b = raw.as_bytes();
+    let (mut depth, mut quote) = (0i32, 0u8);
+    let mut i = 0;
+    while i < b.len() {
+        let c = b[i];
+        if quote != 0 {
+            if c == b'\\' {
+                i += 1;
+            } else if c == quote {
+                quote = 0;
+            }
+        } else {
+            match c {
+                b'"' | 39 => quote = c,
+                b'(' | b'[' | b'{' => depth += 1,
+                b')' | b']' | b'}' => depth -= 1,
+                b'=' if depth == 0 => {
+                    let prev = if i > 0 { b[i - 1] } else { 0 };
+                    let next = if i + 1 < b.len() { b[i + 1] } else { 0 };
+                    if !matches!(prev, b'=' | b'<' | b'>' | b'!') && next != b'=' && next != b'>' {
+                        return (&raw[..i], Some(raw[i + 1..].trim()));
+                    }
+                }
+                _ => {}
+            }
+        }
+        i += 1;
+    }
+    (raw, None)
+}
+
+/// Emit the prologue that fills in omitted arguments: `if argN == null { argN = <default> }`.
+/// The default is evaluated at call time inside the function, so it can use earlier parameters
+/// and globals. An argument explicitly passed as `null` also takes the default.
+fn emit_default_prologue(
+    defaults: &[(usize, String)],
+    line_no: usize,
+    state: &mut CompilerState,
+    context: &mut CompileContext,
+) -> Result<(), VmError> {
+    for (index, expr) in defaults {
+        let arg = format!("arg{}", index);
+        state.instructions.push(Instruction::Load(arg.clone()));
+        state.instructions.push(Instruction::ConstNull);
+        state.instructions.push(Instruction::Eq);
+        let skip = state.instructions.len();
+        state.instructions.push(Instruction::JumpIfFalse(usize::MAX));
+        compile_expr_str(expr, line_no, state, context)?;
+        state.instructions.push(Instruction::Store(arg));
+        let after = state.instructions.len();
+        state.instructions[skip] = Instruction::JumpIfFalse(after);
+    }
+    Ok(())
 }
 
 /// Emit bytecode for `spawn func(arg0, arg1, …)` or `spawn func`.
