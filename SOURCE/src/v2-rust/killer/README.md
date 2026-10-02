@@ -2,7 +2,7 @@
 
 [![Rust](https://img.shields.io/badge/language-Rust-orange.svg)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-1849%20passing-brightgreen.svg)](#testing)
+[![Tests](https://img.shields.io/badge/tests-1884%20unit%20%2B%20integration%20passing-brightgreen.svg)](#testing)
 [![Version](https://img.shields.io/badge/version-2.1-blueviolet.svg)](#)
 
 **Killer** is a high-performance, AI-native scripting language with a Rust-powered runtime. It combines Python-style expressiveness with native-speed execution via JIT compilation, trinary (3-valued) logic, built-in AI primitives, and a rich 600+ function standard library — all with zero external crate dependencies.
@@ -17,7 +17,7 @@
 |---------|----------------|--------|
 | Logic system | Binary (true/false) | **Trinary** (T_POS / T_NEG / T_ZERO) |
 | Runtime | GC'd or manual | **Rust VM + tri-color cycle GC** |
-| JIT | Optional/external | **Built-in x86-64 JIT** (hot loop detection) |
+| JIT | Optional/external | **Built-in x86-64 JIT** for pure numeric functions and arrays (x86-64 only) |
 | AI primitives | Library calls | **Native `believe`, `async_spawn`, LLM client** |
 | Dependencies | Many crates | **Zero external crate dependencies** |
 | Package manager | Separate tool | **Built-in KPM** with local/registry install |
@@ -216,30 +216,84 @@ cargo run --bin kpm-registry
 
 ## Performance
 
-Killer's JIT detects hot loops at runtime and compiles them to native x86-64 machine code:
+Killer has two execution tiers:
 
-```
-Simple loop 100,000 iterations:
-  Interpreter:  ~45 ms
-  After JIT:    ~8 ms   (5.6× faster)
+- A **bytecode interpreter** for everything.
+- A **built-in x86-64 JIT** that compiles *pure numeric* functions (numbers, arrays of numbers,
+  loops, `range`, `for ... in`, `sqrt/abs/floor/ceil/min/max`, calls to other such functions) to
+  machine code. Anything it cannot prove safe runs in the interpreter, and native code that hits
+  division by zero, a bad index or runaway recursion falls back to the interpreter automatically.
 
-Array accumulate 100,000 elements:
-  Interpreter:  ~38 ms
-  After JIT:    ~6 ms   (6.3× faster)
+Measured against CPython on the same machine, same algorithm, identical output (best of 5 runs;
+timings include process start-up and vary from run to run, so read the ratios, not the seconds):
+
+| Benchmark | Killer | Python | Result |
+|-----------|--------|--------|--------|
+| Bubble sort, 4000 numbers | 0.24 s | 1.66 s | 6.8x faster |
+| Collatz chains (loops, `%`) | 0.87 s | 4.06 s | 4.7x faster |
+| Count primes below 300k (`for`, `sqrt`) | 0.33 s | 0.49 s | 1.5x faster |
+| Dot product of arrays | 0.16 s | 0.22 s | 1.4x faster |
+| String building (`s = s + "x"`) | 0.14 s | 0.17 s | 1.3x faster |
+| `fib(30)` | 0.19 s | 0.24 s | 1.3x faster |
+| Top-level `while` loop | 0.43 s | 0.37 s | about level |
+| Array `push` loop | 0.23 s | 0.14 s | 1.6x slower |
+| Dict counting | 0.29 s | 0.12 s | 2.5x slower |
+| Object method calls | 0.40 s | 0.12 s | 3.3x slower |
+
+**Honest summary:** numeric and string-building code is faster than CPython; code dominated by
+dicts, objects and array building is still slower, because the JIT does not handle those yet.
+Killer is not a replacement for C, C++, Java or .NET on performance.
+
+Run the benchmarks yourself with `cargo bench --bench vm_runtime`.
+
+---
+
+## Calling C libraries (FFI)
+
+```killer
+lib = ffi_open("msvcrt.dll")                 # libc.so.6 / libm.so.6 on Linux
+println(ffi_call(lib, "pow", "dd>d", 2, 10)) # 1024
+println(ffi_call(lib, "strlen", "s>l", "killer"))
+
+buf = ffi_alloc(16)                          # bounds-checked native memory
+ffi_poke(buf, 0, "i32", 1234)
+println(ffi_peek(buf, 0, "i32"))
+ffi_free(buf)
+ffi_close(lib)
 ```
 
-Run benchmarks:
-```bash
-cargo bench --bench vm_runtime
-cargo bench --bench ai_benchmark
+Signatures are `<args>><ret>` with `i`/`l` integer, `p` pointer, `d` double, `s` string and
+`v` void. A call is either all doubles (up to 4) or all integer/pointer/string (up to 6); mixed
+signatures, structs by value and callbacks are not supported yet. FFI needs the `allow_ffi`
+capability, which sandboxed scripts do not get.
+
+## Optional type annotations
+
+```killer
+fn add(a: number, b: number) -> number {
+  return a + b
+}
+count: number = 10
+add("one", 2)        # type error (line 5): argument 1 of add() expects number, got string
 ```
+
+Types are `number`, `string`, `bool`, `array`, `dict` and `any`. The checker is gradual: it only
+reports errors it can prove, and code without annotations is untouched.
+
+## Known limitations
+
+- The JIT is x86-64 only and covers pure numeric code; everything else is interpreted.
+- Dicts and objects are shared references (like Python or JavaScript): `b = a` aliases, and a
+  dict or object that contains itself is never garbage-collected.
+- The FFI is minimal (see above) and has no safety net against a wrong signature.
+- Killer has no package ecosystem to speak of and is a one-person project.
 
 ---
 
 ## Testing
 
 ```bash
-# Unit tests (1849 tests)
+# Unit tests (1884 tests)
 cargo test --lib
 
 # Integration tests
