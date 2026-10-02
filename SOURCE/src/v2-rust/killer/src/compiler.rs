@@ -248,6 +248,9 @@ struct CompilerState {
     /// Track top-level variable names so function bodies can reference them
     /// via named Store/Load (outer_vars in CompileContext).
     known_top_level_vars: std::collections::HashSet<String>,
+    /// Top-level variables that functions mention: stored by name so functions can see them
+    /// (see `scan_globals`).
+    global_vars: std::collections::HashSet<String>,
     /// Class metadata: class_name → (parent, [(method_name, params)])
     /// Used to populate Program.classes and method_bytecode.
     class_defs: HashMap<String, (Option<String>, Vec<(String, Vec<String>)>)>,
@@ -287,6 +290,12 @@ struct CompileContext {
     /// Names of variables from an enclosing scope (e.g. top-level vars visible to functions).
     /// Assignment to these emits `Store(name)` so the VM updates the outer named scope.
     outer_vars: std::collections::HashSet<String>,
+    /// Names declared `global` inside the current function: assignment writes the top-level variable.
+    global_decls: std::collections::HashSet<String>,
+    /// True while compiling the last statement of a function body (its value is the implicit return).
+    tail_position: bool,
+    /// The function body ended in a bare expression whose value was left on the stack.
+    tail_value: bool,
     runtime_scope_depth: usize,
 }
 
@@ -305,6 +314,7 @@ pub fn compile_killer_subset(source: &str) -> Result<Program, VmError> {
     let preprocessed = preprocess_polyglot(&indented);
     let preprocessed = preprocess_ui_sugar(&preprocessed);
     let lines = normalize_lines(&preprocessed);
+    state.global_vars = scan_globals(&lines);
     let mut cursor = 0usize;
     let mut context = CompileContext::default();
     compile_block(&lines, &mut cursor, &mut state, &mut context, false, false)?;
@@ -348,6 +358,13 @@ pub fn compile_killer_subset(source: &str) -> Result<Program, VmError> {
         .map(|(old_ip, arity)| (old_to_new[old_ip.min(n_old)], arity))
         .collect();
 
+    // Named functions, so the VM can expose them as first-class values.
+    let function_names: HashMap<usize, String> = state
+        .functions
+        .iter()
+        .map(|(name, meta)| (old_to_new[meta.start.min(n_old)], name.clone()))
+        .collect();
+
     // Remap method_bytecode indices through the optimization map too
     let method_bytecode = state.method_bytecode
         .into_iter()
@@ -368,7 +385,7 @@ pub fn compile_killer_subset(source: &str) -> Result<Program, VmError> {
     Ok(Program {
         instructions: optimized,
         function_arities,
-        function_names: std::collections::HashMap::new(),
+        function_names,
         method_bytecode,
         classes,
         live_vars: state.live_vars,
@@ -1836,6 +1853,9 @@ fn compile_expr(
                 slot_map: HashMap::new(),
                 next_slot: 0,
                 outer_vars: std::collections::HashSet::new(),
+                global_decls: Default::default(),
+                tail_position: false,
+                tail_value: false,
                 runtime_scope_depth: 0,
             };
             
@@ -2374,8 +2394,16 @@ fn compile_block(
             *cursor = end_phys + 1;
             continue;
         }
-        for piece in pieces {
-            compile_simple_statement(&piece, line_no, state, context)?;
+        let is_fn_body = stop_on_closing_brace && !needs_runtime_scope;
+        let next_is_close = lines.get(end_phys + 1).map_or(false, |(_, l)| l.trim() == "}");
+        let last_piece = pieces.len().saturating_sub(1);
+        for (index, piece) in pieces.iter().enumerate() {
+            context.tail_position = is_fn_body && next_is_close && index == last_piece;
+            context.tail_value = false;
+            let compiled = compile_simple_statement(piece, line_no, state, context);
+            context.tail_position = false;
+            compiled?;
+            // a tail statement that did not leave a value clears the flag for the next statement
         }
         *cursor = end_phys + 1;
     }
@@ -2649,6 +2677,18 @@ fn compile_simple_statement(
         return Ok(());
     }
 
+    // `global a, b`: assignments to these names inside this function write the top-level variable
+    if let Some(rest) = stmt.strip_prefix("global ") {
+        for n in rest.split(',') {
+            let n = n.trim();
+            if !is_valid_name(n) {
+                return Err(VmError::parse_error_simple(format!("Line {}: invalid name `{}` in global declaration", line_no, n)));
+            }
+            context.global_decls.insert(n.to_string());
+        }
+        return Ok(());
+    }
+
     // `live name = expr` — reactive variable
     if let Some(rest) = stmt.strip_prefix("live ") {
         compile_live(rest, line_no, state, context)?;
@@ -2735,24 +2775,16 @@ fn compile_simple_statement(
         return Ok(());
     }
 
-    if parse_call_expr(stmt).is_some() {
-        let before = state.instructions.len();
+    if parse_call_expr(stmt).is_some() || split_postfix_call(stmt).is_some() {
         compile_expr_str(stmt, line_no, state, context)?;
-        // A builtin call always pushes exactly one result. As a statement inside a loop that
-        // value would otherwise pile up on the stack every iteration (memory growth, slower GC
-        // root scans), so discard it. User functions may push nothing, so they are left alone.
-        if !context.loop_stack.is_empty()
-            && state.instructions.len() > before
-            && matches!(state.instructions.last(), Some(Instruction::CallBuiltin(_, _)))
-        {
-            state.instructions.push(Instruction::Pop);
-        }
+        finish_expression_statement(state, context);
         return Ok(());
     }
 
     // Method call statement: obj.method(args)  e.g.  f.to("out.csv"), arr.push(x)
     if parse_method_call_str(stmt).is_some() {
         compile_method_call_str(stmt, line_no, state, context)?;
+        finish_expression_statement(state, context);
         return Ok(());
     }
 
@@ -2833,6 +2865,11 @@ fn compile_simple_statement(
             state.instructions.push(Instruction::Store(name.to_string()));
             return Ok(());
         }
+        // `global x` in this function, or a top-level variable that functions read: named store.
+        if context.global_decls.contains(name) || (!context.in_function && state.global_vars.contains(name)) {
+            state.instructions.push(Instruction::Store(name.to_string()));
+            return Ok(());
+        }
         // Slot-backed locals (including top-level `i = 0` script vars): always StoreSlot so
         // they stay consistent with LoadSlot / LtSlotConst in conditions and expressions.
         if let Some(&slot) = context.slot_map.get(name) {
@@ -2860,6 +2897,7 @@ fn compile_simple_statement(
     // If it's a valid expression, emit it. In a script, the last expression's
     // value stays on the stack as the "return value".
     if compile_expr_str(stmt, line_no, state, context).is_ok() {
+        finish_expression_statement(state, context);
         return Ok(());
     }
 
@@ -3398,6 +3436,21 @@ fn compile_expr_str(
     }
 
     if let Some((name, args)) = parse_call_expr(expr) {
+        // `f(x)` where `f` is a variable (parameter, local, or global) holding a function value:
+        // push the callee, then the arguments, then call dynamically. A variable shadows a function.
+        let callee_is_variable = context.params.contains_key(&name)
+            || context.slot_map.contains_key(&name)
+            || context.global_decls.contains(&name)
+            || state.global_vars.contains(&name)
+            || (context.in_function && context.outer_vars.contains(&name));
+        if callee_is_variable {
+            compile_expr_str(&name, line_no, state, context)?;
+            for arg in &args {
+                compile_expr_str(arg, line_no, state, context)?;
+            }
+            state.instructions.push(Instruction::CallDynamic { arg_count: args.len() });
+            return Ok(());
+        }
         for arg in &args {
             compile_expr_str(arg, line_no, state, context)?;
         }
@@ -3420,6 +3473,16 @@ fn compile_expr_str(
                 line_no,
             });
         }
+        return Ok(());
+    }
+
+    // `callee(args)` where the callee is itself an expression: `fs[1](x)`, `d["k"](x)`, `make()(x)`
+    if let Some((callee, args)) = split_postfix_call(expr) {
+        compile_expr_str(callee, line_no, state, context)?;
+        for arg in &args {
+            compile_expr_str(arg, line_no, state, context)?;
+        }
+        state.instructions.push(Instruction::CallDynamic { arg_count: args.len() });
         return Ok(());
     }
 
@@ -4425,6 +4488,51 @@ fn parse_dot_call_expr(expr: &str) -> Option<(&str, &str, Vec<String>)> {
     }
 }
 
+/// Split `callee(args)` where `callee` ends in `]` or `)` (an index or call result) and the final
+/// parenthesis group is the call. Returns `None` for plain `name(args)` (handled elsewhere) and for
+/// anything that is not entirely one postfix call.
+fn split_postfix_call(expr: &str) -> Option<(&str, Vec<String>)> {
+    let expr = expr.trim();
+    if !expr.ends_with(')') {
+        return None;
+    }
+    // find the '(' that matches the final ')', scanning backwards outside strings
+    let bytes = expr.as_bytes();
+    let mut depth = 0i32;
+    let mut quote = 0u8;
+    let mut open = None;
+    let mut i = bytes.len();
+    while i > 0 {
+        i -= 1;
+        let c = bytes[i];
+        if quote != 0 {
+            if c == quote && (i == 0 || bytes[i - 1] != 92) {
+                quote = 0;
+            }
+            continue;
+        }
+        match c {
+            b'"' | 39 => quote = c,
+            b')' | b']' | b'}' => depth += 1,
+            b'(' | b'[' | b'{' => {
+                depth -= 1;
+                if depth == 0 {
+                    open = Some(i);
+                    break;
+                }
+            }
+            _ => {}
+        }
+    }
+    let open = open?;
+    let callee = expr[..open].trim_end();
+    if !(callee.ends_with(']') || callee.ends_with(')')) {
+        return None;
+    }
+    let args = split_arguments(&expr[open + 1..expr.len() - 1])?;
+    Some((callee, args))
+}
+
 fn parse_call_expr(expr: &str) -> Option<(String, Vec<String>)> {
     let open = expr.find('(')?;
     if !expr.ends_with(')') {
@@ -4565,6 +4673,9 @@ fn compile_fn_definition(
         // Collect parent scope variable names so function body can reference them
         // via named Store/Load (instead of creating new local slots).
         outer_vars: state.known_top_level_vars.iter().cloned().collect(),
+        global_decls: Default::default(),
+        tail_position: false,
+        tail_value: false,
         runtime_scope_depth: 0,
     };
     for (index, param) in params.into_iter().enumerate() {
@@ -4574,9 +4685,14 @@ fn compile_fn_definition(
     emit_default_prologue(&defaults, line_no, state, &mut fn_context)?;
     compile_block(lines, cursor, state, &mut fn_context, true, false)?;
 
-    if !matches!(state.instructions.last(), Some(Instruction::Ret)) {
-        state.instructions.push(Instruction::Ret);
+    // Fall-through return. A body that ends in a bare expression returns that value (the value is
+    // already on the stack); anything else returns null. This must be emitted even when the last
+    // instruction is a Ret: `if c { return 1 }` ends in a Ret that the false branch skips, so
+    // control would otherwise run on into the code after the function.
+    if !fn_context.tail_value {
+        state.instructions.push(Instruction::ConstNull);
     }
+    state.instructions.push(Instruction::Ret);
 
     let after_fn = state.instructions.len();
     state.instructions[skip_jump_index] = Instruction::Jump(after_fn);
@@ -4658,6 +4774,9 @@ fn compile_class_definition(
                 slot_map: HashMap::new(),
                 next_slot: 0,
                 outer_vars: state.known_top_level_vars.iter().cloned().collect(),
+                global_decls: Default::default(),
+                tail_position: false,
+                tail_value: false,
                 runtime_scope_depth: 0,
             };
             for (index, param) in params.iter().enumerate() {
@@ -4667,15 +4786,17 @@ fn compile_class_definition(
             emit_default_prologue(&method_defaults, *mline_no, state, &mut method_context)?;
             compile_block(lines, cursor, state, &mut method_context, true, false)?;
 
-            // Implicit return: init returns "this", other methods return null
-            if !matches!(state.instructions.last(), Some(Instruction::Ret)) {
-                if method_name == "init" {
-                    state.instructions.push(Instruction::Load("this".to_string()));
-                } else {
-                    state.instructions.push(Instruction::ConstNull);
+            // Implicit return: init returns "this", other methods return null. Always emitted, for
+            // the same reason as for plain functions.
+            if method_name == "init" {
+                if method_context.tail_value {
+                    state.instructions.push(Instruction::Pop);
                 }
-                state.instructions.push(Instruction::Ret);
+                state.instructions.push(Instruction::Load("this".to_string()));
+            } else if !method_context.tail_value {
+                state.instructions.push(Instruction::ConstNull);
             }
+            state.instructions.push(Instruction::Ret);
 
             method_info.push((method_name, params));
         } else {
@@ -4701,6 +4822,125 @@ fn compile_class_definition(
 
     Ok(())
 }
+
+/// A bare expression used as a statement leaves its value on the stack. Inside a function the
+/// value of the *last* statement is the implicit return value; every other value is discarded, as
+/// is any value produced inside a top-level loop (it would pile up on the stack every iteration).
+fn finish_expression_statement(state: &mut CompilerState, context: &mut CompileContext) {
+    if context.in_function {
+        if context.tail_position {
+            context.tail_value = true;
+        } else {
+            state.instructions.push(Instruction::Pop);
+        }
+    } else if !context.loop_stack.is_empty() {
+        state.instructions.push(Instruction::Pop);
+    }
+}
+
+/// Names assigned at top level that are also mentioned inside some function or method body.
+/// Those variables must be stored by name (visible to functions) instead of in a frame slot.
+fn scan_globals(lines: &[(usize, String)]) -> std::collections::HashSet<String> {
+    use std::collections::HashSet;
+    fn identifiers(line: &str, out: &mut HashSet<String>) {
+        // skip string literals
+        let mut cleaned = String::with_capacity(line.len());
+        let mut quote: Option<char> = None;
+        for c in line.chars() {
+            match quote {
+                Some(q) => {
+                    if c == q {
+                        quote = None;
+                    }
+                }
+                None => {
+                    if c == '"' || c == '\'' {
+                        quote = Some(c);
+                    } else {
+                        cleaned.push(c);
+                    }
+                }
+            }
+        }
+        let mut cur = String::new();
+        for c in cleaned.chars().chain(std::iter::once(' ')) {
+            if c.is_alphanumeric() || c == '_' {
+                cur.push(c);
+            } else {
+                if !cur.is_empty() && !cur.chars().next().unwrap().is_ascii_digit() {
+                    out.insert(std::mem::take(&mut cur));
+                }
+                cur.clear();
+            }
+        }
+    }
+    fn brace_delta(line: &str) -> i32 {
+        let mut d = 0;
+        let mut quote: Option<char> = None;
+        for c in line.chars() {
+            match quote {
+                Some(q) => {
+                    if c == q {
+                        quote = None;
+                    }
+                }
+                None => match c {
+                    '"' | '\'' => quote = Some(c),
+                    '{' => d += 1,
+                    '}' => d -= 1,
+                    _ => {}
+                },
+            }
+        }
+        d
+    }
+
+    let mut used_in_functions: HashSet<String> = HashSet::new();
+    let mut assigned_at_top: HashSet<String> = HashSet::new();
+    let mut depth: i32 = 0;
+    // (depth at the function header, whether its opening brace has been seen)
+    let mut region: Option<(i32, bool)> = None;
+
+    for (_, raw) in lines {
+        let line = raw.trim();
+        let is_header = line.starts_with("fn ")
+            || line.starts_with("kfn ")
+            || line.starts_with("async fn ")
+            || line.starts_with("async kfn ");
+        if region.is_none() && is_header {
+            region = Some((depth, false));
+        }
+        if region.is_some() {
+            identifiers(line, &mut used_in_functions);
+        } else {
+            // `name = expr`, `let name = expr`, `name += expr` (not `==`)
+            let t = line.strip_prefix("let ").unwrap_or(line);
+            let name: String = t.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
+            if !name.is_empty() && !name.chars().next().unwrap().is_ascii_digit() {
+                let rest = t[name.len()..].trim_start();
+                let is_assign = (rest.starts_with('=') && !rest.starts_with("=="))
+                    || ["+=", "-=", "*=", "/=", "%="].iter().any(|op| rest.starts_with(op));
+                if is_assign {
+                    assigned_at_top.insert(name);
+                }
+            }
+        }
+        let delta = brace_delta(line);
+        if let Some((start, opened)) = region.as_mut() {
+            if delta > 0 || line.contains('{') {
+                *opened = true;
+            }
+            depth += delta;
+            if *opened && depth <= *start {
+                region = None;
+            }
+        } else {
+            depth += delta;
+        }
+    }
+    used_in_functions.intersection(&assigned_at_top).cloned().collect()
+}
+
 
 fn parse_function_signature(line: &str, line_no: usize) -> Result<(String, Vec<String>), VmError> {
     let (name, params, _defaults) = parse_function_signature_full(line, line_no)?;

@@ -79,6 +79,14 @@ fn array_index(idx: f64, len: usize) -> usize {
     }
 }
 
+/// Return address used for calls made from Rust (see `call_value_nested`).
+const NESTED_RETURN: usize = usize::MAX;
+
+/// Builtins that take a function: `map`, `filter`, `reduce`, `sorted`.
+fn is_callback_builtin(id: u16) -> bool {
+    matches!(id, 10 | 42 | 43 | 44 | 45)
+}
+
 fn wrap_builtin_error(e: VmError, instr_idx: usize) -> VmError {
     let msg = e.to_string();
     if msg.starts_with("Line ") || msg.starts_with("(at instruction") {
@@ -529,11 +537,23 @@ impl VirtualMachine {
             self.classes.insert(class_name.clone(), class_info);
         }
 
-        // Expose function symbols as first-class callback markers for APIs like map/reduce/sort.
-        for name in program.function_names.values() {
-            let _ = self.store_var(name, Value::Str(name.clone()));
+        // Every named function is a first-class value: `f = double`, `apply(double, 3)`,
+        // `map(xs, double)`. Parameters are bound by position (argN), so the names are synthetic.
+        for (start, name) in program.function_names.iter() {
+            let arity = program.function_arities.get(start).copied().unwrap_or(0);
+            let params: Vec<String> = (0..arity).map(|i| format!("arg{i}")).collect();
+            let _ = self.store_var(
+                name,
+                Value::Function { params, bytecode_start: *start, captured: Box::new(HashMap::new()) },
+            );
         }
 
+        self.run_loop(program)
+    }
+
+    /// The interpreter loop. Runs until `Halt`, the end of the code, or (for a nested call made by
+    /// [`call_value_nested`]) the `Ret` that returns to the nested-call sentinel.
+    fn run_loop(&mut self, program: &Program) -> Result<(), VmError> {
         let mut gc_poll: u32 = 0;
         while self.ip < program.instructions.len() {
             self.enforce_step_budget()?;
@@ -2126,6 +2146,11 @@ impl VirtualMachine {
                     let return_ip = self.call_stack.pop().ok_or_else(|| {
                         VmError::runtime_error("RET used without active CALL".to_string())
                     })?;
+                    if return_ip == NESTED_RETURN {
+                        // finished a call made from Rust (map/filter/sorted callbacks); the
+                        // return value is left on top of the stack for the caller
+                        return Ok(());
+                    }
                     self.ensure_jump_target(program, return_ip)?;
                     self.ip = return_ip;
                     continue;
@@ -3503,8 +3528,12 @@ impl VirtualMachine {
                     let b = self.pop_value()?;
                     let a = self.pop_value()?;
                     let args = [a, b];
-                    let result = BuiltinFunctions::call_by_id(*id, &args)
-                        .map_err(|e| wrap_builtin_error(e, instr_idx))?;
+                    let result = if is_callback_builtin(*id) && args.iter().any(|v| matches!(v, Value::Function { .. })) {
+                        self.call_builtin_with_callbacks(*id, &args, program)
+                    } else {
+                        BuiltinFunctions::call_by_id(*id, &args)
+                    }
+                    .map_err(|e| wrap_builtin_error(e, instr_idx))?;
                     self.stack.push(result);
                 }
                 Instruction::CallBuiltinId(id, arg_count) => {
@@ -3513,8 +3542,12 @@ impl VirtualMachine {
                         args.push(self.pop_value()?);
                     }
                     args.reverse();
-                    let result = BuiltinFunctions::call_by_id(*id, &args)
-                        .map_err(|e| wrap_builtin_error(e, instr_idx))?;
+                    let result = if is_callback_builtin(*id) && args.iter().any(|v| matches!(v, Value::Function { .. })) {
+                        self.call_builtin_with_callbacks(*id, &args, program)
+                    } else {
+                        BuiltinFunctions::call_by_id(*id, &args)
+                    }
+                    .map_err(|e| wrap_builtin_error(e, instr_idx))?;
                     self.stack.push(result);
                 }
                 Instruction::DefineClass { name, parent } => {
@@ -5257,6 +5290,132 @@ impl VirtualMachine {
         }
 
         Ok(())
+    }
+
+    /// Call a Killer function value from Rust and return its result, running the *full*
+    /// interpreter (loops, slots, classes, nested calls) rather than a reduced subset.
+    pub(crate) fn call_value_nested(&mut self, func: &Value, args: Vec<Value>, program: &Program) -> Result<Value, VmError> {
+        let (params, start, captured) = match func {
+            Value::Function { params, bytecode_start, captured } => (params, *bytecode_start, captured),
+            Value::Str(name) => return BuiltinFunctions::call(name, &args),
+            other => {
+                return Err(VmError::runtime_error(format!("{} is not callable", other.type_name())));
+            }
+        };
+        let saved_ip = self.ip;
+        let (base_stack, base_calls, base_scopes, base_locals) =
+            (self.stack.len(), self.call_stack.len(), self.scopes.len(), self.locals_stack.len());
+
+        self.call_stack.push(NESTED_RETURN);
+        self.push_scope();
+        self.locals_stack.push(Vec::new());
+        for (name, value) in captured.iter() {
+            self.store_local(name, value.clone());
+        }
+        let arity = program.function_arities.get(&start).copied().unwrap_or(params.len());
+        self.store_local("args", Value::from(args.clone()));
+        for index in 0..arity.max(args.len()) {
+            let value = args.get(index).cloned().unwrap_or(Value::Null);
+            if index < ARG_NAMES.len() {
+                self.store_local(ARG_NAMES[index], value);
+            } else {
+                self.store_local_owned(format!("arg{index}"), value);
+            }
+        }
+        self.ip = start;
+        let outcome = self.run_loop(program);
+        self.ip = saved_ip;
+        match outcome {
+            Ok(()) => Ok(self.stack.pop().unwrap_or(Value::Null)),
+            Err(e) => {
+                // unwind whatever the failed call left behind
+                self.stack.truncate(base_stack);
+                self.call_stack.truncate(base_calls);
+                self.scopes.truncate(base_scopes);
+                self.locals_stack.truncate(base_locals);
+                Err(e)
+            }
+        }
+    }
+
+    /// `map`, `filter`, `reduce` and `sorted` when given Killer function values.
+    fn call_builtin_with_callbacks(&mut self, id: u16, args: &[Value], program: &Program) -> Result<Value, VmError> {
+        let array_arg = |what: &str| -> Result<crate::value::SharedArray, VmError> {
+            match args.first() {
+                Some(Value::Array(a)) => Ok(a.clone()),
+                _ => Err(VmError::runtime_error(format!("{}() first argument must be an array", what))),
+            }
+        };
+        let is_fn = |v: &Value| matches!(v, Value::Function { .. });
+        match id {
+            42 => {
+                // map(array, f)
+                let arr = array_arg("map")?;
+                let f = args.get(1).cloned().unwrap_or(Value::Null);
+                let mut out = Vec::with_capacity(arr.len());
+                for item in arr.to_vec() {
+                    out.push(self.call_value_nested(&f, vec![item], program)?);
+                }
+                Ok(Value::from(out))
+            }
+            43 => {
+                // filter(array, f): keep elements for which f(x) is truthy
+                let arr = array_arg("filter")?;
+                let f = args.get(1).cloned().unwrap_or(Value::Null);
+                let mut out = Vec::new();
+                for item in arr.to_vec() {
+                    let keep = self.call_value_nested(&f, vec![item.clone()], program)?;
+                    if self.is_truthy(&keep) {
+                        out.push(item);
+                    }
+                }
+                Ok(Value::from(out))
+            }
+            44 => {
+                // reduce(array, f, initial?) -- f(accumulator, item)
+                let arr = array_arg("reduce")?;
+                let f = args.get(1).cloned().unwrap_or(Value::Null);
+                let mut items = arr.to_vec().into_iter();
+                let mut acc = match args.get(2) {
+                    Some(init) => init.clone(),
+                    None => items.next().ok_or_else(|| {
+                        VmError::runtime_error("reduce() of an empty array with no initial value".to_string())
+                    })?,
+                };
+                for item in items {
+                    acc = self.call_value_nested(&f, vec![acc, item], program)?;
+                }
+                Ok(acc)
+            }
+            10 | 45 if args.get(1).map_or(false, is_fn) => {
+                // sorted(array, key_function[, reverse]) -- stable, by key
+                let arr = array_arg("sorted")?;
+                let f = args[1].clone();
+                let reverse = args.get(2).map_or(false, |v| self.is_truthy(v));
+                let mut keyed: Vec<(Value, Value)> = Vec::new();
+                for item in arr.to_vec() {
+                    let key = self.call_value_nested(&f, vec![item.clone()], program)?;
+                    keyed.push((key, item));
+                }
+                let mut failure: Option<VmError> = None;
+                keyed.sort_by(|a, b| match (&a.0, &b.0) {
+                    (Value::Number(x), Value::Number(y)) => x.partial_cmp(y).unwrap_or(std::cmp::Ordering::Equal),
+                    (Value::Str(x), Value::Str(y)) => x.cmp(y),
+                    _ => {
+                        failure = Some(VmError::runtime_error("sorted() keys must be all numbers or all strings".to_string()));
+                        std::cmp::Ordering::Equal
+                    }
+                });
+                if let Some(e) = failure {
+                    return Err(e);
+                }
+                if reverse {
+                    keyed.reverse();
+                }
+                Ok(Value::from(keyed.into_iter().map(|(_, v)| v).collect::<Vec<_>>()))
+            }
+            _ => BuiltinFunctions::call_by_id(id, args),
+        }
     }
 
     /// Fused `slot <cmp> const` on a slot that is not a plain number: uncertain values compare

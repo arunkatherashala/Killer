@@ -230,8 +230,8 @@
  {
   "category": "Functions",
   "name": "default argument",
-  "status": "WRONG",
-  "detail": "got 'null Sai\\nYo Sai', expected 'Hi Sai\\nYo Sai'"
+  "status": "PASS",
+  "detail": ""
  },
  {
   "category": "Functions",
@@ -248,14 +248,14 @@
  {
   "category": "Functions",
   "name": "no explicit return",
-  "status": "ERROR",
-  "detail": "ERROR: Runtime error: Stack underflow"
+  "status": "PASS",
+  "detail": ""
  },
  {
   "category": "Functions",
   "name": "function stored in variable",
-  "status": "ERROR",
-  "detail": "ERROR: Parse error: Line 5: unknown function `f`"
+  "status": "PASS",
+  "detail": ""
  },
  {
   "category": "Functions",
@@ -273,13 +273,13 @@
   "category": "Functions",
   "name": "closure keeps state",
   "status": "ERROR",
-  "detail": "ERROR: Parse error: Line 10: unknown function `c`"
+  "detail": "ERROR: Runtime error: Undefined variable `n`"
  },
  {
   "category": "Functions",
   "name": "function passed as argument",
-  "status": "ERROR",
-  "detail": "ERROR: Parse error: Line 2: unknown function `f`"
+  "status": "PASS",
+  "detail": ""
  },
  {
   "category": "Functions",
@@ -290,14 +290,14 @@
  {
   "category": "Functions",
   "name": "map with named function",
-  "status": "ERROR",
-  "detail": "ERROR: Runtime error: Undefined variable `d`"
+  "status": "PASS",
+  "detail": ""
  },
  {
   "category": "Functions",
   "name": "filter and reduce",
-  "status": "ERROR",
-  "detail": "ERROR: Runtime error: Undefined variable `even`"
+  "status": "PASS",
+  "detail": ""
  },
  {
   "category": "Functions",
@@ -308,26 +308,26 @@
  {
   "category": "Functions",
   "name": "function in dict",
-  "status": "ERROR",
-  "detail": "ERROR: Parse error: Line 5: unsupported expression `d[\"say\"]()`"
+  "status": "PASS",
+  "detail": ""
  },
  {
   "category": "Functions",
   "name": "read global from function",
-  "status": "ERROR",
-  "detail": "ERROR: Runtime error: Undefined variable `g`"
+  "status": "PASS",
+  "detail": ""
  },
  {
   "category": "Functions",
   "name": "write global from function",
-  "status": "ERROR",
-  "detail": "ERROR: Runtime error: Undefined variable `total`"
+  "status": "WRONG",
+  "detail": "got '0', expected '11'"
  },
  {
   "category": "Functions",
   "name": "global keyword",
-  "status": "ERROR",
-  "detail": "ERROR: Parse error: Line 2: Parse error: Line 3: unsupported Killer subset statement `global total`"
+  "status": "PASS",
+  "detail": ""
  },
  {
   "category": "Functions",
@@ -356,14 +356,14 @@
  {
   "category": "OOP",
   "name": "inheritance and override",
-  "status": "WRONG",
-  "detail": "got 'null barks', expected 'Rex barks'"
+  "status": "PASS",
+  "detail": ""
  },
  {
   "category": "OOP",
   "name": "inherited method + init",
-  "status": "WRONG",
-  "detail": "got 'null makes a sound\\nnull fetches', expected 'Rex makes a sound\\nRex fetches'"
+  "status": "PASS",
+  "detail": ""
  },
  {
   "category": "OOP",
@@ -392,8 +392,8 @@
  {
   "category": "OOP",
   "name": "polymorphism",
-  "status": "WRONG",
-  "detail": "got 'null\\nmeow', expected 'a makes a sound\\nmeow'"
+  "status": "PASS",
+  "detail": ""
  },
  {
   "category": "OOP",
@@ -440,8 +440,8 @@
  {
   "category": "Collections",
   "name": "negative index",
-  "status": "WRONG",
-  "detail": "got '1', expected '3'"
+  "status": "PASS",
+  "detail": ""
  },
  {
   "category": "Collections",
@@ -566,8 +566,8 @@
  {
   "category": "Collections",
   "name": "sorted with key function",
-  "status": "ERROR",
-  "detail": "ERROR: Runtime error: Undefined variable `neg`"
+  "status": "PASS",
+  "detail": ""
  },
  {
   "category": "Collections",
@@ -902,8 +902,8 @@
  {
   "category": "Concurrency",
   "name": "async_spawn / async_await builtins",
-  "status": "ERROR",
-  "detail": "ERROR: Runtime error: Undefined variable `w`"
+  "status": "WRONG",
+  "detail": "got '<function()>', expected '3'"
  },
  {
   "category": "Concurrency",

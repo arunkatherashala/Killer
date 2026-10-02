@@ -105,3 +105,105 @@ fn polymorphism_through_inherited_constructors() {
     let src = format!("{}class Cat extends Animal {{\n  fn speak() {{\n    return \"meow\"\n  }}\n}}\nxs = [new Animal(\"a\"), new Cat(\"c\")]\nfor x in xs {{\n  println(x.speak())\n}}\nprintln(xs[1].name)\n", ANIMAL);
     assert_eq!(run(&src), "a makes a sound\nmeow\nc");
 }
+
+// ---------------------------------------------------------------- first-class functions
+
+#[test]
+fn functions_are_values() {
+    let src = "fn double(a) {\n  return a * 2\n}\nf = double\nprintln(f(4))\nfn apply(g, x) {\n  return g(x)\n}\nprintln(apply(double, 21))\nfn make() {\n  return double\n}\nprintln(make()(5))\n";
+    assert_eq!(run(src), "8\n42\n10");
+}
+
+#[test]
+fn functions_in_lists_and_dicts_can_be_called() {
+    let src = "fn a() {\n  return 1\n}\nfn b(x) {\n  return x + 2\n}\nfs = [a, b]\nprintln(fs[0]())\nprintln(fs[1](40))\nd = {\"go\": b}\nprintln(d[\"go\"](5))\n";
+    assert_eq!(run(src), "1\n42\n7");
+}
+
+#[test]
+fn a_variable_shadows_a_function_of_the_same_name() {
+    let src = "fn f(x) {\n  return x + 1\n}\nfn g(f) {\n  return f(10)\n}\nfn h(x) {\n  return x * 100\n}\nprintln(f(1))\nprintln(g(h))\n";
+    assert_eq!(run(src), "2\n1000");
+}
+
+#[test]
+fn map_filter_reduce_accept_user_functions() {
+    let src = "fn d(a) {\n  return a * 2\n}\nfn even(x) {\n  return x % 2 == 0\n}\nfn add(a, b) {\n  return a + b\n}\nprintln(map([1, 2, 3], d))\nprintln(filter([1, 2, 3, 4], even))\nprintln(reduce([1, 2, 3, 4], add, 0))\nprintln(reduce([1, 2, 3, 4], add))\n";
+    assert_eq!(run(src), "[2, 4, 6]\n[2, 4]\n10\n10");
+}
+
+#[test]
+fn callbacks_run_the_full_interpreter_not_a_subset() {
+    // loops, local variables, nested calls and early returns inside a callback
+    let src = "fn tri(n) {\n  t = 0\n  for i in range(n + 1) {\n    t = t + i\n  }\n  return t\n}\nfn classify(n) {\n  if n > 2 {\n    return \"big\"\n  }\n  return tri(n)\n}\nprintln(map([1, 2, 3, 4], tri))\nprintln(map([1, 2, 3], classify))\n";
+    assert_eq!(run(src), "[1, 3, 6, 10]\n[1, 3, big]");
+}
+
+#[test]
+fn sorted_with_a_key_function_is_stable_and_supports_reverse() {
+    let src = "fn neg(x) {\n  return 0 - x\n}\nfn size(s) {\n  return len(s)\n}\nprintln(sorted([1, 3, 2], neg))\nprintln(sorted([\"ccc\", \"a\", \"bb\", \"dd\"], size))\nprintln(sorted([\"ccc\", \"a\", \"bb\"], size, true))\n";
+    assert_eq!(run(src), "[3, 2, 1]\n[a, bb, dd, ccc]\n[ccc, bb, a]");
+}
+
+#[test]
+fn builtins_still_accept_builtin_names_as_strings() {
+    let src = "println(map([\"a\", \"b\"], \"upper\"))\nprintln(sorted([3, 1, 2]))\nprintln(sorted([3, 1, 2], true))\n";
+    assert_eq!(run(src), "[A, B]\n[1, 2, 3]\n[3, 2, 1]");
+}
+
+// ---------------------------------------------------------------- return values and globals
+
+#[test]
+fn a_function_without_return_yields_null_and_does_not_underflow() {
+    let src = "fn f() {\n  y = 1\n}\nprintln(f())\nx = f()\nprintln(x == null)\n";
+    assert_eq!(run(src), "null\ntrue");
+}
+
+#[test]
+fn falling_off_the_end_of_an_if_does_not_run_on_into_later_code() {
+    // the last instruction of f is the Ret inside the if; the false branch used to continue into main code
+    let src = "fn f(x) {\n  if x > 0 {\n    return \"pos\"\n  }\n}\nprintln(f(1))\nprintln(f(-1))\nprintln(\"after\")\n";
+    assert_eq!(run(src), "pos\nnull\nafter");
+}
+
+#[test]
+fn the_last_expression_of_a_function_is_its_value() {
+    let src = "fn add(a, b) {\n  a + b\n}\nfn twice(a) {\n  add(a, a)\n}\nprintln(add(2, 3))\nprintln(twice(4))\n";
+    assert_eq!(run(src), "5\n8");
+}
+
+#[test]
+fn expression_statements_in_the_middle_of_a_function_are_discarded() {
+    let src = "fn noisy() {\n  return 5\n}\nfn f() {\n  noisy()\n  noisy()\n  return 1\n}\nt = 0\nfor i in range(1000) {\n  t = t + f()\n  noisy()\n}\nprintln(t)\n";
+    assert_eq!(run(src), "1000");
+}
+
+#[test]
+fn functions_can_read_top_level_variables() {
+    let src = "g = 5\nfn f() {\n  return g + 1\n}\nprintln(f())\ng = 10\nprintln(f())\n";
+    assert_eq!(run(src), "6\n11");
+}
+
+#[test]
+fn global_declaration_lets_a_function_write_a_top_level_variable() {
+    let src = "total = 0\nfn add(n) {\n  global total\n  total = total + n\n}\nadd(5)\nadd(6)\nprintln(total)\n";
+    assert_eq!(run(src), "11");
+}
+
+#[test]
+fn assignment_inside_a_function_is_local_unless_declared_global() {
+    let src = "x = 1\nfn f() {\n  x = 99\n  return x\n}\nprintln(f())\nprintln(x)\n";
+    assert_eq!(run(src), "99\n1");
+}
+
+#[test]
+fn a_global_holding_a_function_can_be_called_from_another_function() {
+    let src = "fn double(a) {\n  return a * 2\n}\nop = double\nfn run(x) {\n  return op(x)\n}\nprintln(run(21))\n";
+    assert_eq!(run(src), "42");
+}
+
+#[test]
+fn recursion_and_mutual_recursion_still_work() {
+    let src = "fn even(n) {\n  if n == 0 {\n    return true\n  }\n  return odd(n - 1)\n}\nfn odd(n) {\n  if n == 0 {\n    return false\n  }\n  return even(n - 1)\n}\nprintln(even(10))\nprintln(odd(7))\n";
+    assert_eq!(run(src), "true\ntrue");
+}
