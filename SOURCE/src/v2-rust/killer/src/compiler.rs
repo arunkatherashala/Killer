@@ -264,6 +264,9 @@ struct CompilerState {
     method_bytecode: HashMap<(String, String), usize>,
     /// `live` variable registry: name → (deps, recompute_instr_start, recompute_instr_count)
     live_vars: HashMap<String, (Vec<String>, usize, usize)>,
+    /// Loop / comprehension variables currently in scope. They are stored by name (not in a
+    /// slot), so a call `g(x)` on one must still be compiled as a call through the variable.
+    named_locals: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -2797,7 +2800,10 @@ fn compile_for_each_line_statement(
     });
 
     // body
-    compile_block(lines, cursor, state, context, true, true)?;
+    state.named_locals.push(var_name.to_string());
+    let body_result = compile_block(lines, cursor, state, context, true, true);
+    state.named_locals.pop();
+    body_result?;
 
     state.instructions.push(Instruction::Jump(loop_start));
     let loop_end = state.instructions.len();
@@ -3774,6 +3780,7 @@ fn compile_expr_str(
             || context.global_decls.contains(&name)
             || state.global_vars.contains(&name)
             || state.decorated.contains(&name)
+            || state.named_locals.contains(&name)
             || (context.in_function && context.outer_vars.contains(&name));
         if callee_is_variable {
             compile_expr_str(&name, line_no, state, context)?;
@@ -4197,6 +4204,7 @@ fn compile_list_comprehension(
     context: &CompileContext,
 ) -> Result<(), VmError> {
     let uid = state.instructions.len();
+    let named_locals_base = state.named_locals.len();
     let result = format!("__lcR_{}", uid);
     state.instructions.push(Instruction::BuildArray(0));
     state.instructions.push(Instruction::Store(result.clone()));
@@ -4246,6 +4254,7 @@ fn compile_list_comprehension(
                 state.instructions.push(Instruction::StoreLocal(name.clone()));
             }
         }
+        state.named_locals.extend(vars.iter().cloned());
         hidden.extend(vars);
 
         // this clause's filters: a failing filter skips to this level's "next element"
@@ -4279,6 +4288,7 @@ fn compile_list_comprehension(
         let end = state.instructions.len();
         state.instructions[*exit_jump] = Instruction::JumpIfFalse(end);
     }
+    state.named_locals.truncate(named_locals_base);
     state.instructions.push(Instruction::Load(result));
     Ok(())
 }

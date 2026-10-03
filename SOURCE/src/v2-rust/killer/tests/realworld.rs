@@ -86,3 +86,9 @@ fn constant_folding_does_not_cross_a_branch_target() {
     assert_eq!(run(src), "4\n12\n13\n8");
 }
 
+#[test]
+fn loop_and_comprehension_variables_can_be_called() {
+    let src = "fn inc(x) {\n  return x + 1\n}\nfn dbl(x) {\n  return x * 2\n}\nfn run(fs, v) {\n  for g in fs {\n    v = g(v)\n  }\n  return v\n}\nprintln(run([inc, dbl, inc], 3))\nfs = [inc, dbl]\nprintln([f(10) for f in fs])\nclass K {\n  fn init() {\n    this.fs = [inc, dbl]\n  }\n  fn go(v) {\n    for g in reverse(this.fs) {\n      v = g(v)\n    }\n    return v\n  }\n}\nprintln(new K().go(5))\n";
+    assert_eq!(run(src), "9\n[11, 20]\n11");
+}
+
