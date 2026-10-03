@@ -3410,6 +3410,51 @@ fn extract_identifiers(expr: &str) -> Vec<String> {
     ids
 }
 
+/// Rewrite the single-quoted string literals of an expression as double-quoted ones.
+fn single_quoted_to_double(expr: &str) -> String {
+    if !expr.contains('\'') {
+        return expr.to_string();
+    }
+    let mut out = String::with_capacity(expr.len() + 2);
+    let mut chars = expr.chars();
+    let mut in_double = false;
+    while let Some(c) = chars.next() {
+        match c {
+            '"' => {
+                in_double = !in_double;
+                out.push(c);
+            }
+            '\\' if in_double => {
+                out.push(c);
+                if let Some(next) = chars.next() {
+                    out.push(next);
+                }
+            }
+            '\'' if !in_double => {
+                out.push('"');
+                while let Some(d) = chars.next() {
+                    match d {
+                        '\'' => break,
+                        '\\' => match chars.next() {
+                            Some('\'') => out.push('\''),
+                            Some(next) => {
+                                out.push('\\');
+                                out.push(next);
+                            }
+                            None => out.push('\\'),
+                        },
+                        '"' => out.push_str("\\\""),
+                        other => out.push(other),
+                    }
+                }
+                out.push('"');
+            }
+            other => out.push(other),
+        }
+    }
+    out
+}
+
 /// Compile a K-string interpolation: the raw content between `K"..."` or `k"..."`.
 /// Segments like "Hello {name}" compile to  ConstStr("Hello ") + Load(name) + Add + ...
 fn compile_kstring(
@@ -3467,8 +3512,9 @@ fn compile_kstring(
     let mut first = true;
     for (is_expr, text) in &segments {
         if *is_expr {
-            // Wrap in str() so numbers/bools convert cleanly
-            let call_expr = format!("str({})", text.trim());
+            // Wrap in str() so numbers/bools convert cleanly. The text sits inside a double-quoted
+            // literal, so strings in it are usually single-quoted: `f"{d['k']}"`.
+            let call_expr = format!("str({})", single_quoted_to_double(text.trim()));
             compile_expr_str(&call_expr, line_no, state, context)?;
         } else {
             state.instructions.push(Instruction::ConstStr(text.clone()));
