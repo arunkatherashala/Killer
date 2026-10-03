@@ -1569,6 +1569,15 @@ fn compile_expr(
                     return Ok(());
                 }
             }
+            if matches!(op, BinaryOp::And | BinaryOp::Or) {
+                let sym = if matches!(op, BinaryOp::And) { "&&" } else { "||" };
+                compile_short_circuit(
+                    sym,
+                    state,
+                    |st, rhs| compile_expr(if rhs { right } else { left }, st, context),
+                )?;
+                return Ok(());
+            }
             compile_expr(left, state, context)?;
             compile_expr(right, state, context)?;
             match op {
@@ -3810,19 +3819,11 @@ fn compile_expr_str(
     }
 
     if let Some((left, op, right)) = split_logical(expr) {
-        compile_expr_str(left, line_no, state, context)?;
-        compile_expr_str(right, line_no, state, context)?;
-        match op {
-            "&&" => state.instructions.push(Instruction::And),
-            "||" => state.instructions.push(Instruction::Or),
-            "??" => state.instructions.push(Instruction::NullCoalesce),
-            _ => {
-                return Err(VmError::parse_error_simple(format!(
-                    "Line {}: unsupported logical operator `{}`",
-                    line_no, op
-                )))
-            }
-        }
+        compile_short_circuit(
+            op,
+            state,
+            |st, rhs| compile_expr_str(if rhs { right } else { left }, line_no, st, context),
+        )?;
         return Ok(());
     }
 
@@ -4299,6 +4300,35 @@ fn parse_list_comprehension(inner: &str) -> Option<(String, String, String, Opti
     } else {
         Some((expr_part, var_name, after_in.to_string(), None))
     }
+}
+
+/// Compile `left op right` for the logical operators `&&`, `||` and `??` with short-circuit
+/// evaluation: `right` runs only when `left` does not already decide the result.
+fn compile_short_circuit(
+    op: &str,
+    state: &mut CompilerState,
+    mut compile_operand: impl FnMut(&mut CompilerState, bool) -> Result<(), VmError>,
+) -> Result<(), VmError> {
+    compile_operand(state, false)?;
+    let jump = state.instructions.len();
+    state.instructions.push(match op {
+        "&&" => Instruction::AndShort(usize::MAX),
+        "||" => Instruction::OrShort(usize::MAX),
+        _ => Instruction::CoalesceShort(usize::MAX),
+    });
+    compile_operand(state, true)?;
+    match op {
+        "&&" => state.instructions.push(Instruction::And),
+        "||" => state.instructions.push(Instruction::Or),
+        _ => {}
+    }
+    let end = state.instructions.len();
+    state.instructions[jump] = match op {
+        "&&" => Instruction::AndShort(end),
+        "||" => Instruction::OrShort(end),
+        _ => Instruction::CoalesceShort(end),
+    };
+    Ok(())
 }
 
 fn split_logical(expr: &str) -> Option<(&str, &str, &str)> {
@@ -5552,13 +5582,11 @@ fn compile_binary_operators(
     use crate::exprsplit as xs;
 
     if let Some((left, op, right)) = xs::split_logical_ordered(expr) {
-        compile_expr_str(left, line_no, state, context)?;
-        compile_expr_str(right, line_no, state, context)?;
-        state.instructions.push(match op {
-            "&&" => Instruction::And,
-            "||" => Instruction::Or,
-            _ => Instruction::NullCoalesce,
-        });
+        compile_short_circuit(
+            op,
+            state,
+            |st, rhs| compile_expr_str(if rhs { right } else { left }, line_no, st, context),
+        )?;
         return Ok(true);
     }
 

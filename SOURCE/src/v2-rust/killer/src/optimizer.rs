@@ -47,11 +47,48 @@ pub fn optimize_bytecode_with_map(instructions: &[Instruction]) -> (Vec<Instruct
 /// Rewrite every code address in `code` through `old_to_new` (`n` = length of the old code).
 /// One shared routine so that no shrinking pass can forget an instruction kind.
 fn remap_code_addresses(code: &mut [Instruction], old_to_new: &[usize], n: usize) {
-    let m = |x: usize| old_to_new[x.min(n)];
+    visit_code_addresses(code, &mut |x| *x = old_to_new[(*x).min(n)]);
+}
+
+/// For every instruction index `i`, the smallest jump/call/handler target greater than `i`
+/// (or `code.len()` when there is none). A peephole pattern starting at `i` may only span
+/// instructions below this limit: fusing across a branch target would let a jump land in the
+/// middle of a fused instruction and change what the other path computes.
+fn fusion_limits(code: &[Instruction]) -> Vec<usize> {
+    let n = code.len();
+    let mut is_target = vec![false; n + 1];
+    let mut scratch = code.to_vec();
+    visit_code_addresses(&mut scratch, &mut |x| {
+        if *x < n {
+            is_target[*x] = true;
+        }
+    });
+    let mut limits = vec![n; n + 1];
+    let mut next = n;
+    for i in (0..n).rev() {
+        limits[i] = next;
+        if is_target[i] {
+            next = i;
+        }
+    }
+    limits
+}
+
+/// Call `f` on every code address stored in `code` (jump targets, call targets, loop and
+/// exception-handler addresses). One shared routine so that no pass can forget an instruction kind.
+fn visit_code_addresses(code: &mut [Instruction], f: &mut dyn FnMut(&mut usize)) {
+    let mut m = |x: usize| {
+        let mut y = x;
+        f(&mut y);
+        y
+    };
     for instr in code {
         match instr {
             Instruction::Jump(t)
             | Instruction::JumpIfFalse(t)
+            | Instruction::AndShort(t)
+            | Instruction::OrShort(t)
+            | Instruction::CoalesceShort(t)
             | Instruction::JumpIfTNeg(t)
             | Instruction::JumpIfTZero(t)
             | Instruction::JumpIfTPos(t)
@@ -94,11 +131,13 @@ fn fold_const_arithmetic(instructions: &[Instruction]) -> (Vec<Instruction>, Vec
     let n = instructions.len();
     let mut out: Vec<Instruction> = Vec::with_capacity(n);
     let mut old_to_new = vec![0usize; n + 1];
+    let limits = fusion_limits(instructions);
     let mut i = 0;
     while i < n {
+        let lim = limits[i];
         old_to_new[i] = out.len();
         // Look for: ConstNum(a) ConstNum(b) <Op>
-        if i + 2 < n {
+        if i + 2 < lim {
             if let (Instruction::ConstNum(a), Instruction::ConstNum(b)) =
                 (&instructions[i], &instructions[i + 1])
             {
@@ -124,7 +163,7 @@ fn fold_const_arithmetic(instructions: &[Instruction]) -> (Vec<Instruction>, Vec
             }
         }
         // Look for: ConstStr(a) ConstStr(b) Add → ConstStr(ab)
-        if i + 2 < n {
+        if i + 2 < lim {
             if let (Instruction::ConstStr(a), Instruction::ConstStr(b), Instruction::Add) =
                 (&instructions[i], &instructions[i + 1], &instructions[i + 2])
             {
@@ -268,11 +307,13 @@ fn fuse_slot_patterns(instructions: &[Instruction]) -> (Vec<Instruction>, Vec<us
     let mut new_idx = 0usize;
     let mut i = 0;
 
+    let limits = fusion_limits(instructions);
     while i < n {
+        let lim = limits[i];
         old_to_new[i] = new_idx;
 
         // ── Constant folding (numeric / bool / compare) — 3→1, jump-remapped like other fusions ──
-        if i + 2 < n {
+        if i + 2 < lim {
             if let (Instruction::ConstNum(a), Instruction::ConstNum(b), op) = (
                 &instructions[i],
                 &instructions[i + 1],
@@ -321,7 +362,7 @@ fn fuse_slot_patterns(instructions: &[Instruction]) -> (Vec<Instruction>, Vec<us
                 }
             }
         }
-        if i + 2 < n {
+        if i + 2 < lim {
             if let (Instruction::ConstBool(a), Instruction::ConstBool(b), op) = (
                 &instructions[i],
                 &instructions[i + 1],
@@ -344,7 +385,7 @@ fn fuse_slot_patterns(instructions: &[Instruction]) -> (Vec<Instruction>, Vec<us
         }
 
         // Pattern TR0 (2→1): ConstNum(n), IntToTrit → ConstTrit — matches VM clamp (int_to_trit / trit_from_int)
-        if i + 1 < n {
+        if i + 1 < lim {
             if let (Instruction::ConstNum(nv), Instruction::IntToTrit) = (
                 &instructions[i],
                 &instructions[i + 1],
@@ -358,7 +399,7 @@ fn fuse_slot_patterns(instructions: &[Instruction]) -> (Vec<Instruction>, Vec<us
             }
         }
         // Pattern TR1 (2→1): ConstTrit(t), TritToInt → ConstNum — stack-neutral trit→scalar for literals
-        if i + 1 < n {
+        if i + 1 < lim {
             if let (Instruction::ConstTrit(t), Instruction::TritToInt) = (
                 &instructions[i],
                 &instructions[i + 1],
@@ -372,7 +413,7 @@ fn fuse_slot_patterns(instructions: &[Instruction]) -> (Vec<Instruction>, Vec<us
         }
 
         // Pattern A: LoadSlot(s), ConstNum(n), Add, StoreSlot(s) → AddSlotConst(s, n)
-        if i + 3 < n {
+        if i + 3 < lim {
             if let (
                 Instruction::LoadSlot(s1),
                 Instruction::ConstNum(nv),
@@ -397,7 +438,7 @@ fn fuse_slot_patterns(instructions: &[Instruction]) -> (Vec<Instruction>, Vec<us
             }
         }
         // Pattern A2: LoadSlot(s), ConstNum(n), Sub, StoreSlot(s) -> SubSlotConst(s, n)
-        if i + 3 < n {
+        if i + 3 < lim {
             if let (
                 Instruction::LoadSlot(s1),
                 Instruction::ConstNum(nv),
@@ -422,7 +463,7 @@ fn fuse_slot_patterns(instructions: &[Instruction]) -> (Vec<Instruction>, Vec<us
         }
         // Pattern K1 (6→1): ConstStr(pre) + LoadSlot + CallBuiltin("str",1) + Add + ConstStr(suf) + Add
         // → PrefixSlotSuffix  (K"prefix{slot}suffix")
-        if i + 5 < n {
+        if i + 5 < lim {
             if let (
                 Instruction::ConstStr(pre),
                 Instruction::LoadSlot(s),
@@ -451,7 +492,7 @@ fn fuse_slot_patterns(instructions: &[Instruction]) -> (Vec<Instruction>, Vec<us
         }
         // Pattern K2 (4→1): ConstStr(pre) + LoadSlot + CallBuiltin("str",1) + Add
         // → PrefixStrSlot  (K"prefix{slot}")
-        if i + 3 < n {
+        if i + 3 < lim {
             if let (
                 Instruction::ConstStr(pre),
                 Instruction::LoadSlot(s),
@@ -474,7 +515,7 @@ fn fuse_slot_patterns(instructions: &[Instruction]) -> (Vec<Instruction>, Vec<us
         }
         // Pattern K3 (4→1): LoadSlot + CallBuiltin("str",1) + ConstStr(suf) + Add
         // → SlotStrSuffix  (K"{slot}suffix")
-        if i + 3 < n {
+        if i + 3 < lim {
             if let (
                 Instruction::LoadSlot(s),
                 Instruction::CallBuiltin(cb1, 1),
@@ -496,7 +537,7 @@ fn fuse_slot_patterns(instructions: &[Instruction]) -> (Vec<Instruction>, Vec<us
             }
         }
         // Pattern B family: LoadSlot(s), ConstNum(n), CMP -> CmpSlotConst(s, n)
-        if i + 2 < n {
+        if i + 2 < lim {
             if let (
                 Instruction::LoadSlot(s),
                 Instruction::ConstNum(nv),
@@ -525,7 +566,7 @@ fn fuse_slot_patterns(instructions: &[Instruction]) -> (Vec<Instruction>, Vec<us
             }
         }
         // Pattern T (Trit/Fuzzy 4→1): LoadSlot(s1), LoadSlot(s2), TritAnd/TritOr/FuzzyAnd/FuzzyOr, StoreSlot(dst)
-        if i + 3 < n {
+        if i + 3 < lim {
             if let (
                 Instruction::LoadSlot(s1),
                 Instruction::LoadSlot(s2),
@@ -558,7 +599,7 @@ fn fuse_slot_patterns(instructions: &[Instruction]) -> (Vec<Instruction>, Vec<us
             }
         }
         // Pattern T3 (Trit/Fuzzy 3→1): LoadSlot(s), TritNot/FuzzyNot, StoreSlot(dst)
-        if i + 2 < n {
+        if i + 2 < lim {
             if let (
                 Instruction::LoadSlot(src),
                 not_op,

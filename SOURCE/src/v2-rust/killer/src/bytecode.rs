@@ -213,6 +213,15 @@ pub enum Instruction {
     /// `a ?? b` — null coalescing: if top-of-stack is null, replace with right-hand side
     /// Pops left; if null pushes right, else pushes left
     NullCoalesce,
+    /// Short-circuit `a && b`, emitted after `a`: if `a` is a plain falsy value (not a trit) the
+    /// result is `false` and execution jumps to `target`, past `b` and the closing `And`;
+    /// otherwise `a` stays on the stack for the `And` that follows `b`.
+    AndShort(usize),
+    /// Short-circuit `a || b`: a plain truthy `a` becomes `true` and jumps past `b` and `Or`.
+    OrShort(usize),
+    /// Short-circuit `a ?? b`: a non-null `a` stays as the result and jumps to `target`;
+    /// a null `a` is popped and `b` is evaluated.
+    CoalesceShort(usize),
     /// `obj?.method(args)` / `obj?.field` — optional chain: if obj is null, short-circuit to null
     /// method_name + arg_count; if top is null, skip call and push null
     OptionalChain { method_name: String, arg_count: usize },

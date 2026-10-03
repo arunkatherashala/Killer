@@ -85,7 +85,9 @@ fn logical_operators_follow_kleene_three_valued_logic() {
 #[test]
 fn trits_mix_with_plain_booleans() {
     let src = "believe a = 10 \u{b1} 1\nU = a > 10\nprintln(true && U)\nprintln(false && U)\nprintln(true || U)\nprintln(false || U)\n";
-    assert_eq!(run(src), "T_ZERO\nT_NEG\nT_POS\nT_ZERO");
+    // `false && U` and `true || U` are decided by the left operand alone: it short-circuits, so the
+    // result is a plain boolean (the right operand is not even evaluated)
+    assert_eq!(run(src), "T_ZERO\nfalse\ntrue\nT_ZERO");
 }
 
 #[test]

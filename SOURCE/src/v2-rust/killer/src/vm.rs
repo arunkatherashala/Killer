@@ -1398,6 +1398,30 @@ impl VirtualMachine {
                             .push(Value::Bool(self.is_truthy(&lhs) || self.is_truthy(&rhs)));
                     }
                 }
+                Instruction::AndShort(target) => {
+                    let lhs = self.stack.last().cloned().unwrap_or(Value::Null);
+                    if !matches!(lhs, Value::Trit(_)) && !self.is_truthy(&lhs) {
+                        *self.stack.last_mut().unwrap() = Value::Bool(false);
+                        self.ip = *target;
+                        continue;
+                    }
+                }
+                Instruction::OrShort(target) => {
+                    let lhs = self.stack.last().cloned().unwrap_or(Value::Null);
+                    if !matches!(lhs, Value::Trit(_)) && self.is_truthy(&lhs) {
+                        *self.stack.last_mut().unwrap() = Value::Bool(true);
+                        self.ip = *target;
+                        continue;
+                    }
+                }
+                Instruction::CoalesceShort(target) => {
+                    if matches!(self.stack.last(), Some(Value::Null) | None) {
+                        self.stack.pop();
+                    } else {
+                        self.ip = *target;
+                        continue;
+                    }
+                }
                 Instruction::Not => {
                     let val = self.pop_value()?;
                     if let Value::Trit(t) = val {
@@ -6318,6 +6342,27 @@ impl VirtualMachine {
                             let rhs = self.pop_value()?;
                             let lhs = self.pop_value()?;
                             self.stack.push(Value::Bool(self.is_truthy(&lhs) || self.is_truthy(&rhs)));
+                        }
+                        Instruction::AndShort(target) => {
+                            let lhs = self.stack.last().cloned().unwrap_or(Value::Null);
+                            if !matches!(lhs, Value::Trit(_)) && !self.is_truthy(&lhs) {
+                                *self.stack.last_mut().unwrap() = Value::Bool(false);
+                                self.ip = *target;
+                            }
+                        }
+                        Instruction::OrShort(target) => {
+                            let lhs = self.stack.last().cloned().unwrap_or(Value::Null);
+                            if !matches!(lhs, Value::Trit(_)) && self.is_truthy(&lhs) {
+                                *self.stack.last_mut().unwrap() = Value::Bool(true);
+                                self.ip = *target;
+                            }
+                        }
+                        Instruction::CoalesceShort(target) => {
+                            if matches!(self.stack.last(), Some(Value::Null) | None) {
+                                self.stack.pop();
+                            } else {
+                                self.ip = *target;
+                            }
                         }
                         Instruction::Jump(target) => {
                             self.ip = *target;
