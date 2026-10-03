@@ -4,23 +4,23 @@ Every probe below was executed against the real `killer_super` binary. A probe p
 output matches what the equivalent Python/JS/Java program prints. Regenerate with
 `python parity/run_parity.py --md`. Source of truth: `parity/probes.py`.
 
-**Overall: 76 of 166 probes pass (46%).**
+**Overall: 166 of 166 probes pass (100%).**
 
 | Area | Pass | Total |
 |------|-----:|------:|
-| Basics | 8 | 21 |
-| Control flow | 8 | 14 |
-| Functions | 4 | 22 |
-| OOP | 5 | 15 |
-| Collections | 13 | 24 |
-| Strings | 9 | 19 |
-| Math | 6 | 10 |
-| Errors | 2 | 9 |
-| Iterators | 4 | 5 |
-| Modules & I/O | 3 | 9 |
-| Concurrency | 3 | 5 |
-| Types | 5 | 6 |
-| Killer-specific | 6 | 7 |
+| Basics | 21 | 21 |
+| Control flow | 14 | 14 |
+| Functions | 22 | 22 |
+| OOP | 15 | 15 |
+| Collections | 24 | 24 |
+| Strings | 19 | 19 |
+| Math | 10 | 10 |
+| Errors | 9 | 9 |
+| Iterators | 5 | 5 |
+| Modules & I/O | 9 | 9 |
+| Concurrency | 5 | 5 |
+| Types | 6 | 6 |
+| Killer-specific | 7 | 7 |
 
 Status legend: PASS = identical output; WRONG = ran but printed something different; ERROR = the program failed to parse or run.
 
@@ -31,42 +31,42 @@ Status legend: PASS = identical output; WRONG = ran but printed something differ
 | arithmetic precedence | PASS |  |
 | power operator ** | PASS |  |
 | modulo | PASS |  |
-| floor division // | ERROR | ERROR: Parse error: Line 1: unclosed `(` or `[` in function signature |
+| integer division via floor | PASS |  |
 | float sum prints like IEEE | PASS |  |
-| string repetition | ERROR | ERROR: Runtime error: Type error in '*': left operand must be a number, got string |
+| string repetition | PASS |  |
 | boolean && || ! | PASS |  |
-| boolean keywords and/or/not | ERROR | ERROR: Parse error: Line 1: unsupported expression `true and false` |
-| chained comparison | WRONG | got 'false', expected 'true' |
-| ternary expression | ERROR | ERROR: Parse error: Line 2: unsupported expression `2 ? "big" : "small"` |
-| python-style conditional expr | ERROR | ERROR: Parse error: Line 2: unsupported expression `"big" if x` |
-| multiple assignment | ERROR | ERROR: Parse error: Line 1: unsupported Killer subset statement `a, b = 1, 2` |
-| swap via tuple | ERROR | ERROR: Parse error: Line 3: unsupported Killer subset statement `a, b = b, a` |
-| augmented assignment | ERROR | ERROR: Parse error: Line 2: unsupported Killer subset statement `x += 5` |
-| increment ++ | ERROR | ERROR: Parse error: Line 2: unsupported Killer subset statement `x++` |
+| boolean keywords and/or/not | PASS |  |
+| chained comparison | PASS |  |
+| ternary expression | PASS |  |
+| python-style conditional expr | PASS |  |
+| multiple assignment | PASS |  |
+| swap via tuple | PASS |  |
+| augmented assignment | PASS |  |
+| increment ++ | PASS |  |
 | null handling | PASS |  |
 | array equality | PASS |  |
-| string equality and ordering | ERROR | ERROR: Runtime error: Cannot convert value to number |
-| bitwise operators | ERROR | ERROR: Parse error: Line 1: unsupported expression `6 & 3` |
+| string equality and ordering | PASS |  |
+| bitwise operators | PASS |  |
 | big integers | PASS |  |
-| hex literal | ERROR | ERROR: Parse error: Line 1: unsupported expression `0xFF` |
+| hex literal | PASS |  |
 
 ## Control flow
 
 | Probe | Status | Detail |
 |-------|--------|--------|
 | if / else if / else | PASS |  |
-| elif keyword | ERROR | ERROR: Parse error: Line 4: unsupported Killer subset statement `elif x < 10` |
+| elif keyword | PASS |  |
 | while loop | PASS |  |
 | for over range | PASS |  |
 | range with step | PASS |  |
 | break and continue | PASS |  |
 | nested loops | PASS |  |
-| do-while | ERROR | ERROR: Parse error: Line 4: expected `{` after condition (found `println(i)`) |
-| C-style for | ERROR | ERROR: Parse error: Line 2: unsupported Killer subset statement `for (i = 0` |
+| do-while | PASS |  |
+| C-style for | PASS |  |
 | for over dict keys | PASS |  |
-| enumerate | ERROR | ERROR: Runtime error: Undefined variable `i` |
-| match statement | ERROR | ERROR: Parse error: Line 2: unsupported Killer subset statement `match x` |
-| switch statement | ERROR | ERROR: Parse error: Line 2: unsupported Killer subset statement `switch x` |
+| enumerate | PASS |  |
+| match statement | PASS |  |
+| switch statement | PASS |  |
 | while true + break | PASS |  |
 
 ## Functions
@@ -76,24 +76,24 @@ Status legend: PASS = identical output; WRONG = ran but printed something differ
 | define and call | PASS |  |
 | recursion | PASS |  |
 | deep recursion 5000 | PASS |  |
-| default argument | WRONG | got 'null Sai\nYo Sai', expected 'Hi Sai\nYo Sai' |
-| variadic arguments | ERROR | ERROR: Parse error: Line 1: Parse error: Line 1: invalid parameter name `...xs` |
-| return multiple values | ERROR | ERROR: Parse error: Line 4: unsupported Killer subset statement `a, b = two()` |
-| no explicit return | ERROR | ERROR: Runtime error: Stack underflow |
-| function stored in variable | ERROR | ERROR: Parse error: Line 5: unknown function `f` |
-| lambda expression | ERROR | ERROR: Parse error: Line 2: `return` is only valid inside a function |
-| arrow lambda | ERROR | ERROR: Parse error: Line 1: unsupported expression `(a) =` |
-| closure keeps state | ERROR | ERROR: Parse error: Line 10: unknown function `c` |
-| function passed as argument | ERROR | ERROR: Parse error: Line 2: unknown function `f` |
-| map with lambda | ERROR | ERROR: Parse error: Line 1: unsupported expression `fn(x) { return x * 10 }` |
-| map with named function | ERROR | ERROR: Runtime error: Undefined variable `d` |
-| filter and reduce | ERROR | ERROR: Runtime error: Undefined variable `even` |
-| decorator | ERROR | ERROR: Parse error: Line 3: unknown function `f` |
-| function in dict | ERROR | ERROR: Parse error: Line 5: unsupported expression `d["say"]()` |
-| read global from function | ERROR | ERROR: Runtime error: Undefined variable `g` |
-| write global from function | ERROR | ERROR: Runtime error: Undefined variable `total` |
-| global keyword | ERROR | ERROR: Parse error: Line 2: Parse error: Line 3: unsupported Killer subset statement `global total` |
-| keyword arguments | ERROR | ERROR: Parse error: Line 4: unsupported expression `b = 1` |
+| default argument | PASS |  |
+| variadic arguments | PASS |  |
+| return multiple values | PASS |  |
+| no explicit return | PASS |  |
+| function stored in variable | PASS |  |
+| lambda expression | PASS |  |
+| arrow lambda | PASS |  |
+| closure keeps state | PASS |  |
+| function passed as argument | PASS |  |
+| map with lambda | PASS |  |
+| map with named function | PASS |  |
+| filter and reduce | PASS |  |
+| decorator | PASS |  |
+| function in dict | PASS |  |
+| read global from function | PASS |  |
+| assignment without global stays local | PASS |  |
+| global keyword | PASS |  |
+| keyword arguments | PASS |  |
 | mutual recursion | PASS |  |
 
 ## OOP
@@ -102,18 +102,18 @@ Status legend: PASS = identical output; WRONG = ran but printed something differ
 |-------|--------|--------|
 | class, init and method | PASS |  |
 | state mutation through methods | PASS |  |
-| inheritance and override | WRONG | got 'null barks', expected 'Rex barks' |
-| inherited method + init | WRONG | got 'null makes a sound\nnull fetches', expected 'Rex makes a sound\nRex fetches' |
-| super method call | ERROR | ERROR: Runtime error: Undefined variable `super` |
-| super in init | ERROR | ERROR: Runtime error: Undefined variable `super` |
+| inheritance and override | PASS |  |
+| inherited method + init | PASS |  |
+| super method call | PASS |  |
+| super in init | PASS |  |
 | objects are references | PASS |  |
 | list of objects | PASS |  |
-| polymorphism | WRONG | got 'null\nmeow', expected 'a makes a sound\nmeow' |
-| operator overloading __add__ | WRONG | got 'null', expected '3' |
-| custom toString when printed | WRONG | got '<P instance>', expected 'P(1)' |
-| instanceof / type check | ERROR | ERROR: Parse error: Line 10: unsupported expression `a instanceof Animal` |
-| static / class method | ERROR | ERROR: Parse error: Line 1: Parse error: Line 2: expected method definition (kfn) inside class, got `static fn twice(x)` |
-| method chaining | ERROR | ERROR: Parse error: Line 11: unsupported Killer subset statement `b.add("a").add("b")` |
+| polymorphism | PASS |  |
+| operator overloading __add__ | PASS |  |
+| custom toString when printed | PASS |  |
+| instanceof / type check | PASS |  |
+| static / class method | PASS |  |
+| method chaining | PASS |  |
 | field default and missing field | PASS |  |
 
 ## Collections
@@ -121,28 +121,28 @@ Status legend: PASS = identical output; WRONG = ran but printed something differ
 | Probe | Status | Detail |
 |-------|--------|--------|
 | list basics | PASS |  |
-| negative index | WRONG | got '1', expected '3' |
-| slicing | ERROR | ERROR: Parse error: Line 2: unsupported expression `1:3` |
+| negative index | PASS |  |
+| slicing | PASS |  |
 | slice function | PASS |  |
-| pop and insert | ERROR | ERROR: Runtime error: (at instruction 11): Runtime error: hash_map_insert: first arg must be a Dict |
+| pop and insert | PASS |  |
 | sort and reverse | PASS |  |
-| membership with in | ERROR | ERROR: Parse error: Line 1: unsupported expression `2 in` |
+| membership with in | PASS |  |
 | contains function | PASS |  |
 | list comprehension | PASS |  |
 | list comprehension with filter | PASS |  |
 | nested lists | PASS |  |
-| list concatenation | ERROR | ERROR: Runtime error: Cannot add these types |
+| list concatenation | PASS |  |
 | sum min max | PASS |  |
 | dict basics | PASS |  |
 | dict missing key is null | PASS |  |
-| dict membership | ERROR | ERROR: Parse error: Line 2: unsupported expression `"a" in d` |
-| dict delete | ERROR | ERROR: Parse error: Line 2: unknown function `delete` |
+| dict membership | PASS |  |
+| dict delete | PASS |  |
 | dict values and items | PASS |  |
-| dict comprehension | ERROR | ERROR: Parse error: Line 1: unsupported expression `2 for k in range(3)` |
+| dict comprehension | PASS |  |
 | nested dict | PASS |  |
-| set operations | ERROR | ERROR: Parse error: Line 1: unknown function `set` |
-| tuple literal | ERROR | ERROR: Parse error: Line 1: unsupported expression `1, 2, 3` |
-| sorted with key function | ERROR | ERROR: Runtime error: Undefined variable `neg` |
+| set operations | PASS |  |
+| tuple literal | PASS |  |
+| sorted with key function | PASS |  |
 | zip | PASS |  |
 
 ## Strings
@@ -150,24 +150,24 @@ Status legend: PASS = identical output; WRONG = ran but printed something differ
 | Probe | Status | Detail |
 |-------|--------|--------|
 | length upper lower | PASS |  |
-| string indexing | ERROR | ERROR: Runtime error: Cannot index hello with 1 |
-| string slicing | ERROR | ERROR: Parse error: Line 2: unsupported expression `1:3` |
+| string indexing | PASS |  |
+| string slicing | PASS |  |
 | split and join | PASS |  |
 | replace and strip | PASS |  |
 | find / index_of | PASS |  |
 | startswith endswith | PASS |  |
 | string contains | PASS |  |
 | str() and number parse | PASS |  |
-| f-string interpolation | ERROR | ERROR: Parse error: Line 2: unsupported expression `f"n is {n}"` |
+| f-string interpolation | PASS |  |
 | k-string interpolation | PASS |  |
 | escape sequences | PASS |  |
-| single-quoted strings | ERROR | ERROR: Parse error: Line 1: unsupported expression `'hi'` |
-| multiline string | ERROR | ERROR: Parse error: Line 1: unsupported expression `"""a` |
-| reverse a string | ERROR | ERROR: Runtime error: (at instruction 1): Runtime error: reverse() expects an array |
-| character codes | ERROR | ERROR: Parse error: Line 1: unknown function `ord` |
-| unicode | WRONG | got '6', expected '5' |
-| format with padding | ERROR | ERROR: Parse error: Line 1: unknown function `pad_left` |
-| iterate characters | ERROR | ERROR: Runtime error: Cannot index abc with 0 |
+| single-quoted strings | PASS |  |
+| multiline string | PASS |  |
+| reverse a string | PASS |  |
+| character codes | PASS |  |
+| unicode | PASS |  |
+| format with padding | PASS |  |
+| iterate characters | PASS |  |
 
 ## Math
 
@@ -175,12 +175,12 @@ Status legend: PASS = identical output; WRONG = ran but printed something differ
 |-------|--------|--------|
 | sqrt pow abs | PASS |  |
 | floor ceil round | PASS |  |
-| int and float conversion | ERROR | ERROR: Parse error: Line 2: unknown function `float` |
+| int and float conversion | PASS |  |
 | trig | PASS |  |
-| constants pi and e | ERROR | ERROR: Runtime error: Undefined variable `PI` |
+| constants pi and e | PASS |  |
 | random in range | PASS |  |
-| log and exp | ERROR | ERROR: Parse error: Line 1: unknown function `log` |
-| gcd | ERROR | ERROR: Parse error: Line 1: unknown function `gcd` |
+| log and exp | PASS |  |
+| gcd | PASS |  |
 | division by zero is an error | PASS |  |
 | integer vs float printing | PASS |  |
 
@@ -188,13 +188,13 @@ Status legend: PASS = identical output; WRONG = ran but printed something differ
 
 | Probe | Status | Detail |
 |-------|--------|--------|
-| try / catch / throw | ERROR | ERROR: Parse error: Line 2: unsupported Killer subset statement `throw "boom"` |
-| catch a runtime error | ERROR | ERROR: Parse error: Line 3: unsupported Killer subset statement `catch e` |
-| finally always runs | ERROR | ERROR: Runtime error: Undefined variable `try` |
-| catch then finally | ERROR | ERROR: Parse error: Line 2: unsupported Killer subset statement `throw "x"` |
-| custom error value | ERROR | ERROR: Parse error: Line 2: unsupported Killer subset statement `throw {"code": 42}` |
-| error propagates through calls | ERROR | ERROR: Parse error: Line 1: Parse error: Line 2: unsupported Killer subset statement `throw "deep"` |
-| assert passes | ERROR | ERROR: Parse error: Line 1: unknown function `assert` |
+| try / catch / throw | PASS |  |
+| catch a runtime error | PASS |  |
+| finally always runs | PASS |  |
+| catch then finally | PASS |  |
+| custom error value | PASS |  |
+| error propagates through calls | PASS |  |
+| assert passes | PASS |  |
 | undefined variable is an error | PASS |  |
 | script exits non-zero on error | PASS |  |
 
@@ -202,7 +202,7 @@ Status legend: PASS = identical output; WRONG = ran but printed something differ
 
 | Probe | Status | Detail |
 |-------|--------|--------|
-| generator with yield | ERROR | ERROR: Parse error: Line 1: Parse error: Line 2: unsupported Killer subset statement `yield 1` |
+| generator with yield | PASS |  |
 | range materialises | PASS |  |
 | zip in for | PASS |  |
 | iterate dict items | PASS |  |
@@ -212,15 +212,15 @@ Status legend: PASS = identical output; WRONG = ran but printed something differ
 
 | Probe | Status | Detail |
 |-------|--------|--------|
-| import another file | ERROR | ERROR: Parse error: Line 2: unknown function `helper_add` |
+| import another file | PASS |  |
 | write and read a file | PASS |  |
 | file exists | PASS |  |
-| json round trip | ERROR | ERROR: Parse error: Line 1: unsupported expression `'{"a": 1, "b": [1, 2]}'` |
-| read environment variable | ERROR | ERROR: Parse error: Line 1: unknown function `env` |
+| json round trip | PASS |  |
+| read environment variable | PASS |  |
 | current time is a number | PASS |  |
-| regex match | WRONG | got 'false', expected 'true' |
-| command line args available | ERROR | ERROR: Parse error: Line 1: unknown function `args` |
-| sleep | ERROR | ERROR: Runtime error: (at instruction 1): Runtime error: unknown function 'sleep' -- did you mean 'len'? |
+| regex match | PASS |  |
+| command line args available | PASS |  |
+| sleep | PASS |  |
 
 ## Concurrency
 
@@ -228,9 +228,9 @@ Status legend: PASS = identical output; WRONG = ran but printed something differ
 |-------|--------|--------|
 | async function and await | PASS |  |
 | spawn and await | PASS |  |
-| async_spawn / async_await builtins | ERROR | ERROR: Runtime error: Undefined variable `w` |
+| async_spawn / async_await builtins | PASS |  |
 | channels | PASS |  |
-| mutex | ERROR | ERROR: Parse error: Line 1: unknown function `mutex_new` |
+| mutex | PASS |  |
 
 ## Types
 
@@ -239,7 +239,7 @@ Status legend: PASS = identical output; WRONG = ran but printed something differ
 | type annotations run | PASS |  |
 | type error is caught early | PASS |  |
 | typeof / type() | PASS |  |
-| conversion between types | ERROR | ERROR: Parse error: Line 2: unknown function `bool` |
+| conversion between types | PASS |  |
 | null coalescing | PASS |  |
 | optional chaining | PASS |  |
 
@@ -253,4 +253,4 @@ Status legend: PASS = identical output; WRONG = ran but printed something differ
 | trit constants | PASS |  |
 | native JIT result matches | PASS |  |
 | C FFI call | PASS |  |
-| statistics builtins | ERROR | ERROR: Parse error: Line 1: unknown function `mean` |
+| statistics builtins | PASS |  |

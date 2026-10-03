@@ -174,8 +174,8 @@ JIT x86-64  GC (tri-color mark-and-sweep)
 | JSON | `json_parse`, `json_stringify` |
 | Date/Time | `date_now`, `date_parse`, `date_format`, `date_diff`, `date_add`, `timestamp`, … |
 | Concurrency | `async_spawn`, `async_await`, `chan_send`, `chan_recv`, `mutex_new`, … |
-| AI | `llm_complete`, `llm_embed`, `vector_store`, `vector_search`, `khlm_route`, … |
-| Crypto | `sha256`, `hmac_sha256`, `base64_encode`, `base64_decode`, `aes_encrypt`, … |
+| AI | `llm_complete`, `llm_embed`, `ghost_ask`, … |
+| Crypto | `sha256`, `hmac_sha256`, `base64_encode`, `base64_decode`, … |
 | System | `env`, `exit`, `args`, `sleep`, `gc_stats`, `jit_stats`, … |
 
 ---

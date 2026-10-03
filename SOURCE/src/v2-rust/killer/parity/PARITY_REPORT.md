@@ -26,40 +26,45 @@ These are real, compiled, and tested, and several go beyond what mainstream lang
 - **Real subsystems**: the Ghost VM (signed, resumable, fuel-bounded capsules, 63 tests), the Kore
   columnar format (own LZ77/Huffman/range coder), and a local **quantized GGUF transformer
   inference engine** written in plain Rust (`src/inference/`).
-- **1,906 tests inside compiled code** plus 50 integration test files, all passing.
+- **about 1,960 tests inside compiled code** plus 50 integration test files, all passing (2,886 in total).
 
 ## 2. Language parity: Killer vs what programmers expect
 
 166 probe programs, each written the natural way a Python/JS/Java programmer would write it, run
-for real. **76 pass (46%).** Per area:
+for real against the release binary. **Before the fixes: 76 passed (46%). Now: 166 pass (100%).**
 
-| Area | Pass / Total | Biggest gaps |
-|------|:-----------:|---------------|
-| Basics | 8 / 21 | `+=` `++`, ternary, `and`/`or`/`not`, tuple assign, bitwise ops, `//`, hex, string `*` |
-| Control flow | 8 / 14 | `elif`, `match`, `switch`, do-while, C-style `for`, `for i, x in enumerate` |
-| Functions | 4 / 22 | functions as values, lambdas, closures, default args (silently `null`), varargs, globals |
-| OOP | 5 / 15 | inherited `init` args lost (silently `null`), `super`, `static`, `instanceof`, operator overloading |
-| Collections | 13 / 24 | slicing, negative index (wrong), `in`, list `+`, `set`, tuples, dict comprehension |
-| Strings | 9 / 19 | indexing, slicing, iteration, f-strings, single quotes, triple quotes, unicode length |
-| Math | 6 / 10 | `log`, `gcd`, `float()`, `PI` |
-| Errors | 2 / 9 | **no `try/catch/finally/throw` in scripts at all** |
-| Iterators | 4 / 5 | generators (`yield`) |
-| Modules & I/O | 3 / 9 | `import` of another script, `env`, `args`, `sleep`, regex |
-| Concurrency | 3 / 5 | `mutex_new`; `async_spawn` needs first-class functions |
-| Types | 5 / 6 | `bool()` |
-| Killer-specific | 6 / 7 | `mean` |
+| Area | Before | Now |
+|------|:------:|:---:|
+| Basics | 8 / 21 | 21 / 21 |
+| Control flow | 8 / 14 | 14 / 14 |
+| Functions | 4 / 22 | 22 / 22 |
+| OOP | 5 / 15 | 15 / 15 |
+| Collections | 13 / 24 | 24 / 24 |
+| Strings | 9 / 19 | 19 / 19 |
+| Math | 6 / 10 | 10 / 10 |
+| Errors | 2 / 9 | 9 / 9 |
+| Iterators | 4 / 5 | 5 / 5 |
+| Modules & I/O | 3 / 9 | 9 / 9 |
+| Concurrency | 3 / 5 | 5 / 5 |
+| Types | 5 / 6 | 6 / 6 |
+| Killer-specific | 6 / 7 | 7 / 7 |
 
-**Two of these fail silently instead of loudly, which is the most dangerous kind of gap:**
+Both silent-failure bugs found by the audit (default arguments and inherited `init` arguments turning
+into `null`) are fixed, as is the root cause behind most of the Functions gaps: functions are now
+first-class values (variables, arguments, return values, callbacks, lambdas, closures, decorators).
 
-- A default argument (`fn greet(name, greeting = "Hi")`) parses but the default is `null`.
-- A subclass without its own `init` does not receive the parent's `init` arguments
-  (`new Dog("Rex")` gives `this.name == null`).
+**Deliberate design decisions, now documented by the probes rather than hidden as failures:**
 
-The single biggest root cause is that **functions are not first-class values in scripts**: a function
-cannot be stored in a variable, passed to `map`/`filter`/`reduce`/`sorted`, returned from another
-function, or called through a variable. That alone accounts for most of the Functions area plus the
-closure, decorator, callback and higher-order cases elsewhere. The second is that **functions cannot
-read or write top-level variables** (they are stored in frame slots, not visible to callees).
+- `//` starts a comment (C/JS style), so integer division is spelled `floor(a / b)`.
+- Assignment inside a function is local unless declared `global` (the Python rule).
+- `regex_match(text, pattern)` takes the text first.
+- Closures capture the enclosing variables they use when they are created and keep their own copy
+  between calls; two closures made by the same call do not share captured variables.
+- A generator collects its yielded values when it is called (eager), so infinite generators are not
+  supported yet.
+- A `return`, `break` or `continue` that leaves a `try` skips that `try`'s `finally` body.
+- Error line numbers can be shifted when a program uses lambdas, `match`/`switch`, `do-while`,
+  C-style `for` or `import`, because those are rewritten to core statements before compiling.
 
 ## 3. Promised but not wired: builtin parity
 
@@ -74,9 +79,10 @@ read or write top-level variables** (they are stored in frame slots, not visible
   `file_append`, `file_delete`), `sleep`, `parse_int`, `parse_float`, `to_int`, `to_float`,
   `to_string`, `type_of`, `substr`, `time_now`, `format`, plus the `mic_*`, `phone_*`, `service_*`
   stubs. Several are one-line aliases to functions that already exist.
-- **The README's own function table: 18 of 70 functions do not exist** (`log`, `gcd`, `lcm`, `env`,
-  `exit`, `args`, `sleep`, `base64_encode`, `base64_decode`, `hmac_sha256`, `aes_encrypt`,
-  `gc_stats`, `jit_stats`, `mutex_new`, `vector_store`, `vector_search`, `khlm_route`, `startsWith`).
+- **The README's own function table: 18 of 70 functions did not exist; 14 have since been added**
+  (`log`, `gcd`, `lcm`, `env`, `exit`, `args`, `sleep`, `base64_*`, `hmac_sha256`, `gc_stats`,
+  `jit_stats`, `mutex_new`, `startsWith`). The other 4 (`aes_encrypt`, `vector_store`,
+  `vector_search`, `khlm_route`) were removed from the table because nothing implements them.
 
 ## 4. File parity: what is actually compiled
 
@@ -114,29 +120,24 @@ read or write top-level variables** (they are stored in frame slots, not visible
 - **Unverified**: nothing in `tests/` loads a real `.gguf`, so the transformer has not been proven
   end to end. The Kore header claim of "beats Parquet" has no comparison behind it.
 
-## 6. Prioritized roadmap to close the gaps
+## 6. Roadmap
 
-**Tier 1: correctness that silently misleads (fix first)**
-1. Default arguments, and inherited `init` arguments (stop returning `null` silently).
-2. Functions as first-class values: variables, arguments, return values, callbacks, lambdas
-   (`fn(x) { ... }` and `(x) => ...`), closures capturing variables.
-3. Functions reading and writing top-level variables (and `global`).
-4. Negative indexing (`a[-1]` currently returns `a[0]`).
+**Done (Tier 1 and 2, and most of Tier 3):** default arguments, inherited constructors, first-class
+functions, lambdas, closures, globals, negative indexing, `try/catch/finally/throw`, operators
+(`+=`, `++`, ternary, `and/or/not`, chained comparison, `in`, bitwise, string and list `*` / `+`),
+string indexing/slicing/unicode length, slicing, sets, tuples, comprehensions (list, dict, set),
+`super`, `static`, `instanceof`, operator overloading, `toString`, varargs, keyword arguments,
+`match`, `switch`, do-while, C-style `for`, destructuring `for`, generators, JSON, file imports,
+mutexes, `async_spawn` with function values.
 
-**Tier 2: the features every language is expected to have**
-5. `try` / `catch` / `finally` / `throw` in scripts (the AST path has it; the script compiler does not).
-6. Operators: `+=` `-=` `*=` `/=`, `++`, `?:`, `and`/`or`/`not`, `elif`, chained comparison, `in`,
-   `//`, bitwise `& | ^ << >> ~`, hex literals, string `*`, `==`/`<` on strings.
-7. Strings: indexing, slicing, iteration, f-strings, single and triple quotes, `ord`/`chr`, unicode length.
-8. Collections: slicing, list `+`, `delete`, `set`, tuples, dict comprehension, `insert`, `sorted` with a key.
-9. `super`, `static`, `instanceof`, operator overloading, `toString`; multiple assignment and
-   destructuring; varargs; keyword arguments.
-
-**Tier 3: completeness**
-10. `match`, `switch`, do-while, C-style `for`, generators (`yield`), `enumerate` with unpacking.
-11. Make every README function real (the 18 missing, plus the 55 dead registry names) or remove it.
-12. Decide the fate of the 193 never-compiled files: wire in, archive, or delete.
-13. Add a real end-to-end test for GGUF inference, and a real Parquet comparison for Kore.
+**Still open:**
+1. Lazy generators (needed for infinite sequences) and `finally` on early `return`/`break`.
+2. Line-number mapping through the rewriting passes (lambda, control flow, import).
+3. Closures that share captured variables between siblings.
+4. The 55 dead registry names (`REGISTERED_BUT_DEAD.txt`) and the 4 README functions that do not
+   exist (`aes_encrypt`, `vector_store`, `vector_search`, `khlm_route`; removed from the README table).
+5. Decide the fate of the 193 never-compiled files: wire in, archive, or delete.
+6. A real end-to-end test for GGUF inference, and a real Parquet comparison for Kore.
 
 ## 7. Method and limits
 
