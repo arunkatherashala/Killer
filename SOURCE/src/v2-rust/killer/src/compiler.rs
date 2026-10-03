@@ -7247,12 +7247,45 @@ fn try_ui_assign_sugar(raw_line: &str) -> Option<String> {
     Some(format!("{indent}{var} = {rhs_call}"))
 }
 
+/// True when a `{` after `before` opens a dictionary literal rather than a block: it follows an
+/// operator or opening bracket (`x = {`, `f({`, `[{`, `a, {`, `k: {`) or `return`.
+fn brace_opens_literal(before: &str) -> bool {
+    let b = before.trim_end();
+    b.ends_with(['=', '(', '[', ',', ':']) && !b.ends_with("==")
+        || b == "return"
+        || b.ends_with(" return")
+}
+
+/// A `{` at byte `open` of `line` that is not closed on that line, in expression position: join the
+/// following source lines until the braces balance. Returns the joined text and the index of the
+/// last source line consumed.
+fn join_multiline_literal(lines: &[&str], line_index: usize, line: &str, open: usize) -> Option<(String, usize)> {
+    let mut text = line.to_string();
+    let mut j = line_index;
+    loop {
+        if consume_balanced_curly_line(&text, open).is_some() {
+            return Some((text, j));
+        }
+        j += 1;
+        let next = lines.get(j)?.trim();
+        if next.is_empty() || next.starts_with('#') || next.starts_with("//") {
+            continue;
+        }
+        text.push(' ');
+        text.push_str(strip_trailing_line_comment(next));
+    }
+}
+
 fn normalize_lines(source: &str) -> Vec<(usize, String)> {
     let mut out = Vec::new();
-    for (line_index, raw) in source.lines().enumerate() {
+    let source_lines: Vec<&str> = source.lines().collect();
+    let mut line_index = 0usize;
+    while line_index < source_lines.len() {
         let line_no = line_index + 1;
-        let trimmed = raw.trim();
-        if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with("//") {
+        let mut text = source_lines[line_index].trim().to_string();
+        let first_line = line_index;
+        line_index += 1;
+        if text.is_empty() || text.starts_with('#') || text.starts_with("//") {
             continue;
         }
 
@@ -7260,8 +7293,8 @@ fn normalize_lines(source: &str) -> Vec<(usize, String)> {
         let mut in_string = false; // inside "..." or K"..."
         let mut in_backtick = false; // inside `...`
         let mut i = 0usize;
-        while i < trimmed.len() {
-            let rest = &trimmed[i..];
+        while i < text.len() {
+            let rest = &text[i..];
             let ch = rest.chars().next().unwrap();
             let clen = ch.len_utf8();
 
@@ -7305,10 +7338,19 @@ fn normalize_lines(source: &str) -> Vec<(usize, String)> {
                         i += clen + 1;
                         continue;
                     }
-                    if let Some(end) = consume_balanced_curly_line(trimmed, i) {
-                        current.push_str(&trimmed[i..end]);
+                    if let Some(end) = consume_balanced_curly_line(&text, i) {
+                        let literal = text[i..end].to_string();
+                        current.push_str(&literal);
                         i = end;
                         continue;
+                    }
+                    // a dictionary literal spread over several lines
+                    if brace_opens_literal(&current) {
+                        if let Some((joined, last)) = join_multiline_literal(&source_lines, first_line, &text, i) {
+                            text = joined;
+                            line_index = last + 1;
+                            continue;
+                        }
                     }
                     if !current.trim().is_empty() {
                         out.push((line_no, current.trim().to_string()));

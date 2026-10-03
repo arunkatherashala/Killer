@@ -99,6 +99,12 @@ fn string_literal_ending_in_an_escaped_quote() {
 }
 
 #[test]
+fn dictionary_literals_can_span_lines() {
+    let src = "b = {\n  \"x\": 1,\n  \"y\": {\"k\": [1, 2]}\n}\nprintln(b)\nfn make() {\n  return {\n    \"a\": 1,\n    // a comment inside\n    \"b\": 2\n  }\n}\nprintln(make())\nprintln(max(1, 5,\n  3))\nrows = []\npush(rows, {\n  \"n\": 1\n})\nprintln(rows)\nif true {\n  println(\"block still works\")\n}\n";
+    assert_eq!(run(src), "{x: 1, y: {k: [1, 2]}}\n{a: 1, b: 2}\n5\n[{n: 1}]\nblock still works");
+}
+
+#[test]
 fn finally_runs_when_return_break_or_continue_leave_the_try() {
     let src = "fn a() {\n  try {\n    return 1\n  } finally {\n    println(\"fin a\")\n  }\n}\nprintln(a())\nfn b() {\n  try {\n    throw \"x\"\n  } catch e {\n    return \"caught \" + e\n  } finally {\n    println(\"fin b\")\n  }\n}\nprintln(b())\nfn nested() {\n  try {\n    try {\n      return \"inner\"\n    } finally {\n      println(\"inner finally\")\n    }\n  } finally {\n    println(\"outer finally\")\n  }\n}\nprintln(nested())\nfor i in range(3) {\n  try {\n    if i == 1 {\n      continue\n    }\n    if i == 2 {\n      break\n    }\n    println(\"body \" + str(i))\n  } finally {\n    println(\"fin \" + str(i))\n  }\n}\nfn ft() {\n  try {\n    try {\n      return 1\n    } finally {\n      throw \"from finally\"\n    }\n  } catch e {\n    return \"caught \" + e\n  }\n}\nprintln(ft())\n";
     assert_eq!(
