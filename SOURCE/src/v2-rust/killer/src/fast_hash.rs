@@ -26,3 +26,4 @@ impl Hasher for FnvHasher {
 }
 
 pub type FastMap<K, V> = HashMap<K, V, BuildHasherDefault<FnvHasher>>;
+pub type FastSet<K> = std::collections::HashSet<K, BuildHasherDefault<FnvHasher>>;
