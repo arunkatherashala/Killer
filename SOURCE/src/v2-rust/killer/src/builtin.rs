@@ -566,8 +566,8 @@ impl BuiltinFunctions {
             "tryte_eq"        => Self::tryte_eq(args),
             "tryte_zero"      => Self::tryte_zero(args),
             "tryte_type"      => { let _ = args; Ok(Value::Str("tryte".to_string())) },
-            "parse_json" | "json_parse" => Self::parse_json(args),
-            "json_stringify" | "json_encode" => Self::json_stringify(args),
+            "parse_json" | "json_parse" => crate::json_lang::builtin_parse(args),
+            "json_stringify" | "json_encode" => crate::json_lang::builtin_stringify(args),
             "HttpServer_new" => Self::http_server_new(args),
             "HttpServer_listen" => Self::http_server_listen(args),
             

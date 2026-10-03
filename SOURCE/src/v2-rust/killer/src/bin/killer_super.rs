@@ -255,6 +255,11 @@ fn main() {
         }
     };
 
+    // `import "file.killer"` is resolved relative to the script's folder
+    if let Some(dir) = std::path::Path::new(&cli_args.input_file).parent() {
+        killer_native::imports::set_base_dir(if dir.as_os_str().is_empty() { std::path::Path::new(".") } else { dir });
+    }
+
     // ── VM run path: execute .killer source directly (works for all programs) ──
     // When --run is set without an explicit output file, execute via the VM.
     // The native/rustc path is only for --emit native with an explicit output target.
