@@ -448,3 +448,15 @@ fn operator_overloading_and_tostring() {
     let src = "class V {\n  fn init(x) {\n    this.x = x\n  }\n  fn __add__(o) {\n    return new V(this.x + o.x)\n  }\n  fn __eq__(o) {\n    return this.x == o.x\n  }\n  fn toString() {\n    return \"V(\" + str(this.x) + \")\"\n  }\n}\nr = new V(1) + new V(2)\nprintln(r.x)\nprintln(r)\nprintln(\"sum=\" + r)\nprintln(str(r))\nprintln(new V(3) == new V(3))\nprintln(new V(3) == new V(4))\n";
     assert_eq!(run(src), "3\nV(3)\nsum=V(3)\nV(3)\ntrue\nfalse");
 }
+
+#[test]
+fn do_while_c_style_for_and_destructuring_loops() {
+    let src = "i = 0\ndo {\n  i = i + 1\n} while i < 3\nprintln(i)\nt = 0\nfor (j = 0; j < 4; j++) {\n  t = t + j\n}\nprintln(t)\nfor k = 0; k < 6; k += 2 {\n  if k == 2 {\n    continue\n  }\n  println(k)\n}\nfor a, b in [[1, 2], [3, 4]] {\n  println(a + b)\n}\nfor idx, x in enumerate([\"a\", \"b\"]) {\n  println(str(idx) + x)\n}\nn = 0\ndo {\n  n = n + 1\n  if n == 2 {\n    continue\n  }\n  println(\"n\" + str(n))\n} while n < 4\n";
+    assert_eq!(run(src), "3\n6\n0\n4\n3\n7\n0a\n1b\nn1\nn3\nn4");
+}
+
+#[test]
+fn match_and_switch_statements() {
+    let src = "x = 2\nmatch x {\n  1 => println(\"one\")\n  2 | 3 => println(\"two-three\")\n  _ => println(\"other\")\n}\nfn size(n) {\n  match n {\n    0 => return \"zero\"\n    k if k < 10 => return \"small \" + str(k)\n    _ => return \"big\"\n  }\n}\nprintln(size(0))\nprintln(size(5))\nprintln(size(50))\nswitch x {\n  case 1:\n    println(\"one\")\n  case 2, 3:\n    println(\"two-three\")\n    break\n  default:\n    println(\"other\")\n}\nswitch \"b\" {\n  case \"a\":\n    println(\"A\")\n  default:\n    println(\"fallback\")\n}\nmatch = 5\nprintln(match)\n";
+    assert_eq!(run(src), "two-three\nzero\nsmall 5\nbig\ntwo-three\nfallback\n5");
+}

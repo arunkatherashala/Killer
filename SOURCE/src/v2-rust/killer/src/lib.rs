@@ -339,6 +339,7 @@ pub mod time_machine;
 // -- LLM Integration (native, zero external deps) -----------------------------
 pub mod exprsplit;             // top-level operator splitting for the expression parser
 pub mod lang_builtins;         // everyday builtins: ord/chr, padding, logs, stats, base64, sets
+pub mod controlflow;           // lowers match/switch/do-while/C-style for/destructuring for into core statements
 pub mod lambda;                // lifts anonymous functions (fn(x){..}, x => ..) into named ones
 pub mod sugar;               // surface syntax sugar rewritten to core Killer before compiling
 pub mod uncertain;             // interval arithmetic and three-valued comparison for `believe` values

@@ -13,7 +13,7 @@
 
 /// Replace string contents and comments with `_`/spaces so structural scanning cannot be fooled,
 /// keeping byte length (and line breaks) identical to the source.
-fn mask(src: &str) -> Vec<u8> {
+pub(crate) fn mask(src: &str) -> Vec<u8> {
     let b = src.as_bytes();
     let mut out = b.to_vec();
     let mut i = 0;

@@ -305,7 +305,8 @@ struct CompileContext {
 
 pub fn compile_killer_subset(source: &str) -> Result<Program, VmError> {
     let checked = crate::typecheck::process(source)?;
-    let lifted = crate::lambda::lift(&checked);
+    let lowered = crate::controlflow::lower(&checked);
+    let lifted = crate::lambda::lift(&lowered);
     let sugared = crate::sugar::preprocess(&lifted, &|l| parse_polyglot_header(l).is_some());
     let source = sugared.as_str();
     let mut state = CompilerState::default();
