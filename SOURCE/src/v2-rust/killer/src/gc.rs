@@ -65,7 +65,7 @@ fn mark_value(val: &Value, seen: &mut HashSet<usize>, queue: &mut Vec<Value>) {
             }
         }
         Value::Function { captured, .. } => {
-            for v in captured.values() {
+            for v in captured.values().iter() {
                 queue.push(v.clone());
             }
         }
@@ -176,7 +176,7 @@ where
 fn count_array_refs(v: &Value, internal: &mut HashMap<usize, usize>) {
     match v {
         Value::Array(a) => *internal.entry(a.rc_ptr()).or_insert(0) += 1,
-        Value::Function { captured, .. } => captured.values().for_each(|x| count_array_refs(x, internal)),
+        Value::Function { captured, .. } => captured.values().iter().for_each(|x| count_array_refs(x, internal)),
         Value::Signal { value, .. } => count_array_refs(value, internal),
         _ => {}
     }
@@ -187,7 +187,7 @@ fn collect_array_ptrs(v: &Value, out: &mut Vec<usize>) {
         Value::Array(a) => out.push(a.rc_ptr()),
         Value::Dict(d) => d.values().iter().for_each(|x| collect_array_ptrs(x, out)),
         Value::Object(o) => o.fields().values().for_each(|x| collect_array_ptrs(x, out)),
-        Value::Function { captured, .. } => captured.values().for_each(|x| collect_array_ptrs(x, out)),
+        Value::Function { captured, .. } => captured.values().iter().for_each(|x| collect_array_ptrs(x, out)),
         Value::Signal { value, .. } => collect_array_ptrs(value, out),
         _ => {}
     }

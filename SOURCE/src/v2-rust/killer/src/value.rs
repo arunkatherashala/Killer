@@ -419,8 +419,48 @@ impl PartialEq for FutureHandle { fn eq(&self, _: &Self) -> bool { false } }
 // are Send.  Raw-pointer JIT types live only in VirtualMachine, not in Value.
 unsafe impl Send for Value {}
 unsafe impl Sync for Value {}
+// A spawned task receives its own detached copy of the captures (see SpawnCall), like Value itself.
+unsafe impl Send for Captures {}
 unsafe impl Send for FutureHandle {}
 unsafe impl Sync for FutureHandle {}
+
+/// Variables a closure captured when it was created. Shared between clones of the function value
+/// and written back after every call, so a closure keeps its own state (`n = n + 1` persists).
+#[derive(Clone, Default)]
+pub struct Captures(Rc<RefCell<HashMap<String, Value>>>);
+
+impl Captures {
+    pub fn new(map: HashMap<String, Value>) -> Self {
+        Captures(Rc::new(RefCell::new(map)))
+    }
+    pub fn is_empty(&self) -> bool {
+        self.0.borrow().is_empty()
+    }
+    pub fn snapshot(&self) -> Vec<(String, Value)> {
+        self.0.borrow().iter().map(|(k, v)| (k.clone(), v.clone())).collect()
+    }
+    pub fn names(&self) -> Vec<String> {
+        self.0.borrow().keys().cloned().collect()
+    }
+    pub fn values(&self) -> Vec<Value> {
+        self.0.borrow().values().cloned().collect()
+    }
+    pub fn set(&self, name: &str, value: Value) {
+        self.0.borrow_mut().insert(name.to_string(), value);
+    }
+}
+
+impl std::fmt::Debug for Captures {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Captures({} vars)", self.0.borrow().len())
+    }
+}
+
+impl PartialEq for Captures {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.0, &other.0)
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
@@ -434,7 +474,7 @@ pub enum Value {
     Function {
         params: Vec<String>,
         bytecode_start: usize,  // Index in VM's function bytecode
-        captured: Box<HashMap<String, Value>>,  // Variables captured from outer scope (closures)
+        captured: Captures,  // Variables captured from the enclosing function (closures); shared, persists across calls
     },
     Generator(String),  // Generator ID string to track state in VM
     QualityWrapped(Box<crate::data_quality::DataQuality>),  // Wrapped data quality object

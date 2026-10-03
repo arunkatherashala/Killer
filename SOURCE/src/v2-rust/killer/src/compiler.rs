@@ -251,6 +251,8 @@ struct CompilerState {
     /// Top-level variables that functions mention: stored by name so functions can see them
     /// (see `scan_globals`).
     global_vars: std::collections::HashSet<String>,
+    /// Functions rebound by a decorator: calls go through the variable, not the original code.
+    decorated: std::collections::HashSet<String>,
     /// Class metadata: class_name → (parent, [(method_name, params)])
     /// Used to populate Program.classes and method_bytecode.
     class_defs: HashMap<String, (Option<String>, Vec<(String, Vec<String>)>)>,
@@ -301,7 +303,8 @@ struct CompileContext {
 
 pub fn compile_killer_subset(source: &str) -> Result<Program, VmError> {
     let checked = crate::typecheck::process(source)?;
-    let sugared = crate::sugar::preprocess(&checked, &|l| parse_polyglot_header(l).is_some());
+    let lifted = crate::lambda::lift(&checked);
+    let sugared = crate::sugar::preprocess(&lifted, &|l| parse_polyglot_header(l).is_some());
     let source = sugared.as_str();
     let mut state = CompilerState::default();
 
@@ -2247,7 +2250,7 @@ fn compile_block(
         {
             // Extract function name before compiling
             let fn_name = extract_fn_name(line);
-            compile_fn_definition(lines, cursor, state).map_err(|e| {
+            compile_fn_definition(lines, cursor, state, Some(&mut *context)).map_err(|e| {
                 let msg = e.to_string();
                 if msg.starts_with("Line ") { e } else { VmError::parse_error_simple(format!("Line {}: {}", line_no, msg)) }
             })?;
@@ -2259,6 +2262,7 @@ fn compile_block(
                         let call_expr = format!("{}({})", decorator, fn_name);
                         compile_expr_str(&call_expr, line_no, state, context)?;
                         state.instructions.push(Instruction::Store(fn_name.clone()));
+                        state.decorated.insert(fn_name.clone());
                     }
                 }
             }
@@ -3675,6 +3679,7 @@ fn compile_expr_str(
             || context.slot_map.contains_key(&name)
             || context.global_decls.contains(&name)
             || state.global_vars.contains(&name)
+            || state.decorated.contains(&name)
             || (context.in_function && context.outer_vars.contains(&name));
         if callee_is_variable {
             compile_expr_str(&name, line_no, state, context)?;
@@ -5056,10 +5061,50 @@ fn split_arguments(input: &str) -> Option<Vec<String>> {
     Some(args)
 }
 
+/// Identifiers mentioned in `lines` (string literals skipped).
+fn identifiers_in_lines(lines: &[(usize, String)]) -> std::collections::HashSet<String> {
+    let mut out = std::collections::HashSet::new();
+    for (_, line) in lines {
+        let mut cleaned = String::with_capacity(line.len());
+        let mut quote: Option<char> = None;
+        for c in line.chars() {
+            match quote {
+                Some(q) => {
+                    if c == q {
+                        quote = None;
+                    }
+                }
+                None => {
+                    if c == '"' || c == '\'' {
+                        quote = Some(c);
+                    } else {
+                        cleaned.push(c);
+                    }
+                }
+            }
+        }
+        let mut cur = String::new();
+        for c in cleaned.chars().chain(std::iter::once(' ')) {
+            if c.is_alphanumeric() || c == '_' {
+                cur.push(c);
+            } else {
+                if !cur.is_empty() && !cur.chars().next().unwrap().is_ascii_digit() {
+                    out.insert(std::mem::take(&mut cur));
+                }
+                cur.clear();
+            }
+        }
+    }
+    out
+}
+
+/// `parent` is the enclosing function's context when this definition is nested in a function: the
+/// variables the body uses from it are captured (by value, at definition time) into a closure.
 fn compile_fn_definition(
     lines: &[(usize, String)],
     cursor: &mut usize,
     state: &mut CompilerState,
+    mut parent: Option<&mut CompileContext>,
 ) -> Result<(), VmError> {
     let start = *cursor;
     let line_no = lines[start].0;
@@ -5076,29 +5121,56 @@ fn compile_fn_definition(
     *cursor = end_phys + 1;
     expect_open_brace(lines, cursor, line_no, "fn")?;
 
+    // Variables of the enclosing function that this body uses: captured into a closure.
+    let mut captured_vars: Vec<(String, Option<u16>, Option<usize>)> = Vec::new(); // (name, slot, param index)
+    if let Some(p) = parent.as_deref() {
+        if p.in_function {
+            let body_end = skip_braced_block(lines, *cursor - 1).saturating_sub(1).max(*cursor);
+            let used = identifiers_in_lines(&lines[*cursor..body_end.min(lines.len())]);
+            let own: std::collections::HashSet<&String> = params.iter().collect();
+            let mut names: Vec<&String> = p.slot_map.keys().chain(p.params.keys()).collect();
+            names.sort();
+            names.dedup();
+            for n in names {
+                if used.contains(n) && !own.contains(n) && *n != name && !p.global_decls.contains(n) {
+                    captured_vars.push((n.clone(), p.slot_map.get(n).copied(), p.params.get(n).copied()));
+                }
+            }
+        }
+    }
+    let is_closure = !captured_vars.is_empty();
+
     let skip_jump_index = state.instructions.len();
     state.instructions.push(Instruction::Jump(usize::MAX));
 
     let fn_start = state.instructions.len();
     state.function_arities.insert(fn_start, params.len());
-    state.functions.insert(
-        name.clone(),
-        FunctionMeta {
-            start: fn_start,
-            arity: params.len(),
-        },
-    );
+    if !is_closure {
+        state.functions.insert(
+            name.clone(),
+            FunctionMeta {
+                start: fn_start,
+                arity: params.len(),
+            },
+        );
+    }
+    let arg_names: Vec<String> = (0..params.len()).map(|i| format!("arg{}", i)).collect();
 
     let mut fn_context = CompileContext {
         loop_stack: Vec::new(),
         in_function: true,
-        current_function_name: Some(name),
+        current_function_name: Some(name.clone()),
         params: HashMap::new(),
         slot_map: HashMap::new(),
         next_slot: 0,
         // Collect parent scope variable names so function body can reference them
         // via named Store/Load (instead of creating new local slots).
-        outer_vars: state.known_top_level_vars.iter().cloned().collect(),
+        outer_vars: state
+            .known_top_level_vars
+            .iter()
+            .cloned()
+            .chain(captured_vars.iter().map(|(n, _, _)| n.clone()))
+            .collect(),
         global_decls: Default::default(),
         tail_position: false,
         tail_value: false,
@@ -5122,6 +5194,26 @@ fn compile_fn_definition(
 
     let after_fn = state.instructions.len();
     state.instructions[skip_jump_index] = Instruction::Jump(after_fn);
+
+    if is_closure {
+        // Make the captured values visible by name, build the function value, bind it to its name.
+        for (var, slot, param) in &captured_vars {
+            match (slot, param) {
+                (Some(s), _) => state.instructions.push(Instruction::LoadSlot(*s)),
+                (None, Some(i)) => state.instructions.push(Instruction::Load(format!("arg{}", i))),
+                (None, None) => continue,
+            }
+            state.instructions.push(Instruction::Store(var.clone()));
+        }
+        state.instructions.push(Instruction::ConstFunc {
+            params: arg_names,
+            bytecode_start: fn_start,
+            captured_names: captured_vars.iter().map(|(n, _, _)| n.clone()).collect(),
+        });
+        if let Some(p) = parent.as_deref_mut() {
+            emit_store_variable(&name, state, p);
+        }
+    }
     Ok(())
 }
 

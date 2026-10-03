@@ -186,6 +186,8 @@ pub struct VirtualMachine {
     handlers: Vec<TryHandler>,
     /// Value of the `throw` currently unwinding (so `catch e` receives the original value).
     pending_throw: Option<Value>,
+    /// Calls in progress to closures with captured variables: (call depth, captures to write back).
+    closure_frames: Vec<(usize, crate::value::Captures)>,
     generator_manager: GeneratorManager,  // Manages generator state
     yielded_values: Vec<Value>,  // Collected yielded values for generators
     collecting_yields: bool,  // Flag to track if we're inside a generator function
@@ -255,6 +257,7 @@ impl Default for VirtualMachine {
             exception_manager: ExceptionManager::default(),
             handlers: Vec::new(),
             pending_throw: None,
+            closure_frames: Vec::new(),
             generator_manager: GeneratorManager::default(),
             yielded_values: Vec::new(),
             collecting_yields: false,
@@ -312,6 +315,7 @@ impl VirtualMachine {
             exception_manager: ExceptionManager::default(),
             handlers: Vec::new(),
             pending_throw: None,
+            closure_frames: Vec::new(),
             generator_manager: GeneratorManager::default(),
             yielded_values: Vec::new(),
             collecting_yields: false,
@@ -542,6 +546,7 @@ impl VirtualMachine {
         self.exception_manager.reset();
         self.handlers.clear();
         self.pending_throw = None;
+        self.closure_frames.clear();
         self.generator_manager.clear();
         self.yielded_values.clear();
 
@@ -614,7 +619,7 @@ impl VirtualMachine {
             let params: Vec<String> = (0..arity).map(|i| format!("arg{i}")).collect();
             let _ = self.store_var(
                 name,
-                Value::Function { params, bytecode_start: *start, captured: Box::new(HashMap::new()) },
+                Value::Function { params, bytecode_start: *start, captured: Default::default() },
             );
         }
 
@@ -674,6 +679,7 @@ impl VirtualMachine {
             .pending_throw
             .take()
             .unwrap_or_else(|| Value::Str(error_message_for_catch(error)));
+        self.closure_frames.retain(|(d, _)| *d <= h.call_len);
         self.stack.push(value);
         self.ip = h.catch_ip;
         true
@@ -775,7 +781,7 @@ impl VirtualMachine {
                     self.stack.push(Value::Function {
                         params: params.clone(),
                         bytecode_start: *bytecode_start,
-                        captured: Box::new(captured),
+                        captured: crate::value::Captures::new(captured),
                     });
                 }
                 Instruction::EnterScope => self.push_scope(),
@@ -2248,9 +2254,12 @@ impl VirtualMachine {
                             self.push_scope();
                             self.locals_stack.push(Vec::new());  // new locals frame
                             
-                            // Restore captured variables from closure
-                            for (var_name, var_value) in *captured {
+                            // Restore captured variables from closure; written back at `Ret`
+                            for (var_name, var_value) in captured.snapshot() {
                                 self.store_local(&var_name, var_value);
+                            }
+                            if !captured.is_empty() {
+                                self.closure_frames.push((self.call_stack.len(), captured.clone()));
                             }
 
                             // Expose all passed arguments as `args` for variadic use-cases.
@@ -2291,6 +2300,14 @@ impl VirtualMachine {
                         let gen_id = self.generator_manager.create_generator(yielded);
                         self.stack.pop();  // discard original return value
                         self.stack.push(Value::Generator(gen_id));
+                    }
+                    if self.closure_frames.last().map_or(false, |(d, _)| *d == self.call_stack.len()) {
+                        let (_, caps) = self.closure_frames.pop().expect("checked");
+                        for name in caps.names() {
+                            if let Ok(v) = self.load_var(&name) {
+                                caps.set(&name, v);
+                            }
+                        }
                     }
                     self.pop_scope()?;
                     // Pop the locals frame pushed by Call (keep frame 0 for top-level)
@@ -5200,6 +5217,7 @@ impl VirtualMachine {
                         Value::Function { params, bytecode_start, captured } => {
                             let prog_arc = self.program_arc_for_spawn(program);
                             let spawn_caps = crate::security::current_capabilities();
+                            let captured = crate::value::Captures::new(captured.snapshot().into_iter().collect());
                             std::thread::spawn(move || {
                                 let _spawn_cap_guard =
                                     CapabilityScopeGuard::install(spawn_caps.clone());
@@ -5246,7 +5264,7 @@ impl VirtualMachine {
                         let func = Value::Function {
                             params,
                             bytecode_start,
-                            captured: Box::new(std::collections::HashMap::new()),
+                            captured: Default::default(),
                         };
                         let result = child
                             .call_function_sync(&func, args, &prog_arc)
@@ -5499,8 +5517,11 @@ impl VirtualMachine {
         self.call_stack.push(NESTED_RETURN);
         self.push_scope();
         self.locals_stack.push(Vec::new());
-        for (name, value) in captured.iter() {
-            self.store_local(name, value.clone());
+        for (name, value) in captured.snapshot() {
+            self.store_local(&name, value.clone());
+        }
+        if !captured.is_empty() {
+            self.closure_frames.push((self.call_stack.len(), captured.clone()));
         }
         let arity = program.function_arities.get(&start).copied().unwrap_or(params.len());
         self.store_local("args", Value::from(args.clone()));
@@ -5520,6 +5541,7 @@ impl VirtualMachine {
             Err(e) => {
                 // unwind whatever the failed call left behind
                 self.stack.truncate(base_stack);
+                self.closure_frames.retain(|(d, _)| *d <= base_calls);
                 self.call_stack.truncate(base_calls);
                 self.scopes.truncate(base_scopes);
                 self.locals_stack.truncate(base_locals);
@@ -6107,8 +6129,8 @@ impl VirtualMachine {
                 self.push_scope();
                 
                 // Restore captured variables
-                for (name, val) in captured.iter() {
-                    self.store_local(name, val.clone());
+                for (name, val) in captured.snapshot() {
+                    self.store_local(&name, val.clone());
                 }
                 
                 // Bind parameters - try both param names and argN for compatibility
@@ -6331,7 +6353,7 @@ impl VirtualMachine {
                             let callee = Value::Function {
                                 params,
                                 bytecode_start: *target,
-                                captured: Box::new(std::collections::HashMap::new()),
+                                captured: Default::default(),
                             };
                             let r = self.call_function_sync(&callee, call_args, program)
                                 .unwrap_or(Value::Null);
@@ -6348,7 +6370,7 @@ impl VirtualMachine {
                             let callee = Value::Function {
                                 params,
                                 bytecode_start: *target,
-                                captured: Box::new(std::collections::HashMap::new()),
+                                captured: Default::default(),
                             };
                             let r = self.call_function_sync(&callee, call_args, program)
                                 .unwrap_or(Value::Null);

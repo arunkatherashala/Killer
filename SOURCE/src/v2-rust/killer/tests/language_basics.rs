@@ -400,3 +400,21 @@ fn errors_inside_callbacks_are_catchable_and_uncaught_ones_fail() {
     assert!(out.contains("Uncaught exception: final"), "{out}");
     assert!(!out.contains("unreachable"), "{out}");
 }
+
+#[test]
+fn lambdas_arrows_and_closures() {
+    let src = "f = fn(a) {\n  return a * 3\n}\nprintln(f(4))\ng = (a, b) => a + b\nprintln(g(2, 3))\nprintln(map([1, 2, 3], x => x + 1))\nprintln(reduce([1, 2, 3, 4], (a, b) => a + b, 0))\nprintln(filter([1, 2, 3, 4], n => n % 2 == 0))\nfn scale(xs, k) {\n  return map(xs, v => v * k)\n}\nprintln(scale([1, 2], 7))\nfn adder(k) {\n  return fn(x) {\n    return x + k\n  }\n}\nadd5 = adder(5)\nprintln(add5(10))\nprintln(map([1, 2, 3], fn(x) {\n  return x * 10\n}))\n";
+    assert_eq!(run(src), "12\n5\n[2, 3, 4]\n10\n[2, 4]\n[7, 14]\n15\n[10, 20, 30]");
+}
+
+#[test]
+fn closures_keep_their_own_state_between_calls() {
+    let src = "fn make() {\n  n = 0\n  fn inc() {\n    n = n + 1\n    return n\n  }\n  return inc\n}\nc = make()\nprintln(c())\nprintln(c())\nd = make()\nprintln(d())\nprintln(c())\n";
+    assert_eq!(run(src), "1\n2\n1\n3");
+}
+
+#[test]
+fn decorators_rebind_the_function() {
+    let src = "fn loud(f) {\n  fn wrapper(x) {\n    return f(x) + 1\n  }\n  return wrapper\n}\n@loud\nfn base(x) {\n  return x * 2\n}\nprintln(base(5))\n";
+    assert_eq!(run(src), "11");
+}
