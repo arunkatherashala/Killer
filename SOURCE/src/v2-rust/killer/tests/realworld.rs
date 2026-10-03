@@ -54,6 +54,12 @@ fn assigning_through_a_field_and_an_index() {
 }
 
 #[test]
+fn contains_and_in_accept_number_keys_on_dicts() {
+    let src = "memo = {}\nmemo[5] = \"five\"\nprintln(5 in memo)\nprintln(6 in memo)\nprintln(contains(memo, 5))\nprintln(memo[5])\n";
+    assert_eq!(run(src), "true\nfalse\ntrue\nfive");
+}
+
+#[test]
 fn and_or_short_circuit() {
     // the right operand used to run even when the left decided the result
     let src = "fn boom() {\n  println(\"boom\")\n  return true\n}\nprintln(false && boom())\nprintln(true || boom())\nprintln(true && boom())\nprintln(false || boom())\nxs = [1]\nj = 3\nprintln(j < len(xs) && xs[j] > 0)\nprintln(j >= len(xs) || xs[j] > 0)\nif j < len(xs) && xs[j] > 0 {\n  println(\"no\")\n}\nwhile j < len(xs) && xs[j] > 0 {\n  j = j + 1\n}\nprintln(j)\n";

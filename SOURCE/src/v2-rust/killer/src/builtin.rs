@@ -1656,6 +1656,9 @@ impl BuiltinFunctions {
                 Ok(Value::Bool(arr.contains(val)))
             }
             (Value::Dict(dict), Value::Str(key)) => Ok(Value::Bool(dict.contains_key(key))),
+            // dict keys are strings; other keys are stored by their printed form (see IndexRead)
+            (Value::Dict(dict), Value::Number(n)) => Ok(Value::Bool(dict.contains_key(&n.to_string()))),
+            (Value::Dict(dict), other) => Ok(Value::Bool(dict.contains_key(&format!("{other}")))),
             (Value::Set(set), val) => Ok(Value::Bool(
                 crate::value::SetKey::from_value(val).map_or(false, |k| set.contains(&k)),
             )),
