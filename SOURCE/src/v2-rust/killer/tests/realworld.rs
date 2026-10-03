@@ -165,6 +165,12 @@ fn bracketed_destructuring_assignment() {
 }
 
 #[test]
+fn sets_are_shared_and_mutated_in_place() {
+    let src = "s = set([1])\nset_add(s, 2)\ns.add(3)\nprintln(s)\nfn addto(x) {\n  set_add(x, 99)\n}\naddto(s)\nprintln(s)\nprintln(3 in s)\ns.remove(1)\nprintln(len(s))\nt = set([2, 3, 4])\nprintln(s | t)\nprintln(s & t)\nprintln(t - s)\nprintln(s.contains(99))\nfor v in t {\n  println(v)\n}\n";
+    assert_eq!(run(src), "{1, 2, 3}\n{1, 2, 3, 99}\ntrue\n3\n{2, 3, 4, 99}\n{2, 3}\n{4}\ntrue\n2\n3\n4");
+}
+
+#[test]
 fn finally_runs_when_return_break_or_continue_leave_the_try() {
     let src = "fn a() {\n  try {\n    return 1\n  } finally {\n    println(\"fin a\")\n  }\n}\nprintln(a())\nfn b() {\n  try {\n    throw \"x\"\n  } catch e {\n    return \"caught \" + e\n  } finally {\n    println(\"fin b\")\n  }\n}\nprintln(b())\nfn nested() {\n  try {\n    try {\n      return \"inner\"\n    } finally {\n      println(\"inner finally\")\n    }\n  } finally {\n    println(\"outer finally\")\n  }\n}\nprintln(nested())\nfor i in range(3) {\n  try {\n    if i == 1 {\n      continue\n    }\n    if i == 2 {\n      break\n    }\n    println(\"body \" + str(i))\n  } finally {\n    println(\"fin \" + str(i))\n  }\n}\nfn ft() {\n  try {\n    try {\n      return 1\n    } finally {\n      throw \"from finally\"\n    }\n  } catch e {\n    return \"caught \" + e\n  }\n}\nprintln(ft())\n";
     assert_eq!(

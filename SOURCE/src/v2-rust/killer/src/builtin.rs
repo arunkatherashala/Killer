@@ -2016,6 +2016,8 @@ impl BuiltinFunctions {
             (Value::Number(a), Value::Number(b)) => Ok(Value::Number(
                 (Self::num_to_i64(*a) & Self::num_to_i64(*b)) as f64,
             )),
+            // `a & b` on sets is the intersection
+            (Value::Set(_), Value::Set(_)) => Self::set_intersection(args),
             _ => Err(VmError::runtime_error("bit_and() expects numbers".to_string())),
         }
     }
@@ -2028,6 +2030,8 @@ impl BuiltinFunctions {
             (Value::Number(a), Value::Number(b)) => Ok(Value::Number(
                 (Self::num_to_i64(*a) | Self::num_to_i64(*b)) as f64,
             )),
+            // `a | b` on sets is the union
+            (Value::Set(_), Value::Set(_)) => Self::set_union(args),
             _ => Err(VmError::runtime_error("bit_or() expects numbers".to_string())),
         }
     }
@@ -6963,48 +6967,50 @@ impl BuiltinFunctions {
     // =========================================================
 
     fn set_new(args: &[Value]) -> Result<Value, VmError> {
-        use std::collections::BTreeSet;
-        use crate::value::SetKey;
-        let mut s = BTreeSet::new();
+        use crate::value::{SetKey, SharedSet};
+        let mut s = std::collections::BTreeSet::new();
         for a in args {
             if let Some(k) = SetKey::from_value(a) { s.insert(k); }
         }
-        Ok(Value::Set(Box::new(s)))
+        Ok(Value::Set(SharedSet::new(s)))
     }
 
     fn set_from_array(args: &[Value]) -> Result<Value, VmError> {
-        use std::collections::BTreeSet;
-        use crate::value::SetKey;
+        use crate::value::{SetKey, SharedSet};
         if args.is_empty() { return Err(VmError::runtime_error("set_from_array(arr) requires 1 arg")); }
-        let mut s = BTreeSet::new();
+        let mut s = std::collections::BTreeSet::new();
         if let Value::Array(arr) = &args[0] {
             for v in arr.iter_cloned() {
                 if let Some(k) = SetKey::from_value(&v) { s.insert(k); }
             }
         }
-        Ok(Value::Set(Box::new(s)))
+        Ok(Value::Set(SharedSet::new(s)))
     }
 
+    /// `set_add(set, value)`: adds in place and returns the same set.
     fn set_add(args: &[Value]) -> Result<Value, VmError> {
         use crate::value::SetKey;
         if args.len() < 2 { return Err(VmError::runtime_error("set_add(set, value) requires 2 args")); }
-        let mut s = match &args[0] {
-            Value::Set(s) => *s.clone(),
-            _ => return Err(VmError::runtime_error("set_add: first arg must be a set")),
-        };
-        if let Some(k) = SetKey::from_value(&args[1]) { s.insert(k); }
-        Ok(Value::Set(Box::new(s)))
+        match &args[0] {
+            Value::Set(s) => {
+                if let Some(k) = SetKey::from_value(&args[1]) { s.insert(k); }
+                Ok(args[0].clone())
+            }
+            _ => Err(VmError::runtime_error("set_add: first arg must be a set")),
+        }
     }
 
+    /// `set_remove(set, value)`: removes in place and returns the same set.
     fn set_remove(args: &[Value]) -> Result<Value, VmError> {
         use crate::value::SetKey;
         if args.len() < 2 { return Err(VmError::runtime_error("set_remove(set, value) requires 2 args")); }
-        let mut s = match &args[0] {
-            Value::Set(s) => *s.clone(),
-            _ => return Err(VmError::runtime_error("set_remove: first arg must be a set")),
-        };
-        if let Some(k) = SetKey::from_value(&args[1]) { s.remove(&k); }
-        Ok(Value::Set(Box::new(s)))
+        match &args[0] {
+            Value::Set(s) => {
+                if let Some(k) = SetKey::from_value(&args[1]) { s.remove(&k); }
+                Ok(args[0].clone())
+            }
+            _ => Err(VmError::runtime_error("set_remove: first arg must be a set")),
+        }
     }
 
     fn set_has(args: &[Value]) -> Result<Value, VmError> {
@@ -7037,37 +7043,38 @@ impl BuiltinFunctions {
         Ok(Value::from(items))
     }
 
+    /// `set_clear(set)`: empties the set in place and returns it.
     fn set_clear(args: &[Value]) -> Result<Value, VmError> {
-        use std::collections::BTreeSet;
         if args.is_empty() { return Err(VmError::runtime_error("set_clear(set) requires 1 arg")); }
         match &args[0] {
-            Value::Set(_) => Ok(Value::Set(Box::new(BTreeSet::new()))),
+            Value::Set(s) => {
+                s.clear();
+                Ok(args[0].clone())
+            }
             _ => Err(VmError::runtime_error("set_clear: arg must be a set")),
         }
     }
 
+    fn two_sets<'a>(who: &str, args: &'a [Value]) -> Result<(std::collections::BTreeSet<crate::value::SetKey>, std::collections::BTreeSet<crate::value::SetKey>), VmError> {
+        match (args.get(0), args.get(1)) {
+            (Some(Value::Set(a)), Some(Value::Set(b))) => Ok((a.to_btree(), b.to_btree())),
+            _ => Err(VmError::runtime_error(format!("{}(a, b) requires 2 sets", who))),
+        }
+    }
+
     fn set_union(args: &[Value]) -> Result<Value, VmError> {
-        if args.len() < 2 { return Err(VmError::runtime_error("set_union(a, b) requires 2 args")); }
-        let a = match &args[0] { Value::Set(s) => s, _ => return Err(VmError::runtime_error("set_union: args must be sets")) };
-        let b = match &args[1] { Value::Set(s) => s, _ => return Err(VmError::runtime_error("set_union: args must be sets")) };
-        let result = a.union(b.as_ref()).cloned().collect();
-        Ok(Value::Set(Box::new(result)))
+        let (a, b) = Self::two_sets("set_union", args)?;
+        Ok(Value::Set(crate::value::SharedSet::new(a.union(&b).cloned().collect())))
     }
 
     fn set_intersection(args: &[Value]) -> Result<Value, VmError> {
-        if args.len() < 2 { return Err(VmError::runtime_error("set_intersection(a, b) requires 2 args")); }
-        let a = match &args[0] { Value::Set(s) => s, _ => return Err(VmError::runtime_error("set_intersection: args must be sets")) };
-        let b = match &args[1] { Value::Set(s) => s, _ => return Err(VmError::runtime_error("set_intersection: args must be sets")) };
-        let result = a.intersection(b.as_ref()).cloned().collect();
-        Ok(Value::Set(Box::new(result)))
+        let (a, b) = Self::two_sets("set_intersection", args)?;
+        Ok(Value::Set(crate::value::SharedSet::new(a.intersection(&b).cloned().collect())))
     }
 
     fn set_difference(args: &[Value]) -> Result<Value, VmError> {
-        if args.len() < 2 { return Err(VmError::runtime_error("set_difference(a, b) requires 2 args")); }
-        let a = match &args[0] { Value::Set(s) => s, _ => return Err(VmError::runtime_error("set_difference: args must be sets")) };
-        let b = match &args[1] { Value::Set(s) => s, _ => return Err(VmError::runtime_error("set_difference: args must be sets")) };
-        let result = a.difference(b.as_ref()).cloned().collect();
-        Ok(Value::Set(Box::new(result)))
+        let (a, b) = Self::two_sets("set_difference", args)?;
+        Ok(Value::Set(crate::value::SharedSet::new(a.difference(&b).cloned().collect())))
     }
 
     // =========================================================

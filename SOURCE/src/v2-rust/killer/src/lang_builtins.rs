@@ -104,7 +104,7 @@ fn set_from(items: &[Value]) -> Result<Value, VmError> {
             None => return err(format!("set() elements must be numbers, strings or booleans, got {}", item.type_name())),
         }
     }
-    Ok(Value::Set(Box::new(set)))
+    Ok(Value::Set(crate::value::SharedSet::new(set)))
 }
 
 const B64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";

@@ -1199,6 +1199,10 @@ impl VirtualMachine {
                                 ));
                             }
                         }
+                        // `a - b` on two sets is their difference
+                        Value::Set(_) if matches!(rhs, Value::Set(_)) => {
+                            self.stack.push(BuiltinFunctions::call("set_difference", &[lhs.clone(), rhs])?);
+                        }
                         _ => {
                             // Fall back to numeric subtraction
                             let lhs_num = match lhs {

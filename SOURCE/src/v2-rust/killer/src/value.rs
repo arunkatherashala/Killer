@@ -358,7 +358,63 @@ impl From<HashMap<String, Value>> for SharedDict {
 
 impl FromIterator<(String, Value)> for SharedDict {
     fn from_iter<I: IntoIterator<Item = (String, Value)>>(iter: I) -> Self {
-        SharedDict::new(iter.into_iter().collect())
+        SharedDict::from_pairs(iter.into_iter().collect())
+    }
+}
+
+/// Reference-counted, interior-mutable set. Like arrays and dicts, a set passed around is the same
+/// set, so `seen.add(x)` / `set_add(seen, x)` inside a function updates the caller's set.
+#[derive(Clone)]
+pub struct SharedSet(Rc<RefCell<std::collections::BTreeSet<SetKey>>>);
+
+impl SharedSet {
+    pub fn new(set: std::collections::BTreeSet<SetKey>) -> Self {
+        SharedSet(Rc::new(RefCell::new(set)))
+    }
+    pub fn len(&self) -> usize {
+        self.0.borrow().len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.0.borrow().is_empty()
+    }
+    pub fn contains(&self, key: &SetKey) -> bool {
+        self.0.borrow().contains(key)
+    }
+    pub fn insert(&self, key: SetKey) -> bool {
+        self.0.borrow_mut().insert(key)
+    }
+    pub fn remove(&self, key: &SetKey) -> bool {
+        self.0.borrow_mut().remove(key)
+    }
+    pub fn clear(&self) {
+        self.0.borrow_mut().clear();
+    }
+    /// Snapshot of the members in order.
+    pub fn iter(&self) -> std::vec::IntoIter<SetKey> {
+        self.0.borrow().iter().cloned().collect::<Vec<_>>().into_iter()
+    }
+    /// Plain copy of the members.
+    pub fn to_btree(&self) -> std::collections::BTreeSet<SetKey> {
+        self.0.borrow().clone()
+    }
+    /// New, independent set with the same members.
+    pub fn copy(&self) -> SharedSet {
+        SharedSet::new(self.to_btree())
+    }
+}
+
+impl Debug for SharedSet {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        match self.0.try_borrow() {
+            Ok(s) => write!(f, "{:?}", *s),
+            Err(_) => write!(f, "{{..}}"),
+        }
+    }
+}
+
+impl PartialEq for SharedSet {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.0, &other.0) || *self.0.borrow() == *other.0.borrow()
     }
 }
 
@@ -516,7 +572,7 @@ pub enum Value {
     /// Statistical uncertainty: independent normally distributed error (`gauss(mean, sigma)`)
     Gauss { mean: f64, sigma: f64 },
     /// Unordered unique-value collection (set semantics)
-    Set(Box<std::collections::BTreeSet<SetKey>>),
+    Set(SharedSet),
     Null,
 }
 
