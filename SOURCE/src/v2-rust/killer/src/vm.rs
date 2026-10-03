@@ -1068,7 +1068,7 @@ impl VirtualMachine {
                             (Value::Object(obj), rhs_val) => {
                                 // Try to find __add__ method
                                 if let Some(result) = self.try_call_operator_method(
-                                    obj.class_name().clone(), 
+                                    Value::Object(obj.clone()),
                                     "__add__", 
                                     vec![rhs_val.clone()],
                                     program
@@ -1089,9 +1089,11 @@ impl VirtualMachine {
                                 self.stack.push(Value::Str(format!("{}{}", l, r)));
                             }
                             (Value::Str(l), r) => {
+                                let r = self.display_value(r, program)?;
                                 self.stack.push(Value::Str(format!("{}{}", l, r)));
                             }
                             (l, Value::Str(r)) => {
+                                let l = self.display_value(l, program)?;
                                 self.stack.push(Value::Str(format!("{}{}", l, r)));
                             }
                             // `[1, 2] + [3]` builds a new list (neither operand changes)
@@ -1147,7 +1149,7 @@ impl VirtualMachine {
                     match &lhs {
                         Value::Object(obj) => {
                             if let Some(result) = self.try_call_operator_method(
-                                obj.class_name().clone(), 
+                                Value::Object(obj.clone()),
                                 "__sub__", 
                                 vec![rhs],
                                 program
@@ -1197,7 +1199,7 @@ impl VirtualMachine {
                     match &lhs {
                         Value::Object(obj) => {
                             if let Some(result) = self.try_call_operator_method(
-                                obj.class_name().clone(), 
+                                Value::Object(obj.clone()),
                                 "__mul__", 
                                 vec![rhs],
                                 program
@@ -1253,7 +1255,7 @@ impl VirtualMachine {
                     match &lhs {
                         Value::Object(obj) => {
                             if let Some(result) = self.try_call_operator_method(
-                                obj.class_name().clone(), 
+                                Value::Object(obj.clone()),
                                 "__div__", 
                                 vec![rhs],
                                 program
@@ -1393,7 +1395,7 @@ impl VirtualMachine {
                     match &lhs {
                         Value::Object(obj) => {
                             if let Some(result) = self.try_call_operator_method(
-                                obj.class_name().clone(), 
+                                Value::Object(obj.clone()),
                                 "__eq__", 
                                 vec![rhs.clone()],
                                 program
@@ -1436,7 +1438,7 @@ impl VirtualMachine {
                     match &lhs {
                         Value::Object(obj) => {
                             if let Some(result) = self.try_call_operator_method(
-                                obj.class_name().clone(), 
+                                Value::Object(obj.clone()),
                                 "__ne__", 
                                 vec![rhs.clone()],
                                 program
@@ -1488,7 +1490,7 @@ impl VirtualMachine {
                     match &lhs {
                         Value::Object(obj) => {
                             if let Some(result) = self.try_call_operator_method(
-                                obj.class_name().clone(), 
+                                Value::Object(obj.clone()),
                                 "__gt__", 
                                 vec![rhs],
                                 program
@@ -1533,7 +1535,7 @@ impl VirtualMachine {
                     match &lhs {
                         Value::Object(obj) => {
                             if let Some(result) = self.try_call_operator_method(
-                                obj.class_name().clone(), 
+                                Value::Object(obj.clone()),
                                 "__ge__", 
                                 vec![rhs],
                                 program
@@ -1580,7 +1582,7 @@ impl VirtualMachine {
                         match &lhs {
                             Value::Object(obj) => {
                                 if let Some(result) = self.try_call_operator_method(
-                                    obj.class_name().clone(),
+                                    Value::Object(obj.clone()),
                                     "__lt__",
                                     vec![rhs],
                                     program
@@ -1625,7 +1627,7 @@ impl VirtualMachine {
                     match &lhs {
                         Value::Object(obj) => {
                             if let Some(result) = self.try_call_operator_method(
-                                obj.class_name().clone(), 
+                                Value::Object(obj.clone()),
                                 "__le__", 
                                 vec![rhs],
                                 program
@@ -2335,7 +2337,12 @@ impl VirtualMachine {
                     let value = self.stack.pop().ok_or_else(|| {
                         VmError::runtime_error("PRINT requires one value on stack".to_string())
                     })?;
-                    println!("{value}");
+                    if matches!(value, Value::Object(_)) {
+                        let text = self.display_value(&value, program)?;
+                        println!("{text}");
+                    } else {
+                        println!("{value}");
+                    }
                 }
                 Instruction::PrintMultiple(count) => {
                     // OPTIMIZATION: Pop count values and print them with spaces in between
@@ -2347,10 +2354,15 @@ impl VirtualMachine {
                         values.push(self.pop_value()?);
                     }
                     values.reverse();
-                    let output = values.iter()
-                        .map(|v| format!("{}", v))
-                        .collect::<Vec<_>>()
-                        .join(" ");
+                    let mut parts = Vec::with_capacity(values.len());
+                    for v in values.iter() {
+                        parts.push(if matches!(v, Value::Object(_)) {
+                            self.display_value(v, program)?
+                        } else {
+                            format!("{}", v)
+                        });
+                    }
+                    let output = parts.join(" ");
                     println!("{output}");
                     // Return buffer to pool for reuse
                     self.value_buffer_pool.return_buffer(values);
@@ -2567,6 +2579,46 @@ impl VirtualMachine {
                     }
 
                     // VM-internal builtins (need access to VM state)
+                    if name == "instanceof" && args.len() == 2 {
+                        let answer = match (&args[0], &args[1]) {
+                            (Value::Object(o), Value::Str(class)) => {
+                                // walk the inheritance chain
+                                let mut current = o.class_name().clone();
+                                let mut seen = std::collections::HashSet::new();
+                                let mut found = false;
+                                while seen.insert(current.clone()) {
+                                    if &current == class {
+                                        found = true;
+                                        break;
+                                    }
+                                    match program.classes.get(&current) {
+                                        Some((Some(parent), _)) => current = parent.clone(),
+                                        _ => break,
+                                    }
+                                }
+                                found
+                            }
+                            (other, Value::Str(kind)) => other.type_name() == kind.as_str(),
+                            _ => false,
+                        };
+                        self.stack.push(Value::Bool(answer));
+                        self.ip += 1;
+                        continue;
+                    }
+                    if (name == "str" || name == "to_string") && args.len() == 1 && matches!(args[0], Value::Object(_)) {
+                        let text = self.display_value(&args[0], program)?;
+                        self.stack.push(Value::Str(text));
+                        self.ip += 1;
+                        continue;
+                    }
+                    if (name == "println" || name == "print") && args.iter().any(|a| matches!(a, Value::Object(_))) {
+                        // objects with a toString method print as their text
+                        for a in args.iter_mut() {
+                            if matches!(a, Value::Object(_)) {
+                                *a = Value::Str(self.display_value(a, program)?);
+                            }
+                        }
+                    }
                     if name == "jit_stats" {
                         let (compiled, threshold) = self.jit_stats();
                         let mut d = std::collections::HashMap::new();
@@ -3699,6 +3751,12 @@ impl VirtualMachine {
                 // Allocation-free paths for the very common 1- and 2-argument builtins.
                 Instruction::CallBuiltinId(id, 1) => {
                     let a = self.pop_value()?;
+                    // `str(obj)` / `println(obj)` render objects through their toString method
+                    let a = if (*id == 1 || *id == 49) && matches!(a, Value::Object(_)) {
+                        Value::Str(self.display_value(&a, program)?)
+                    } else {
+                        a
+                    };
                     let result = BuiltinFunctions::call_by_id(*id, std::slice::from_ref(&a))
                         .map_err(|e| wrap_builtin_error(e, instr_idx))?;
                     self.stack.push(result);
@@ -3706,7 +3764,14 @@ impl VirtualMachine {
                 Instruction::CallBuiltinId(id, 2) => {
                     let b = self.pop_value()?;
                     let a = self.pop_value()?;
-                    let args = [a, b];
+                    let mut args = [a, b];
+                    if *id == 49 {
+                        for v in args.iter_mut() {
+                            if matches!(v, Value::Object(_)) {
+                                *v = Value::Str(self.display_value(v, program)?);
+                            }
+                        }
+                    }
                     let result = if is_callback_builtin(*id) && args.iter().any(|v| matches!(v, Value::Function { .. })) {
                         self.call_builtin_with_callbacks(*id, &args, program)
                     } else {
@@ -3721,6 +3786,13 @@ impl VirtualMachine {
                         args.push(self.pop_value()?);
                     }
                     args.reverse();
+                    if *id == 49 {
+                        for v in args.iter_mut() {
+                            if matches!(v, Value::Object(_)) {
+                                *v = Value::Str(self.display_value(v, program)?);
+                            }
+                        }
+                    }
                     let result = if is_callback_builtin(*id) && args.iter().any(|v| matches!(v, Value::Function { .. })) {
                         self.call_builtin_with_callbacks(*id, &args, program)
                     } else {
@@ -5123,6 +5195,40 @@ impl VirtualMachine {
                 Instruction::TryEnter { catch_target, finally_target } => {
                     self.exception_manager.push_try_frame(*catch_target, *finally_target);
                 }
+                Instruction::CallSuper { class, method_name, arg_count } => {
+                    let mut args = Vec::with_capacity(*arg_count);
+                    for _ in 0..*arg_count {
+                        args.push(self.pop_value()?);
+                    }
+                    args.reverse();
+                    let this = self.pop_value()?;
+                    match self.find_method_in_class(class, method_name, program) {
+                        Some((start, _)) => {
+                            self.call_stack.push(self.ip + 1);
+                            self.push_scope();
+                            self.locals_stack.push(Vec::new());
+                            self.store_local("this", this);
+                            let n_passed = args.len();
+                            for (index, arg) in args.into_iter().enumerate() {
+                                if index < ARG_NAMES.len() { self.store_local(ARG_NAMES[index], arg); } else { self.store_local_owned(format!("arg{index}"), arg); }
+                            }
+                            let arity = program.function_arities.get(&start).copied().unwrap_or(0);
+                            for index in n_passed..arity {
+                                if index < ARG_NAMES.len() { self.store_local(ARG_NAMES[index], Value::Null); } else { self.store_local_owned(format!("arg{index}"), Value::Null); }
+                            }
+                            self.ip = start;
+                            continue;
+                        }
+                        // a parent without its own constructor: `super.init(...)` has nothing to do
+                        None if method_name == "init" => self.stack.push(this),
+                        None => {
+                            return Err(VmError::runtime_error(format!(
+                                "super.{}() not found in class {} or its parents",
+                                method_name, class
+                            )))
+                        }
+                    }
+                }
                 Instruction::TryBegin { catch_target, body_end } => {
                     let depth = self.call_stack.len();
                     // re-entering the same `try` (a loop) replaces its leftover handler
@@ -5908,158 +6014,80 @@ impl VirtualMachine {
     /// Returns Ok(Some(result)) if method exists and executes, Ok(None) if method doesn't exist,
     /// or Err if something goes wrong
     fn try_call_operator_method(
-        &mut self, 
-        class_name: String, 
-        operator_name: &str, 
+        &mut self,
+        this: Value,
+        operator_name: &str,
         args: Vec<Value>,
-        program: &Program
+        program: &Program,
     ) -> Result<Option<Value>, VmError> {
-        // Check if this class has the operator method
-        if let Some((bytecode_start, params)) = self.find_method_in_class(&class_name, operator_name, program) {
-            // Method exists! Call it with the arguments
-            // Save current state
-            let saved_ip = self.ip;
-            let saved_stack_len = self.stack.len();
-            let saved_scopes_len = self.scopes.len();
-            
-            // Set up new scope for method execution
-            self.push_scope();
-            self.locals_stack.push(Vec::new());  // new locals frame for operator method
-            
-            // IMPORTANT: Store "this" - the object instance being operated on
-            // We need to construct the object from just the class name
-            // This is a limitation - we don't have the actual object instance here
-            // For now, create a minimal one with just the class_name
-            let this_obj = Value::Object(crate::value::SharedObject::new(ObjectInstance {
-                class_name: class_name.clone(),
-                fields: std::collections::HashMap::new(),
-            }));
-            self.store_local("this", this_obj);
-            
-            // Bind parameters to arguments  
-            if params.len() != args.len() {
-                self.scopes.truncate(saved_scopes_len);
-                self.ip = saved_ip;
-                return Err(VmError::runtime_error(
-                    format!("Operator {} expects {} arguments, got {}", operator_name, params.len(), args.len())
-                ));
+        let class_name = match &this {
+            Value::Object(o) => o.class_name().clone(),
+            _ => return Ok(None),
+        };
+        match self.find_method_in_class(&class_name, operator_name, program) {
+            Some((start, _)) => self.call_method_nested(this, start, args, program).map(Some),
+            None => Ok(None),
+        }
+    }
+
+    /// Run the method at `start` on `this` from Rust and return its result, using the full
+    /// interpreter (so loops, calls, `super`, exceptions all work inside operator methods,
+    /// `toString`, and other callbacks). The caller decides what to do with the value.
+    pub(crate) fn call_method_nested(
+        &mut self,
+        this: Value,
+        start: usize,
+        args: Vec<Value>,
+        program: &Program,
+    ) -> Result<Value, VmError> {
+        let saved_ip = self.ip;
+        let (base_stack, base_calls, base_scopes, base_locals) =
+            (self.stack.len(), self.call_stack.len(), self.scopes.len(), self.locals_stack.len());
+
+        self.call_stack.push(NESTED_RETURN);
+        self.push_scope();
+        self.locals_stack.push(Vec::new());
+        self.store_local("this", this);
+        let arity = program.function_arities.get(&start).copied().unwrap_or(args.len());
+        for index in 0..arity.max(args.len()) {
+            let value = args.get(index).cloned().unwrap_or(Value::Null);
+            if index < ARG_NAMES.len() {
+                self.store_local(ARG_NAMES[index], value);
+            } else {
+                self.store_local_owned(format!("arg{index}"), value);
             }
-            
-            for (param, arg) in params.iter().zip(args.into_iter()) {
-                self.store_local(param, arg);
+        }
+        self.ip = start;
+        let outcome = self.run_loop(program);
+        self.ip = saved_ip;
+        match outcome {
+            Ok(()) => Ok(self.stack.pop().unwrap_or(Value::Null)),
+            Err(e) => {
+                self.stack.truncate(base_stack);
+                self.closure_frames.retain(|(d, _)| *d <= base_calls);
+                self.call_stack.truncate(base_calls);
+                self.scopes.truncate(base_scopes);
+                self.locals_stack.truncate(base_locals);
+                Err(e)
             }
-            
-            // Execute method bytecode starting from bytecode_start
-            self.ip = bytecode_start;
-            let mut result = Value::Null;
-            
-            // Execute until Ret instruction
-            while self.ip < program.instructions.len() {
-                let instruction = program.instructions[self.ip].clone();
-                self.ip += 1;
-                
-                // Execute instruction and check if it's Ret
-                match instruction {
-                    Instruction::Ret => {
-                        result = self.pop_value().unwrap_or(Value::Null);
-                        break;
-                    }
-                    // For most instructions, we'll just skip detailed handling
-                    // and rely on the general execution logic to work
-                    _ => {
-                        // This is a simplified executor - only handle the most common cases
-                        // For a full implementation, we'd need to duplicate the entire match statement
-                        match &instruction {
-                            Instruction::ConstNum(n) => self.stack.push(Value::Number(*n)),
-                            Instruction::ConstStr(s) => self.stack.push(Value::Str(s.clone())),
-                            Instruction::ConstBool(b) => self.stack.push(Value::Bool(*b)),
-                            Instruction::ConstNull => self.stack.push(Value::Null), 
-                            Instruction::Load(name) => {
-                                if let Ok(val) = self.load_var(name) {
-                                    self.stack.push(val);
-                                }
-                            }
-                            Instruction::LoadSlot(slot) => {
-                                let idx = *slot as usize;
-                                let val = self.locals_stack.last()
-                                    .and_then(|f| f.get(idx))
-                                    .cloned()
-                                    .unwrap_or(Value::Null);
-                                self.stack.push(val);
-                            }
-                            Instruction::Store(name) => {
-                                if let Ok(val) = self.pop_value() {
-                                    let _ = self.store_var(name, val);
-                                }
-                            }
-                            Instruction::StoreLocal(name) => {
-                                if let Ok(val) = self.pop_value() {
-                                    self.store_local(name, val);
-                                }
-                            }
-                            Instruction::StoreSlot(slot) => {
-                                if let Ok(val) = self.pop_value() {
-                                    let idx = *slot as usize;
-                                    if let Some(frame) = self.locals_stack.last_mut() {
-                                        if idx >= frame.len() { frame.resize(idx + 1, Value::Null); }
-                                        frame[idx] = val;
-                                    }
-                                }
-                            }
-                            Instruction::AddSlotConst(slot, n) => {
-                                let idx = *slot as usize;
-                                if let Some(frame) = self.locals_stack.last_mut() {
-                                    if idx >= frame.len() { frame.resize(idx + 1, Value::Null); }
-                                    if let Value::Number(v) = &frame[idx] {
-                                        frame[idx] = Value::Number(v + n);
-                                    }
-                                }
-                            }
-                            Instruction::LtSlotConst(slot, n) => {
-                                let idx = *slot as usize;
-                                let val = self.locals_stack.last()
-                                    .and_then(|f| f.get(idx))
-                                    .cloned()
-                                    .unwrap_or(Value::Null);
-                                if let Value::Number(v) = val {
-                                    self.stack.push(Value::Bool(v < *n));
-                                } else {
-                                    self.stack.push(Value::Bool(false));
-                                }
-                            }
-                            Instruction::Add => {
-                                let rhs = self.pop_value().unwrap_or(Value::Null);
-                                let lhs = self.pop_value().unwrap_or(Value::Null);
-                                match (&lhs, &rhs) {
-                                    (Value::Number(l), Value::Number(r)) => self.stack.push(Value::Number(l + r)),
-                                    (Value::Str(l), _) => self.stack.push(Value::Str(format!("{}{}", l, rhs))),
-                                    (_, Value::Str(r)) => self.stack.push(Value::Str(format!("{}{}", lhs, r))),
-                                    _ => { self.stack.push(Value::Null); }
-                                }
-                            }
-                            _ => {
-                                // For other instructions, just continue - they might not be important for operator methods
-                                // This is a limitation of this simplified executor
-                            }
-                        }
-                    }
+        }
+    }
+
+    /// The text for `print`, `str` and string concatenation: an object whose class defines
+    /// `toString` (or `__str__`) is rendered by calling it.
+    pub(crate) fn display_value(&mut self, value: &Value, program: &Program) -> Result<String, VmError> {
+        if let Value::Object(obj) = value {
+            let class_name = obj.class_name().clone();
+            for hook in ["toString", "__str__"] {
+                if let Some((start, _)) = self.find_method_in_class(&class_name, hook, program) {
+                    let text = self.call_method_nested(value.clone(), start, Vec::new(), program)?;
+                    return Ok(format!("{}", text));
                 }
             }
-            
-            // Restore VM state
-            self.scopes.truncate(saved_scopes_len);
-            self.locals_stack.pop();  // pop operator method locals frame
-            self.ip = saved_ip;
-            self.stack.truncate(saved_stack_len);
-            self.stack.push(result.clone());
-            
-            return Ok(Some(result));
         }
-        
-        // Method doesn't exist
-        Ok(None)
+        Ok(format!("{}", value))
     }
-    
+
     /// Helper to convert a value to a number
     #[inline(always)]
     fn value_to_number(&self, val: &Value) -> Result<f64, VmError> {

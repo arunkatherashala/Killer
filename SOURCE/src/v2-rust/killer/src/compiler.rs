@@ -253,6 +253,8 @@ struct CompilerState {
     global_vars: std::collections::HashSet<String>,
     /// Functions rebound by a decorator: calls go through the variable, not the original code.
     decorated: std::collections::HashSet<String>,
+    /// `static fn` methods: (class, method) -> (bytecode start, arity)
+    static_methods: HashMap<(String, String), (usize, usize)>,
     /// Class metadata: class_name → (parent, [(method_name, params)])
     /// Used to populate Program.classes and method_bytecode.
     class_defs: HashMap<String, (Option<String>, Vec<(String, Vec<String>)>)>,
@@ -3654,6 +3656,38 @@ fn compile_expr_str(
 
     // `obj.method(args)` — method call or `obj.field` — property access
     if let Some((receiver, method_name, args)) = parse_dot_call_expr(expr) {
+        // `super.method(args)` (rewritten to `__super_<Parent>.method(args)` inside a subclass)
+        if let Some(parent) = receiver.strip_prefix("__super_") {
+            state.instructions.push(Instruction::Load("this".to_string()));
+            for arg in &args {
+                compile_expr_str(arg, line_no, state, context)?;
+            }
+            state.instructions.push(Instruction::CallSuper {
+                class: parent.to_string(),
+                method_name: method_name.to_string(),
+                arg_count: args.len(),
+            });
+            return Ok(());
+        }
+        // `ClassName.staticMethod(args)`: a direct call (the class or one of its parents declares it)
+        if is_valid_name(receiver) && !context.slot_map.contains_key(receiver) && !context.params.contains_key(receiver) {
+            let mut class = Some(receiver.to_string());
+            let mut hops = 0;
+            while let Some(c) = class {
+                if let Some(&(start, _)) = state.static_methods.get(&(c.clone(), method_name.to_string())) {
+                    for arg in &args {
+                        compile_expr_str(arg, line_no, state, context)?;
+                    }
+                    state.instructions.push(Instruction::Call { target: start, arg_count: args.len() });
+                    return Ok(());
+                }
+                hops += 1;
+                class = state.class_defs.get(&c).and_then(|(p, _)| p.clone());
+                if hops > 64 {
+                    break;
+                }
+            }
+        }
         // Compile the receiver (the object)
         compile_expr_str(receiver, line_no, state, context)?;
         // Compile arguments
@@ -4848,6 +4882,13 @@ fn compile_method_call_str(
             "Line {}: not a valid method call: `{}`", line_no, expr
         )));
     };
+    // `super.m(..)` and `Class.staticMethod(..)` need the richer expression path
+    let static_call = !context.slot_map.contains_key(&obj)
+        && !context.params.contains_key(&obj)
+        && state.static_methods.keys().any(|(c, m)| *c == obj && *m == method);
+    if obj.starts_with("__super_") || static_call {
+        return compile_expr_str(expr, line_no, state, context);
+    }
     // Load receiver
     if let Some(param_idx) = context.params.get(&obj) {
         state.instructions.push(Instruction::Load(format!("arg{}", param_idx)));
@@ -4886,9 +4927,16 @@ fn parse_dot_call_expr(expr: &str) -> Option<(&str, &str, Vec<String>)> {
         }
         match b {
             b'"' => in_string = true,
-            b'(' | b'[' => depth += 1,
-            b')' | b']' => depth -= 1,
-            b'.' if depth == 0 && i > 0 => { dot_pos = Some(i); break; }
+            b'(' | b'[' | b'{' => depth += 1,
+            b')' | b']' | b'}' => depth -= 1,
+            // the LAST top-level dot: `a.b(x).c(y).d` is a chain whose receiver is everything
+            // before the final member (decimal points are not member dots)
+            b'.' if depth == 0 && i > 0 => {
+                let decimal_point = bytes[i - 1].is_ascii_digit() && bytes.get(i + 1).map_or(false, |c| c.is_ascii_digit());
+                if !decimal_point {
+                    dot_pos = Some(i);
+                }
+            }
             _ => {}
         }
     }
@@ -5224,6 +5272,46 @@ fn compile_fn_definition(
 ///   }
 /// or with inheritance:
 ///   class Child extends Parent { ... }
+/// Rewrite `super.` to `__super_<parent>.` outside string literals.
+fn replace_super_calls(line: &str, parent: &str) -> String {
+    let mut out = String::with_capacity(line.len() + 16);
+    let mut in_string = false;
+    let bytes = line.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        let c = bytes[i];
+        if in_string {
+            let ch = line[i..].chars().next().unwrap();
+            out.push(ch);
+            if c == 92 && i + 1 < bytes.len() {
+                let next = line[i + 1..].chars().next().unwrap();
+                out.push(next);
+                i += 1 + next.len_utf8();
+                continue;
+            }
+            if c == b'"' {
+                in_string = false;
+            }
+            i += ch.len_utf8();
+            continue;
+        }
+        if c == b'"' {
+            in_string = true;
+        }
+        let word_before = i > 0 && (bytes[i - 1].is_ascii_alphanumeric() || bytes[i - 1] == b'_');
+        if !word_before && line[i..].starts_with("super.") {
+            out.push_str(&format!("__super_{}.", parent));
+            i += "super.".len();
+            continue;
+        }
+        // keep multi-byte characters intact
+        let ch = line[i..].chars().next().unwrap();
+        out.push(ch);
+        i += ch.len_utf8();
+    }
+    out
+}
+
 fn compile_class_definition(
     lines: &[(usize, String)],
     cursor: &mut usize,
@@ -5249,6 +5337,35 @@ fn compile_class_definition(
     *cursor += 1;
     expect_open_brace(lines, cursor, line_no, "class")?;
 
+    // Inside the class body: `super.` becomes `__super_<Parent>.` and `static fn` loses its
+    // prefix (the line numbers are remembered in `static_lines`).
+    let class_end = skip_braced_block(lines, *cursor - 1);
+    let mut static_lines: std::collections::HashSet<usize> = std::collections::HashSet::new();
+    let patched: Vec<(usize, String)> = lines
+        .iter()
+        .enumerate()
+        .map(|(idx, (n, l))| {
+            if idx < *cursor || idx >= class_end {
+                return (*n, l.clone());
+            }
+            let mut text = l.clone();
+            let trimmed = text.trim_start();
+            if let Some(rest) = trimmed.strip_prefix("static ") {
+                if rest.starts_with("fn ") || rest.starts_with("kfn ") {
+                    static_lines.insert(idx);
+                    text = rest.to_string();
+                }
+            }
+            if let Some(p) = &parent {
+                if text.contains("super.") {
+                    text = replace_super_calls(&text, p);
+                }
+            }
+            (*n, text)
+        })
+        .collect();
+    let lines: &[(usize, String)] = &patched;
+
     // Emit a Jump to skip over all method bytecode during linear execution
     let skip_jump_index = state.instructions.len();
     state.instructions.push(Instruction::Jump(usize::MAX));
@@ -5271,6 +5388,7 @@ fn compile_class_definition(
         }
 
         if mline.starts_with("kfn ") || mline.starts_with("fn ") {
+            let is_static = static_lines.contains(&*cursor);
             let (sig_line, end_phys) = merge_multiline_signature_header(lines, *cursor)?;
             let (method_name, params, method_defaults) = parse_function_signature_full(&sig_line, *mline_no)?;
             *cursor = end_phys + 1;
@@ -5282,6 +5400,11 @@ fn compile_class_definition(
                 method_start,
             );
             state.function_arities.insert(method_start, params.len());
+            if is_static {
+                state
+                    .static_methods
+                    .insert((class_name.clone(), method_name.clone()), (method_start, params.len()));
+            }
 
             // Compile method body in its own context
             let mut method_context = CompileContext {
@@ -5306,7 +5429,7 @@ fn compile_class_definition(
 
             // Implicit return: init returns "this", other methods return null. Always emitted, for
             // the same reason as for plain functions.
-            if method_name == "init" {
+            if method_name == "init" && !is_static {
                 if method_context.tail_value {
                     state.instructions.push(Instruction::Pop);
                 }
@@ -5372,6 +5495,14 @@ fn compile_binary_operators(
             state.instructions.push(Instruction::Not);
             return Ok(true);
         }
+    }
+
+    // `value instanceof ClassName`
+    if let Some((left, class)) = xs::split_keyword(expr, "instanceof") {
+        compile_expr_str(left, line_no, state, context)?;
+        state.instructions.push(Instruction::ConstStr(class.trim().to_string()));
+        state.instructions.push(Instruction::CallBuiltin("instanceof".to_string(), 2));
+        return Ok(true);
     }
 
     if let Some((operands, ops)) = xs::split_comparison_chain(expr) {
@@ -5886,7 +6017,7 @@ fn patch_pending_calls(state: &mut CompilerState) -> Result<(), VmError> {
         "base64_encode", "base64_decode", "hmac_sha256", "float", "bool", "log", "log2", "log10", "exp", "cbrt",
         "trunc", "sign", "atan2", "hypot", "asin", "acos", "atan", "sinh", "cosh", "tanh", "degrees", "radians",
         "gcd", "lcm", "mean", "median", "variance", "stdev", "pvariance", "pstdev", "env", "args", "exit",
-        "sleep", "assert", "set", "delete", "insert", "gc_stats", "jit_stats",
+        "sleep", "assert", "set", "delete", "insert", "gc_stats", "jit_stats", "instanceof",
         "uncertain", "unc_value", "unc_margin", "unc_lo", "unc_hi", "gauss", "unc_sigma", "prob_gt", "prob_lt",
         // Ghost Agent (web search + local LLM)
         "ghost_ask",

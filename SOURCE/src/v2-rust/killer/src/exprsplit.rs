@@ -349,6 +349,25 @@ pub fn tuple_elements(expr: &str) -> Option<Vec<&str>> {
 
 /// True when `expr` has a top-level operator that binds looser than a member access, so it cannot
 /// be the receiver of `.name` / `.name(...)` (for example `1 + c`).
+/// Split `left <keyword> right` at the first top-level occurrence of a word operator such as
+/// `instanceof` (surrounded by whitespace, outside strings and brackets).
+pub fn split_keyword<'a>(expr: &'a str, keyword: &str) -> Option<(&'a str, &'a str)> {
+    let mask = top_level_mask(expr);
+    let b = expr.as_bytes();
+    let pat = format!(" {} ", keyword);
+    let mut i = 0;
+    while i + pat.len() <= b.len() {
+        if mask[i] && starts_at(b, i, &pat) {
+            let (l, r) = (expr[..i].trim(), expr[i + pat.len()..].trim());
+            if !l.is_empty() && !r.is_empty() {
+                return Some((l, r));
+            }
+        }
+        i += 1;
+    }
+    None
+}
+
 pub fn has_top_level_operator(expr: &str) -> bool {
     let b = expr.as_bytes();
     let mask = top_level_mask(expr);

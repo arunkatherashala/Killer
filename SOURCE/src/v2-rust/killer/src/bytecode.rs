@@ -168,6 +168,9 @@ pub enum Instruction {
     TryEnd,
     /// `throw value`: unwind to the nearest `TryBegin`, or abort the program if there is none.
     Raise,
+    /// `super.method(args)`: call `method` starting the lookup at `class` (the parent of the class
+    /// the calling method is defined in), on the object below the arguments (`this`).
+    CallSuper { class: String, method_name: String, arg_count: usize },
     Yield,
     CatchEnter { var_name: Option<String> },
     FinallyEnter,

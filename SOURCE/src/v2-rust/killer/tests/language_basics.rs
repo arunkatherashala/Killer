@@ -418,3 +418,33 @@ fn decorators_rebind_the_function() {
     let src = "fn loud(f) {\n  fn wrapper(x) {\n    return f(x) + 1\n  }\n  return wrapper\n}\n@loud\nfn base(x) {\n  return x * 2\n}\nprintln(base(5))\n";
     assert_eq!(run(src), "11");
 }
+
+#[test]
+fn super_calls_methods_and_constructors() {
+    let src = format!("{ANIMAL}class Dog extends Animal {{\n  fn init(name, breed) {{\n    super.init(name)\n    this.breed = breed\n  }}\n  fn speak() {{\n    return super.speak() + \" loudly\"\n  }}\n}}\nd = new Dog(\"Rex\", \"lab\")\nprintln(d.speak())\nprintln(d.name + d.breed)\n");
+    assert_eq!(run(&src), "Rex makes a sound loudly\nRexlab");
+}
+
+#[test]
+fn instanceof_follows_inheritance() {
+    let src = format!("{ANIMAL}class Dog extends Animal {{\n}}\nd = new Dog(\"d\")\nprintln(d instanceof Dog)\nprintln(d instanceof Animal)\nprintln(new Animal(\"a\") instanceof Dog)\nprintln(\"x\" instanceof string)\n");
+    assert_eq!(run(&src), "true\ntrue\nfalse\ntrue");
+}
+
+#[test]
+fn static_methods_are_called_on_the_class() {
+    let src = "class M {\n  static fn twice(x) {\n    return x * 2\n  }\n  fn inst() {\n    return 1\n  }\n}\nclass N extends M {\n}\nprintln(M.twice(4))\nprintln(N.twice(5))\nM.twice(1)\nprintln(new M().inst())\n";
+    assert_eq!(run(src), "8\n10\n1");
+}
+
+#[test]
+fn method_chaining_and_member_access_after_calls() {
+    let src = "class B {\n  fn init() {\n    this.s = \"\"\n  }\n  fn add(x) {\n    this.s = this.s + x\n    return this\n  }\n}\nb = new B()\nb.add(\"a\").add(\"b\")\nprintln(b.s)\nprintln(new B().add(\"x\").add(\"y\").s)\n";
+    assert_eq!(run(src), "ab\nxy");
+}
+
+#[test]
+fn operator_overloading_and_tostring() {
+    let src = "class V {\n  fn init(x) {\n    this.x = x\n  }\n  fn __add__(o) {\n    return new V(this.x + o.x)\n  }\n  fn __eq__(o) {\n    return this.x == o.x\n  }\n  fn toString() {\n    return \"V(\" + str(this.x) + \")\"\n  }\n}\nr = new V(1) + new V(2)\nprintln(r.x)\nprintln(r)\nprintln(\"sum=\" + r)\nprintln(str(r))\nprintln(new V(3) == new V(3))\nprintln(new V(3) == new V(4))\n";
+    assert_eq!(run(src), "3\nV(3)\nsum=V(3)\nV(3)\ntrue\nfalse");
+}
