@@ -130,6 +130,7 @@ impl StackManager {
             Value::Uncertain { value, margin } => *value > *margin,  // truthy if value > margin (clearly positive)
             Value::Gauss { mean, sigma } => *mean > crate::uncertain::Z95 * sigma.abs(),
             Value::Set(s) => !s.is_empty(),
+            Value::TaskError(_) => true,
         }
     }
 

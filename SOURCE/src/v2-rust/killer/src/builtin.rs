@@ -1425,6 +1425,7 @@ impl BuiltinFunctions {
             Value::Uncertain { .. } => "uncertain",
             Value::Gauss { .. } => "gauss",
             Value::Set(_) => "set",
+            Value::TaskError(_) => "error",
         };
         Ok(Value::Str(type_name.to_string()))
     }

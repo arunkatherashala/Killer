@@ -147,6 +147,18 @@ fn iterating_a_dict_or_set_walks_keys_and_members() {
 }
 
 #[test]
+fn spawned_tasks_see_globals_classes_and_raise_their_errors() {
+    let src = "m = mutex_new(0)\nscale = 10\nclass Acc {\n  fn init(n) {\n    this.n = n\n  }\n  fn double() {\n    return this.n * 2\n  }\n}\nfn job(k) {\n  mutex_add(m, k)\n  return new Acc(k * scale).double()\n}\nhs = [async_spawn(job, 1), async_spawn(job, 2)]\nprintln(async_await(hs[0]) + async_await(hs[1]))\nprintln(mutex_get(m))\nfn bad() {\n  throw {\"code\": 7}\n}\ntry {\n  async_await(async_spawn(bad))\n} catch e {\n  println(e[\"code\"])\n}\nfn bad2() {\n  return nosuch + 1\n}\ntry {\n  async_await(async_spawn(bad2))\n} catch e {\n  println(\"caught\")\n}\n";
+    assert_eq!(run(src), "60\n3\n7\ncaught");
+}
+
+#[test]
+fn spawned_tasks_get_their_own_copy_of_arguments() {
+    let src = "fn mutate(xs) {\n  push(xs, 99)\n  return len(xs)\n}\nxs = [1, 2]\nprintln(async_await(async_spawn(mutate, xs)))\nprintln(xs)\n";
+    assert_eq!(run(src), "3\n[1, 2]");
+}
+
+#[test]
 fn dictionary_literals_can_span_lines() {
     let src = "b = {\n  \"x\": 1,\n  \"y\": {\"k\": [1, 2]}\n}\nprintln(b)\nfn make() {\n  return {\n    \"a\": 1,\n    // a comment inside\n    \"b\": 2\n  }\n}\nprintln(make())\nprintln(max(1, 5,\n  3))\nrows = []\npush(rows, {\n  \"n\": 1\n})\nprintln(rows)\nif true {\n  println(\"block still works\")\n}\n";
     assert_eq!(run(src), "{x: 1, y: {k: [1, 2]}}\n{a: 1, b: 2}\n5\n[{n: 1}]\nblock still works");

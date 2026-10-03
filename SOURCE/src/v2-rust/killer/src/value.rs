@@ -573,6 +573,9 @@ pub enum Value {
     Gauss { mean: f64, sigma: f64 },
     /// Unordered unique-value collection (set semantics)
     Set(SharedSet),
+    /// Result slot of a spawned task that failed; `await` turns it back into an error in the
+    /// awaiting thread. Never visible to scripts as a value.
+    TaskError(Box<Value>),
     Null,
 }
 
@@ -655,6 +658,7 @@ impl Display for Value {
                 write!(f, "Tryte[{}]", parts.join(""))
             }
             Value::Future(_) => write!(f, "<future>"),
+            Value::TaskError(msg) => write!(f, "<task error: {}>", msg),
             Value::Integer(n) => write!(f, "{}", n),
             Value::Bytes(b) => write!(f, "<bytes[{}]>", b.len()),
             Value::Pointer(p) => write!(f, "0x{:016x}", p),
@@ -670,6 +674,41 @@ impl Display for Value {
 }
 
 impl Value {
+    /// A structurally independent copy that shares no `Rc` with the original. Values handed to
+    /// another thread (spawn arguments, captured variables, task results) must be detached,
+    /// otherwise two threads would update the same non-atomic reference counts.
+    pub fn detached(&self) -> Value {
+        match self {
+            Value::Array(a) => Value::from(a.to_vec().iter().map(Value::detached).collect::<Vec<_>>()),
+            Value::Dict(d) => {
+                let copy = SharedDict::empty();
+                for (k, v) in d.iter() {
+                    copy.insert(k, v.detached());
+                }
+                Value::Dict(copy)
+            }
+            Value::Object(o) => {
+                let inst = o.0.borrow();
+                Value::Object(SharedObject::new(ObjectInstance {
+                    class_name: inst.class_name.clone(),
+                    fields: inst.fields.iter().map(|(k, v)| (k.clone(), v.detached())).collect(),
+                }))
+            }
+            Value::Function { params, bytecode_start, captured } => Value::Function {
+                params: params.clone(),
+                bytecode_start: *bytecode_start,
+                captured: Captures::new(captured.snapshot().into_iter().map(|(k, v)| (k, v.detached())).collect()),
+            },
+            Value::Signal { value, confidence, reason } => Value::Signal {
+                value: Box::new(value.detached()),
+                confidence: *confidence,
+                reason: reason.clone(),
+            },
+            Value::Set(s) => Value::Set(s.copy()),
+            other => other.clone(),
+        }
+    }
+
     /// Human-readable type name for error messages.
     pub fn type_name(&self) -> &'static str {
         match self {
@@ -687,6 +726,7 @@ impl Value {
             Value::Qubit { .. } => "qubit",
             Value::Tryte(_) => "tryte",
             Value::Future(_) => "future",
+            Value::TaskError(_) => "error",
             Value::Integer(_) => "integer",
             Value::Bytes(_) => "bytes",
             Value::Pointer(_) => "pointer",

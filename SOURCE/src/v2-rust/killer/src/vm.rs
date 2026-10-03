@@ -290,6 +290,49 @@ impl Default for VirtualMachine {
     }
 }
 
+/// State copied into a spawned task (see [`VirtualMachine::task_context`]).
+struct TaskContext {
+    program: std::sync::Arc<Program>,
+    capabilities: CapabilitySet,
+    globals: Vec<(String, Value)>,
+    classes: HashMap<String, ClassInfo>,
+    method_names: std::collections::HashSet<String>,
+}
+
+/// Body of a spawned OS thread: run `func(args)` on a pooled VM and publish either its (detached)
+/// result or its error in the future slot. A panic is reported as an error too, so that `await`
+/// never waits for a result that cannot arrive.
+fn run_spawned_task(
+    task: TaskContext,
+    func: Value,
+    args: Vec<Value>,
+    slot: std::sync::Arc<std::sync::Mutex<Option<Box<Value>>>>,
+) {
+    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let _cap_guard = CapabilityScopeGuard::install(task.capabilities.clone());
+        let mut child = VirtualMachine::acquire_spawn_vm();
+        child.capabilities = task.capabilities.clone();
+        child.current_program = Some(std::sync::Arc::clone(&task.program));
+        child.classes = task.classes.clone();
+        child.method_names = task.method_names.clone();
+        let mut root: crate::fast_hash::FastMap<String, Value> = Default::default();
+        root.extend(task.globals.iter().cloned());
+        child.scopes.push(root);
+        let result = match child.call_value_nested(&func, args, &task.program) {
+            Ok(v) => v.detached(),
+            // keep the thrown value itself (`throw {"code": 1}`), else the error text
+            Err(e) => Value::TaskError(Box::new(match child.pending_throw.take() {
+                Some(thrown) => thrown.detached(),
+                None => Value::Str(error_message_for_catch(&e)),
+            })),
+        };
+        VirtualMachine::release_spawn_vm(child);
+        result
+    }));
+    let result = outcome.unwrap_or_else(|_| Value::TaskError(Box::new(Value::Str("task panicked".to_string()))));
+    *slot.lock().unwrap() = Some(Box::new(result));
+}
+
 impl VirtualMachine {
     pub fn new() -> Self {
         Self::default()
@@ -532,6 +575,24 @@ impl VirtualMachine {
             self.current_program = Some(std::sync::Arc::new(program.clone()));
         }
         std::sync::Arc::clone(self.current_program.as_ref().unwrap())
+    }
+
+    /// Everything a spawned task needs from this VM: the program, the capabilities, a detached
+    /// snapshot of the top-level variables (so tasks can read globals such as mutex handles) and
+    /// the class table.
+    fn task_context(&mut self, program: &Program) -> TaskContext {
+        let globals = self
+            .scopes
+            .first()
+            .map(|root| root.iter().map(|(k, v)| (k.clone(), v.detached())).collect())
+            .unwrap_or_default();
+        TaskContext {
+            program: self.program_arc_for_spawn(program),
+            capabilities: crate::security::current_capabilities(),
+            globals,
+            classes: self.classes.clone(),
+            method_names: self.method_names.clone(),
+        }
     }
 
     pub fn run(&mut self, program: &Program) -> Result<(), VmError> {
@@ -2815,6 +2876,7 @@ impl VirtualMachine {
                                 Value::Uncertain { .. } => "uncertain",
                                 Value::Gauss { .. } => "gauss",
                                 Value::Set(_) => "set",
+                                Value::TaskError(_) => "error",
                             };
                             Value::Str(type_name.to_string())
                         }
@@ -5350,23 +5412,11 @@ impl VirtualMachine {
                     let fut_clone = std::sync::Arc::clone(&future);
 
                     match func_val {
-                        Value::Function { params, bytecode_start, captured } => {
-                            let prog_arc = self.program_arc_for_spawn(program);
-                            let spawn_caps = crate::security::current_capabilities();
-                            let captured = crate::value::Captures::new(captured.snapshot().into_iter().collect());
-                            std::thread::spawn(move || {
-                                let _spawn_cap_guard =
-                                    CapabilityScopeGuard::install(spawn_caps.clone());
-                                let mut child = VirtualMachine::acquire_spawn_vm();
-                                child.capabilities = spawn_caps;
-                                child.current_program = Some(std::sync::Arc::clone(&prog_arc));
-                                let func = Value::Function { params, bytecode_start, captured };
-                                let result = child
-                                    .call_function_sync(&func, args, &prog_arc)
-                                    .unwrap_or(Value::Null);
-                                *fut_clone.lock().unwrap() = Some(Box::new(result));
-                                VirtualMachine::release_spawn_vm(child);
-                            });
+                        func @ Value::Function { .. } => {
+                            let task = self.task_context(program);
+                            let func = func.detached();
+                            let args: Vec<Value> = args.iter().map(Value::detached).collect();
+                            std::thread::spawn(move || run_spawned_task(task, func, args, fut_clone));
                         }
                         other => {
                             *fut_clone.lock().unwrap() = Some(Box::new(other));
@@ -5386,28 +5436,16 @@ impl VirtualMachine {
                         std::sync::Arc::new(std::sync::Mutex::new(None));
                     let fut_clone = std::sync::Arc::clone(&future);
                     let bytecode_start = *target;
-                    let prog_arc = self.program_arc_for_spawn(program);
-                    let spawn_caps = crate::security::current_capabilities();
-
-                    std::thread::spawn(move || {
-                        let _spawn_cap_guard =
-                            CapabilityScopeGuard::install(spawn_caps.clone());
-                        let mut child = VirtualMachine::acquire_spawn_vm();
-                        child.capabilities = spawn_caps;
-                        child.current_program = Some(std::sync::Arc::clone(&prog_arc));
-                        // Synthesise a Value::Function using argN param names (call_function_sync binds these)
-                        let params: Vec<String> = (0..args.len()).map(|i| format!("arg{i}")).collect();
-                        let func = Value::Function {
-                            params,
-                            bytecode_start,
-                            captured: Default::default(),
-                        };
-                        let result = child
-                            .call_function_sync(&func, args, &prog_arc)
-                            .unwrap_or(Value::Null);
-                        *fut_clone.lock().unwrap() = Some(Box::new(result));
-                        VirtualMachine::release_spawn_vm(child);
-                    });
+                    let task = self.task_context(program);
+                    let args: Vec<Value> = args.iter().map(Value::detached).collect();
+                    // Synthesise a Value::Function using argN param names (call_function_sync binds these)
+                    let params: Vec<String> = (0..args.len()).map(|i| format!("arg{i}")).collect();
+                    let func = Value::Function {
+                        params,
+                        bytecode_start,
+                        captured: Default::default(),
+                    };
+                    std::thread::spawn(move || run_spawned_task(task, func, args, fut_clone));
 
                     self.stack.push(Value::Future(crate::value::FutureHandle(future)));
                 }
@@ -5423,6 +5461,12 @@ impl VirtualMachine {
                                 {
                                     let mut slot = handle.0.lock().unwrap();
                                     if let Some(result) = slot.take() {
+                                        // a failed task re-raises its error in the awaiting thread
+                                        if let Value::TaskError(thrown) = *result {
+                                            let message = format!("{}", thrown);
+                                            self.pending_throw = Some(*thrown);
+                                            return Err(VmError::runtime_error(message));
+                                        }
                                         self.stack.push(*result);
                                         break;
                                     }
@@ -5845,6 +5889,7 @@ impl VirtualMachine {
             Value::Uncertain { value, margin } => *value > *margin,
             Value::Gauss { mean, sigma } => *mean > crate::uncertain::Z95 * sigma.abs(),
             Value::Set(s) => !s.is_empty(),
+            Value::TaskError(_) => true,
         }
     }
 
