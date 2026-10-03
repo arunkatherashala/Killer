@@ -4811,16 +4811,41 @@ fn parse_index_assignment_chain(stmt: &str) -> Option<(String, Vec<String>, &str
 /// outer-to-inner (e.g. `m[1][0]` → base `m`, indices `["1","0"]`). Fails for non-identifier bases.
 fn peel_index_chain(mut expr: &str) -> Option<(String, Vec<String>)> {
     let mut rev: Vec<String> = Vec::new();
+    let mut saw_bracket = false;
     loop {
-        let (recv, idx) = split_trailing_index_expr(expr)?;
-        rev.push(idx.to_string());
-        let recv = recv.trim();
+        let trimmed = expr.trim();
+        if let Some((recv, idx)) = split_trailing_index_expr(trimmed) {
+            saw_bracket = true;
+            rev.push(idx.to_string());
+            expr = recv;
+        } else if let Some((recv, field)) = split_trailing_field(trimmed) {
+            // `a.b[i]`, `this.items[i].n`: a field is an index with a string key
+            rev.push(format!("\"{}\"", field));
+            expr = recv;
+        } else {
+            return None;
+        }
+        let recv = expr.trim();
         if is_valid_name(recv) {
+            // a bare `obj.field = v` is handled by the property-assignment path
+            if !saw_bracket && rev.len() == 1 {
+                return None;
+            }
             rev.reverse();
             return Some((recv.to_string(), rev));
         }
-        expr = recv;
     }
+}
+
+/// Split `recv.field` at its last top-level dot when the tail is a plain identifier.
+fn split_trailing_field(expr: &str) -> Option<(&str, &str)> {
+    let dot = expr.rfind('.')?;
+    let field = expr[dot + 1..].trim();
+    let recv = expr[..dot].trim();
+    if recv.is_empty() || !is_valid_name(field) {
+        return None;
+    }
+    Some((recv, field))
 }
 
 fn compile_chained_index_assign(
