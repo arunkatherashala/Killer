@@ -98,3 +98,12 @@ fn string_literal_ending_in_an_escaped_quote() {
     assert_eq!(run(src), "say \"hi\"\nquote:\"\naq:\"b\nx,\"y z");
 }
 
+#[test]
+fn finally_runs_when_return_break_or_continue_leave_the_try() {
+    let src = "fn a() {\n  try {\n    return 1\n  } finally {\n    println(\"fin a\")\n  }\n}\nprintln(a())\nfn b() {\n  try {\n    throw \"x\"\n  } catch e {\n    return \"caught \" + e\n  } finally {\n    println(\"fin b\")\n  }\n}\nprintln(b())\nfn nested() {\n  try {\n    try {\n      return \"inner\"\n    } finally {\n      println(\"inner finally\")\n    }\n  } finally {\n    println(\"outer finally\")\n  }\n}\nprintln(nested())\nfor i in range(3) {\n  try {\n    if i == 1 {\n      continue\n    }\n    if i == 2 {\n      break\n    }\n    println(\"body \" + str(i))\n  } finally {\n    println(\"fin \" + str(i))\n  }\n}\nfn ft() {\n  try {\n    try {\n      return 1\n    } finally {\n      throw \"from finally\"\n    }\n  } catch e {\n    return \"caught \" + e\n  }\n}\nprintln(ft())\n";
+    assert_eq!(
+        run(src),
+        "fin a\n1\nfin b\ncaught x\ninner finally\nouter finally\ninner\nbody 0\nfin 0\nfin 1\nfin 2\ncaught from finally"
+    );
+}
+

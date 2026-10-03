@@ -306,6 +306,22 @@ struct CompileContext {
     /// The function body ended in a bare expression whose value was left on the stack.
     tail_value: bool,
     runtime_scope_depth: usize,
+    /// `try ... finally` blocks being compiled in this function, innermost last.
+    finally_stack: Vec<FinallyEntry>,
+    /// Exception-handler frames pushed by the `try` blocks around the code being compiled.
+    try_depth: usize,
+}
+
+/// A `finally` body that must also run when `return` / `break` / `continue` leaves its `try`.
+#[derive(Debug, Clone)]
+struct FinallyEntry {
+    /// The `{ ... }` block of the `finally` clause.
+    body: Vec<(usize, String)>,
+    /// `loop_stack` depth where the `try` sits: a `break` / `continue` leaves it only when the
+    /// loop it targets is at least this deep.
+    loop_depth: usize,
+    /// `try_depth` before the `try` pushed its handler frames.
+    depth_before: usize,
 }
 
 pub fn compile_killer_subset(source: &str) -> Result<Program, VmError> {
@@ -1881,6 +1897,8 @@ fn compile_expr(
                 tail_position: false,
                 tail_value: false,
                 runtime_scope_depth: 0,
+                finally_stack: Vec::new(),
+                try_depth: 0,
             };
             
             // Compile function body
@@ -2495,6 +2513,44 @@ fn skip_braced_block(lines: &[(usize, String)], open: usize) -> usize {
     lines.len()
 }
 
+/// Before `return` / `break` / `continue` leaves a `try ... finally`: pop the handler frames of
+/// the tries being left and run each `finally` body inline, innermost first. Only the `finally`
+/// blocks of tries nested at loop depth `min_loop_depth` or deeper are run (0 = all, for `return`).
+fn emit_finally_unwind(
+    state: &mut CompilerState,
+    context: &mut CompileContext,
+    min_loop_depth: usize,
+) -> Result<(), VmError> {
+    let full_stack = context.finally_stack.clone();
+    let saved_depth = context.try_depth;
+    let mut depth = saved_depth;
+    let mut result = Ok(());
+    for index in (0..full_stack.len()).rev() {
+        let entry = &full_stack[index];
+        if entry.loop_depth < min_loop_depth {
+            break;
+        }
+        for _ in entry.depth_before..depth {
+            state.instructions.push(Instruction::TryEnd);
+        }
+        depth = entry.depth_before;
+        // the body runs outside this `try` (and the ones inside it), so a `return` in the
+        // `finally` body does not run itself again
+        context.finally_stack.truncate(index);
+        context.try_depth = depth;
+        let mut cursor = 0usize;
+        let open_line = entry.body.first().map(|l| l.0).unwrap_or(0);
+        result = expect_open_brace(&entry.body, &mut cursor, open_line, "finally")
+            .and_then(|_| compile_block(&entry.body, &mut cursor, state, context, true, true));
+        if result.is_err() {
+            break;
+        }
+    }
+    context.finally_stack = full_stack;
+    context.try_depth = saved_depth;
+    result
+}
+
 /// `try { } catch e { } finally { }` (either `catch` or `finally` may be omitted).
 ///
 /// Layout, with both parts present (`finally` wraps the whole `try`/`catch` so it also runs when
@@ -2514,7 +2570,8 @@ fn skip_braced_block(lines: &[(usize, String)], open: usize) -> usize {
 /// F: Store __exc ; <finally body> ; Load __exc ; Raise
 /// normal: <finally body>
 /// ```
-/// A `return`, `break` or `continue` that leaves the `try` skips the `finally` body.
+/// A `return`, `break` or `continue` that leaves the `try` runs the `finally` body inline first
+/// (see `emit_finally_unwind`).
 fn compile_try_statement(
     lines: &[(usize, String)],
     cursor: &mut usize,
@@ -2540,14 +2597,28 @@ fn compile_try_statement(
         )));
     }
 
+    let depth_before = context.try_depth;
+    if have_finally {
+        let finally_open = after + 1;
+        let finally_end = skip_braced_block(lines, finally_open);
+        context.finally_stack.push(FinallyEntry {
+            body: lines[finally_open..finally_end].to_vec(),
+            loop_depth: context.loop_stack.len(),
+            depth_before,
+        });
+    }
+
     let outer_idx = state.instructions.len();
     if have_finally {
         state.instructions.push(Instruction::TryBegin { catch_target: usize::MAX, body_end: usize::MAX });
+        context.try_depth += 1;
     }
 
     let inner_idx = state.instructions.len();
     state.instructions.push(Instruction::TryBegin { catch_target: usize::MAX, body_end: usize::MAX });
+    context.try_depth += 1;
     compile_block(lines, cursor, state, context, true, true)?;
+    context.try_depth -= 1;
     let inner_end = state.instructions.len();
     state.instructions.push(Instruction::TryEnd);
 
@@ -2581,6 +2652,9 @@ fn compile_try_statement(
     }
 
     if have_finally {
+        // the `finally` body is compiled outside the `try`: a `return` in it must not run it again
+        context.finally_stack.pop();
+        context.try_depth = depth_before;
         let outer_end = state.instructions.len();
         state.instructions.push(Instruction::TryEnd);
         let jump_normal = state.instructions.len();
@@ -2931,6 +3005,9 @@ fn compile_simple_statement(
             compile_expr_str(expr, line_no, state, context)?;
         }
         
+        // the returned value stays on the stack while the `finally` bodies of enclosing tries run
+        emit_finally_unwind(state, context, 0)?;
+
         // Before returning, pop all runtime scopes active in this function
         for _ in 0..context.runtime_scope_depth {
             state.instructions.push(Instruction::ExitScope);
@@ -2941,9 +3018,12 @@ fn compile_simple_statement(
     }
 
     if stmt == "break" {
-        let loop_context = context.loop_stack.last_mut().ok_or_else(|| {
-            VmError::parse_error_simple(format!("Line {}: `break` is only valid inside a loop", line_no))
-        })?;
+        if context.loop_stack.is_empty() {
+            return Err(VmError::parse_error_simple(format!("Line {}: `break` is only valid inside a loop", line_no)));
+        }
+        // leaving a `try ... finally` that sits inside this loop runs its `finally` body
+        emit_finally_unwind(state, context, context.loop_stack.len())?;
+        let loop_context = context.loop_stack.last_mut().expect("checked non-empty");
 
         // Pop runtime scopes pushed since the loop started
         for _ in 0..(context.runtime_scope_depth - loop_context.scope_depth_at_start) {
@@ -2957,12 +3037,14 @@ fn compile_simple_statement(
     }
 
     if stmt == "continue" {
-        let loop_context = context.loop_stack.last().ok_or_else(|| {
-            VmError::parse_error_simple(format!(
+        if context.loop_stack.is_empty() {
+            return Err(VmError::parse_error_simple(format!(
                 "Line {}: `continue` is only valid inside a loop",
                 line_no
-            ))
-        })?;
+            )));
+        }
+        emit_finally_unwind(state, context, context.loop_stack.len())?;
+        let loop_context = context.loop_stack.last().expect("checked non-empty");
 
         // Pop runtime scopes pushed since the loop started
         for _ in 0..(context.runtime_scope_depth - loop_context.scope_depth_at_start) {
@@ -4131,6 +4213,8 @@ fn shadowed_context(context: &CompileContext, hide: &[String]) -> CompileContext
         tail_position: false,
         tail_value: false,
         runtime_scope_depth: context.runtime_scope_depth,
+        finally_stack: Vec::new(),
+        try_depth: 0,
     }
 }
 
@@ -5381,6 +5465,8 @@ fn compile_fn_definition(
         tail_position: false,
         tail_value: false,
         runtime_scope_depth: 0,
+        finally_stack: Vec::new(),
+        try_depth: 0,
     };
     for (index, param) in params.into_iter().enumerate() {
         fn_context.params.insert(param, index);
@@ -5577,6 +5663,8 @@ fn compile_class_definition(
                 tail_position: false,
                 tail_value: false,
                 runtime_scope_depth: 0,
+                finally_stack: Vec::new(),
+                try_depth: 0,
             };
             for (index, param) in params.iter().enumerate() {
                 method_context.params.insert(param.clone(), index);
