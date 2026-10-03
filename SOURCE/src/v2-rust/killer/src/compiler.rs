@@ -2288,6 +2288,11 @@ fn compile_block(
             continue;
         }
 
+        if line == "try" {
+            compile_try_statement(lines, cursor, state, context)?;
+            continue;
+        }
+
         if line.starts_with("while ") || line.starts_with("while(") {
             compile_while_statement(lines, cursor, state, context)?;
             continue;
@@ -2420,6 +2425,163 @@ fn compile_block(
     context.slot_map = saved_slot_map;
     context.next_slot = saved_next_slot;
 
+    Ok(())
+}
+
+/// Store the value on top of the stack into variable `name`, creating a local if needed
+/// (same placement rules as plain assignment).
+fn emit_store_variable(name: &str, state: &mut CompilerState, context: &mut CompileContext) {
+    if let Some(param_index) = context.params.get(name) {
+        state.instructions.push(Instruction::Store(format!("arg{}", param_index)));
+    } else if name.starts_with("__")
+        || context.global_decls.contains(name)
+        || (!context.in_function && state.global_vars.contains(name))
+    {
+        state.instructions.push(Instruction::Store(name.to_string()));
+    } else if let Some(&slot) = context.slot_map.get(name) {
+        state.instructions.push(Instruction::StoreSlot(slot));
+    } else if (context.in_function && context.outer_vars.contains(name))
+        || (!context.in_function && state.known_top_level_vars.contains(name))
+    {
+        state.instructions.push(Instruction::Store(name.to_string()));
+    } else {
+        let s = context.next_slot;
+        context.next_slot = context.next_slot.saturating_add(1);
+        context.slot_map.insert(name.to_string(), s);
+        state.instructions.push(Instruction::StoreSlot(s));
+    }
+}
+
+/// Index just past the `}` that closes the block whose `{` is at `open` (or `lines.len()`).
+fn skip_braced_block(lines: &[(usize, String)], open: usize) -> usize {
+    let mut depth = 0i32;
+    let mut j = open;
+    while j < lines.len() {
+        match lines[j].1.trim() {
+            "{" => depth += 1,
+            "}" => {
+                depth -= 1;
+                if depth == 0 {
+                    return j + 1;
+                }
+            }
+            _ => {}
+        }
+        j += 1;
+    }
+    lines.len()
+}
+
+/// `try { } catch e { } finally { }` (either `catch` or `finally` may be omitted).
+///
+/// Layout, with both parts present (`finally` wraps the whole `try`/`catch` so it also runs when
+/// the catch body itself throws, and then re-raises):
+///
+/// ```text
+///   TryBegin(F)            ; outer: guards try + catch bodies
+///   TryBegin(C)            ; inner: guards the try body
+///   <try body>
+///   TryEnd
+///   Jump after_catch
+/// C: <store error in e>
+///   <catch body>
+/// after_catch:
+///   TryEnd
+///   Jump normal
+/// F: Store __exc ; <finally body> ; Load __exc ; Raise
+/// normal: <finally body>
+/// ```
+/// A `return`, `break` or `continue` that leaves the `try` skips the `finally` body.
+fn compile_try_statement(
+    lines: &[(usize, String)],
+    cursor: &mut usize,
+    state: &mut CompilerState,
+    context: &mut CompileContext,
+) -> Result<(), VmError> {
+    let line_no = lines[*cursor].0;
+    *cursor += 1;
+    let try_open = *cursor;
+    expect_open_brace(lines, cursor, line_no, "try")?;
+
+    // Look past the try body (and an optional catch block) to see whether a `finally` follows.
+    let mut after = skip_braced_block(lines, try_open);
+    let has_catch_block = after < lines.len() && lines[after].1.trim().starts_with("catch");
+    if has_catch_block {
+        after = skip_braced_block(lines, after + 1);
+    }
+    let have_finally = after < lines.len() && lines[after].1.trim() == "finally";
+    if !has_catch_block && !have_finally {
+        return Err(VmError::parse_error_simple(format!(
+            "Line {}: `try` needs a `catch` or `finally` block",
+            line_no
+        )));
+    }
+
+    let outer_idx = state.instructions.len();
+    if have_finally {
+        state.instructions.push(Instruction::TryBegin { catch_target: usize::MAX, body_end: usize::MAX });
+    }
+
+    let inner_idx = state.instructions.len();
+    state.instructions.push(Instruction::TryBegin { catch_target: usize::MAX, body_end: usize::MAX });
+    compile_block(lines, cursor, state, context, true, true)?;
+    let inner_end = state.instructions.len();
+    state.instructions.push(Instruction::TryEnd);
+
+    if has_catch_block {
+        let header = lines[*cursor].1.trim().to_string();
+        let catch_line = lines[*cursor].0;
+        *cursor += 1;
+        let var = header["catch".len()..].trim().trim_start_matches('(').trim_end_matches(')').trim().to_string();
+        if !var.is_empty() && !is_valid_name(&var) {
+            return Err(VmError::parse_error_simple(format!(
+                "Line {}: invalid catch variable `{}`",
+                catch_line, var
+            )));
+        }
+        expect_open_brace(lines, cursor, catch_line, "catch")?;
+        let jump_after_catch = state.instructions.len();
+        state.instructions.push(Instruction::Jump(usize::MAX));
+        let catch_ip = state.instructions.len();
+        state.instructions[inner_idx] = Instruction::TryBegin { catch_target: catch_ip, body_end: inner_end };
+        if var.is_empty() {
+            state.instructions.push(Instruction::Pop);
+        } else {
+            emit_store_variable(&var, state, context);
+        }
+        compile_block(lines, cursor, state, context, true, true)?;
+        let end_of_catch = state.instructions.len();
+        state.instructions[jump_after_catch] = Instruction::Jump(end_of_catch);
+    } else {
+        // no catch: this guard only exists so the structure is uniform; it never catches
+        state.instructions[inner_idx] = Instruction::TryBegin { catch_target: usize::MAX, body_end: inner_end };
+    }
+
+    if have_finally {
+        let outer_end = state.instructions.len();
+        state.instructions.push(Instruction::TryEnd);
+        let jump_normal = state.instructions.len();
+        state.instructions.push(Instruction::Jump(usize::MAX));
+        let handler_ip = state.instructions.len();
+        state.instructions[outer_idx] = Instruction::TryBegin { catch_target: handler_ip, body_end: outer_end };
+        let temp = format!("__exc_{}", handler_ip);
+        state.instructions.push(Instruction::Store(temp.clone()));
+
+        let fin_line = lines[*cursor].0;
+        *cursor += 1; // `finally`
+        expect_open_brace(lines, cursor, fin_line, "finally")?;
+        let body_start = *cursor;
+        compile_block(lines, cursor, state, context, true, true)?;
+        state.instructions.push(Instruction::Load(temp));
+        state.instructions.push(Instruction::Raise);
+        let normal = state.instructions.len();
+        state.instructions[jump_normal] = Instruction::Jump(normal);
+        // the same finally body again for the no-error path
+        let after_body = *cursor;
+        *cursor = body_start;
+        compile_block(lines, cursor, state, context, true, true)?;
+        debug_assert_eq!(*cursor, after_body);
+    }
     Ok(())
 }
 
@@ -2676,6 +2838,13 @@ fn compile_simple_statement(
 
     if let Some(rest) = stmt.strip_prefix("let ") {
         compile_let(rest, line_no, state, context)?;
+        return Ok(());
+    }
+
+    // `throw value`: unwind to the nearest `catch` (or abort with "Uncaught exception")
+    if let Some(rest) = stmt.strip_prefix("throw ") {
+        compile_expr_str(rest.trim(), line_no, state, context)?;
+        state.instructions.push(Instruction::Raise);
         return Ok(());
     }
 
@@ -6104,6 +6273,7 @@ fn preprocess_indentation(source: &str) -> String {
         t.starts_with("if ") || t.starts_with("if(") || t == "else" ||
         t.starts_with("else if ") || t.starts_with("else if(") || t.starts_with("elif ") ||
         t.starts_with("while ") || t.starts_with("while(") ||
+        t == "try" || t == "finally" || t == "catch" || t.starts_with("catch ") ||
         (t.starts_with("for ") && (t.contains(" in ") || t.contains(" of ")))
     }
 

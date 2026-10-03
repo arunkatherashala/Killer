@@ -69,6 +69,13 @@ fn remap_code_addresses(code: &mut [Instruction], old_to_new: &[usize], n: usize
             }
             Instruction::ConstFunc { bytecode_start, .. } => *bytecode_start = m(*bytecode_start),
             Instruction::RegisterLive { instr_start, .. } => *instr_start = m(*instr_start),
+            Instruction::TryBegin { catch_target, body_end } => {
+                // usize::MAX marks a `try` with no catch: not an address
+                if *catch_target != usize::MAX {
+                    *catch_target = m(*catch_target);
+                }
+                *body_end = m(*body_end);
+            }
             Instruction::TryEnter { catch_target, finally_target } => {
                 *catch_target = m(*catch_target);
                 if *finally_target != usize::MAX {

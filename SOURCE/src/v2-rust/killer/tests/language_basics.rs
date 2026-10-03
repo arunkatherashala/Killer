@@ -367,3 +367,36 @@ fn lists_slice_concat_repeat_and_sets_contain() {
     let src = "a = [1, 2, 3, 4, 5]\nprintln(a[1:3])\nprintln(a[-2:])\nprintln(a[:])\nprintln(a[1 > 0 ? 1 : 2])\nprintln([1, 2] + [3])\nprintln([0] * 3)\nb = a[:2]\nb[0] = 99\nprintln(a[0])\nst = set([1, 2, 2])\nprintln(2 in st)\nprintln(contains(st, 7))\nprintln(type(gc_stats()))\n";
     assert_eq!(run(src), "[2, 3]\n[4, 5]\n[1, 2, 3, 4, 5]\n2\n[1, 2, 3]\n[0, 0, 0]\n1\ntrue\nfalse\ndict");
 }
+
+#[test]
+fn try_catch_throw_with_any_value() {
+    let src = "try {\n  throw \"boom\"\n} catch e {\n  println(\"caught \" + str(e))\n}\ntry {\n  throw {\"code\": 42}\n} catch e {\n  println(e[\"code\"])\n}\ntry {\n  x = 1 / 0\n} catch e {\n  println(e)\n}\nprintln(\"after\")\n";
+    assert_eq!(run(src), "caught boom\n42\nDivision by zero\nafter");
+}
+
+#[test]
+fn errors_unwind_through_function_calls_and_returns() {
+    let src = "fn risky(n) {\n  if n > 2 {\n    throw \"too big: \" + str(n)\n  }\n  return n * 10\n}\nfn safe(n) {\n  try {\n    return risky(n)\n  } catch e {\n    return \"caught \" + e\n  }\n}\nprintln(safe(1))\nprintln(safe(5))\nprintln(safe(2))\nfn deep() {\n  throw \"deep\"\n}\nfn mid() {\n  deep()\n}\ntry {\n  mid()\n} catch e {\n  println(\"got \" + e)\n}\n";
+    assert_eq!(run(src), "10\ncaught too big: 5\n20\ngot deep");
+}
+
+#[test]
+fn finally_runs_on_every_path_and_rethrows() {
+    let src = "try {\n  println(\"a\")\n} finally {\n  println(\"b\")\n}\ntry {\n  throw \"x\"\n} catch e {\n  println(\"c\")\n} finally {\n  println(\"f\")\n}\ntry {\n  try {\n    throw \"y\"\n  } finally {\n    println(\"cleanup\")\n  }\n} catch e {\n  println(\"got \" + e)\n}\ntry {\n  try {\n    throw \"in\"\n  } catch e {\n    throw \"out from \" + e\n  }\n} catch e2 {\n  println(e2)\n}\n";
+    assert_eq!(run(src), "a\nb\nc\nf\ncleanup\ngot y\nout from in");
+}
+
+#[test]
+fn try_inside_loops_with_break_and_continue_stays_correct() {
+    let src = "total = 0\nfor i in range(1000) {\n  try {\n    if i % 3 == 0 {\n      continue\n    }\n    if i > 990 {\n      break\n    }\n    total = total + 1\n  } catch e {\n    println(\"never\")\n  }\n}\nprintln(total)\ntry {\n  y = 1 / 0\n} catch e {\n  println(\"still catching\")\n}\ncaught = 0\nfor i in range(1000) {\n  try {\n    if i % 2 == 0 {\n      throw i\n    }\n  } catch e {\n    caught = caught + 1\n  }\n}\nprintln(caught)\n";
+    assert_eq!(run(src), "660\nstill catching\n500");
+}
+
+#[test]
+fn errors_inside_callbacks_are_catchable_and_uncaught_ones_fail() {
+    let src = "fn boom(x) {\n  if x == 3 {\n    throw \"bad three\"\n  }\n  return x\n}\ntry {\n  println(map([1, 2, 3], boom))\n} catch e {\n  println(\"map failed: \" + e)\n}\nprintln(map([1, 2], boom))\nthrow \"final\"\nprintln(\"unreachable\")\n";
+    let out = run(src);
+    assert!(out.starts_with("map failed: bad three\n[1, 2]\n"), "{out}");
+    assert!(out.contains("Uncaught exception: final"), "{out}");
+    assert!(!out.contains("unreachable"), "{out}");
+}

@@ -70,7 +70,9 @@ impl JitCompiler {
                 | Instruction::DefineClass { .. }
                 | Instruction::NewObject(_)
                 | Instruction::NewObjectN(..)
-                | Instruction::TryEnter { .. } => {
+                | Instruction::TryEnter { .. }
+                | Instruction::TryBegin { .. }
+                | Instruction::Raise => {
                     // These are complex and shouldn't be JIT compiled
                     return false;
                 }

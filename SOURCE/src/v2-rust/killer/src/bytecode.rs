@@ -161,6 +161,13 @@ pub enum Instruction {
     TryEnter { catch_target: usize, finally_target: usize },
     TryExit,
     Throw,
+    /// Begin a `try` region: an error raised before `body_end` (here or in anything called from
+    /// here) unwinds the VM to this point and jumps to `catch_target` with the error value pushed.
+    TryBegin { catch_target: usize, body_end: usize },
+    /// Leave the `try` region normally.
+    TryEnd,
+    /// `throw value`: unwind to the nearest `TryBegin`, or abort the program if there is none.
+    Raise,
     Yield,
     CatchEnter { var_name: Option<String> },
     FinallyEnter,

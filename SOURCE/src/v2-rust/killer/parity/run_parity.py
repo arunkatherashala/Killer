@@ -23,6 +23,7 @@ CRATE = os.path.dirname(HERE)
 BIN = os.path.join(CRATE, "target", "release", "killer_super.exe")
 if not os.path.exists(BIN):
     BIN = os.path.join(CRATE, "target", "release", "killer_super")
+BIN = os.environ.get("KILLER_BIN", BIN)  # e.g. target/debug/killer_super.exe for quick checks
 
 
 def norm(s):

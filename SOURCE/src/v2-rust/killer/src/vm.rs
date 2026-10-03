@@ -79,6 +79,38 @@ fn array_index(idx: f64, len: usize) -> usize {
     }
 }
 
+/// One active `try` region (see `Instruction::TryBegin`).
+struct TryHandler {
+    catch_ip: usize,
+    start_ip: usize,
+    body_end: usize,
+    call_len: usize,
+    stack_len: usize,
+    scopes_len: usize,
+    locals_len: usize,
+}
+
+/// The text a script sees in `catch e` for an error the VM raised itself: the message without the
+/// "Runtime error:" / "(at instruction N):" wrappers.
+fn error_message_for_catch(error: &VmError) -> String {
+    let mut text = error.to_string();
+    loop {
+        let trimmed = text.trim_start();
+        let rest = if let Some(r) = trimmed.strip_prefix("Runtime error:") {
+            r
+        } else if trimmed.starts_with("(at instruction") {
+            match trimmed.find("):") {
+                Some(i) => &trimmed[i + 2..],
+                None => break,
+            }
+        } else {
+            break;
+        };
+        text = rest.trim_start().to_string();
+    }
+    text
+}
+
 /// `"ab" * 3`, `3 * "ab"`, `[0] * 4`: repeat a string or list. `None` when neither operand is a
 /// sequence (ordinary arithmetic), `Some(Err)` for a bad count.
 fn repeat_sequence(lhs: &Value, rhs: &Value) -> Option<Result<Value, String>> {
@@ -150,6 +182,10 @@ pub struct VirtualMachine {
     classes: HashMap<String, ClassInfo>,  // Global class registry
     current_object: Option<ObjectInstance>,  // The "this" object
     exception_manager: ExceptionManager,  // Manages try/catch/finally and exceptions
+    /// Active `try` regions of the line compiler (`TryBegin`/`TryEnd`), innermost last.
+    handlers: Vec<TryHandler>,
+    /// Value of the `throw` currently unwinding (so `catch e` receives the original value).
+    pending_throw: Option<Value>,
     generator_manager: GeneratorManager,  // Manages generator state
     yielded_values: Vec<Value>,  // Collected yielded values for generators
     collecting_yields: bool,  // Flag to track if we're inside a generator function
@@ -217,6 +253,8 @@ impl Default for VirtualMachine {
             classes: HashMap::new(),
             current_object: None,
             exception_manager: ExceptionManager::default(),
+            handlers: Vec::new(),
+            pending_throw: None,
             generator_manager: GeneratorManager::default(),
             yielded_values: Vec::new(),
             collecting_yields: false,
@@ -272,6 +310,8 @@ impl VirtualMachine {
             classes: HashMap::new(),
             current_object: None,
             exception_manager: ExceptionManager::default(),
+            handlers: Vec::new(),
+            pending_throw: None,
             generator_manager: GeneratorManager::default(),
             yielded_values: Vec::new(),
             collecting_yields: false,
@@ -500,6 +540,8 @@ impl VirtualMachine {
         self.call_stack.clear();
         self.current_object = None;
         self.exception_manager.reset();
+        self.handlers.clear();
+        self.pending_throw = None;
         self.generator_manager.clear();
         self.yielded_values.clear();
 
@@ -582,6 +624,62 @@ impl VirtualMachine {
     /// The interpreter loop. Runs until `Halt`, the end of the code, or (for a nested call made by
     /// [`call_value_nested`]) the `Ret` that returns to the nested-call sentinel.
     fn run_loop(&mut self, program: &Program) -> Result<(), VmError> {
+        // handlers below `base` belong to callers further out (this may be a nested call)
+        let base = self.handlers.len();
+        loop {
+            match self.run_loop_inner(program) {
+                Ok(()) => {
+                    self.handlers.truncate(base);
+                    return Ok(());
+                }
+                Err(e) => {
+                    if !self.recover_into_handler(&e, base) {
+                        self.handlers.truncate(base);
+                        return Err(e);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Route an error to the innermost live `try` handler: unwind the VM to where the `try` began,
+    /// push the error value and continue at the `catch`. Returns false when nothing can catch it.
+    fn recover_into_handler(&mut self, error: &VmError, base: usize) -> bool {
+        // resource limits are not something a script may swallow
+        if matches!(error, VmError::SecurityError { .. }) {
+            return false;
+        }
+        let (ip, depth) = (self.ip, self.call_stack.len());
+        // drop handlers whose function has returned or whose body we have left (break/continue)
+        while self.handlers.len() > base {
+            let h = self.handlers.last().expect("checked non-empty");
+            // `catch_ip == MAX`: a `try`/`finally` with no catch, which never handles errors itself
+            let stale = h.catch_ip == usize::MAX
+                || h.call_len > depth
+                || (h.call_len == depth && !(h.start_ip <= ip && ip < h.body_end));
+            if !stale {
+                break;
+            }
+            self.handlers.pop();
+        }
+        if self.handlers.len() <= base {
+            return false;
+        }
+        let h = self.handlers.pop().expect("checked non-empty");
+        self.stack.truncate(h.stack_len);
+        self.call_stack.truncate(h.call_len);
+        self.scopes.truncate(h.scopes_len);
+        self.locals_stack.truncate(h.locals_len);
+        let value = self
+            .pending_throw
+            .take()
+            .unwrap_or_else(|| Value::Str(error_message_for_catch(error)));
+        self.stack.push(value);
+        self.ip = h.catch_ip;
+        true
+    }
+
+    fn run_loop_inner(&mut self, program: &Program) -> Result<(), VmError> {
         let mut gc_poll: u32 = 0;
         while self.ip < program.instructions.len() {
             self.enforce_step_budget()?;
@@ -5007,6 +5105,34 @@ impl VirtualMachine {
                 }
                 Instruction::TryEnter { catch_target, finally_target } => {
                     self.exception_manager.push_try_frame(*catch_target, *finally_target);
+                }
+                Instruction::TryBegin { catch_target, body_end } => {
+                    let depth = self.call_stack.len();
+                    // re-entering the same `try` (a loop) replaces its leftover handler
+                    while self.handlers.last().map_or(false, |h| h.catch_ip == *catch_target && h.call_len == depth) {
+                        self.handlers.pop();
+                    }
+                    self.handlers.push(TryHandler {
+                        catch_ip: *catch_target,
+                        start_ip: self.ip,
+                        body_end: *body_end,
+                        call_len: depth,
+                        stack_len: self.stack.len(),
+                        scopes_len: self.scopes.len(),
+                        locals_len: self.locals_stack.len(),
+                    });
+                }
+                Instruction::TryEnd => {
+                    let depth = self.call_stack.len();
+                    if self.handlers.last().map_or(false, |h| h.call_len == depth) {
+                        self.handlers.pop();
+                    }
+                }
+                Instruction::Raise => {
+                    let value = self.pop_value()?;
+                    let message = format!("Uncaught exception: {}", value);
+                    self.pending_throw = Some(value);
+                    return Err(VmError::runtime_error(message));
                 }
                 Instruction::TryExit => {
                     let _ = self.exception_manager.pop_try_frame();
