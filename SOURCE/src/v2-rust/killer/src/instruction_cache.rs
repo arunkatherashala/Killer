@@ -165,6 +165,7 @@ mod tests {
             method_bytecode: HashMap::new(),
             classes: HashMap::new(),
             live_vars: HashMap::new(),
+            line_table: Default::default(),
         };
 
         let cache = InstructionCache::new(&program);
@@ -185,6 +186,7 @@ mod tests {
             method_bytecode: HashMap::new(),
             classes: HashMap::new(),
             live_vars: HashMap::new(),
+            line_table: Default::default(),
         };
 
         let mut cache = InstructionCache::new(&program);

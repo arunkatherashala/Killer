@@ -223,8 +223,16 @@ fn arrow_at(src: &str, m: &[u8], arrow: usize) -> Option<Found> {
 
 /// Lift every lambda in `src`. Returns the source unchanged when there are none.
 pub fn lift(src: &str) -> String {
+    lift_mapped(src).0
+}
+
+/// Like [`lift`], also returning for every output line the index of the input line it came from.
+/// A lifted function's lines point at the lines of the lambda they were cut from; the statement
+/// that held the lambda keeps pointing at its own first line.
+pub fn lift_mapped(src: &str) -> (String, Vec<usize>) {
+    let mut map: Vec<usize> = (0..crate::sourcemap::line_count(src)).collect();
     if !src.contains("=>") && !contains_anonymous_fn(src) {
-        return src.to_string();
+        return (src.to_string(), map);
     }
     let mut text = src.to_string();
     let mut counter = 0usize;
@@ -239,6 +247,34 @@ pub fn lift(src: &str) -> String {
         let indent: String = text[line_start..].chars().take_while(|c| *c == ' ' || *c == '\t').collect();
         let body = found.body.trim_matches(|c| c == '\n' || c == '\r');
         let definition = format!("{indent}fn {name}({}) {{\n{}\n{indent}}}\n", found.params.trim(), body);
+
+        // line map: header -> first line of the lambda, body lines -> the lines they were cut
+        // from, closing brace -> last line of the lambda; the statement line keeps its origin
+        let start_line = text[..found.start].bytes().filter(|&b| b == b'\n').count();
+        let end_line = start_line + text[found.start..found.end].bytes().filter(|&b| b == b'\n').count();
+        let region: Vec<&str> = text[line_start..found.end].split('\n').collect();
+        let mut def_map = vec![map[start_line.min(map.len() - 1)]];
+        let mut cursor = 0usize;
+        for bl in body.split('\n') {
+            let t = bl.trim();
+            let t = t.strip_prefix("return ").unwrap_or(t);
+            if t.len() >= 2 {
+                if let Some(off) = region[cursor..].iter().position(|r| r.contains(t)) {
+                    cursor += off;
+                }
+            }
+            def_map.push(map[(start_line + cursor).min(map.len() - 1)]);
+        }
+        def_map.push(map[end_line.min(map.len() - 1)]);
+        let mut next_map: Vec<usize> = Vec::with_capacity(map.len() + def_map.len());
+        next_map.extend_from_slice(&map[..start_line.min(map.len())]);
+        next_map.extend(def_map);
+        next_map.push(map[start_line.min(map.len() - 1)]);
+        if end_line + 1 <= map.len() {
+            next_map.extend_from_slice(&map[end_line + 1..]);
+        }
+        map = next_map;
+
         let mut next = String::with_capacity(text.len() + definition.len());
         next.push_str(&text[..line_start]);
         next.push_str(&definition);
@@ -247,7 +283,7 @@ pub fn lift(src: &str) -> String {
         next.push_str(&text[found.end..]);
         text = next;
     }
-    text
+    (text, map)
 }
 
 fn contains_anonymous_fn(src: &str) -> bool {
@@ -268,6 +304,19 @@ fn contains_anonymous_fn(src: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn line_map_follows_lifted_lambdas() {
+        let (out, map) = lift_mapped("f = fn(a) {\n  return a * 3\n}\nprintln(f(4))\n");
+        assert_eq!(out, "fn __lambda_0(a) {\n  return a * 3\n}\nf = __lambda_0\nprintln(f(4))\n");
+        assert_eq!(map, vec![0, 1, 2, 0, 3, 4]);
+        let (out, map) = lift_mapped("x = 1\nf = (a, b) => a + b\nprintln(f(1, 2))\n");
+        assert_eq!(map.len(), crate::sourcemap::line_count(&out), "{out}");
+        assert_eq!(map, vec![0, 1, 1, 1, 1, 2, 3]);
+        // untouched source maps to itself
+        let (_, map) = lift_mapped("a = 1\nb = 2\n");
+        assert_eq!(map, vec![0, 1, 2]);
+    }
 
     #[test]
     fn source_without_lambdas_is_untouched() {

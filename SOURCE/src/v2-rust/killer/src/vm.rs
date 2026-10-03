@@ -104,7 +104,10 @@ struct GenCtx {
 /// The text a script sees in `catch e` for an error the VM raised itself: the message without the
 /// "Runtime error:" / "(at instruction N):" wrappers.
 fn error_message_for_catch(error: &VmError) -> String {
-    let mut text = error.to_string();
+    // the "at file:line" suffix is for uncaught errors; a caught message stays as it was raised
+    let mut plain = error.clone();
+    plain.clear_location();
+    let mut text = plain.to_string();
     loop {
         let trimmed = text.trim_start();
         let rest = if let Some(r) = trimmed.strip_prefix("Runtime error:") {
@@ -676,6 +679,18 @@ impl VirtualMachine {
                 Err(e) => {
                     if !self.recover_into_handler(&e, base) {
                         self.handlers.truncate(base);
+                        // Uncaught: say where. `ip` still points at the failing instruction (also
+                        // inside a nested callback run, which gets here before its caller does).
+                        let mut e = e;
+                        if !program.line_table.entries.is_empty() {
+                            let ip = self.ip;
+                            e.set_location_if_missing(|| {
+                                match program.line_table.lookup(ip) {
+                                    Some((file, line)) => crate::source_location::SourceLocation::new(file.to_string(), line as usize, 0),
+                                    None => crate::source_location::SourceLocation::new("<unknown>".to_string(), 0, 0),
+                                }
+                            });
+                        }
                         return Err(e);
                     }
                 }
@@ -5596,7 +5611,12 @@ impl VirtualMachine {
                     let iter_prog = crate::compiler::compile_killer_subset(iterable_src)
                         .map_err(|e| VmError::runtime_error(format!("listcomp iter: {}", e)))?;
                     let mut iter_vm = VirtualMachine::new_for_spawn();
-                    iter_vm.run(&iter_prog)?;
+                    // the mini program's own line numbers mean nothing to the user: the enclosing
+                    // statement gets the blame instead
+                    iter_vm.run(&iter_prog).map_err(|mut e| {
+                        e.clear_location();
+                        e
+                    })?;
                     let iterable = iter_vm.stack.pop().unwrap_or(Value::Null);
                     let items: Vec<Value> = match iterable {
                         Value::Array(a) => a.iter_cloned().collect(),

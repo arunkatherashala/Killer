@@ -278,6 +278,9 @@ fn real_main() {
         killer_native::imports::set_base_dir(if dir.as_os_str().is_empty() { std::path::Path::new(".") } else { dir });
     }
 
+    // error messages name the script as the user typed it
+    killer_native::imports::set_main_file(cli_args.input_file.display().to_string());
+
     // ── VM run path: execute .killer source directly (works for all programs) ──
     // When --run is set without an explicit output file, execute via the VM.
     // The native/rustc path is only for --emit native with an explicit output target.
