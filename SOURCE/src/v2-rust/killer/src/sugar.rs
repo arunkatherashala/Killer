@@ -461,8 +461,17 @@ fn rewrite_line(line: &str, counter: &mut usize) -> String {
 
     // 3) a, b = x, y   /   a, b = pair()
     if let Some(eq) = find_assign_eq(masked_code) {
+        // `[a, b] = pair` and `(a, b) = pair` destructure like `a, b = pair`
+        let unbracket = |s: &'_ str| -> usize {
+            let s = s.trim();
+            let wrapped = (s.starts_with('[') && s.ends_with(']')) || (s.starts_with('(') && s.ends_with(')'));
+            if wrapped && s.len() > 2 { 1 } else { 0 }
+        };
+        let cut = unbracket(&masked_code[..eq]);
         let lhs_m = masked_code[..eq].trim();
+        let lhs_m = &lhs_m[cut..lhs_m.len() - cut];
         let lhs_o = code[..eq].trim();
+        let lhs_o = &lhs_o[cut..lhs_o.len() - cut];
         let rhs_m = masked_code[eq + 1..].trim();
         let rhs_o = code[eq + 1..].trim();
         if lhs_m.contains(',')
@@ -616,6 +625,8 @@ mod tests {
         assert_eq!(p("a, b = 1, 2"), "__mt0_0 = 1; __mt0_1 = 2; a = __mt0_0; b = __mt0_1");
         assert_eq!(p("a, b = b, a"), "__mt0_0 = b; __mt0_1 = a; a = __mt0_0; b = __mt0_1");
         assert_eq!(p("a, b = pair()"), "__mu0 = pair(); a = __mu0[0]; b = __mu0[1]");
+        assert_eq!(p("[a, b] = pair()"), "__mu0 = pair(); a = __mu0[0]; b = __mu0[1]");
+        assert_eq!(p("(a, b) = b, a"), "__mt0_0 = b; __mt0_1 = a; a = __mt0_0; b = __mt0_1");
         assert_eq!(p("a, b = f(1, 2)"), "__mu0 = f(1, 2); a = __mu0[0]; b = __mu0[1]");
         assert_eq!(p("a, b = [1, 2], \"x, y\""), "__mt0_0 = [1, 2]; __mt0_1 = \"x, y\"; a = __mt0_0; b = __mt0_1");
         // function headers and ordinary lines are untouched

@@ -111,6 +111,12 @@ fn fstrings_accept_single_quoted_strings_inside_the_braces() {
 }
 
 #[test]
+fn bracketed_destructuring_assignment() {
+    let src = "pair = [3, 4]\n[a, b] = pair\nprintln(a + b)\n(c, d) = d_swap(a, b)\nprintln(str(c) + str(d))\nfn d_swap(x, y) {\n  return [y, x]\n}\n";
+    assert_eq!(run(src), "7\n43");
+}
+
+#[test]
 fn finally_runs_when_return_break_or_continue_leave_the_try() {
     let src = "fn a() {\n  try {\n    return 1\n  } finally {\n    println(\"fin a\")\n  }\n}\nprintln(a())\nfn b() {\n  try {\n    throw \"x\"\n  } catch e {\n    return \"caught \" + e\n  } finally {\n    println(\"fin b\")\n  }\n}\nprintln(b())\nfn nested() {\n  try {\n    try {\n      return \"inner\"\n    } finally {\n      println(\"inner finally\")\n    }\n  } finally {\n    println(\"outer finally\")\n  }\n}\nprintln(nested())\nfor i in range(3) {\n  try {\n    if i == 1 {\n      continue\n    }\n    if i == 2 {\n      break\n    }\n    println(\"body \" + str(i))\n  } finally {\n    println(\"fin \" + str(i))\n  }\n}\nfn ft() {\n  try {\n    try {\n      return 1\n    } finally {\n      throw \"from finally\"\n    }\n  } catch e {\n    return \"caught \" + e\n  }\n}\nprintln(ft())\n";
     assert_eq!(
