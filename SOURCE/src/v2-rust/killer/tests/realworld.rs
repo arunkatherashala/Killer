@@ -198,3 +198,9 @@ fn read_file_raises_for_a_missing_file() {
     assert_eq!(run(src), "caught\nhi");
 }
 
+#[test]
+fn a_blocked_receiver_does_not_stop_other_threads_from_sending() {
+    // recv used to wait while holding the channel registry lock, so send could not get in
+    let src = "ch = chan_new()\nfn consume(c) {\n  return chan_recv(c)\n}\nh = async_spawn(consume, ch)\nsleep_ms(300)\nchan_send(ch, 42)\nprintln(async_await(h))\n";
+    assert_eq!(run(src), "42");
+}
