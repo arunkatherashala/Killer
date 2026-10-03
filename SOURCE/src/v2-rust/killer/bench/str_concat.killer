@@ -1,0 +1,10 @@
+s = ""
+for i in range(200000) {
+  s = s + "x"
+}
+t = ""
+for i in range(100000) {
+  t = t + str(i) + ","
+}
+println(len(s))
+println(len(t))

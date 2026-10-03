@@ -1,0 +1,14 @@
+parts = []
+for i in range(300000) {
+  push(parts, "w" + str(i % 1000))
+}
+big = join(parts, ",")
+words = split(big, ",")
+println(len(big))
+println(len(words))
+j = join(words, "-")
+r = replace(j, "w1", "Q")
+println(len(j))
+println(len(r))
+u = upper(big)
+println(len(u))

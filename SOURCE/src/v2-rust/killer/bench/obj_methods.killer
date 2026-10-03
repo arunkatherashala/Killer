@@ -1,0 +1,27 @@
+class Counter {
+  fn init(step) {
+    this.n = 0
+    this.step = step
+  }
+  fn inc() {
+    this.n = this.n + this.step
+  }
+  fn get() {
+    return this.n
+  }
+}
+c = new Counter(2)
+for i in range(1000000) {
+  c.inc()
+}
+println(c.get())
+objs = []
+for i in range(100000) {
+  push(objs, new Counter(i))
+}
+t = 0
+for o in objs {
+  o.inc()
+  t = t + o.get()
+}
+println(t)

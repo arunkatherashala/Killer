@@ -1,0 +1,28 @@
+class Node {
+  fn init(v, l, r) {
+    this.v = v
+    this.l = l
+    this.r = r
+  }
+}
+fn build(d, v) {
+  if d == 0 {
+    return null
+  }
+  return new Node(v, build(d - 1, v * 2), build(d - 1, v * 2 + 1))
+}
+fn total(n) {
+  if n == null {
+    return 0
+  }
+  return n.v + total(n.l) + total(n.r)
+}
+fn depth(n) {
+  if n == null {
+    return 0
+  }
+  return 1 + max(depth(n.l), depth(n.r))
+}
+t = build(17, 1)
+println(total(t) % 1000003)
+println(depth(t))

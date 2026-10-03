@@ -1,0 +1,11 @@
+rows = []
+for i in range(30000) {
+  push(rows, {"id": i, "name": "user" + str(i), "ok": i % 2 == 0, "vals": [i, i + 1, i + 2]})
+}
+s = json_stringify(rows)
+println(len(s))
+back = json_parse(s)
+println(len(back))
+println(back[29999]["vals"][2])
+s2 = json_stringify(back)
+println(len(s2))

@@ -1,0 +1,19 @@
+a = []
+x = 7
+for i in range(500000) {
+  x = (x * 1664525 + 1013904223) % 4294967296
+  push(a, x)
+}
+s = 0
+for i in range(500000) {
+  s = s + a[i] % 10
+}
+for i in range(100000) {
+  pop(a)
+}
+b = sorted(a)
+println(len(a))
+println(s)
+println(b[0])
+println(b[len(b) - 1])
+println(b[200000])
