@@ -1250,6 +1250,9 @@ impl BuiltinFunctions {
                 if let Some(result) = crate::lang_builtins::call(name, args) {
                     return result;
                 }
+                if let Some(result) = crate::text_methods::call(name, args) {
+                    return result;
+                }
                 let all_builtins: &[&str] = &[
                     "print", "println", "len", "type", "str", "int", "float", "bool",
                     "push", "pop", "append", "slice", "sort", "reverse", "keys", "values",
@@ -1579,12 +1582,22 @@ impl BuiltinFunctions {
     }
 
     fn split(args: &[Value]) -> Result<Value, VmError> {
+        // `split(s)` splits on runs of whitespace (Python's `str.split()`)
+        if let [Value::Str(s)] = args {
+            return Ok(Value::from(
+                s.split_whitespace().map(|w| Value::Str(w.to_string())).collect::<Vec<_>>(),
+            ));
+        }
         if args.len() != 2 {
             return Err(VmError::runtime_error(
-                "split() expects 2 arguments".to_string(),
+                "split() expects 1 or 2 arguments".to_string(),
             ));
         }
         match (&args[0], &args[1]) {
+            // an empty separator splits into characters
+            (Value::Str(s), Value::Str(sep)) if sep.is_empty() => {
+                Ok(Value::from(s.chars().map(|c| Value::Str(c.to_string())).collect::<Vec<_>>()))
+            }
             (Value::Str(s), Value::Str(sep)) => {
                 let parts: Vec<Value> = s.split(sep.as_str())
                     .map(|part| Value::Str(part.to_string()))
@@ -1712,7 +1725,8 @@ impl BuiltinFunctions {
         match (&args[0], &args[1]) {
             (Value::Str(s), Value::Str(search)) => {
                 match s.find(search.as_str()) {
-                    Some(idx) => Ok(Value::Number(idx as f64)),
+                    // a character index, not a byte offset (they differ for non-ASCII text)
+                    Some(idx) => Ok(Value::Number(s[..idx].chars().count() as f64)),
                     None => Ok(Value::Number(-1.0)),
                 }
             }
@@ -2115,48 +2129,75 @@ impl BuiltinFunctions {
         }
     }
 
-    fn min(args: &[Value]) -> Result<Value, VmError> {
-        if args.is_empty() {
-            return Err(VmError::runtime_error(
-                "min() expects at least 1 argument".to_string(),
-            ));
+    /// The values `min` / `max` compare: their arguments, or the elements of a single array.
+    fn extreme_items(who: &str, args: &[Value]) -> Result<Vec<Value>, VmError> {
+        let items: Vec<Value> = match args {
+            [Value::Array(arr)] => arr.to_vec(),
+            _ => args.to_vec(),
+        };
+        if items.is_empty() {
+            return Err(VmError::runtime_error(format!("{}() expects at least 1 value", who)));
         }
-        let mut min_val = f64::INFINITY;
-        for arg in args {
-            match arg {
-                Value::Number(n) => {
-                    if n < &min_val {
-                        min_val = *n;
-                    }
+        Ok(items)
+    }
+
+    fn pick_extreme(who: &str, args: &[Value], want_max: bool) -> Result<Value, VmError> {
+        let items = Self::extreme_items(who, args)?;
+        let mut best = items[0].clone();
+        for item in &items[1..] {
+            let ord = match (&best, item) {
+                (Value::Number(a), Value::Number(b)) => a.partial_cmp(b),
+                (Value::Str(a), Value::Str(b)) => Some(a.cmp(b)),
+                _ => {
+                    return Err(VmError::runtime_error(format!(
+                        "{}() expects numbers (or strings)",
+                        who
+                    )))
                 }
-                _ => return Err(VmError::runtime_error(
-                    "min() expects numbers".to_string(),
-                )),
+            };
+            let better = match ord {
+                Some(std::cmp::Ordering::Less) => want_max,
+                Some(std::cmp::Ordering::Greater) => !want_max,
+                _ => false,
+            };
+            if better {
+                best = item.clone();
             }
         }
-        Ok(Value::Number(min_val))
+        if !matches!(best, Value::Number(_) | Value::Str(_)) {
+            return Err(VmError::runtime_error(format!("{}() expects numbers (or strings)", who)));
+        }
+        Ok(best)
+    }
+
+    /// Total order used to sort rows: numbers, strings and booleans by value, arrays element by
+    /// element (shorter first on a tie), anything else equal.
+    fn cmp_sortable(a: &Value, b: &Value) -> std::cmp::Ordering {
+        use std::cmp::Ordering;
+        match (a, b) {
+            (Value::Number(x), Value::Number(y)) => x.partial_cmp(y).unwrap_or(Ordering::Equal),
+            (Value::Str(x), Value::Str(y)) => x.cmp(y),
+            (Value::Bool(x), Value::Bool(y)) => x.cmp(y),
+            (Value::Array(x), Value::Array(y)) => {
+                let (xs, ys) = (x.to_vec(), y.to_vec());
+                for (p, q) in xs.iter().zip(ys.iter()) {
+                    let o = Self::cmp_sortable(p, q);
+                    if o != Ordering::Equal {
+                        return o;
+                    }
+                }
+                xs.len().cmp(&ys.len())
+            }
+            _ => Ordering::Equal,
+        }
+    }
+
+    fn min(args: &[Value]) -> Result<Value, VmError> {
+        Self::pick_extreme("min", args, false)
     }
 
     fn max(args: &[Value]) -> Result<Value, VmError> {
-        if args.is_empty() {
-            return Err(VmError::runtime_error(
-                "max() expects at least 1 argument".to_string(),
-            ));
-        }
-        let mut max_val = f64::NEG_INFINITY;
-        for arg in args {
-            match arg {
-                Value::Number(n) => {
-                    if n > &max_val {
-                        max_val = *n;
-                    }
-                }
-                _ => return Err(VmError::runtime_error(
-                    "max() expects numbers".to_string(),
-                )),
-            }
-        }
-        Ok(Value::Number(max_val))
+        Self::pick_extreme("max", args, true)
     }
 
     /// `sorted(arr)` or `sorted(arr, reverse)`  numbers or strings (homogeneous), new array.
@@ -2207,9 +2248,13 @@ impl BuiltinFunctions {
                             _ => std::cmp::Ordering::Equal,
                         });
                     }
+                    // pairs / rows sort lexicographically, like Python's lists
+                    Some(Value::Array(_)) => {
+                        out.sort_by(|a, b| Self::cmp_sortable(a, b));
+                    }
                     _ => {
                         return Err(VmError::runtime_error(
-                            "sorted() expects array of numbers or array of strings".to_string(),
+                            "sorted() expects array of numbers, strings or arrays".to_string(),
                         ));
                     }
                 }

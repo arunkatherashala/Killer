@@ -2945,24 +2945,7 @@ impl VirtualMachine {
                                 )),
                             }
                         }
-                        "split" => {
-                            if args.len() != 2 {
-                                return Err(VmError::runtime_error(
-                                    "split() expects 2 arguments".to_string(),
-                                ));
-                            }
-                            match (&args[0], &args[1]) {
-                                (Value::Str(s), Value::Str(sep)) => {
-                                    let parts: Vec<Value> = s.split(sep.as_str())
-                                        .map(|part| Value::Str(part.to_string()))
-                                        .collect();
-                                    Value::from(parts)
-                                }
-                                _ => return Err(VmError::runtime_error(
-                                    "split() expects string and separator".to_string(),
-                                )),
-                            }
-                        }
+                        "split" => BuiltinFunctions::call("split", &args)?,
                         "starts_with" => {
                             if args.len() != 2 {
                                 return Err(VmError::runtime_error(
@@ -4428,6 +4411,8 @@ impl VirtualMachine {
                                 // Property access like Math.PI or Math.E
                                 if let Some(value) = dict.get(method_name) {
                                     self.stack.push(value.clone());
+                                } else if let Some(result) = crate::text_methods::call_as_method(&object, method_name, &args) {
+                                    self.stack.push(result?);
                                 } else {
                                     return Err(VmError::runtime_error(format!(
                                         "Property or method {} not found on object",
@@ -4648,12 +4633,7 @@ impl VirtualMachine {
                                     };
                                     Value::Str(s.replace(old.as_str(), new.as_str()))
                                 }
-                                "split" => {
-                                    if args.len() != 1 {
-                                        return Err(VmError::runtime_error(
-                                            "split() expects 1 argument in method form".to_string(),
-                                        ));
-                                    }
+                                "split" if args.len() == 1 => {
                                     let sep = match &args[0] {
                                         Value::Str(v) => v,
                                         _ => {
@@ -4855,12 +4835,18 @@ impl VirtualMachine {
                                     }
                                     crate::nova::nova_stream_cols(&[Value::Str(s.clone()), args[0].clone()])?
                                 }
-                                _ if args.is_empty() => Value::Null,
                                 _ => {
-                                    return Err(VmError::runtime_error(format!(
-                                        "Cannot call method {} on string",
-                                        method_name
-                                    )));
+                                    // any builtin taking the string first (`s.title()`, `s.count("a")`)
+                                    if let Some(result) = crate::text_methods::call_as_method(&object, method_name, &args) {
+                                        result?
+                                    } else if args.is_empty() {
+                                        Value::Null
+                                    } else {
+                                        return Err(VmError::runtime_error(format!(
+                                            "Cannot call method {} on string",
+                                            method_name
+                                        )));
+                                    }
                                 }
                             };
                             self.stack.push(result);
@@ -4987,7 +4973,10 @@ impl VirtualMachine {
                                 
                                 self.stack.push(acc);
                             } else if method_name == "sort" {
-                                arr.sort_by(|a, b| format!("{}", a).cmp(&format!("{}", b)));
+                                // in place, with the same ordering as `sorted` (numbers numerically)
+                                if let Value::Array(ordered) = BuiltinFunctions::call("sorted", &[object.clone()])? {
+                                    arr.replace_all(ordered.to_vec());
+                                }
                                 self.stack.push(Value::Array(arr.clone()));
                             } else if method_name == "reverse" {
                                 arr.reverse();
@@ -5007,6 +4996,8 @@ impl VirtualMachine {
                                 }
                                 arr.replace_all(v);
                                 self.stack.push(Value::Array(arr.clone()));
+                            } else if let Some(result) = crate::text_methods::call_as_method(&object, method_name, &args) {
+                                self.stack.push(result?);
                             } else {
                                 return Err(VmError::runtime_error(format!(
                                     "Cannot call method {} on array",
@@ -5232,10 +5223,15 @@ impl VirtualMachine {
                                     }
                                 }
                                 _ => {
-                                    return Err(VmError::runtime_error(format!(
-                                        "Cannot call method {} on non-object value: {}",
-                                        method_name, object
-                                    )));
+                                    // builtins taking the value first: `seen.add(x)`, `n.abs()`, ...
+                                    if let Some(result) = crate::text_methods::call_as_method(&object, method_name, &args) {
+                                        result?
+                                    } else {
+                                        return Err(VmError::runtime_error(format!(
+                                            "Cannot call method {} on non-object value: {}",
+                                            method_name, object
+                                        )));
+                                    }
                                 }
                             };
                             self.stack.push(result);

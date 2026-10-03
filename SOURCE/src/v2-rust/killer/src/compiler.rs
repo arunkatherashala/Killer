@@ -6649,6 +6649,9 @@ fn patch_pending_calls(state: &mut CompilerState) -> Result<(), VmError> {
         "pathJoin", "readBytes", "reduce", "renameFile", "set_add", "set_clear", "set_difference",
         "set_from_array", "set_has", "set_intersection", "set_new", "set_remove", "set_size",
         "set_to_array", "set_union", "spawn_thread", "timestamp", "writeBytes",
+        // text helpers (src/text_methods.rs)
+        "capitalize", "title", "swapcase", "center", "zfill", "isdigit", "isalpha", "isalnum", "isspace",
+        "isupper", "islower", "splitlines", "find", "rfind", "count",
     ];
 
     for pending in &state.pending_calls {

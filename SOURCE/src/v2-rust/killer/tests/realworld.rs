@@ -99,6 +99,33 @@ fn string_literal_ending_in_an_escaped_quote() {
 }
 
 #[test]
+fn methods_on_string_literals_and_python_style_string_methods() {
+    let src = "s = \"hello world\"\nprintln(\"abc\".upper())\nprintln(\"a-b\".split(\"-\"))\nprintln(\", \".join([\"a\", \"b\"]))\nprintln(s.startswith(\"he\"))\nprintln(s.endswith(\"d\"))\nprintln(s.find(\"o\"))\nprintln(s.rfind(\"o\"))\nprintln(s.count(\"o\"))\nprintln(s.title())\nprintln(s.capitalize())\nprintln(s.center(15, \"*\"))\nprintln(\"7\".zfill(3))\nprintln(\"-7\".zfill(4))\nprintln(\"42\".isdigit())\nprintln(\"4x\".isdigit())\nprintln(\"abc\".isalpha())\nprintln(len(\"a b  c\".split()))\nprintln(\"x\".ljust(3, \".\") + \"|\")\nprintln(s.swapcase())\nprintln(\"a\\nb\".splitlines())\n";
+    assert_eq!(
+        run(src),
+        "ABC\n[a, b]\na, b\ntrue\ntrue\n4\n7\n2\nHello World\nHello world\n**hello world**\n007\n-007\ntrue\nfalse\ntrue\n3\nx..|\nHELLO WORLD\n[a, b]"
+    );
+}
+
+#[test]
+fn text_search_returns_character_indexes_for_unicode() {
+    let src = "u = \"h\u{e9}llo w\u{f6}rld\"\nprintln(index_of(u, \"w\"))\nprintln(u.find(\"w\"))\nprintln(split(\"abc\", \"\"))\n";
+    assert_eq!(run(src), "6\n6\n[a, b, c]");
+}
+
+#[test]
+fn builtin_fallback_works_for_arrays_and_dicts() {
+    let src = "w = [\"ab\", \"cd\"]\nd = {\"k\": 1}\nprintln(w.contains(\"ab\"))\nprintln(w.slice(0, 1))\nprintln(w.append(\"zz\"))\nprintln(d.has(\"k\"))\nprintln(d.get(\"zz\", 5))\nprintln(w.count(\"ab\"))\n";
+    assert_eq!(run(src), "true\n[ab]\n[ab, cd, zz]\ntrue\n5\n1");
+}
+
+#[test]
+fn sorting_and_extremes_over_numbers_arrays_and_rows() {
+    let src = "n = [10, 9, 2, 33]\nprintln(n.sort())\nprintln(n)\nprintln(max(n))\nprintln(min(n))\nprintln(max(\"b\", \"a\"))\nprintln(sorted([[2, \"b\"], [1, \"z\"], [1, \"a\"]]))\nprintln(sorted([\"b\", \"a\"], true))\n";
+    assert_eq!(run(src), "[2, 9, 10, 33]\n[2, 9, 10, 33]\n33\n2\nb\n[[1, a], [1, z], [2, b]]\n[b, a]");
+}
+
+#[test]
 fn dictionary_literals_can_span_lines() {
     let src = "b = {\n  \"x\": 1,\n  \"y\": {\"k\": [1, 2]}\n}\nprintln(b)\nfn make() {\n  return {\n    \"a\": 1,\n    // a comment inside\n    \"b\": 2\n  }\n}\nprintln(make())\nprintln(max(1, 5,\n  3))\nrows = []\npush(rows, {\n  \"n\": 1\n})\nprintln(rows)\nif true {\n  println(\"block still works\")\n}\n";
     assert_eq!(run(src), "{x: 1, y: {k: [1, 2]}}\n{a: 1, b: 2}\n5\n[{n: 1}]\nblock still works");
