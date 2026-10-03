@@ -3662,6 +3662,24 @@ fn compile_expr_str(
 
     // Indexing: receiver[index_expr] — receiver is any expression (arr[i], (a+b)[0], foo()[1], d["k"])
     if let Some((recv, index_part)) = split_trailing_index_expr(expr) {
+        // Slice `x[a:b]`, `x[:b]`, `x[a:]`, `x[:]` -> slice(x, a, b); a missing bound is null.
+        // (a top-level `:` inside a ternary `x[c ? 1 : 2]` is not a slice)
+        if crate::exprsplit::split_ternary(index_part).is_none() {
+            let mask = crate::exprsplit::top_level_mask(index_part);
+            if let Some(colon) = index_part.bytes().enumerate().position(|(i, b)| b == b':' && mask[i]) {
+                let (lo, hi) = (index_part[..colon].trim(), index_part[colon + 1..].trim());
+                compile_expr_str(recv, line_no, state, context)?;
+                for bound in [lo, hi] {
+                    if bound.is_empty() {
+                        state.instructions.push(Instruction::ConstNull);
+                    } else {
+                        compile_expr_str(bound, line_no, state, context)?;
+                    }
+                }
+                state.instructions.push(Instruction::CallBuiltin("slice".to_string(), 3));
+                return Ok(());
+            }
+        }
         compile_expr_str(recv, line_no, state, context)?;
         compile_expr_str(index_part, line_no, state, context)?;
         state.instructions.push(Instruction::IndexRead);
@@ -5607,7 +5625,7 @@ fn patch_pending_calls(state: &mut CompilerState) -> Result<(), VmError> {
         "base64_encode", "base64_decode", "hmac_sha256", "float", "bool", "log", "log2", "log10", "exp", "cbrt",
         "trunc", "sign", "atan2", "hypot", "asin", "acos", "atan", "sinh", "cosh", "tanh", "degrees", "radians",
         "gcd", "lcm", "mean", "median", "variance", "stdev", "pvariance", "pstdev", "env", "args", "exit",
-        "sleep", "assert", "set", "delete", "insert",
+        "sleep", "assert", "set", "delete", "insert", "gc_stats", "jit_stats",
         "uncertain", "unc_value", "unc_margin", "unc_lo", "unc_hi", "gauss", "unc_sigma", "prob_gt", "prob_lt",
         // Ghost Agent (web search + local LLM)
         "ghost_ask",

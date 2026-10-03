@@ -355,3 +355,15 @@ fn everyday_builtins_are_callable_from_scripts() {
     let src = "println(ord(\"a\"))\nprintln(chr(66))\nprintln(pad_left(\"7\", 3, \"0\"))\nprintln(gcd(12, 18))\nprintln(lcm(4, 6))\nprintln(mean([1, 2, 3, 4]))\nprintln(median([3, 1, 2]))\nprintln(log2(8))\nprintln(bool(\"\"))\nprintln(base64_encode(\"foobar\"))\nprintln(base64_decode(\"Zm9vYmFy\"))\nprintln(len(set([1, 2, 2, 3])))\nprintln(float(\"2.5\"))\nxs = [1, 2, 3]\ninsert(xs, 0, 9)\nprintln(xs)\n";
     assert_eq!(run(src), "97\nB\n007\n6\n12\n2.5\n2\n3\nfalse\nZm9vYmFy\nfoobar\n3\n2.5\n[9, 1, 2, 3]");
 }
+
+#[test]
+fn strings_index_slice_reverse_and_compare() {
+    let src = "s = \"héllo\"\nprintln(s[1])\nprintln(s[-1])\nprintln(len(s))\nprintln(s[1:3])\nprintln(s[:2])\nprintln(s[3:])\nprintln(reverse(s))\nprintln(\"ab\" < \"b\")\nprintln(\"b\" <= \"a\")\nprintln(\"ab\" * 3)\nprintln(s[9])\n";
+    assert_eq!(run(src), "é\no\n5\n\u{e9}l\nhé\nlo\nolléh\ntrue\nfalse\nababab\nnull");
+}
+
+#[test]
+fn lists_slice_concat_repeat_and_sets_contain() {
+    let src = "a = [1, 2, 3, 4, 5]\nprintln(a[1:3])\nprintln(a[-2:])\nprintln(a[:])\nprintln(a[1 > 0 ? 1 : 2])\nprintln([1, 2] + [3])\nprintln([0] * 3)\nb = a[:2]\nb[0] = 99\nprintln(a[0])\nst = set([1, 2, 2])\nprintln(2 in st)\nprintln(contains(st, 7))\nprintln(type(gc_stats()))\n";
+    assert_eq!(run(src), "[2, 3]\n[4, 5]\n[1, 2, 3, 4, 5]\n2\n[1, 2, 3]\n[0, 0, 0]\n1\ntrue\nfalse\ndict");
+}

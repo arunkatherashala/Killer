@@ -79,6 +79,34 @@ fn array_index(idx: f64, len: usize) -> usize {
     }
 }
 
+/// `"ab" * 3`, `3 * "ab"`, `[0] * 4`: repeat a string or list. `None` when neither operand is a
+/// sequence (ordinary arithmetic), `Some(Err)` for a bad count.
+fn repeat_sequence(lhs: &Value, rhs: &Value) -> Option<Result<Value, String>> {
+    let (seq, count) = match (lhs, rhs) {
+        (Value::Str(_) | Value::Array(_), Value::Number(n)) => (lhs, *n),
+        (Value::Number(n), Value::Str(_) | Value::Array(_)) => (rhs, *n),
+        _ => return None,
+    };
+    if !count.is_finite() || count.fract() != 0.0 || count < 0.0 {
+        return Some(Err(format!("cannot repeat a {} {} times", seq.type_name(), count)));
+    }
+    let n = count as usize;
+    Some(match seq {
+        Value::Str(s) if (s.len() as u128) * (n as u128) > 1 << 28 => Err("repeated string is too large".to_string()),
+        Value::Str(s) => Ok(Value::Str(s.repeat(n))),
+        Value::Array(a) if (a.len() as u128) * (n as u128) > 1 << 24 => Err("repeated list is too large".to_string()),
+        Value::Array(a) => {
+            let items = a.to_vec();
+            let mut out = Vec::with_capacity(items.len() * n);
+            for _ in 0..n {
+                out.extend(items.iter().cloned());
+            }
+            Ok(Value::from(out))
+        }
+        _ => unreachable!(),
+    })
+}
+
 /// Return address used for calls made from Rust (see `call_value_nested`).
 const NESTED_RETURN: usize = usize::MAX;
 
@@ -962,6 +990,12 @@ impl VirtualMachine {
                             (l, Value::Str(r)) => {
                                 self.stack.push(Value::Str(format!("{}{}", l, r)));
                             }
+                            // `[1, 2] + [3]` builds a new list (neither operand changes)
+                            (Value::Array(l), Value::Array(r)) => {
+                                let mut joined = l.to_vec();
+                                joined.extend(r.to_vec());
+                                self.stack.push(Value::from(joined));
+                            }
                             // Phase 11: Quality operators
                             (Value::QualityWrapped(q1), Value::QualityWrapped(q2)) => {
                                 // Quality + Quality = Quality (weighted average)
@@ -1075,6 +1109,8 @@ impl VirtualMachine {
                             // Integer * Integer fast path
                             if let (Value::Integer(l), Value::Integer(r)) = (&lhs, &rhs) {
                                 self.stack.push(Value::Integer(l.wrapping_mul(*r)));
+                            } else if let Some(repeated) = repeat_sequence(&lhs, &rhs) {
+                                self.stack.push(repeated.map_err(VmError::runtime_error)?);
                             } else {
                             // Fall back to numeric multiplication
                             let lhs_num = match lhs {
@@ -1332,6 +1368,11 @@ impl VirtualMachine {
                     // Phase 12: Check for __gt__ operator overload on left operand
                     let rhs = self.pop_value()?;
                     let lhs = self.pop_value()?;
+                    if let (Value::Str(l), Value::Str(r)) = (&lhs, &rhs) {
+                        self.stack.push(Value::Bool(l > r));
+                        self.ip += 1;
+                        continue;
+                    }
                     if crate::uncertain::is_uncertain(&lhs) || crate::uncertain::is_uncertain(&rhs) {
                         if let Some(r) = crate::uncertain::compare(crate::uncertain::CmpOp::Gt, &lhs, &rhs) {
                             self.stack.push(r.map_err(VmError::runtime_error)?);
@@ -1372,6 +1413,11 @@ impl VirtualMachine {
                     // Phase 12: Check for __ge__ operator overload
                     let rhs = self.pop_value()?;
                     let lhs = self.pop_value()?;
+                    if let (Value::Str(l), Value::Str(r)) = (&lhs, &rhs) {
+                        self.stack.push(Value::Bool(l >= r));
+                        self.ip += 1;
+                        continue;
+                    }
                     if crate::uncertain::is_uncertain(&lhs) || crate::uncertain::is_uncertain(&rhs) {
                         if let Some(r) = crate::uncertain::compare(crate::uncertain::CmpOp::Ge, &lhs, &rhs) {
                             self.stack.push(r.map_err(VmError::runtime_error)?);
@@ -1410,6 +1456,11 @@ impl VirtualMachine {
                 Instruction::Lt => {
                     let rhs = self.pop_value()?;
                     let lhs = self.pop_value()?;
+                    if let (Value::Str(l), Value::Str(r)) = (&lhs, &rhs) {
+                        self.stack.push(Value::Bool(l < r));
+                        self.ip += 1;
+                        continue;
+                    }
                     if crate::uncertain::is_uncertain(&lhs) || crate::uncertain::is_uncertain(&rhs) {
                         if let Some(r) = crate::uncertain::compare(crate::uncertain::CmpOp::Lt, &lhs, &rhs) {
                             self.stack.push(r.map_err(VmError::runtime_error)?);
@@ -1454,6 +1505,11 @@ impl VirtualMachine {
                     // Phase 12: Check for __le__ operator overload
                     let rhs = self.pop_value()?;
                     let lhs = self.pop_value()?;
+                    if let (Value::Str(l), Value::Str(r)) = (&lhs, &rhs) {
+                        self.stack.push(Value::Bool(l <= r));
+                        self.ip += 1;
+                        continue;
+                    }
                     if crate::uncertain::is_uncertain(&lhs) || crate::uncertain::is_uncertain(&rhs) {
                         if let Some(r) = crate::uncertain::compare(crate::uncertain::CmpOp::Le, &lhs, &rhs) {
                             self.stack.push(r.map_err(VmError::runtime_error)?);
@@ -2223,6 +2279,14 @@ impl VirtualMachine {
                             let i = array_index(*idx, arr.len());
                             self.stack
                                 .push(arr.get(i).unwrap_or(Value::Null));
+                        }
+                        (Value::Str(s), Value::Number(idx)) => {
+                            // characters, with negative indices counting from the end
+                            let len = crate::lang_builtins::char_len(s) as i64;
+                            let i = *idx as i64;
+                            let i = if i < 0 { i + len } else { i };
+                            let ch = if i >= 0 { crate::lang_builtins::char_at(s, i as usize) } else { None };
+                            self.stack.push(ch.map(Value::Str).unwrap_or(Value::Null));
                         }
                         (Value::Dict(dict), Value::Str(key)) => {
                             self.stack

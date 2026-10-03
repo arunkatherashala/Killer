@@ -1643,8 +1643,11 @@ impl BuiltinFunctions {
                 Ok(Value::Bool(arr.contains(val)))
             }
             (Value::Dict(dict), Value::Str(key)) => Ok(Value::Bool(dict.contains_key(key))),
+            (Value::Set(set), val) => Ok(Value::Bool(
+                crate::value::SetKey::from_value(val).map_or(false, |k| set.contains(&k)),
+            )),
             _ => Err(VmError::runtime_error(
-                "contains() expects string, array or dict".to_string(),
+                "contains() expects string, array, dict or set".to_string(),
             )),
         }
     }
@@ -1797,8 +1800,9 @@ impl BuiltinFunctions {
                 arr.reverse();
                 Ok(Value::Array(arr.clone()))
             }
+            Value::Str(s) => Ok(Value::Str(s.chars().rev().collect())),
             _ => Err(VmError::runtime_error(
-                "reverse() expects an array".to_string(),
+                "reverse() expects an array or string".to_string(),
             )),
         }
     }
@@ -1836,23 +1840,24 @@ impl BuiltinFunctions {
     }
 
     fn slice(args: &[Value]) -> Result<Value, VmError> {
-        if args.len() != 3 {
+        if args.len() < 2 || args.len() > 3 {
             return Err(VmError::runtime_error(
-                "slice() expects 3 arguments".to_string(),
+                "slice() expects 2 or 3 arguments: slice(x, start[, end])".to_string(),
             ));
         }
-        match (&args[0], &args[1], &args[2]) {
-            (Value::Array(arr), Value::Number(start), Value::Number(end)) => {
-                let s = (*start as usize).min(arr.len());
-                let e = (*end as usize).min(arr.len());
-                if s <= e {
-                    Ok(Value::from(arr.slice_to_vec(s, e)))
-                } else {
-                    Ok(Value::from(Vec::new()))
-                }
+        let end = args.get(2).unwrap_or(&Value::Null);
+        match &args[0] {
+            Value::Array(arr) => {
+                let (s, e) = crate::lang_builtins::slice_bounds(&args[1], end, arr.len())?;
+                Ok(Value::from(if s < e { arr.slice_to_vec(s, e) } else { Vec::new() }))
+            }
+            Value::Str(text) => {
+                let chars: Vec<char> = text.chars().collect();
+                let (s, e) = crate::lang_builtins::slice_bounds(&args[1], end, chars.len())?;
+                Ok(Value::Str(if s < e { chars[s..e].iter().collect() } else { String::new() }))
             }
             _ => Err(VmError::runtime_error(
-                "slice() expects array and numbers".to_string(),
+                "slice() expects an array or string".to_string(),
             )),
         }
     }
