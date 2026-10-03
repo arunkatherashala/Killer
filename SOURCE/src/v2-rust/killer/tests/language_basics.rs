@@ -460,3 +460,38 @@ fn match_and_switch_statements() {
     let src = "x = 2\nmatch x {\n  1 => println(\"one\")\n  2 | 3 => println(\"two-three\")\n  _ => println(\"other\")\n}\nfn size(n) {\n  match n {\n    0 => return \"zero\"\n    k if k < 10 => return \"small \" + str(k)\n    _ => return \"big\"\n  }\n}\nprintln(size(0))\nprintln(size(5))\nprintln(size(50))\nswitch x {\n  case 1:\n    println(\"one\")\n  case 2, 3:\n    println(\"two-three\")\n    break\n  default:\n    println(\"other\")\n}\nswitch \"b\" {\n  case \"a\":\n    println(\"A\")\n  default:\n    println(\"fallback\")\n}\nmatch = 5\nprintln(match)\n";
     assert_eq!(run(src), "two-three\nzero\nsmall 5\nbig\ntwo-three\nfallback\n5");
 }
+
+#[test]
+fn variadics_keyword_arguments_and_dict_comprehensions() {
+    let src = "fn total(...xs) {\n  t = 0\n  for x in xs {\n    t = t + x\n  }\n  return t\n}\nprintln(total(1, 2, 3))\nprintln(total())\nfn head(first, ...rest) {\n  return str(first) + \":\" + str(len(rest))\n}\nprintln(head(1, 2, 3, 4))\nfn f(a, b) {\n  return a - b\n}\nprintln(f(b = 1, a = 10))\nprintln(f(10, b = 4))\nfn g(a, b = 5, c = 7) {\n  return a + b + c\n}\nprintln(g(1, c = 100))\nprintln({k: k * 2 for k in range(3)})\nprintln(len({x for x in [1, 1, 2]}))\nprintln(PI > 3.14)\n";
+    assert_eq!(run(src), "6\n0\n1:3\n9\n6\n106\n{0: 0, 1: 2, 2: 4}\n2\ntrue");
+}
+
+#[test]
+fn json_round_trips_nested_data() {
+    let src = "d = json_parse('{\"a\": 1, \"b\": [1, 2, {\"c\": null}], \"s\": \"x\\\\ny\"}')\nprintln(d[\"b\"][1])\nprintln(type(d[\"b\"]))\nprintln(json_stringify(d[\"b\"]))\nprintln(json_stringify({\"k\": [true, \"q\"], \"a\": 1.5}))\nprintln(json_stringify([1, [2, 3]], 2))\ntry {\n  json_parse(\"[1,]\")\n} catch e {\n  println(\"bad json\")\n}\n";
+    let out = run(src);
+    assert!(out.starts_with("2\narray\n[1,2,{\"c\":null}]\n{\"a\":1.5,\"k\":[true,\"q\"]}\n[\n  1,\n  [\n    2,\n    3\n  ]\n]\nbad json"), "{out}");
+}
+
+#[test]
+fn generators_async_spawn_and_mutex() {
+    let src = "fn gen() {\n  yield 1\n  yield 2\n}\nfor x in gen() {\n  println(x)\n}\nfn w() {\n  return 3\n}\nprintln(async_await(async_spawn(w)))\nfn add(a, b) {\n  return a + b\n}\nprintln(async_await(async_spawn(add, 2, 5)))\nm = mutex_new(1)\nprintln(mutex_get(m))\nprintln(mutex_add(m, 4))\n";
+    assert_eq!(run(src), "1\n2\n3\n7\n1\n5");
+}
+
+#[test]
+fn import_includes_another_file_relative_to_the_script() {
+    let dir = std::env::temp_dir().join(format!("killer_imp_e2e_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("lib")).unwrap();
+    std::fs::write(dir.join("lib/math2.killer"), "import \"consts.killer\"\nfn twice(x) {\n  return x * FACTOR\n}\n").unwrap();
+    std::fs::write(dir.join("lib/consts.killer"), "FACTOR = 2\n").unwrap();
+    let main = dir.join("main.killer");
+    std::fs::write(&main, "import \"lib/math2.killer\"\nprintln(twice(21))\n").unwrap();
+    // run from a different working directory: imports resolve against the script, not the cwd
+    let out = Command::new(env!("CARGO_BIN_EXE_killer_super")).arg(&main).arg("--run").current_dir(std::env::temp_dir()).output().unwrap();
+    let text = String::from_utf8_lossy(&out.stdout).replace("\r\n", "\n");
+    let _ = std::fs::remove_dir_all(&dir);
+    assert_eq!(text.trim(), "42", "{}", String::from_utf8_lossy(&out.stderr));
+}

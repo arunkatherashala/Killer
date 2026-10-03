@@ -340,6 +340,8 @@ pub mod time_machine;
 pub mod exprsplit;             // top-level operator splitting for the expression parser
 pub mod lang_builtins;         // everyday builtins: ord/chr, padding, logs, stats, base64, sets
 pub mod controlflow;           // lowers match/switch/do-while/C-style for/destructuring for into core statements
+pub mod json_lang;             // strict JSON parser and serializer for json_parse / json_stringify
+pub mod imports;               // compile-time `import "file.killer"` inclusion
 pub mod lambda;                // lifts anonymous functions (fn(x){..}, x => ..) into named ones
 pub mod sugar;               // surface syntax sugar rewritten to core Killer before compiling
 pub mod uncertain;             // interval arithmetic and three-valued comparison for `believe` values

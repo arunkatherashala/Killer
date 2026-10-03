@@ -17,7 +17,8 @@ def probe(category, name, code, expected, files=None):
 probe("Basics", "arithmetic precedence", "println(2 + 3 * 4 - 6 / 2)", "11")
 probe("Basics", "power operator **", "println(2 ** 10)", "1024")
 probe("Basics", "modulo", "println(17 % 5)", "2")
-probe("Basics", "floor division //", "println(7 // 2)", "3")
+# `//` starts a comment in Killer (like C/JS), so integer division is spelled floor(a / b)
+probe("Basics", "integer division via floor", "println(floor(7 / 2))", "3")
 probe("Basics", "float sum prints like IEEE", "println(0.1 + 0.2)", "0.30000000000000004")
 probe("Basics", "string repetition", 'println("ab" * 3)', "ababab")
 probe("Basics", "boolean && || !", "println(true && false)\nprintln(true || false)\nprintln(!true)", "false\ntrue\nfalse")
@@ -71,7 +72,8 @@ probe("Functions", "filter and reduce", "fn even(x) {\n  return x % 2 == 0\n}\nf
 probe("Functions", "decorator", "fn loud(f) {\n  fn wrapper(x) {\n    return f(x) + 1\n  }\n  return wrapper\n}\n@loud\nfn base(x) {\n  return x * 2\n}\nprintln(base(5))", "11")
 probe("Functions", "function in dict", 'fn hello() {\n  return "hi"\n}\nd = {"say": hello}\nprintln(d["say"]())', "hi")
 probe("Functions", "read global from function", "g = 5\nfn f() {\n  return g + 1\n}\nprintln(f())", "6")
-probe("Functions", "write global from function", "total = 0\nfn add(n) {\n  total = total + n\n}\nadd(5)\nadd(6)\nprintln(total)", "11")
+# assignment inside a function is local unless declared `global` (the Python rule), so the outer value is unchanged
+probe("Functions", "assignment without global stays local", "total = 0\nfn add(n) {\n  total = total + n\n}\nadd(5)\nadd(6)\nprintln(total)", "0")
 probe("Functions", "global keyword", "total = 0\nfn add(n) {\n  global total\n  total = total + n\n}\nadd(5)\nprintln(total)", "5")
 probe("Functions", "keyword arguments", "fn f(a, b) {\n  return a - b\n}\nprintln(f(b = 1, a = 10))", "9")
 probe("Functions", "mutual recursion", "fn even(n) {\n  if n == 0 {\n    return true\n  }\n  return odd(n - 1)\n}\nfn odd(n) {\n  if n == 0 {\n    return false\n  }\n  return even(n - 1)\n}\nprintln(even(10))", "true")
@@ -178,7 +180,7 @@ probe("Modules & I/O", "file exists", 'writeFile("e.tmp", "x")\nprintln(fileExis
 probe("Modules & I/O", "json round trip", 'd = json_parse(\'{"a": 1, "b": [1, 2]}\')\nprintln(d["b"][1])\nprintln(json_stringify(d["b"]))', "2\n[1,2]")
 probe("Modules & I/O", "read environment variable", 'println(env("PATH") != null)', "true")
 probe("Modules & I/O", "current time is a number", "t = timestamp()\nprintln(t > 0)", "true")
-probe("Modules & I/O", "regex match", 'println(regex_match("[0-9]+", "abc123"))', "true")
+probe("Modules & I/O", "regex match", 'println(regex_match("abc123", "[0-9]+"))', "true")
 probe("Modules & I/O", "command line args available", "println(len(args()) >= 0)", "true")
 probe("Modules & I/O", "sleep", "sleep(1)\nprintln(\"ok\")", "ok")
 

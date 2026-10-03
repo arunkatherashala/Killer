@@ -623,6 +623,16 @@ impl VirtualMachine {
             );
         }
 
+        // Math constants (a script may assign over them)
+        for (name, value) in [
+            ("PI", std::f64::consts::PI),
+            ("E", std::f64::consts::E),
+            ("TAU", std::f64::consts::TAU),
+            ("INF", f64::INFINITY),
+        ] {
+            let _ = self.store_var(name, Value::Number(value));
+        }
+
         self.run_loop(program)
     }
 
@@ -830,7 +840,23 @@ impl VirtualMachine {
                             self.ip = *exit;
                             continue;
                         }
-                        _ => {}
+                        _ => {
+                            // a generator is drained into a list once, then iterated like one
+                            let gen_id = match self.locals_stack.last().and_then(|f| f.get(iter_i)) {
+                                Some(Value::Generator(id)) => Some(id.clone()),
+                                _ => None,
+                            };
+                            if let Some(id) = gen_id {
+                                let mut items = Vec::new();
+                                while self.generator_manager.has_next(&id) {
+                                    items.push(self.generator_manager.get_next(&id, None)?);
+                                }
+                                if let Some(frame) = self.locals_stack.last_mut() {
+                                    frame[iter_i] = Value::from(items);
+                                }
+                                continue;
+                            }
+                        }
                     }
                 }
                 Instruction::GetField(name) => {

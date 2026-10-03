@@ -253,6 +253,8 @@ struct CompilerState {
     global_vars: std::collections::HashSet<String>,
     /// Functions rebound by a decorator: calls go through the variable, not the original code.
     decorated: std::collections::HashSet<String>,
+    /// Parameter names of every `fn` in the file (pre-scanned), for keyword arguments.
+    signatures: HashMap<String, Vec<String>>,
     /// `static fn` methods: (class, method) -> (bytecode start, arity)
     static_methods: HashMap<(String, String), (usize, usize)>,
     /// Class metadata: class_name → (parent, [(method_name, params)])
@@ -304,7 +306,8 @@ struct CompileContext {
 }
 
 pub fn compile_killer_subset(source: &str) -> Result<Program, VmError> {
-    let checked = crate::typecheck::process(source)?;
+    let imported = crate::imports::resolve(source).map_err(VmError::parse_error_simple)?;
+    let checked = crate::typecheck::process(&imported)?;
     let lowered = crate::controlflow::lower(&checked);
     let lifted = crate::lambda::lift(&lowered);
     let sugared = crate::sugar::preprocess(&lifted, &|l| parse_polyglot_header(l).is_some());
@@ -322,6 +325,7 @@ pub fn compile_killer_subset(source: &str) -> Result<Program, VmError> {
     let preprocessed = preprocess_ui_sugar(&preprocessed);
     let lines = normalize_lines(&preprocessed);
     state.global_vars = scan_globals(&lines);
+    state.signatures = scan_signatures(&lines);
     let mut cursor = 0usize;
     let mut context = CompileContext::default();
     compile_block(&lines, &mut cursor, &mut state, &mut context, false, false)?;
@@ -2848,6 +2852,13 @@ fn compile_simple_statement(
         return Ok(());
     }
 
+    // `yield value`: add to the values the generator function produces
+    if let Some(rest) = stmt.strip_prefix("yield ") {
+        compile_expr_str(rest.trim(), line_no, state, context)?;
+        state.instructions.push(Instruction::Yield);
+        return Ok(());
+    }
+
     // `throw value`: unwind to the nearest `catch` (or abort with "Uncaught exception")
     if let Some(rest) = stmt.strip_prefix("throw ") {
         compile_expr_str(rest.trim(), line_no, state, context)?;
@@ -3518,6 +3529,30 @@ fn compile_expr_str(
         return Ok(());
     }
 
+    // Dict / set comprehension: `{k: v for x in xs if c}` / `{x for x in xs}`
+    if expr.starts_with('{') && expr.ends_with('}') && expr.len() >= 2 {
+        let inner = expr[1..expr.len() - 1].trim();
+        if let Some(for_at) = find_top_level_op(inner, " for ") {
+            let element = inner[..for_at].trim();
+            let tail = &inner[for_at..];
+            let pair = crate::exprsplit::top_level_mask(element)
+                .iter()
+                .enumerate()
+                .find(|(i, top)| **top && element.as_bytes()[*i] == b':')
+                .map(|(i, _)| i);
+            let rewritten = match pair {
+                Some(colon) => format!(
+                    "dict_from_pairs([[{}, {}]{}])",
+                    element[..colon].trim(),
+                    element[colon + 1..].trim(),
+                    tail
+                ),
+                None => format!("set([{}{}])", element, tail),
+            };
+            return compile_expr_str(&rewritten, line_no, state, context);
+        }
+    }
+
     // Dict literal: {} or { k: v, ... } (keys/values compiled like AST Expr::Dict)
     if expr.starts_with('{') && expr.ends_with('}') && expr.len() >= 2 {
         let inner = expr[1..expr.len() - 1].trim();
@@ -3708,6 +3743,21 @@ fn compile_expr_str(
     }
 
     if let Some((name, args)) = parse_call_expr(expr) {
+        let args = reorder_keyword_args(&name, args, state, line_no)?;
+        // async_spawn(f, a, b): run a function value on its own thread; async_await(h) waits for it.
+        // (a non-function first argument just becomes an already-resolved future)
+        if name == "async_spawn" && !args.is_empty() && !state.functions.contains_key(&name) {
+            for a in &args {
+                compile_expr_str(a, line_no, state, context)?;
+            }
+            state.instructions.push(Instruction::SpawnCall { arg_count: args.len() - 1 });
+            return Ok(());
+        }
+        if name == "async_await" && args.len() == 1 && !state.functions.contains_key(&name) {
+            compile_expr_str(&args[0], line_no, state, context)?;
+            state.instructions.push(Instruction::AwaitTask);
+            return Ok(());
+        }
         // `f(x)` where `f` is a variable (parameter, local, or global) holding a function value:
         // push the callee, then the arguments, then call dynamically. A variable shadows a function.
         let callee_is_variable = context.params.contains_key(&name)
@@ -5800,6 +5850,11 @@ fn parse_function_signature_full(line: &str, line_no: usize) -> Result<(String, 
                     .trim()
             };
             let name_part = name_part.split('<').next().unwrap_or(name_part).trim();
+            // `...rest` / `*rest`: collects the remaining arguments into a list
+            let (name_part, is_rest) = match name_part.strip_prefix("...").or_else(|| name_part.strip_prefix('*')) {
+                Some(n) => (n.trim(), true),
+                None => (name_part, false),
+            };
             if !is_valid_name(name_part) {
                 return Err(VmError::parse_error_simple(format!(
                     "Line {}: invalid parameter name `{}`",
@@ -5812,7 +5867,9 @@ fn parse_function_signature_full(line: &str, line_no: usize) -> Result<(String, 
                     line_no, name_part
                 )));
             }
-            if let Some(d) = default_expr {
+            if is_rest {
+                defaults.push((params.len(), REST_MARKER.to_string()));
+            } else if let Some(d) = default_expr {
                 defaults.push((params.len(), d.to_string()));
             } else if let Some((last, _)) = defaults.last() {
                 if *last < params.len() {
@@ -5865,6 +5922,99 @@ fn split_default(raw: &str) -> (&str, Option<&str>) {
 /// Emit the prologue that fills in omitted arguments: `if argN == null { argN = <default> }`.
 /// The default is evaluated at call time inside the function, so it can use earlier parameters
 /// and globals. An argument explicitly passed as `null` also takes the default.
+/// Marks a `...rest` parameter in the defaults list (see `emit_default_prologue`).
+const REST_MARKER: &str = "\u{0}rest";
+
+/// Parameter names of every top-level `fn` / `async fn` in the file, by function name.
+fn scan_signatures(lines: &[(usize, String)]) -> HashMap<String, Vec<String>> {
+    let mut out = HashMap::new();
+    for (line_no, raw) in lines {
+        let line = raw.trim();
+        if (line.starts_with("fn ") || line.starts_with("async fn ")) && line.contains(')') {
+            if let Ok((name, params, _)) = parse_function_signature_full(line, *line_no) {
+                out.insert(name, params);
+            }
+        }
+    }
+    out
+}
+
+/// `name = value` as a call argument -> (name, value)
+fn split_keyword_arg(arg: &str) -> Option<(String, String)> {
+    let (lhs, rhs) = split_default(arg.trim());
+    let rhs = rhs?;
+    let lhs = lhs.trim();
+    if is_valid_name(lhs) && !rhs.is_empty() {
+        Some((lhs.to_string(), rhs.to_string()))
+    } else {
+        None
+    }
+}
+
+/// Put keyword arguments (`f(b = 1, a = 10)`) into parameter order. Skipped parameters become
+/// `null`, which the callee's defaults treat as "not passed".
+fn reorder_keyword_args(
+    name: &str,
+    args: Vec<String>,
+    state: &CompilerState,
+    line_no: usize,
+) -> Result<Vec<String>, VmError> {
+    let parsed: Vec<Option<(String, String)>> = args.iter().map(|a| split_keyword_arg(a)).collect();
+    if parsed.iter().all(|p| p.is_none()) {
+        return Ok(args);
+    }
+    let params = state.signatures.get(name).ok_or_else(|| {
+        VmError::parse_error_simple(format!(
+            "Line {}: keyword arguments need a function declared with `fn` in this file (`{}` is not)",
+            line_no, name
+        ))
+    })?;
+    let mut slots: Vec<Option<String>> = vec![None; params.len()];
+    let mut next_positional = 0usize;
+    let mut seen_keyword = false;
+    for (arg, kw) in args.into_iter().zip(parsed) {
+        match kw {
+            None => {
+                if seen_keyword {
+                    return Err(VmError::parse_error_simple(format!(
+                        "Line {}: positional argument after keyword argument in call to `{}`",
+                        line_no, name
+                    )));
+                }
+                if next_positional >= slots.len() {
+                    return Err(VmError::parse_error_simple(format!(
+                        "Line {}: too many arguments in call to `{}`",
+                        line_no, name
+                    )));
+                }
+                slots[next_positional] = Some(arg);
+                next_positional += 1;
+            }
+            Some((key, value)) => {
+                seen_keyword = true;
+                let Some(index) = params.iter().position(|p| *p == key) else {
+                    return Err(VmError::parse_error_simple(format!(
+                        "Line {}: `{}` has no parameter named `{}`",
+                        line_no, name, key
+                    )));
+                };
+                if slots[index].is_some() {
+                    return Err(VmError::parse_error_simple(format!(
+                        "Line {}: parameter `{}` of `{}` given twice",
+                        line_no, key, name
+                    )));
+                }
+                slots[index] = Some(value);
+            }
+        }
+    }
+    let used = slots.iter().rposition(|s| s.is_some()).map_or(0, |i| i + 1);
+    Ok(slots[..used]
+        .iter()
+        .map(|s| s.clone().unwrap_or_else(|| "null".to_string()))
+        .collect())
+}
+
 fn emit_default_prologue(
     defaults: &[(usize, String)],
     line_no: usize,
@@ -5873,6 +6023,15 @@ fn emit_default_prologue(
 ) -> Result<(), VmError> {
     for (index, expr) in defaults {
         let arg = format!("arg{}", index);
+        if expr == REST_MARKER {
+            // argN = slice(args, N): everything passed from position N on
+            state.instructions.push(Instruction::Load("args".to_string()));
+            state.instructions.push(Instruction::ConstNum(*index as f64));
+            state.instructions.push(Instruction::ConstNull);
+            state.instructions.push(Instruction::CallBuiltin("slice".to_string(), 3));
+            state.instructions.push(Instruction::Store(arg));
+            continue;
+        }
         state.instructions.push(Instruction::Load(arg.clone()));
         state.instructions.push(Instruction::ConstNull);
         state.instructions.push(Instruction::Eq);
@@ -6018,7 +6177,8 @@ fn patch_pending_calls(state: &mut CompilerState) -> Result<(), VmError> {
         "base64_encode", "base64_decode", "hmac_sha256", "float", "bool", "log", "log2", "log10", "exp", "cbrt",
         "trunc", "sign", "atan2", "hypot", "asin", "acos", "atan", "sinh", "cosh", "tanh", "degrees", "radians",
         "gcd", "lcm", "mean", "median", "variance", "stdev", "pvariance", "pstdev", "env", "args", "exit",
-        "sleep", "assert", "set", "delete", "insert", "gc_stats", "jit_stats", "instanceof",
+        "sleep", "assert", "set", "delete", "insert", "gc_stats", "jit_stats", "instanceof", "dict_from_pairs",
+        "mutex_new", "mutex_get", "mutex_set", "mutex_add", "mutex_free",
         "uncertain", "unc_value", "unc_margin", "unc_lo", "unc_hi", "gauss", "unc_sigma", "prob_gt", "prob_lt",
         // Ghost Agent (web search + local LLM)
         "ghost_ask",

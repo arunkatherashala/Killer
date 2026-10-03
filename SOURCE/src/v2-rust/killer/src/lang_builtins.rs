@@ -195,6 +195,81 @@ fn arity<'a>(who: &str, args: &'a [Value], min: usize, max: usize) -> Result<&'a
     Ok(args)
 }
 
+/// Process-wide cells for `mutex_*`. Contents are stored as JSON text, so only plain data (numbers,
+/// strings, booleans, null, lists, dicts) crosses between threads - never shared references.
+fn mutex_store() -> &'static std::sync::Mutex<std::collections::HashMap<u64, String>> {
+    static STORE: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<u64, String>>> = std::sync::OnceLock::new();
+    STORE.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
+}
+
+fn mutex_call(name: &str, args: &[Value]) -> Result<Value, VmError> {
+    static NEXT_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    let handle = |v: &Value| -> Result<u64, VmError> {
+        match v {
+            Value::Number(n) if n.fract() == 0.0 && *n >= 1.0 => Ok(*n as u64),
+            _ => err(format!("{}() expects a mutex handle from mutex_new()", name)),
+        }
+    };
+    let encode = |v: &Value| crate::json_lang::stringify(v, 0).map_err(VmError::runtime_error);
+    let decode = |s: &str| crate::json_lang::parse(s).map_err(VmError::runtime_error);
+    let poisoned = || VmError::runtime_error("mutex is poisoned".to_string());
+    match name {
+        "mutex_new" => {
+            let a = arity(name, args, 1, 1)?;
+            let text = encode(&a[0])?;
+            let id = NEXT_ID.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            mutex_store().lock().map_err(|_| poisoned())?.insert(id, text);
+            Ok(Value::Number(id as f64))
+        }
+        "mutex_get" => {
+            let a = arity(name, args, 1, 1)?;
+            let id = handle(&a[0])?;
+            let store = mutex_store().lock().map_err(|_| poisoned())?;
+            match store.get(&id) {
+                Some(text) => decode(text),
+                None => err("mutex_get(): unknown or freed mutex"),
+            }
+        }
+        "mutex_set" => {
+            let a = arity(name, args, 2, 2)?;
+            let id = handle(&a[0])?;
+            let text = encode(&a[1])?;
+            let mut store = mutex_store().lock().map_err(|_| poisoned())?;
+            match store.get_mut(&id) {
+                Some(slot) => {
+                    *slot = text;
+                    Ok(a[1].clone())
+                }
+                None => err("mutex_set(): unknown or freed mutex"),
+            }
+        }
+        "mutex_add" => {
+            // atomic read-modify-write: the counter pattern shared between spawned tasks
+            let a = arity(name, args, 2, 2)?;
+            let id = handle(&a[0])?;
+            let delta = num(&a[1], name)?;
+            let mut store = mutex_store().lock().map_err(|_| poisoned())?;
+            match store.get_mut(&id) {
+                Some(slot) => match decode(slot)? {
+                    Value::Number(n) => {
+                        let sum = n + delta;
+                        *slot = crate::json_lang::stringify(&Value::Number(sum), 0).map_err(VmError::runtime_error)?;
+                        Ok(Value::Number(sum))
+                    }
+                    other => err(format!("mutex_add() needs a numeric mutex, it holds {}", other.type_name())),
+                },
+                None => err("mutex_add(): unknown or freed mutex"),
+            }
+        }
+        _ => {
+            let a = arity(name, args, 1, 1)?;
+            let id = handle(&a[0])?;
+            let removed = mutex_store().lock().map_err(|_| poisoned())?.remove(&id).is_some();
+            Ok(Value::Bool(removed))
+        }
+    }
+}
+
 /// Dispatch a builtin implemented in this module. `None` means "not mine".
 pub fn call(name: &str, args: &[Value]) -> Option<Result<Value, VmError>> {
     Some(match name {
@@ -444,6 +519,24 @@ pub fn call(name: &str, args: &[Value]) -> Option<Result<Value, VmError>> {
                 Some(other) => err(format!("set() expects an array or string, got {}", other.type_name())),
             }
         })(),
+        "dict_from_pairs" => (|| {
+            let a = arity("dict_from_pairs", args, 1, 1)?;
+            let Value::Array(pairs) = &a[0] else {
+                return err("dict_from_pairs() expects an array of [key, value] pairs");
+            };
+            let mut map = std::collections::HashMap::new();
+            for pair in pairs.to_vec() {
+                match &pair {
+                    Value::Array(kv) if kv.len() == 2 => {
+                        let items = kv.to_vec();
+                        map.insert(format!("{}", items[0]), items[1].clone());
+                    }
+                    other => return err(format!("dict_from_pairs() items must be [key, value], got {}", other)),
+                }
+            }
+            Ok(Value::Dict(crate::value::SharedDict::new(map)))
+        })(),
+        "mutex_new" | "mutex_get" | "mutex_set" | "mutex_add" | "mutex_free" => mutex_call(name, args),
         "delete" => (|| {
             let a = arity("delete", args, 2, 2)?;
             match (&a[0], &a[1]) {
@@ -598,6 +691,29 @@ mod tests {
         assert_eq!(char_len("hello"), 5);
         assert_eq!(char_at("héllo", 1), Some("é".to_string()));
         assert_eq!(char_at("hello", 9), None);
+    }
+
+    #[test]
+    fn mutex_cells_hold_plain_data_and_add_atomically() {
+        let m = run("mutex_new", &[n(1.0)]);
+        assert_eq!(run("mutex_get", &[m.clone()]), n(1.0));
+        assert_eq!(run("mutex_add", &[m.clone(), n(4.0)]), n(5.0));
+        run("mutex_set", &[m.clone(), Value::from(vec![n(1.0), s("x")])]);
+        assert_eq!(format!("{}", run("mutex_get", &[m.clone()])), "[1, x]");
+        assert_eq!(run("mutex_free", &[m.clone()]), Value::Bool(true));
+        assert!(call("mutex_get", &[m]).unwrap().is_err());
+        // many threads incrementing one counter never lose an update
+        let counter = run("mutex_new", &[n(0.0)]);
+        let id = match counter { Value::Number(x) => x, _ => unreachable!() };
+        let handles: Vec<_> = (0..8)
+            .map(|_| std::thread::spawn(move || {
+                for _ in 0..500 {
+                    call("mutex_add", &[Value::Number(id), Value::Number(1.0)]).unwrap().unwrap();
+                }
+            }))
+            .collect();
+        for h in handles { h.join().unwrap(); }
+        assert_eq!(run("mutex_get", &[Value::Number(id)]), n(4000.0));
     }
 
     #[test]
