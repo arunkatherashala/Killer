@@ -5027,6 +5027,25 @@ fn compile_method_call_str(
 
 /// Parse  `obj.method(args)`  or  `obj.field`  expressions.
 /// Returns (receiver, name, args) — empty args for property access.
+/// True when `s` is exactly one double-quoted string literal (the closing quote is the last char).
+fn is_single_string_literal(s: &str) -> bool {
+    let b = s.as_bytes();
+    if b.len() < 2 || b[0] != b'"' || b[b.len() - 1] != b'"' {
+        return false;
+    }
+    let mut escaped = false;
+    for (i, &c) in b.iter().enumerate().skip(1) {
+        if escaped {
+            escaped = false;
+        } else if c == b'\\' {
+            escaped = true;
+        } else if c == b'"' {
+            return i == b.len() - 1;
+        }
+    }
+    false
+}
+
 fn parse_dot_call_expr(expr: &str) -> Option<(&str, &str, Vec<String>)> {
     let expr = expr.trim();
     // Find the first top-level '.' that separates receiver from method/field
@@ -5034,15 +5053,21 @@ fn parse_dot_call_expr(expr: &str) -> Option<(&str, &str, Vec<String>)> {
     let bytes = expr.as_bytes();
     let mut dot_pos = None;
     let mut depth = 0i32;
-    let mut in_string = false;
+    let mut quote = 0u8;
+    let mut escaped = false;
     for (i, &b) in bytes.iter().enumerate() {
-        if in_string {
-            if b == b'\\' { continue; }
-            if b == b'"' { in_string = false; }
+        if quote != 0 {
+            if escaped {
+                escaped = false;
+            } else if b == b'\\' {
+                escaped = true;
+            } else if b == quote {
+                quote = 0;
+            }
             continue;
         }
         match b {
-            b'"' => in_string = true,
+            b'"' | b'\'' => quote = b,
             b'(' | b'[' | b'{' => depth += 1,
             b')' | b']' | b'}' => depth -= 1,
             // the LAST top-level dot: `a.b(x).c(y).d` is a chain whose receiver is everything
@@ -5059,8 +5084,10 @@ fn parse_dot_call_expr(expr: &str) -> Option<(&str, &str, Vec<String>)> {
     let dot_pos = dot_pos?;
     let receiver = expr[..dot_pos].trim();
     if receiver.is_empty() { return None; }
-    // Don't match strings or numbers as receivers
-    if receiver.starts_with('"') || receiver.parse::<f64>().is_ok() { return None; }
+    // Numbers are not receivers; a string literal is one only when it is a single complete literal
+    // (`"a-b".split("-")`), not the start of something like `"x" + y`.
+    if receiver.parse::<f64>().is_ok() { return None; }
+    if receiver.starts_with('"') && !is_single_string_literal(receiver) { return None; }
     // Don't match file-like patterns: something.csv, something.txt, something.kore
     let rest = &expr[dot_pos + 1..];
     if rest.contains('(') {
@@ -5153,14 +5180,29 @@ fn split_arguments(input: &str) -> Option<Vec<String>> {
     let mut args = Vec::new();
     let mut current = String::new();
     let mut in_string = false;
+    let mut quote = '"';
+    let mut escaped = false;
     let mut paren_depth = 0usize;
     let mut bracket_depth = 0usize;
     let mut brace_depth = 0usize;
 
     for ch in trimmed.chars() {
+        // inside a string literal only the (unescaped) closing quote matters
+        if in_string {
+            current.push(ch);
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == quote {
+                in_string = false;
+            }
+            continue;
+        }
         match ch {
-            '"' => {
-                in_string = !in_string;
+            '"' | '\'' => {
+                in_string = true;
+                quote = ch;
                 current.push(ch);
             }
             '(' if !in_string => {

@@ -92,3 +92,9 @@ fn loop_and_comprehension_variables_can_be_called() {
     assert_eq!(run(src), "9\n[11, 20]\n11");
 }
 
+#[test]
+fn string_literal_ending_in_an_escaped_quote() {
+    let src = "println(\"say \\\"hi\\\"\")\nprintln(\"quote:\\\"\")\nprintln(\"a\" + \"q:\\\"\" + \"b\")\nprintln(\"x,\\\"y\", \"z\")\n";
+    assert_eq!(run(src), "say \"hi\"\nquote:\"\naq:\"b\nx,\"y z");
+}
+
