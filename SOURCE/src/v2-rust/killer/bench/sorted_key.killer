@@ -1,0 +1,10 @@
+a = []
+x = 7
+for i in range(150000) {
+  x = (x * 1664525 + 1013904223) % 4294967296
+  push(a, x % 1000003)
+}
+b = sorted(a, fn(v) { return (v * 31) % 1000003 })
+println(b[0])
+println(b[1000])
+println(b[len(b) - 1])

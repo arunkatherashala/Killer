@@ -79,6 +79,47 @@ fn array_index(idx: f64, len: usize) -> usize {
     }
 }
 
+/// The character at `idx` of `s` (negative counts from the end); null when out of range.
+fn index_str(s: &str, idx: f64) -> Value {
+    let i = idx as i64;
+    // ASCII prefix: character i is byte i (no need to scan or count the rest of the string)
+    if i >= 0 {
+        let u = i as usize;
+        let bytes = s.as_bytes();
+        if u < bytes.len() && bytes[..=u].is_ascii() {
+            return Value::Str((bytes[u] as char).to_string());
+        }
+    }
+    let len = crate::lang_builtins::char_len(s) as i64;
+    let i = if i < 0 { i + len } else { i };
+    let ch = if i >= 0 { crate::lang_builtins::char_at(s, i as usize) } else { None };
+    ch.map(Value::Str).unwrap_or(Value::Null)
+}
+
+/// `object[index]` for arrays, strings (by character), dicts and objects.
+fn index_value(object: &Value, index: &Value) -> Result<Value, VmError> {
+    match (object, index) {
+        (Value::Array(arr), Value::Number(idx)) => {
+            let i = array_index(*idx, arr.len());
+            Ok(arr.get(i).unwrap_or(Value::Null))
+        }
+        (Value::Str(s), Value::Number(idx)) => Ok(index_str(s, *idx)),
+        (Value::Dict(dict), Value::Str(key)) => Ok(dict.get(key).unwrap_or(Value::Null)),
+        (Value::Dict(dict), idx) => {
+            let key = match idx {
+                Value::Number(n) => n.to_string(),
+                _ => format!("{idx}"),
+            };
+            Ok(dict.get(&key).unwrap_or(Value::Null))
+        }
+        (Value::Object(obj), Value::Str(key)) => Ok(obj.get_field(key).unwrap_or(Value::Null)),
+        _ => Err(VmError::runtime_error(format!(
+            "Cannot index {} with {}",
+            object, index
+        ))),
+    }
+}
+
 /// One active `try` region (see `Instruction::TryBegin`).
 pub(crate) struct TryHandler {
     pub(crate) catch_ip: usize,
@@ -235,7 +276,7 @@ pub struct VirtualMachine {
     // NATIVE JIT: x86-64 machine code for hot loops (March 27, 2026)
     jit_engine: JitEngine,  // Detects hot loops + compiles to native x86-64
     fn_jit: crate::jit_fn::FnJit,  // pure numeric functions -> native x86-64
-    method_names: std::collections::HashSet<String>,  // every method name any class defines
+    method_names: crate::fast_hash::FastSet<String>,  // every method name any class defines
 
     // v2.2: Shared program reference for spawned threads
     current_program: Option<std::sync::Arc<Program>>,
@@ -248,6 +289,15 @@ pub struct VirtualMachine {
     reactive_graph: HashMap<String, (Vec<String>, usize, usize)>,
     /// Variable history for `@` time-travel: name → ring buffer of past values (max 10)
     var_history: HashMap<String, std::collections::VecDeque<Value>>,
+    /// History is only recorded once a program that reads it (`LoadHistory`) is running (always in the REPL).
+    track_history: bool,
+    /// True when the running program mentions `args` anywhere; only then does each call build
+    /// the implicit `args` array (it costs an allocation per call).
+    uses_args: bool,
+    /// `new C(...)`: the constructor (`init`) found for each class, including inherited ones.
+    init_cache: crate::fast_hash::FastMap<String, Option<usize>>,
+    /// Inline cache for `CallMethodDynamic`, keyed by instruction index: (class, method start, arity).
+    method_ic: crate::fast_hash::FastMap<usize, (String, usize, usize)>,
     /// GC: allocation counter — triggers gc_collect every GC_INTERVAL array allocs.
     gc_alloc_epoch: u64,
     /// When true, `run()` preserves scopes and classes across calls (REPL mode).
@@ -299,11 +349,15 @@ impl Default for VirtualMachine {
             exec_start: None,
             jit_engine: JitEngine::new(),
             fn_jit: crate::jit_fn::FnJit::new(),
-            method_names: std::collections::HashSet::new(),
+            method_names: Default::default(),
             current_program: None,
             capabilities: CapabilitySet::trusted_local(),
             reactive_graph: HashMap::new(),
             var_history: HashMap::new(),
+            track_history: false,
+            uses_args: true,
+            init_cache: Default::default(),
+            method_ic: Default::default(),
             gc_alloc_epoch: 0,
             repl_mode: false,
         }
@@ -359,11 +413,15 @@ impl VirtualMachine {
             exec_start: None,
             jit_engine: JitEngine::new(),
             fn_jit: crate::jit_fn::FnJit::new(),
-            method_names: std::collections::HashSet::new(),
+            method_names: Default::default(),
             current_program: None,
             capabilities: CapabilitySet::trusted_local(),
             reactive_graph: HashMap::new(),
             var_history: HashMap::new(),
+            track_history: false,
+            uses_args: true,
+            init_cache: Default::default(),
+            method_ic: Default::default(),
             gc_alloc_epoch: 0,
             repl_mode: false,
         }
@@ -559,6 +617,17 @@ impl VirtualMachine {
     pub fn run(&mut self, program: &Program) -> Result<(), VmError> {
         // Filled on first SpawnCall* if needed (see `program_arc_for_spawn`).
         self.current_program = None;
+        if self.repl_mode || program.instructions.iter().any(|i| matches!(i, Instruction::LoadHistory { .. })) {
+            self.track_history = true;
+        }
+        self.method_ic.clear();
+        self.init_cache.clear();
+        self.uses_args = self.repl_mode
+            || VM_DBG.with(|c| c.borrow().is_some())
+            || program.instructions.iter().any(|i| match i {
+                Instruction::Load(n) | Instruction::Store(n) | Instruction::StoreLocal(n) => n == "args",
+                other => format!("{other:?}").contains("args"),
+            });
         self.fn_jit.reset();
         self.method_names = program.method_bytecode.keys().map(|(_, m)| m.clone()).collect();
         self.ip = 0;
@@ -947,6 +1016,29 @@ impl VirtualMachine {
                         Some(Value::Number(n)) => Value::Number(*n),
                         Some(Value::Bool(b)) => Value::Bool(*b),
                         Some(Value::Null) | None => Value::Null,
+                        Some(Value::Str(s)) => {
+                            // `s[i]` / `len(s)` on a string slot: read it in place instead of
+                            // copying the whole string just to look at one character (the
+                            // instructions that follow are left intact, so jumps stay valid).
+                            match (program.instructions.get(self.ip + 1), program.instructions.get(self.ip + 2)) {
+                                (Some(Instruction::LoadSlot(b)), Some(Instruction::IndexRead)) => {
+                                    if let Some(Value::Number(n)) = frame.get(*b as usize) {
+                                        let r = index_str(s, *n);
+                                        self.stack.push(r);
+                                        self.ip += 3;
+                                        continue;
+                                    }
+                                    Value::Str(s.clone())
+                                }
+                                (Some(Instruction::CallBuiltinId(0, 1)), _) => {
+                                    let n = crate::lang_builtins::char_len(s);
+                                    self.stack.push(Value::Number(n as f64));
+                                    self.ip += 2;
+                                    continue;
+                                }
+                                _ => Value::Str(s.clone()),
+                            }
+                        }
                         Some(other) => other.clone(),
                     };
                     self.stack.push(value);
@@ -1017,24 +1109,24 @@ impl VirtualMachine {
                         VmError::runtime_error("STORE requires one value on stack".to_string())
                     })?;
 
-                    // OPTIMIZATION: Record variable store for hot variable tracking
-                    self.scope_var_cache.access(name, self.scopes.len());
-
                     // TIME-TRAVEL: push current value to history before overwriting
-                    if let Ok(old) = self.load_var(name) {
-                        let hist = self.var_history.entry(name.clone()).or_insert_with(std::collections::VecDeque::new);
-                        if hist.len() >= 10 { hist.pop_front(); }
-                        hist.push_back(old);
+                    // (only when the program reads history; it clones the old value)
+                    if self.track_history {
+                        if let Ok(old) = self.load_var(name) {
+                            let hist = self.var_history.entry(name.clone()).or_insert_with(std::collections::VecDeque::new);
+                            if hist.len() >= 10 { hist.pop_front(); }
+                            hist.push_back(old);
+                        }
                     }
 
                     self.store_var(name, value)?;
 
                     // REACTIVE: recompute any live vars that depend on this name
-                    let dependents: Vec<(String, usize, usize)> = self.reactive_graph
+                    let dependents: Vec<(String, usize, usize)> = if self.reactive_graph.is_empty() { Vec::new() } else { self.reactive_graph
                         .iter()
                         .filter(|(_, (deps, _, _))| deps.contains(name))
                         .map(|(k, (_, s, c))| (k.clone(), *s, *c))
-                        .collect();
+                        .collect() };
                     for (live_name, instr_start, instr_count) in dependents {
                         let saved_ip = self.ip;
                         self.ip = instr_start;
@@ -1099,9 +1191,6 @@ impl VirtualMachine {
                     self.store_local(name, value);
                 }
                 Instruction::Load(name) => {
-                    // OPTIMIZATION: Record variable load for hot variable tracking
-                    self.scope_var_cache.access(name, self.scopes.len());
-                    
                     let value = self.load_var(name)?;
                     self.stack.push(value);
                 }
@@ -2228,37 +2317,14 @@ impl VirtualMachine {
                     }
 
                     let expected_arity = program.function_arities.get(target).copied().unwrap_or(*arg_count);
-
-                    let mut args = Vec::with_capacity(*arg_count);
-                    for _ in 0..*arg_count {
-                        args.push(self.pop_value()?);
+                    if self.stack.len() < *arg_count {
+                        return Err(VmError::runtime_error("Stack underflow".to_string()));
                     }
-                    args.reverse();
 
                     self.call_stack.push(self.ip + 1);
                     self.push_scope();
                     self.locals_stack.push(Vec::new());  // new locals frame for this call
-
-                    // Expose all passed arguments as `args` for variadic use-cases.
-                    self.store_local("args", Value::from(args.clone()));
-
-                    for (index, value) in args.iter().cloned().enumerate() {
-                        if index < ARG_NAMES.len() {
-                            self.store_local(ARG_NAMES[index], value);
-                        } else {
-                            self.store_local_owned(format!("arg{index}"), value);
-                        }
-                    }
-
-                    if args.len() < expected_arity {
-                        for index in args.len()..expected_arity {
-                            if index < ARG_NAMES.len() {
-                                self.store_local(ARG_NAMES[index], Value::Null);
-                            } else {
-                                self.store_local_owned(format!("arg{index}"), Value::Null);
-                            }
-                        }
-                    }
+                    self.bind_call_args(*arg_count, expected_arity, self.uses_args);
                     self.ip = *target;
                     continue;
                 }
@@ -2269,89 +2335,47 @@ impl VirtualMachine {
                         .get(target)
                         .copied()
                         .unwrap_or(*arg_count);
-                    let mut args = Vec::with_capacity(*arg_count);
-                    for _ in 0..*arg_count {
-                        args.push(self.pop_value()?);
+                    if self.stack.len() < *arg_count {
+                        return Err(VmError::runtime_error("Stack underflow".to_string()));
                     }
-                    args.reverse();
                     // Drop current frame like `Ret`, but keep `call_stack` — we re-enter the same callee.
+                    // (the arguments stay on the value stack until bound, so they survive the frame swap)
                     self.pop_scope()?;
                     if self.locals_stack.len() > 1 {
                         self.locals_stack.pop();
                     }
                     self.push_scope();
                     self.locals_stack.push(Vec::new());
-                    self.store_local("args", Value::from(args.clone()));
-                    for (index, value) in args.iter().cloned().enumerate() {
-                        if index < ARG_NAMES.len() {
-                            self.store_local(ARG_NAMES[index], value);
-                        } else {
-                            self.store_local_owned(format!("arg{index}"), value);
-                        }
-                    }
-                    if args.len() < expected_arity {
-                        for index in args.len()..expected_arity {
-                            if index < ARG_NAMES.len() {
-                                self.store_local(ARG_NAMES[index], Value::Null);
-                            } else {
-                                self.store_local_owned(format!("arg{index}"), Value::Null);
-                            }
-                        }
-                    }
+                    self.bind_call_args(*arg_count, expected_arity, self.uses_args);
                     self.ip = *target;
                     continue;
                 }
                 Instruction::CallDynamic { arg_count } => {
-                    // Pop arguments from stack in reverse order
-                    let mut args = Vec::with_capacity(*arg_count);
-                    for _ in 0..*arg_count {
-                        args.push(self.pop_value()?);
+                    // Stack: [function, arg0 .. argN-1]. The function sits below its arguments.
+                    if self.stack.len() < *arg_count + 1 {
+                        return Err(VmError::runtime_error("Stack underflow".to_string()));
                     }
-                    args.reverse();
+                    let func_at = self.stack.len() - *arg_count - 1;
+                    let func_value = self.stack.remove(func_at);
 
-                    // Pop the function from stack
-                    let func_value = self.pop_value()?;
-                    
                     match func_value {
                         Value::Function { params, bytecode_start, captured } => {
                             let expected_arity = params.len();
-                            
+
                             // Validate bytecode address
                             self.ensure_jump_target(program, bytecode_start)?;
-                            
+
                             self.call_stack.push(self.ip + 1);
                             self.push_scope();
                             self.locals_stack.push(Vec::new());  // new locals frame
-                            
+
                             // Restore captured variables from closure; written back at `Ret`
-                            for (var_name, var_value) in captured.snapshot() {
-                                self.store_local(&var_name, var_value);
-                            }
+                            captured.each(|var_name, var_value| self.store_local(var_name, var_value.clone()));
                             if !captured.is_empty() {
                                 self.closure_frames.push((self.call_stack.len(), captured.clone()));
                             }
 
-                            // Expose all passed arguments as `args` for variadic use-cases.
-                            self.store_local("args", Value::from(args.clone()));
-
-                            for (index, value) in args.iter().cloned().enumerate() {
-                                if index < ARG_NAMES.len() {
-                                    self.store_local(ARG_NAMES[index], value);
-                                } else {
-                                    self.store_local_owned(format!("arg{index}"), value);
-                                }
-                            }
-
-                            if args.len() < expected_arity {
-                                for index in args.len()..expected_arity {
-                                    if index < ARG_NAMES.len() {
-                                        self.store_local(ARG_NAMES[index], Value::Null);
-                                    } else {
-                                        self.store_local_owned(format!("arg{index}"), Value::Null);
-                                    }
-                                }
-                            }
-                            
+                            self.bind_call_args(*arg_count, expected_arity, self.uses_args);
                             self.ip = bytecode_start;
                             continue;
                         }
@@ -2365,11 +2389,7 @@ impl VirtualMachine {
                 Instruction::Ret => {
                     if self.closure_frames.last().map_or(false, |(d, _)| *d == self.call_stack.len()) {
                         let (_, caps) = self.closure_frames.pop().expect("checked");
-                        for name in caps.names() {
-                            if let Ok(v) = self.load_var(&name) {
-                                caps.set(&name, v);
-                            }
-                        }
+                        caps.refresh_with(|name| self.load_var(name).ok());
                     }
                     self.pop_scope()?;
                     // Pop the locals frame pushed by Call (keep frame 0 for top-level)
@@ -2461,71 +2481,46 @@ impl VirtualMachine {
                 Instruction::IndexRead => {
                     let index = self.pop_value()?;
                     let object = self.pop_value()?;
-                    match (&object, &index) {
+                    let result = index_value(&object, &index)?;
+                    self.stack.push(result);
+                }
+                Instruction::IndexWrite(name) => {
+                    let value = self.pop_value()?;
+                    let index = self.pop_value()?;
+                    let object = self.load_var(name)?;
+                    // Arrays, dicts and objects are shared handles: mutating through the clone that
+                    // `load_var` returned already updates the variable, so no write-back is needed.
+                    // (The Math/Physics/Array singletons keep the old behaviour of binding a variable.)
+                    let write_back = matches!(name.as_str(), "Math" | "Physics" | "Array");
+                    match (object, &index) {
                         (Value::Array(arr), Value::Number(idx)) => {
                             let i = array_index(*idx, arr.len());
-                            self.stack
-                                .push(arr.get(i).unwrap_or(Value::Null));
-                        }
-                        (Value::Str(s), Value::Number(idx)) => {
-                            // characters, with negative indices counting from the end
-                            let len = crate::lang_builtins::char_len(s) as i64;
-                            let i = *idx as i64;
-                            let i = if i < 0 { i + len } else { i };
-                            let ch = if i >= 0 { crate::lang_builtins::char_at(s, i as usize) } else { None };
-                            self.stack.push(ch.map(Value::Str).unwrap_or(Value::Null));
+                            if i < arr.len() {
+                                arr.set(i, value);
+                                if write_back { self.store_var(name, Value::Array(arr))?; }
+                            }
                         }
                         (Value::Dict(dict), Value::Str(key)) => {
-                            self.stack
-                                .push(dict.get(key).unwrap_or(Value::Null));
+                            dict.set(key, value);
+                            if write_back { self.store_var(name, Value::Dict(dict))?; }
                         }
                         (Value::Dict(dict), idx) => {
                             let key = match idx {
                                 Value::Number(n) => n.to_string(),
                                 _ => format!("{idx}"),
                             };
-                            self.stack
-                                .push(dict.get(&key).unwrap_or(Value::Null));
+                            dict.insert(key, value);
+                            if write_back { self.store_var(name, Value::Dict(dict))?; }
                         }
                         (Value::Object(obj), Value::Str(key)) => {
-                            self.stack
-                                .push(obj.get_field(key).unwrap_or(Value::Null));
-                        }
-                        _ => {
-                            return Err(VmError::runtime_error(format!(
-                                "Cannot index {} with {}",
-                                object, index
-                            )))
-                        }
-                    }
-                }
-                Instruction::IndexWrite(name) => {
-                    let value = self.pop_value()?;
-                    let index = self.pop_value()?;
-                    let object = self.load_var(name)?;
-                    match (object, &index) {
-                        (Value::Array(arr), Value::Number(idx)) => {
-                            let i = array_index(*idx, arr.len());
-                            if i < arr.len() {
-                                arr.set(i, value);
-                                self.store_var(name, Value::Array(arr))?;
+                            {
+                                let mut inst = obj.borrow_mut();
+                                match inst.fields.get_mut(key.as_str()) {
+                                    Some(slot) => *slot = value,
+                                    None => { inst.fields.insert(key.clone(), value); }
+                                }
                             }
-                        }
-                        (Value::Dict(mut dict), Value::Str(key)) => {
-                            dict.set(key, value);
-                            self.store_var(name, Value::Dict(dict))?;
-                        }
-                        (Value::Dict(mut dict), idx) => {
-                            let key = match idx {
-                                Value::Number(n) => n.to_string(),
-                                _ => format!("{idx}"),
-                            };
-                            dict.insert(key, value);
-                            self.store_var(name, Value::Dict(dict))?;
-                        }
-                        (Value::Object(mut obj), Value::Str(key)) => {
-                            obj.set_field(key.clone(), value);
-                            self.store_var(name, Value::Object(obj))?;
+                            if write_back { self.store_var(name, Value::Object(obj))?; }
                         }
                         _ => {
                             return Err(VmError::runtime_error(format!(
@@ -3909,47 +3904,48 @@ impl VirtualMachine {
                     if !self.classes.contains_key(class_name) {
                         return Err(VmError::runtime_error(format!("Class {} not defined", class_name)));
                     }
-                    let mut ctor_args: Vec<Value> = Vec::with_capacity(*arg_count);
-                    for _ in 0..*arg_count {
-                        ctor_args.push(self.pop_value()?);
+                    if self.stack.len() < *arg_count {
+                        return Err(VmError::runtime_error("Stack underflow".to_string()));
                     }
-                    ctor_args.reverse();
 
-                    // nearest `init` along class -> parent -> grandparent ...
-                    let mut found: Option<usize> = None;
-                    let mut current = class_name.clone();
-                    for _ in 0..64 {
-                        if let Some(&start) = program.method_bytecode.get(&(current.clone(), "init".to_string())) {
-                            found = Some(start);
-                            break;
+                    // nearest `init` along class -> parent -> grandparent ... (cached per class)
+                    let found: Option<usize> = match self.init_cache.get(class_name.as_str()) {
+                        Some(f) => *f,
+                        None => {
+                            let mut found: Option<usize> = None;
+                            let mut current = class_name.clone();
+                            for _ in 0..64 {
+                                if let Some(&start) = program.method_bytecode.get(&(current.clone(), "init".to_string())) {
+                                    found = Some(start);
+                                    break;
+                                }
+                                match program.classes.get(&current) {
+                                    Some((Some(parent), _)) => current = parent.clone(),
+                                    _ => break,
+                                }
+                            }
+                            self.init_cache.insert(class_name.clone(), found);
+                            found
                         }
-                        match program.classes.get(&current) {
-                            Some((Some(parent), _)) => current = parent.clone(),
-                            _ => break,
-                        }
-                    }
+                    };
 
                     let instance = ObjectInstance { class_name: class_name.clone(), fields: HashMap::new() };
                     let object = Value::Object(crate::value::SharedObject::new(instance));
                     match found {
                         Some(start) => {
-                            let arity = program.function_arities.get(&start).copied().unwrap_or(ctor_args.len());
+                            let arity = program.function_arities.get(&start).copied().unwrap_or(*arg_count);
                             self.call_stack.push(self.ip + 1);
                             self.push_scope();
                             self.locals_stack.push(Vec::new());
                             self.store_local("this", object);
-                            let passed = ctor_args.len();
-                            for (idx, arg) in ctor_args.into_iter().enumerate() {
-                                if idx < ARG_NAMES.len() { self.store_local(ARG_NAMES[idx], arg); } else { self.store_local_owned(format!("arg{idx}"), arg); }
-                            }
-                            for idx in passed..arity {
-                                if idx < ARG_NAMES.len() { self.store_local(ARG_NAMES[idx], Value::Null); } else { self.store_local_owned(format!("arg{idx}"), Value::Null); }
-                            }
+                            self.bind_call_args(*arg_count, arity, false);
                             self.ip = start;
                             continue; // init's Ret pushes the object
                         }
                         None => {
                             // no constructor anywhere: arguments are ignored, like JavaScript
+                            let keep = self.stack.len() - *arg_count;
+                            self.stack.truncate(keep);
                             self.stack.push(object);
                         }
                     }
@@ -4050,6 +4046,24 @@ impl VirtualMachine {
                     return Err(VmError::runtime_error("Method calls not yet implemented".to_string()));
                 }
                 Instruction::CallMethodDynamic { method_name, arg_count } => {
+                    // Inline cache: same call site, same receiver class -> same method.
+                    if self.stack.len() > *arg_count {
+                        let obj_at = self.stack.len() - *arg_count - 1;
+                        let hit = match (&self.stack[obj_at], self.method_ic.get(&self.ip)) {
+                            (Value::Object(o), Some((cls, start, arity))) if o.borrow().class_name == *cls => Some((*start, *arity)),
+                            _ => None,
+                        };
+                        if let Some((start, arity)) = hit {
+                            let object = self.stack.remove(obj_at);
+                            self.call_stack.push(self.ip + 1);
+                            self.push_scope();
+                            self.locals_stack.push(Vec::new());
+                            self.store_local("this", object);
+                            self.bind_call_args(*arg_count, arity, false);
+                            self.ip = start;
+                            continue;
+                        }
+                    }
                     // Pop arguments in reverse order
                     let mut args = Vec::with_capacity(*arg_count);
                     for _ in 0..*arg_count {
@@ -4131,6 +4145,8 @@ impl VirtualMachine {
                             } // end of if method_bytecode_start.is_none()
 
                             if let Some(method_bytecode_start) = method_bytecode_start {
+                                let arity = program.function_arities.get(&method_bytecode_start).copied().unwrap_or(0);
+                                self.method_ic.insert(self.ip, (obj_inst.class_name(), method_bytecode_start, arity));
                                 // Save current state and prepare for method call
                                 self.call_stack.push(self.ip + 1);
                                 self.push_scope();
@@ -5861,7 +5877,9 @@ impl VirtualMachine {
             self.closure_frames.push((self.call_stack.len(), captured.clone()));
         }
         let arity = program.function_arities.get(&start).copied().unwrap_or(params.len());
-        self.store_local("args", Value::from(args.clone()));
+        if self.uses_args {
+            self.store_local("args", Value::from(args.clone()));
+        }
         for index in 0..arity.max(args.len()) {
             let value = args.get(index).cloned().unwrap_or(Value::Null);
             if index < ARG_NAMES.len() {
@@ -6102,6 +6120,33 @@ impl VirtualMachine {
         sum
     }
 
+    /// Bind the `n` call arguments on top of the value stack into the freshly pushed scope as
+    /// `arg0..`, padding missing parameters with null. The implicit `args` array is only built for
+    /// programs that mention `args`.
+    fn bind_call_args(&mut self, n: usize, expected_arity: usize, with_args: bool) {
+        if with_args {
+            let base = self.stack.len() - n;
+            let args: Vec<Value> = self.stack[base..].to_vec();
+            self.store_local("args", Value::from(args));
+        }
+        for index in (0..n).rev() {
+            let value = self.stack.pop().unwrap_or(Value::Null);
+            self.store_arg(index, value);
+        }
+        for index in n..expected_arity {
+            self.store_arg(index, Value::Null);
+        }
+    }
+
+    #[inline]
+    fn store_arg(&mut self, index: usize, value: Value) {
+        if index < ARG_NAMES.len() {
+            self.store_local(ARG_NAMES[index], value);
+        } else {
+            self.store_local_owned(format!("arg{index}"), value);
+        }
+    }
+
     fn push_scope(&mut self) {
         self.scopes.push(Default::default());
     }
@@ -6163,8 +6208,8 @@ impl VirtualMachine {
         // Search existing scopes from top to bottom — update in place if found.
         // This allows inner scopes (functions) to mutate outer variables.
         for scope in self.scopes.iter_mut().rev() {
-            if scope.contains_key(name) {
-                scope.insert(name.to_string(), value);
+            if let Some(slot) = scope.get_mut(name) {
+                *slot = value;
                 return Ok(());
             }
         }

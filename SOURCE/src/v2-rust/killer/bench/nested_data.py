@@ -1,0 +1,20 @@
+rows = []
+for i in range(100000):
+    rows.append({"id": i, "name": "user" + str(i), "score": i % 97, "tags": [i % 3, i % 5]})
+total = 0
+cnt = 0
+for r in rows:
+    total = total + r["score"] + r["tags"][1]
+    if r["name"] == "user500":
+        cnt = cnt + 1
+print(total)
+print(cnt)
+groups = {}
+for r in rows:
+    k = "s" + str(r["score"])
+    if k in groups:
+        groups[k].append(r["id"])
+    else:
+        groups[k] = [r["id"]]
+print(len(groups.keys()))
+print(len(groups["s5"]))

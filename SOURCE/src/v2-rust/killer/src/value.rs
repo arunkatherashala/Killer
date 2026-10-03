@@ -442,6 +442,20 @@ impl Captures {
     pub fn names(&self) -> Vec<String> {
         self.0.borrow().keys().cloned().collect()
     }
+    /// Visit every captured variable without copying the map.
+    pub fn each(&self, mut f: impl FnMut(&str, &Value)) {
+        for (k, v) in self.0.borrow().iter() {
+            f(k, v);
+        }
+    }
+    /// Overwrite each captured value in place with `f(name)` when it returns one (no key allocation).
+    pub fn refresh_with(&self, mut f: impl FnMut(&str) -> Option<Value>) {
+        for (k, slot) in self.0.borrow_mut().iter_mut() {
+            if let Some(v) = f(k) {
+                *slot = v;
+            }
+        }
+    }
     pub fn values(&self) -> Vec<Value> {
         self.0.borrow().values().cloned().collect()
     }

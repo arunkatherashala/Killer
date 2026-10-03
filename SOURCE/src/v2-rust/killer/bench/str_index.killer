@@ -1,0 +1,25 @@
+s = ""
+for i in range(20000) {
+  s = s + chr(97 + i % 26)
+}
+c = 0
+for i in range(len(s)) {
+  if s[i] == "e" {
+    c = c + 1
+  }
+}
+println(c)
+m = 0
+for i in range(len(s) - 3) {
+  if s[i:i + 3] == "abc" {
+    m = m + 1
+  }
+}
+println(m)
+v = 0
+for ch in s {
+  if ch == "z" {
+    v = v + 1
+  }
+}
+println(v)
