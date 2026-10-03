@@ -51,7 +51,12 @@ impl SourceLocation {
 
 impl Display for SourceLocation {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}:{}:{}", self.file, self.line, self.column)?;
+        // column 0 means "line only" (e.g. a runtime error located through the line table)
+        if self.column == 0 {
+            write!(f, "{}:{}", self.file, self.line)?;
+        } else {
+            write!(f, "{}:{}:{}", self.file, self.line, self.column)?;
+        }
         if let Some(ctx) = &self.context {
             write!(f, " ({})", ctx)?;
         }

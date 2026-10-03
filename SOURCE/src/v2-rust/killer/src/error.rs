@@ -194,6 +194,39 @@ impl VmError {
     }
 }
 
+// ── Source location of runtime errors ───────────────────────────────────────
+
+impl VmError {
+    fn location_slot(&mut self) -> Option<&mut Option<SourceLocation>> {
+        match self {
+            VmError::ParseError { location, .. }
+            | VmError::RuntimeError { location, .. }
+            | VmError::IoError { location, .. }
+            | VmError::SecurityError { location, .. }
+            | VmError::TypeError { location, .. } => Some(location),
+            VmError::CompilationError(_) => None,
+            VmError::Rich { inner, .. } => inner.location_slot(),
+        }
+    }
+
+    /// Attach `location` unless the error already has one. The innermost (first) location wins,
+    /// which is what makes nested calls report the line that actually failed.
+    pub fn set_location_if_missing(&mut self, location: impl FnOnce() -> SourceLocation) {
+        if let Some(slot) = self.location_slot() {
+            if slot.is_none() {
+                *slot = Some(location());
+            }
+        }
+    }
+
+    /// Drop the location (used when an error is turned into a value for `catch`).
+    pub fn clear_location(&mut self) {
+        if let Some(slot) = self.location_slot() {
+            *slot = None;
+        }
+    }
+}
+
 // ── Accessors ───────────────────────────────────────────────────────────────
 
 impl VmError {
@@ -305,10 +338,14 @@ impl VmError {
 
         // ── location arrow ──────────────────────────────────────────────
         if let Some(loc) = loc {
-            out.push_str(&format!(
-                "  --> line {}, column {}\n",
-                loc.line, loc.column,
-            ));
+            if loc.column == 0 {
+                out.push_str(&format!("  --> {}:{}\n", loc.file, loc.line));
+            } else {
+                out.push_str(&format!(
+                    "  --> line {}, column {}\n",
+                    loc.line, loc.column,
+                ));
+            }
         }
 
         // ── source snippet with caret ───────────────────────────────────
@@ -383,10 +420,16 @@ impl Display for VmError {
                 location,
                 suggestion,
             } => {
-                write!(f, "Runtime error: {message}")?;
+                // the location belongs on the first line, before any embedded hint lines
+                let (first, rest) = match message.find('\n') {
+                    Some(i) if location.is_some() => message.split_at(i),
+                    _ => (message.as_str(), ""),
+                };
+                write!(f, "Runtime error: {first}")?;
                 if let Some(loc) = location {
                     write!(f, " at {loc}")?;
                 }
+                write!(f, "{rest}")?;
                 if let Some(sugg) = suggestion {
                     write!(f, "\nHint: {sugg}")?;
                 }

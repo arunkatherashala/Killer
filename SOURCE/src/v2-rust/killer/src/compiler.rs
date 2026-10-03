@@ -264,6 +264,9 @@ struct CompilerState {
     method_bytecode: HashMap<(String, String), usize>,
     /// `live` variable registry: name → (deps, recompute_instr_start, recompute_instr_count)
     live_vars: HashMap<String, (Vec<String>, usize, usize)>,
+    /// (first instruction index, line number in the rewritten text) of every statement compiled;
+    /// becomes `Program::line_table` once mapped back to the user's files.
+    line_marks: Vec<(usize, usize)>,
 }
 
 #[derive(Debug, Clone)]
@@ -306,24 +309,66 @@ struct CompileContext {
 }
 
 pub fn compile_killer_subset(source: &str) -> Result<Program, VmError> {
-    let imported = crate::imports::resolve(source).map_err(VmError::parse_error_simple)?;
-    let checked = crate::typecheck::process(&imported)?;
-    let lowered = crate::controlflow::lower(&checked);
-    let lifted = crate::lambda::lift(&lowered);
-    let sugared = crate::sugar::preprocess(&lifted, &|l| parse_polyglot_header(l).is_some());
+    // Every rewriting pass returns its text plus a per-line map back to its input; composing them
+    // (see `sourcemap`) tells us the original file and line of each line the compiler sees.
+    let (imported, map) = crate::imports::resolve_mapped(source).map_err(VmError::parse_error_simple)?;
+    let checked = crate::typecheck::process(&imported).map_err(|e| remap_error(e, &map))?;
+    let (lowered, pass) = crate::controlflow::lower_mapped(&checked);
+    let map = map.compose(&pass);
+    let (lifted, pass) = crate::lambda::lift_mapped(&lowered);
+    let map = map.compose(&pass);
+    let (sugared, pass) = crate::sugar::preprocess_mapped(&lifted, &|l| parse_polyglot_header(l).is_some());
+    let map = map.compose(&pass);
     let source = sugared.as_str();
-    let mut state = CompilerState::default();
 
     // Phase 0: Convert indentation-based syntax → brace-delimited syntax,
     // and strip `--` / `//` comments.  Must run before preprocess_polyglot so that
     // subsequent stages always see `{}`-delimited blocks.
-    let indented = preprocess_indentation(source);
+    let (indented, pass) = preprocess_indentation_mapped(source);
+    let map = map.compose(&pass);
 
     // Pre-process @lang{} blocks BEFORE normalize_lines() splits braces.
     // This preserves embedded language code (Go, Rust, etc.) that uses { }.
-    let preprocessed = preprocess_polyglot(&indented);
-    let preprocessed = preprocess_ui_sugar(&preprocessed);
+    let (preprocessed, pass) = preprocess_polyglot_mapped(&indented);
+    let map = map.compose(&pass);
+    let preprocessed = preprocess_ui_sugar(&preprocessed); // one output line per input line
     let lines = normalize_lines(&preprocessed);
+    compile_normalized(&lines, &map).map_err(|e| remap_error(e, &map))
+}
+
+/// Rewrite the line numbers inside a compile error from the compiler's text to the user's files.
+fn remap_error(error: VmError, map: &crate::sourcemap::SourceMap) -> VmError {
+    match error {
+        VmError::ParseError { message, location, suggestion } => {
+            // `a // 2` is a comment, which leaves the line broken in confusing ways: name the cause
+            let hint = message
+                .strip_prefix("Line ")
+                .and_then(|r| r.split(|c: char| !c.is_ascii_digit()).next())
+                .and_then(|n| n.parse::<usize>().ok())
+                .and_then(|n| map.loc(n))
+                .and_then(|l| map.source_line(l))
+                .and_then(crate::hints::floor_division_hint);
+            let mut message = crate::sourcemap::remap_message(&message, map);
+            if let Some(h) = hint {
+                message = match message.find(": ") {
+                    Some(i) if message.starts_with("Line ") => format!("{}: {}", &message[..i], h),
+                    _ => format!("{message} ({h})"),
+                };
+            }
+            VmError::ParseError { message, location, suggestion }
+        }
+        VmError::Rich { inner, source_context, stack_frames } => VmError::Rich {
+            inner: Box::new(remap_error(*inner, map)),
+            source_context,
+            stack_frames,
+        },
+        other => other,
+    }
+}
+
+/// Compile the normalized lines (`(line number in the rewritten text, statement)`).
+fn compile_normalized(lines: &[(usize, String)], map: &crate::sourcemap::SourceMap) -> Result<Program, VmError> {
+    let mut state = CompilerState::default();
     state.global_vars = scan_globals(&lines);
     state.signatures = scan_signatures(&lines);
     let mut cursor = 0usize;
@@ -393,6 +438,15 @@ pub fn compile_killer_subset(source: &str) -> Result<Program, VmError> {
             (name, (parent, method_list))
         }).collect();
 
+    // instruction -> original file/line, for runtime error messages (consulted only on errors)
+    let mut line_table = crate::bytecode::LineTable::default();
+    for (idx, line_no) in &state.line_marks {
+        if let Some(l) = map.loc(*line_no) {
+            let file = map.file_name(l.file);
+            line_table.push(old_to_new[(*idx).min(n_old)], file, l.line);
+        }
+    }
+
     Ok(Program {
         instructions: optimized,
         function_arities,
@@ -400,6 +454,7 @@ pub fn compile_killer_subset(source: &str) -> Result<Program, VmError> {
         method_bytecode,
         classes,
         live_vars: state.live_vars,
+        line_table,
     })
 }
 
@@ -574,6 +629,7 @@ pub fn compile_statements(statements: &[crate::ast::Stmt]) -> Result<Program, Vm
         method_bytecode: method_bytecode_map,
         classes,
         live_vars: state.live_vars,
+        line_table: Default::default(),
     })
 }
 
@@ -2242,6 +2298,8 @@ fn compile_block(
             continue;
         }
 
+        state.line_marks.push((state.instructions.len(), line_no));
+
         // @decorator — collect for the next fn definition
         if line.starts_with('@') && !line.starts_with("@lang{") {
             let decorator = line[1..].trim().to_string();
@@ -2610,6 +2668,8 @@ fn compile_if_statement(
     *cursor = end_phys + 1;
     expect_open_brace(lines, cursor, line_no, "if")?;
 
+    // (also covers `else if`, which re-enters here: its condition has its own line)
+    state.line_marks.push((state.instructions.len(), line_no));
     compile_expr_str(condition, line_no, state, context)?;
     let jump_false_index = state.instructions.len();
     state.instructions.push(Instruction::JumpIfFalse(usize::MAX));
@@ -6592,6 +6652,11 @@ fn strip_trailing_line_comment(content: &str) -> &str {
 /// Top-level scripts (no `fn`/`kfn`) always run the offside pass so Python-style
 /// `if` / `while` / `for` with indented bodies get `{` / `}` inserted.
 fn preprocess_indentation(source: &str) -> String {
+    preprocess_indentation_mapped(source).0
+}
+
+/// [`preprocess_indentation`] plus, for every output line, the index of the input line it came from.
+fn preprocess_indentation_mapped(source: &str) -> (String, Vec<usize>) {
     // Fast-path: if the source already uses braces (brace-style), return unchanged.
     // We detect this by checking if any `kfn`/`fn` line is immediately followed
     // by a `{` (either same-line inline or on the very next non-empty line).
@@ -6635,7 +6700,9 @@ fn preprocess_indentation(source: &str) -> String {
                 })
                 .collect::<Vec<_>>()
                 .join("\n");
-            return cleaned;
+            // one output line per input line
+            let n = source.lines().count().max(1);
+            return (cleaned, (0..n).collect());
         }
     }
 
@@ -6682,6 +6749,7 @@ fn preprocess_indentation(source: &str) -> String {
     //     defines the block indent. Push that indent, emit `{`.
     //   - When current indent < top of stack, pop and emit `}` until stacks match.
     let mut out_lines: Vec<String> = Vec::new();
+    let mut out_src: Vec<usize> = Vec::new(); // input line index of each entry of `out_lines`
     let mut indent_stack: Vec<usize> = vec![0]; // base indent = 0
 
     // We need to look ahead one line to determine block indent after an opener.
@@ -6715,10 +6783,12 @@ fn preprocess_indentation(source: &str) -> String {
         while indent < *indent_stack.last().unwrap_or(&0) {
             indent_stack.pop();
             out_lines.push("}".to_string());
+            out_src.push(i);
         }
 
         // Emit the content line
         out_lines.push(content.to_string());
+        out_src.push(i);
 
         // If this is a block-opener, find the next non-empty non-comment line's indent
         // and push that as the new block indent, emitting `{` for Python-style bodies only.
@@ -6748,6 +6818,7 @@ fn preprocess_indentation(source: &str) -> String {
                 if next_indent > indent {
                     indent_stack.push(next_indent);
                     out_lines.push("{".to_string());
+                    out_src.push(i);
                 }
             }
             // else: no body (definition with no body follows — edge case, skip brace)
@@ -6760,18 +6831,35 @@ fn preprocess_indentation(source: &str) -> String {
     while indent_stack.len() > 1 {
         indent_stack.pop();
         out_lines.push("}".to_string());
+        out_src.push(n.saturating_sub(1));
     }
 
-    out_lines.join("\n")
+    if out_src.is_empty() {
+        out_src.push(0);
+    }
+    (out_lines.join("\n"), out_src)
 }
 
 /// Pre-process @lang{} blocks before normalize_lines().
 fn preprocess_polyglot(source: &str) -> String {
+    preprocess_polyglot_mapped(source).0
+}
+
+/// [`preprocess_polyglot`] plus, for every output line, the index of the input line it came from
+/// (a whole `@lang { ... }` block collapses onto the line that opens it).
+fn preprocess_polyglot_mapped(source: &str) -> (String, Vec<usize>) {
     let src_lines: Vec<&str> = source.lines().collect();
     let mut out = String::new();
+    let mut map: Vec<usize> = Vec::new();
+    let (mut mapped_to, mut item_start) = (0usize, 0usize);
     let mut i = 0;
 
     while i < src_lines.len() {
+        // attribute the lines emitted for the previous item to the line it started on
+        let added = out[mapped_to..].matches('\n').count();
+        map.extend(std::iter::repeat(item_start).take(added));
+        mapped_to = out.len();
+        item_start = i;
         let raw = src_lines[i];
         let trimmed = raw.trim();
 
@@ -6838,7 +6926,10 @@ fn preprocess_polyglot(source: &str) -> String {
             i += 1;
         }
     }
-    out
+    let added = out[mapped_to..].matches('\n').count();
+    map.extend(std::iter::repeat(item_start).take(added));
+    map.push(item_start); // the empty text after the final newline
+    (out, map)
 }
 
 /// Parse a line that may begin a polyglot block.

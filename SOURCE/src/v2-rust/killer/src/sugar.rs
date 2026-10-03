@@ -15,8 +15,37 @@
 /// Rewrite `source`. `is_polyglot_header` tells whether a trimmed line opens an `@lang { ... }`
 /// block, whose contents must not be touched.
 pub fn preprocess(source: &str, is_polyglot_header: &dyn Fn(&str) -> bool) -> String {
-    let lexed = lex_pass(source, is_polyglot_header);
-    line_pass(&lexed)
+    preprocess_mapped(source, is_polyglot_header).0
+}
+
+/// Like [`preprocess`], also returning for every output line the index of the input line it came
+/// from (a collapsed multi-line string shifts the lines after it; a statement that expands into
+/// several lines maps all of them to its own line).
+pub fn preprocess_mapped(source: &str, is_polyglot_header: &dyn Fn(&str) -> bool) -> (String, Vec<usize>) {
+    let mut skips: Vec<(usize, usize)> = Vec::new();
+    let lexed = lex_pass(source, is_polyglot_header, &mut skips);
+    // lexed line j came from source line j + (lines swallowed on earlier lines)
+    let lexed_lines = crate::sourcemap::line_count(&lexed);
+    let mut lex_map: Vec<usize> = Vec::with_capacity(lexed_lines);
+    {
+        // (output line holding the string, lines it swallowed); lines after it shift by that much
+        let events: Vec<(usize, usize)> = skips
+            .iter()
+            .map(|&(off, k)| (lexed.as_bytes()[..off.min(lexed.len())].iter().filter(|&&b| b == b'\n').count(), k))
+            .collect();
+        let mut shift = 0usize;
+        let mut next_event = 0usize;
+        for line in 0..lexed_lines {
+            lex_map.push(line + shift);
+            while next_event < events.len() && events[next_event].0 == line {
+                shift += events[next_event].1;
+                next_event += 1;
+            }
+        }
+    }
+    let (text, line_map) = line_pass_mapped(&lexed);
+    let map = line_map.iter().map(|&i| lex_map[i.min(lex_map.len() - 1)]).collect();
+    (text, map)
 }
 
 fn is_ident(c: char) -> bool {
@@ -27,7 +56,7 @@ fn is_ident(c: char) -> bool {
 // Pass 1: strings, numbers, word operators
 // ------------------------------------------------------------------------------------------
 
-fn lex_pass(source: &str, is_polyglot_header: &dyn Fn(&str) -> bool) -> String {
+fn lex_pass(source: &str, is_polyglot_header: &dyn Fn(&str) -> bool, skips: &mut Vec<(usize, usize)>) -> String {
     let chars: Vec<char> = source.chars().collect();
     let n = chars.len();
     let mut out = String::with_capacity(source.len() + 16);
@@ -99,7 +128,13 @@ fn lex_pass(source: &str, is_polyglot_header: &dyn Fn(&str) -> bool) -> String {
                     j += 1;
                 }
                 out.push('"');
-                out.push_str(&escape_for_double(&body));
+                let escaped = escape_for_double(&body);
+                // a multi-line string collapses onto one line: remember how many lines vanished
+                let swallowed = body.matches('\n').count().saturating_sub(escaped.matches('\n').count());
+                if swallowed > 0 {
+                    skips.push((out.len(), swallowed));
+                }
+                out.push_str(&escaped);
                 out.push('"');
                 i = if closed { j + 3 } else { j };
                 continue;
@@ -405,18 +440,24 @@ fn split_top_level_commas(masked: &str, original: &str) -> Vec<String> {
     parts
 }
 
-fn line_pass(source: &str) -> String {
+fn line_pass_mapped(source: &str) -> (String, Vec<usize>) {
     let mut counter = 0usize;
     let mut out = String::with_capacity(source.len() + 16);
+    let mut map = Vec::new();
     let mut first = true;
-    for line in source.split('\n') {
+    for (idx, line) in source.split('\n').enumerate() {
         if !first {
             out.push('\n');
         }
         first = false;
-        out.push_str(&rewrite_line(line, &mut counter));
+        let rewritten = rewrite_line(line, &mut counter);
+        // a statement may expand into several lines; all of them belong to this one
+        for _ in 0..rewritten.matches('\n').count() + 1 {
+            map.push(idx);
+        }
+        out.push_str(&rewritten);
     }
-    out
+    (out, map)
 }
 
 fn rewrite_line(line: &str, counter: &mut usize) -> String {
@@ -539,6 +580,19 @@ mod tests {
 
     fn p(s: &str) -> String {
         preprocess(s, &|l| l.starts_with("@python") || l.starts_with("@go"))
+    }
+
+    #[test]
+    fn line_map_survives_collapsed_strings_and_expanded_statements() {
+        let (out, map) = preprocess_mapped("s = \"\"\"a\nb\nc\"\"\"\nx = 1\ny = 2\n", &|_| false);
+        assert_eq!(out, "s = \"a\\nb\\nc\"\nx = 1\ny = 2\n");
+        assert_eq!(map, vec![0, 3, 4, 5]);
+        let (out, map) = preprocess_mapped("a = 1\nb, c = c, b\nz = 3\n", &|_| false);
+        assert_eq!(map.len(), crate::sourcemap::line_count(&out), "{out}");
+        let line_of = |needle: &str| out.split('\n').position(|l| l.contains(needle)).unwrap();
+        assert_eq!(map[line_of("z = 3")], 2, "{out}");
+        assert_eq!(map[line_of("a = 1")], 0, "{out}");
+        assert!(map[..line_of("z = 3")].iter().skip(1).all(|&m| m == 1), "{map:?}");
     }
 
     #[test]

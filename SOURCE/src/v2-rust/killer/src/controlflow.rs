@@ -128,19 +128,29 @@ impl Counter {
 
 /// Lower every supported construct in `src`. Returns `src` unchanged when there are none.
 pub fn lower(src: &str) -> String {
+    lower_mapped(src).0
+}
+
+/// Like [`lower`], also returning for every output line the index of the input line it came from.
+pub fn lower_mapped(src: &str) -> (String, Vec<usize>) {
     let probe = mask(src);
     let text = String::from_utf8_lossy(&probe).to_string();
     let has_any = ["match", "switch", "do", "for"].iter().any(|k| text.contains(k));
     if !has_any {
-        return src.to_string();
+        let n = crate::sourcemap::line_count(src);
+        return (src.to_string(), (0..n).collect());
     }
     let mut counter = Counter(0);
-    lower_with(src, &mut counter)
+    lower_with_map(src, &mut counter)
 }
 
 fn lower_with(src: &str, counter: &mut Counter) -> String {
+    lower_with_map(src, counter).0
+}
+
+fn lower_with_map(src: &str, counter: &mut Counter) -> (String, Vec<usize>) {
     let m = mask(src);
-    let mut out = String::with_capacity(src.len() + 64);
+    let mut out = crate::sourcemap::Rewriter::new(src);
     let mut copied = 0usize; // everything before `copied` is already in `out`
     let mut i = 0usize;
     while i < src.len() {
@@ -166,16 +176,16 @@ fn lower_with(src: &str, counter: &mut Counter) -> String {
         };
         match lowered {
             Some((replacement, end)) => {
-                out.push_str(&src[copied..i]);
-                out.push_str(&replacement);
+                out.copy(copied, i);
+                out.replace(i, end, &replacement);
                 copied = end;
                 i = end;
             }
             None => i += 1,
         }
     }
-    out.push_str(&src[copied..]);
-    out
+    out.copy(copied, src.len());
+    out.finish()
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -615,6 +625,25 @@ fn hm_find(masked: &[u8], pat: &str) -> Option<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn line_map_follows_lowered_constructs() {
+        let s = "a = 1\nmatch a {\n  1 => foo()\n  _ => bar()\n}\nz = 2\n";
+        let (out, map) = lower_mapped(s);
+        assert_eq!(map.len(), crate::sourcemap::line_count(&out), "{out}");
+        let line_of = |needle: &str| out.split('\n').position(|l| l.contains(needle)).unwrap();
+        assert_eq!(map[line_of("a = 1")], 0, "{out}");
+        assert_eq!(map[line_of("foo()")], 2, "{out}");
+        assert_eq!(map[line_of("bar()")], 3, "{out}");
+        assert_eq!(map[line_of("z = 2")], 5, "{out}");
+        // a do-while: the body keeps its own lines, the trailing statement its own
+        let s = "n = 0\ndo {\n  n = n + 1\n  work(n)\n} while n < 3\nafter()\n";
+        let (out, map) = lower_mapped(s);
+        assert_eq!(map.len(), crate::sourcemap::line_count(&out), "{out}");
+        let line_of = |needle: &str| out.split('\n').position(|l| l.contains(needle)).unwrap();
+        assert_eq!(map[line_of("work(n)")], 3, "{out}");
+        assert_eq!(map[line_of("after()")], 5, "{out}");
+    }
 
     #[test]
     fn plain_source_is_unchanged() {

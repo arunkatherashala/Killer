@@ -240,6 +240,52 @@ pub struct Program {
     pub classes: HashMap<String, (Option<String>, Vec<(String, Vec<String>, Vec<crate::ast::Stmt>)>)>, // class_name -> (parent, methods)
     /// `live` variable registry: name → (deps, recompute_instr_start, recompute_instr_count)
     pub live_vars: HashMap<String, (Vec<String>, usize, usize)>,
+    /// Instruction index -> original file/line. Only consulted when an error is reported, so the
+    /// interpreter loop never touches it.
+    pub line_table: LineTable,
+}
+
+/// Compact instruction-index -> (file, line) table. Entries are sorted by `start`; an entry
+/// covers the instructions from `start` up to the next entry.
+#[derive(Debug, Clone, Default)]
+pub struct LineTable {
+    pub files: Vec<String>,
+    /// (first instruction index, index into `files`, 1-based line)
+    pub entries: Vec<(u32, u32, u32)>,
+}
+
+impl LineTable {
+    /// Record that the code from instruction `start` on belongs to `file:line`.
+    pub fn push(&mut self, start: usize, file: &str, line: u32) {
+        let file_idx = match self.files.iter().position(|f| f == file) {
+            Some(i) => i as u32,
+            None => {
+                self.files.push(file.to_string());
+                (self.files.len() - 1) as u32
+            }
+        };
+        let start = start as u32;
+        if let Some(last) = self.entries.last_mut() {
+            if last.1 == file_idx && last.2 == line {
+                return; // same statement continues
+            }
+            if last.0 == start {
+                // an empty statement (no code of its own): the later one wins
+                last.1 = file_idx;
+                last.2 = line;
+                return;
+            }
+        }
+        self.entries.push((start, file_idx, line));
+    }
+
+    /// Original `(file, line)` of the instruction at `ip`.
+    pub fn lookup(&self, ip: usize) -> Option<(&str, u32)> {
+        let ip = ip as u32;
+        let n = self.entries.partition_point(|e| e.0 <= ip);
+        let (_, f, l) = *self.entries.get(n.checked_sub(1)?)?;
+        Some((self.files.get(f as usize)?.as_str(), l))
+    }
 }
 
 impl Program {
@@ -531,6 +577,7 @@ impl Program {
             method_bytecode: HashMap::new(),
             classes: HashMap::new(),
             live_vars: HashMap::new(),
+            line_table: LineTable::default(),
         })
     }
 }
