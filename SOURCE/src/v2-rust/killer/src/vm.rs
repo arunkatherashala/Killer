@@ -3670,42 +3670,8 @@ impl VirtualMachine {
                                 _ => Value::Bool(false),
                             }
                         }
-                        "readFile" => {
-                            if args.len() != 1 {
-                                return Err(VmError::runtime_error(
-                                    "readFile() expects 1 argument (filename)".to_string(),
-                                ));
-                            }
-                            match &args[0] {
-                                Value::Str(filename) => {
-                                    match std::fs::read_to_string(filename) {
-                                        Ok(contents) => Value::Str(contents),
-                                        Err(_) => Value::Null,
-                                    }
-                                }
-                                _ => return Err(VmError::runtime_error(
-                                    "readFile() expects a string filename".to_string(),
-                                )),
-                            }
-                        }
-                        "writeFile" => {
-                            if args.len() != 2 {
-                                return Err(VmError::runtime_error(
-                                    "writeFile() expects 2 arguments (filename, content)".to_string(),
-                                ));
-                            }
-                            match (&args[0], &args[1]) {
-                                (Value::Str(filename), Value::Str(content)) => {
-                                    match std::fs::write(filename, content) {
-                                        Ok(_) => Value::Bool(true),
-                                        Err(_) => Value::Bool(false),
-                                    }
-                                }
-                                _ => return Err(VmError::runtime_error(
-                                    "writeFile() expects string arguments (filename, content)".to_string(),
-                                )),
-                            }
-                        }
+                        // readFile / writeFile are the ordinary builtins: they check the sandbox
+                        // capabilities and raise on failure instead of returning null / false.
                         "interpolate" => {
                             if args.is_empty() {
                                 return Err(VmError::runtime_error(

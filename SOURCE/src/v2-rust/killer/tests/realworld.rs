@@ -158,3 +158,10 @@ fn finally_runs_when_return_break_or_continue_leave_the_try() {
     );
 }
 
+#[test]
+fn read_file_raises_for_a_missing_file() {
+    // the VM used to answer null (and skip the sandbox capability check)
+    let src = "try {\n  readFile(\"definitely_missing_zz.txt\")\n  println(\"no error\")\n} catch e {\n  println(\"caught\")\n}\nwriteFile(\"rw_tmp.txt\", \"hi\")\nprintln(readFile(\"rw_tmp.txt\"))\ndeleteFile(\"rw_tmp.txt\")\n";
+    assert_eq!(run(src), "caught\nhi");
+}
+
