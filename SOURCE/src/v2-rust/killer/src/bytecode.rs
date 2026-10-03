@@ -171,7 +171,11 @@ pub enum Instruction {
     /// `super.method(args)`: call `method` starting the lookup at `class` (the parent of the class
     /// the calling method is defined in), on the object below the arguments (`this`).
     CallSuper { class: String, method_name: String, arg_count: usize },
+    /// Suspend the running generator, handing the popped value to its consumer (`next`/`for`).
     Yield,
+    /// First instruction of a generator function (after argument binding): lifts the call frame
+    /// into a generator object and returns it to the caller without running the body.
+    MakeGenerator,
     CatchEnter { var_name: Option<String> },
     FinallyEnter,
     Halt,

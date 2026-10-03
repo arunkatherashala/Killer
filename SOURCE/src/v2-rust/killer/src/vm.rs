@@ -80,14 +80,25 @@ fn array_index(idx: f64, len: usize) -> usize {
 }
 
 /// One active `try` region (see `Instruction::TryBegin`).
-struct TryHandler {
-    catch_ip: usize,
-    start_ip: usize,
-    body_end: usize,
+pub(crate) struct TryHandler {
+    pub(crate) catch_ip: usize,
+    pub(crate) start_ip: usize,
+    pub(crate) body_end: usize,
+    pub(crate) call_len: usize,
+    pub(crate) stack_len: usize,
+    pub(crate) scopes_len: usize,
+    pub(crate) locals_len: usize,
+}
+
+/// Where a running generator's frame sits in the VM, so `Yield` can lift it back out.
+struct GenCtx {
+    id: String,
+    base_stack: usize,
+    base_scopes: usize,
+    base_locals: usize,
+    base_handlers: usize,
+    /// `call_stack.len()` while the generator's own frame is on top.
     call_len: usize,
-    stack_len: usize,
-    scopes_len: usize,
-    locals_len: usize,
 }
 
 /// The text a script sees in `catch e` for an error the VM raised itself: the message without the
@@ -189,6 +200,10 @@ pub struct VirtualMachine {
     /// Calls in progress to closures with captured variables: (call depth, captures to write back).
     closure_frames: Vec<(usize, crate::value::Captures)>,
     generator_manager: GeneratorManager,  // Manages generator state
+    /// Generators currently being resumed, innermost last.
+    gen_ctx: Vec<GenCtx>,
+    /// Set by `Yield` for the `gen_resume` that is waiting for it: (value, saved frame).
+    gen_yielded: Option<(Value, crate::generator::GenFrame)>,
     yielded_values: Vec<Value>,  // Collected yielded values for generators
     collecting_yields: bool,  // Flag to track if we're inside a generator function
     instruction_cache: Option<InstructionCache>,  // Cache for instruction execution
@@ -259,6 +274,8 @@ impl Default for VirtualMachine {
             pending_throw: None,
             closure_frames: Vec::new(),
             generator_manager: GeneratorManager::default(),
+            gen_ctx: Vec::new(),
+            gen_yielded: None,
             yielded_values: Vec::new(),
             collecting_yields: false,
             instruction_cache: None,
@@ -317,6 +334,8 @@ impl VirtualMachine {
             pending_throw: None,
             closure_frames: Vec::new(),
             generator_manager: GeneratorManager::default(),
+            gen_ctx: Vec::new(),
+            gen_yielded: None,
             yielded_values: Vec::new(),
             collecting_yields: false,
             instruction_cache: None,          // never needed; call_function_sync skips it
@@ -548,6 +567,8 @@ impl VirtualMachine {
         self.pending_throw = None;
         self.closure_frames.clear();
         self.generator_manager.clear();
+        self.gen_ctx.clear();
+        self.gen_yielded = None;
         self.yielded_values.clear();
 
         if self.repl_mode && !self.scopes.is_empty() {
@@ -639,8 +660,13 @@ impl VirtualMachine {
     /// The interpreter loop. Runs until `Halt`, the end of the code, or (for a nested call made by
     /// [`call_value_nested`]) the `Ret` that returns to the nested-call sentinel.
     fn run_loop(&mut self, program: &Program) -> Result<(), VmError> {
-        // handlers below `base` belong to callers further out (this may be a nested call)
         let base = self.handlers.len();
+        self.run_loop_from(program, base)
+    }
+
+    /// `run_loop` where handlers below `base` belong to callers further out (a resumed generator
+    /// restores its own handlers above `base` before running).
+    fn run_loop_from(&mut self, program: &Program, base: usize) -> Result<(), VmError> {
         loop {
             match self.run_loop_inner(program) {
                 Ok(()) => {
@@ -841,18 +867,18 @@ impl VirtualMachine {
                             continue;
                         }
                         _ => {
-                            // a generator is drained into a list once, then iterated like one
+                            // a generator is resumed once per iteration (lazily)
                             let gen_id = match self.locals_stack.last().and_then(|f| f.get(iter_i)) {
                                 Some(Value::Generator(id)) => Some(id.clone()),
                                 _ => None,
                             };
                             if let Some(id) = gen_id {
-                                let mut items = Vec::new();
-                                while self.generator_manager.has_next(&id) {
-                                    items.push(self.generator_manager.get_next(&id, None)?);
-                                }
-                                if let Some(frame) = self.locals_stack.last_mut() {
-                                    frame[iter_i] = Value::from(items);
+                                match self.gen_next(&id, program)? {
+                                    Some(v) => {
+                                        self.store_local(var, v);
+                                        self.ip = *body;
+                                    }
+                                    None => self.ip = *exit,
                                 }
                                 continue;
                             }
@@ -2322,13 +2348,6 @@ impl VirtualMachine {
                     }
                 }
                 Instruction::Ret => {
-                    // Check if we have yielded values - if so, create a generator
-                    let yielded = self.generator_manager.take_yielded_values();
-                    if !yielded.is_empty() {
-                        let gen_id = self.generator_manager.create_generator(yielded);
-                        self.stack.pop();  // discard original return value
-                        self.stack.push(Value::Generator(gen_id));
-                    }
                     if self.closure_frames.last().map_or(false, |(d, _)| *d == self.call_stack.len()) {
                         let (_, caps) = self.closure_frames.pop().expect("checked");
                         for name in caps.names() {
@@ -3751,11 +3770,25 @@ impl VirtualMachine {
                             }
                             match &args[0] {
                                 Value::Generator(gen_id) => {
-                                    let default = if args.len() == 2 { Some(args[1].clone()) } else { None };
-                                    self.generator_manager.get_next(gen_id, default).unwrap_or(Value::Null)
+                                    let gen_id = gen_id.clone();
+                                    match self.gen_next(&gen_id, program)? {
+                                        Some(v) => v,
+                                        None => args.get(1).cloned().unwrap_or(Value::Null),
+                                    }
                                 }
                                 _ => return Err(VmError::runtime_error(
                                     "next() expects a generator".to_string(),
+                                )),
+                            }
+                        }
+                        "has_next" => {
+                            match args.first() {
+                                Some(Value::Generator(gen_id)) if args.len() == 1 => {
+                                    let gen_id = gen_id.clone();
+                                    Value::Bool(self.gen_has_next(&gen_id, program)?)
+                                }
+                                _ => return Err(VmError::runtime_error(
+                                    "has_next() expects a generator".to_string(),
                                 )),
                             }
                         }
@@ -5310,9 +5343,65 @@ impl VirtualMachine {
                         Err(e) => return Err(e),
                     }
                 }
+                Instruction::MakeGenerator => {
+                    // Lift the frame the call just built into a generator object, then return it
+                    // to the caller exactly as `Ret` would. The body has not run yet.
+                    let closure = if self.closure_frames.last().map_or(false, |(d, _)| *d == self.call_stack.len()) {
+                        self.closure_frames.pop().map(|(_, caps)| caps)
+                    } else {
+                        None
+                    };
+                    let scope = self.scopes.pop().ok_or_else(|| VmError::runtime_error("generator frame lost its scope".to_string()))?;
+                    let locals = if self.locals_stack.len() > 1 { self.locals_stack.pop().unwrap_or_default() } else { Vec::new() };
+                    let frame = crate::generator::GenFrame {
+                        scopes: vec![scope],
+                        locals,
+                        stack: Vec::new(),
+                        handlers: Vec::new(),
+                        captured: closure,
+                        ip: self.ip + 1,
+                    };
+                    let id = self.generator_manager.create(frame);
+                    self.stack.push(Value::Generator(id));
+                    let return_ip = self.call_stack.pop().ok_or_else(|| {
+                        VmError::runtime_error("generator created without an active call".to_string())
+                    })?;
+                    if return_ip == NESTED_RETURN {
+                        return Ok(());
+                    }
+                    self.ensure_jump_target(program, return_ip)?;
+                    self.ip = return_ip;
+                    continue;
+                }
                 Instruction::Yield => {
+                    let depth = self.call_stack.len();
+                    let ctx = match self.gen_ctx.last() {
+                        Some(c) if c.call_len == depth => c,
+                        _ => return Err(VmError::runtime_error("yield used outside of a generator function".to_string())),
+                    };
+                    let (base_stack, base_scopes, base_locals, base_handlers) =
+                        (ctx.base_stack, ctx.base_scopes, ctx.base_locals, ctx.base_handlers);
                     let value = self.pop_value()?;
-                    self.generator_manager.push_yield(value);
+                    let stack = self.stack.split_off(base_stack.min(self.stack.len()));
+                    let mut handlers = self.handlers.split_off(base_handlers.min(self.handlers.len()));
+                    for h in handlers.iter_mut() {
+                        h.stack_len = h.stack_len.saturating_sub(base_stack);
+                        h.scopes_len = h.scopes_len.saturating_sub(base_scopes);
+                        h.locals_len = h.locals_len.saturating_sub(base_locals);
+                    }
+                    let captured = if self.closure_frames.last().map_or(false, |(d, _)| *d == depth) {
+                        self.closure_frames.pop().map(|(_, caps)| caps)
+                    } else {
+                        None
+                    };
+                    let scopes = self.scopes.split_off(base_scopes.min(self.scopes.len()));
+                    let locals = self.locals_stack.pop().unwrap_or_default();
+                    self.call_stack.pop();
+                    self.gen_yielded = Some((
+                        value,
+                        crate::generator::GenFrame { scopes, locals, stack, handlers, captured, ip: self.ip + 1 },
+                    ));
+                    return Ok(());
                 }
                 // OPTIMIZED: Fused instructions for common patterns
                 Instruction::Halt => return Ok(()),
@@ -5630,6 +5719,102 @@ impl VirtualMachine {
         }
 
         Ok(())
+    }
+
+    /// Resume generator `id` until its next `yield`. `Some(value)` for a yielded value, `None`
+    /// once the generator has finished (also for an unknown or already-finished id).
+    pub(crate) fn gen_next(&mut self, id: &str, program: &Program) -> Result<Option<Value>, VmError> {
+        if let Some(v) = self.generator_manager.take_peeked(id) {
+            return Ok(Some(v));
+        }
+        self.gen_resume(id, program)
+    }
+
+    /// True when the generator can produce another value (runs it to its next `yield` to find out;
+    /// the value is kept for the following `next`).
+    pub(crate) fn gen_has_next(&mut self, id: &str, program: &Program) -> Result<bool, VmError> {
+        if self.generator_manager.has_peeked(id) {
+            return Ok(true);
+        }
+        match self.gen_resume(id, program)? {
+            Some(v) => {
+                self.generator_manager.set_peeked(id, v);
+                Ok(true)
+            }
+            None => Ok(false),
+        }
+    }
+
+    fn gen_resume(&mut self, id: &str, program: &Program) -> Result<Option<Value>, VmError> {
+        use crate::generator::Taken;
+        let frame = match self.generator_manager.take_frame(id) {
+            Taken::Frame(f) => f,
+            Taken::Exhausted => return Ok(None),
+            Taken::Running => {
+                return Err(VmError::runtime_error("generator is already running".to_string()));
+            }
+        };
+        let saved_ip = self.ip;
+        let (base_stack, base_calls, base_scopes, base_locals, base_handlers) = (
+            self.stack.len(),
+            self.call_stack.len(),
+            self.scopes.len(),
+            self.locals_stack.len(),
+            self.handlers.len(),
+        );
+        // swap the suspended frame in, behind a nested-call return address
+        self.call_stack.push(NESTED_RETURN);
+        let call_len = self.call_stack.len();
+        self.scopes.extend(frame.scopes);
+        self.locals_stack.push(frame.locals);
+        self.stack.extend(frame.stack);
+        if let Some(caps) = frame.captured {
+            self.closure_frames.push((call_len, caps));
+        }
+        for mut h in frame.handlers {
+            h.call_len = call_len;
+            h.stack_len += base_stack;
+            h.scopes_len += base_scopes;
+            h.locals_len += base_locals;
+            self.handlers.push(h);
+        }
+        self.gen_ctx.push(GenCtx {
+            id: id.to_string(),
+            base_stack,
+            base_scopes,
+            base_locals,
+            base_handlers,
+            call_len,
+        });
+        self.ip = frame.ip;
+        let outcome = self.run_loop_from(program, base_handlers);
+        self.ip = saved_ip;
+        self.gen_ctx.pop();
+        match outcome {
+            Ok(()) => {
+                if let Some((value, frame)) = self.gen_yielded.take() {
+                    self.generator_manager.put_frame(id, frame);
+                    Ok(Some(value))
+                } else {
+                    // `Ret`: the generator ran to completion; its return value is discarded
+                    self.stack.pop();
+                    self.generator_manager.finish(id);
+                    Ok(None)
+                }
+            }
+            Err(e) => {
+                // a generator that raised is finished; unwind what it left behind
+                self.generator_manager.finish(id);
+                self.gen_yielded = None;
+                self.stack.truncate(base_stack);
+                self.closure_frames.retain(|(d, _)| *d <= base_calls);
+                self.handlers.truncate(base_handlers);
+                self.call_stack.truncate(base_calls);
+                self.scopes.truncate(base_scopes);
+                self.locals_stack.truncate(base_locals);
+                Err(e)
+            }
+        }
     }
 
     /// Call a Killer function value from Rust and return its result, running the *full*
@@ -6213,14 +6398,7 @@ impl VirtualMachine {
                     // For now, handle the critical instructions directly
                     match instruction {
                         Instruction::Ret => {
-                            // Check if we have yielded values - if so, create a generator
-                            let yielded = self.generator_manager.take_yielded_values();
-                            if !yielded.is_empty() {
-                                let gen_id = self.generator_manager.create_generator(yielded);
-                                result = Value::Generator(gen_id);
-                            } else {
-                                result = self.pop_value().unwrap_or(Value::Null);
-                            }
+                            result = self.pop_value().unwrap_or(Value::Null);
                             break;
                         }
                         Instruction::ConstNum(n) => self.stack.push(Value::Number(*n)),
