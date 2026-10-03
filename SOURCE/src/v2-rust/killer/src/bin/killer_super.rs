@@ -222,7 +222,25 @@ struct CacheStats {
     size_bytes: u64,
 }
 
+/// The interpreter recurses on the Rust stack for nested calls (callbacks, resumed generators,
+/// `toString` hooks), and the default 1 MB main-thread stack is too small for a few levels of that
+/// in a debug build, so everything runs on a thread with a large (lazily committed) stack.
 fn main() {
+    let worker = std::thread::Builder::new()
+        .name("killer-main".to_string())
+        .stack_size(512 * 1024 * 1024)
+        .spawn(real_main);
+    match worker {
+        Ok(handle) => {
+            if handle.join().is_err() {
+                process::exit(101);
+            }
+        }
+        Err(_) => real_main(),
+    }
+}
+
+fn real_main() {
     let args: Vec<String> = env::args().collect();
     
     // Parse CLI arguments

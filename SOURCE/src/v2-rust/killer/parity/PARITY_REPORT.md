@@ -60,8 +60,10 @@ first-class values (variables, arguments, return values, callbacks, lambdas, clo
 - `regex_match(text, pattern)` takes the text first.
 - Closures capture the enclosing variables they use when they are created and keep their own copy
   between calls; two closures made by the same call do not share captured variables.
-- A generator collects its yielded values when it is called (eager), so infinite generators are not
-  supported yet.
+- Generators are lazy coroutines: calling a function that contains `yield` returns a generator
+  without running the body, and each `next(g)` / `for` iteration resumes it to the next `yield`
+  (infinite generators, on-demand side effects, `has_next(g)`). A generator that is abandoned
+  part-way (for example after `break`) keeps its suspended frame until the program ends.
 - A `return`, `break` or `continue` that leaves a `try` skips that `try`'s `finally` body.
 - Error line numbers can be shifted when a program uses lambdas, `match`/`switch`, `do-while`,
   C-style `for` or `import`, because those are rewritten to core statements before compiling.
@@ -127,11 +129,11 @@ functions, lambdas, closures, globals, negative indexing, `try/catch/finally/thr
 (`+=`, `++`, ternary, `and/or/not`, chained comparison, `in`, bitwise, string and list `*` / `+`),
 string indexing/slicing/unicode length, slicing, sets, tuples, comprehensions (list, dict, set),
 `super`, `static`, `instanceof`, operator overloading, `toString`, varargs, keyword arguments,
-`match`, `switch`, do-while, C-style `for`, destructuring `for`, generators, JSON, file imports,
+`match`, `switch`, do-while, C-style `for`, destructuring `for`, lazy generators, JSON, file imports,
 mutexes, `async_spawn` with function values.
 
 **Still open:**
-1. Lazy generators (needed for infinite sequences) and `finally` on early `return`/`break`.
+1. `finally` on early `return`/`break`.
 2. Line-number mapping through the rewriting passes (lambda, control flow, import).
 3. Closures that share captured variables between siblings.
 4. The 55 dead registry names (`REGISTERED_BUT_DEAD.txt`) and the 4 README functions that do not

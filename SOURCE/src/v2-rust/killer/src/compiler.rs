@@ -303,6 +303,8 @@ struct CompileContext {
     /// The function body ended in a bare expression whose value was left on the stack.
     tail_value: bool,
     runtime_scope_depth: usize,
+    /// The function being compiled contains `yield` (it is a generator).
+    in_generator: bool,
 }
 
 pub fn compile_killer_subset(source: &str) -> Result<Program, VmError> {
@@ -629,7 +631,8 @@ fn try_compile_self_tail_call(
     state: &mut CompilerState,
     context: &mut CompileContext,
 ) -> Result<bool, VmError> {
-    if context.current_function_name.as_deref() != Some(callee) {
+    // a generator's frame is kept alive between resumes, so it can never be recycled by a tail call
+    if context.current_function_name.as_deref() != Some(callee) || context.in_generator {
         return Ok(false);
     }
     let target_ip = {
@@ -1869,6 +1872,7 @@ fn compile_expr(
                 tail_position: false,
                 tail_value: false,
                 runtime_scope_depth: 0,
+                in_generator: false,
             };
             
             // Compile function body
@@ -2464,6 +2468,56 @@ fn emit_store_variable(name: &str, state: &mut CompilerState, context: &mut Comp
 }
 
 /// Index just past the `}` that closes the block whose `{` is at `open` (or `lines.len()`).
+/// True when the function body `lines` contains a `yield` statement of its own (a `yield` inside a
+/// nested `fn` belongs to that function).
+fn body_has_yield(lines: &[(usize, String)]) -> bool {
+    let mut depth = 0i32;
+    // brace depths at which a nested function body was opened
+    let mut nested: Vec<i32> = Vec::new();
+    for (_, raw) in lines {
+        let line = raw.trim();
+        if nested.is_empty() && (line == "yield" || line.starts_with("yield ") || line.starts_with("yield(")) {
+            return true;
+        }
+        let is_fn_header = line.starts_with("fn ") || line.starts_with("kfn ") || line.starts_with("static fn ")
+            || line.starts_with("function ");
+        let mut in_str = false;
+        let mut opened_here = false;
+        let mut prev = '\0';
+        for c in line.chars() {
+            if in_str {
+                if c == '"' && prev != '\\' {
+                    in_str = false;
+                }
+            } else if c == '"' {
+                in_str = true;
+            } else if c == '{' {
+                if is_fn_header && !opened_here {
+                    nested.push(depth);
+                    opened_here = true;
+                }
+                depth += 1;
+            } else if c == '}' {
+                depth -= 1;
+                if nested.last() == Some(&depth) {
+                    nested.pop();
+                }
+            }
+            prev = c;
+        }
+        // a header whose `{` is on the next line
+        if is_fn_header && !opened_here && !line.contains('{') {
+            // handled by the lone "{" line below: treat the next "{" as a function opener
+            nested.push(i32::MIN);
+        }
+        if line == "{" && nested.last() == Some(&i32::MIN) {
+            nested.pop();
+            nested.push(depth - 1);
+        }
+    }
+    false
+}
+
 fn skip_braced_block(lines: &[(usize, String)], open: usize) -> usize {
     let mut depth = 0i32;
     let mut j = open;
@@ -4123,6 +4177,7 @@ fn shadowed_context(context: &CompileContext, hide: &[String]) -> CompileContext
         tail_position: false,
         tail_value: false,
         runtime_scope_depth: context.runtime_scope_depth,
+        in_generator: context.in_generator,
     }
 }
 
@@ -5274,12 +5329,19 @@ fn compile_fn_definition(
         tail_position: false,
         tail_value: false,
         runtime_scope_depth: 0,
+        in_generator: false,
     };
     for (index, param) in params.into_iter().enumerate() {
         fn_context.params.insert(param, index);
     }
 
     emit_default_prologue(&defaults, line_no, state, &mut fn_context)?;
+    let body_close = skip_braced_block(lines, cursor.saturating_sub(1)).min(lines.len());
+    if body_has_yield(&lines[(*cursor).min(body_close)..body_close]) {
+        // a generator: calling it only creates the generator object
+        fn_context.in_generator = true;
+        state.instructions.push(Instruction::MakeGenerator);
+    }
     compile_block(lines, cursor, state, &mut fn_context, true, false)?;
 
     // Fall-through return. A body that ends in a bare expression returns that value (the value is
@@ -5470,12 +5532,18 @@ fn compile_class_definition(
                 tail_position: false,
                 tail_value: false,
                 runtime_scope_depth: 0,
+                in_generator: false,
             };
             for (index, param) in params.iter().enumerate() {
                 method_context.params.insert(param.clone(), index);
             }
 
             emit_default_prologue(&method_defaults, *mline_no, state, &mut method_context)?;
+            let body_close = skip_braced_block(lines, cursor.saturating_sub(1)).min(lines.len());
+            if body_has_yield(&lines[(*cursor).min(body_close)..body_close]) {
+                method_context.in_generator = true;
+                state.instructions.push(Instruction::MakeGenerator);
+            }
             compile_block(lines, cursor, state, &mut method_context, true, false)?;
 
             // Implicit return: init returns "this", other methods return null. Always emitted, for
@@ -6413,7 +6481,11 @@ fn patch_pending_calls(state: &mut CompilerState) -> Result<(), VmError> {
     ];
 
     for pending in &state.pending_calls {
-        if BUILTINS.contains(&pending.function_name.as_str()) {
+        // `next`/`has_next` are generator builtins, but only when the script has no function of
+        // that name (they are common words)
+        let generator_builtin = matches!(pending.function_name.as_str(), "next" | "has_next")
+            && !state.functions.contains_key(&pending.function_name);
+        if generator_builtin || BUILTINS.contains(&pending.function_name.as_str()) {
             // -- Nova Galaxy: emit native opcodes instead of CallBuiltin ------
             let native_instr: Option<Instruction> = match pending.function_name.as_str() {
                 // Phase A: Trit native ALU opcodes
