@@ -841,6 +841,18 @@ impl VirtualMachine {
                             continue;
                         }
                         _ => {
+                            // `for k in dict` walks the keys and `for x in set` the members (as Python does)
+                            let as_list = match self.locals_stack.last().and_then(|f| f.get(iter_i)) {
+                                Some(Value::Dict(d)) => Some(d.keys().into_iter().map(Value::Str).collect::<Vec<_>>()),
+                                Some(Value::Set(s)) => Some(s.iter().map(|k| k.to_value()).collect::<Vec<_>>()),
+                                _ => None,
+                            };
+                            if let Some(items) = as_list {
+                                if let Some(frame) = self.locals_stack.last_mut() {
+                                    frame[iter_i] = Value::from(items);
+                                }
+                                continue;
+                            }
                             // a generator is drained into a list once, then iterated like one
                             let gen_id = match self.locals_stack.last().and_then(|f| f.get(iter_i)) {
                                 Some(Value::Generator(id)) => Some(id.clone()),
@@ -2429,7 +2441,8 @@ impl VirtualMachine {
                     self.stack.push(Value::from(elements));
                 }
                 Instruction::BuildDict(count) => {
-                    let mut dict = HashMap::new();
+                    // pairs were pushed in source order; keep that order (a repeated key: last wins)
+                    let mut pairs = Vec::with_capacity(*count);
                     for _ in 0..*count {
                         let value = self.pop_value()?;
                         let key_val = self.pop_value()?;
@@ -2438,9 +2451,10 @@ impl VirtualMachine {
                             Value::Number(n) => n.to_string(),
                             _ => format!("{key_val}"),
                         };
-                        dict.insert(key, value);
+                        pairs.push((key, value));
                     }
-                    self.stack.push(Value::Dict(crate::value::SharedDict::new(dict)));
+                    pairs.reverse();
+                    self.stack.push(Value::Dict(crate::value::SharedDict::from_pairs(pairs)));
                 }
                 Instruction::NewQuality => {
                     let value = self.pop_value()?;

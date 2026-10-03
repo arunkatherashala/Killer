@@ -132,6 +132,21 @@ fn sorting_and_extremes_over_numbers_arrays_and_rows() {
 }
 
 #[test]
+fn dicts_keep_insertion_order() {
+    let src = "d = {\"z\": 1, \"a\": 2}\nd[\"m\"] = 3\nprintln(d)\nprintln(keys(d))\nprintln(values(d))\ndelete(d, \"z\")\nd[\"z\"] = 9\nprintln(d)\nprintln(json_stringify(d))\nprintln(json_stringify(json_parse('{\"b\": 1, \"a\": {\"y\": 1, \"x\": 2}}')))\nprintln({\"a\": 1, \"a\": 2})\nprintln({\"a\": 1, \"b\": 2} == {\"b\": 2, \"a\": 1})\nprintln({k: k * 2 for k in range(3)})\nc = d\nc[\"q\"] = 1\nprintln(len(d))\n";
+    assert_eq!(
+        run(src),
+        "{z: 1, a: 2, m: 3}\n[z, a, m]\n[1, 2, 3]\n{a: 2, m: 3, z: 9}\n{\"a\":2,\"m\":3,\"z\":9}\n{\"b\":1,\"a\":{\"y\":1,\"x\":2}}\n{a: 2}\ntrue\n{0: 0, 1: 2, 2: 4}\n4"
+    );
+}
+
+#[test]
+fn iterating_a_dict_or_set_walks_keys_and_members() {
+    let src = "d = {\"x\": 1, \"y\": 2}\nfor k in d {\n  println(k + \"=\" + str(d[k]))\n}\ns = set([3, 1, 2])\ntotal = 0\nfor v in s {\n  total = total + v\n}\nprintln(total)\n";
+    assert_eq!(run(src), "x=1\ny=2\n6");
+}
+
+#[test]
 fn dictionary_literals_can_span_lines() {
     let src = "b = {\n  \"x\": 1,\n  \"y\": {\"k\": [1, 2]}\n}\nprintln(b)\nfn make() {\n  return {\n    \"a\": 1,\n    // a comment inside\n    \"b\": 2\n  }\n}\nprintln(make())\nprintln(max(1, 5,\n  3))\nrows = []\npush(rows, {\n  \"n\": 1\n})\nprintln(rows)\nif true {\n  println(\"block still works\")\n}\n";
     assert_eq!(run(src), "{x: 1, y: {k: [1, 2]}}\n{a: 1, b: 2}\n5\n[{n: 1}]\nblock still works");

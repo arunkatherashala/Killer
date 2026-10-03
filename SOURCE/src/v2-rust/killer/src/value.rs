@@ -247,11 +247,19 @@ impl PartialEq for ObjectInstance {
 /// dict passed to a function or stored in two variables is the same dict (like arrays, Python and
 /// JS), and reading a dict variable is O(1) instead of a deep copy.
 #[derive(Clone)]
-pub struct SharedDict(Rc<RefCell<crate::fast_hash::FastMap<String, Value>>>);
+pub struct SharedDict(Rc<RefCell<crate::ordered_map::OrderedMap<Value>>>);
 
 impl SharedDict {
+    /// From an unordered map: entries are laid out in sorted key order so the result is
+    /// deterministic. Use [`SharedDict::from_pairs`] when insertion order matters.
     pub fn new(map: HashMap<String, Value>) -> Self {
-        SharedDict(Rc::new(RefCell::new(map.into_iter().collect())))
+        let mut pairs: Vec<(String, Value)> = map.into_iter().collect();
+        pairs.sort_by(|a, b| a.0.cmp(&b.0));
+        SharedDict::from_pairs(pairs)
+    }
+    /// From pairs in order; a repeated key keeps its first position and its last value.
+    pub fn from_pairs(pairs: Vec<(String, Value)>) -> Self {
+        SharedDict(Rc::new(RefCell::new(pairs.into_iter().collect())))
     }
     pub fn empty() -> Self {
         SharedDict(Rc::new(RefCell::new(Default::default())))
@@ -312,17 +320,17 @@ impl SharedDict {
     pub fn to_map(&self) -> HashMap<String, Value> {
         self.0.borrow().iter().map(|(k, v)| (k.clone(), v.clone())).collect()
     }
-    /// New, independent dict with the same entries.
+    /// New, independent dict with the same entries in the same order.
     pub fn copy(&self) -> SharedDict {
-        SharedDict::new(self.to_map())
+        SharedDict::from_pairs(self.iter().collect())
     }
     pub fn extend<I: IntoIterator<Item = (String, Value)>>(&self, iter: I) {
         self.0.borrow_mut().extend(iter);
     }
-    pub fn borrow(&self) -> std::cell::Ref<'_, crate::fast_hash::FastMap<String, Value>> {
+    pub fn borrow(&self) -> std::cell::Ref<'_, crate::ordered_map::OrderedMap<Value>> {
         self.0.borrow()
     }
-    pub fn borrow_mut(&self) -> std::cell::RefMut<'_, crate::fast_hash::FastMap<String, Value>> {
+    pub fn borrow_mut(&self) -> std::cell::RefMut<'_, crate::ordered_map::OrderedMap<Value>> {
         self.0.borrow_mut()
     }
 }

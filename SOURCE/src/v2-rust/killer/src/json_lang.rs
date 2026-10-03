@@ -2,7 +2,7 @@
 //!
 //! `json_parse(text)` -> numbers, strings, booleans, null, arrays, dicts (errors carry the
 //! line/column of the problem). `json_stringify(value[, indent])` -> compact text, or pretty
-//! text when `indent` > 0. Dict keys are written in sorted order so output is deterministic.
+//! text when `indent` > 0. Dict keys are written in insertion order (object fields sorted by name).
 
 use crate::error::VmError;
 use crate::value::{SharedDict, Value};
@@ -202,11 +202,11 @@ impl<'a> Parser<'a> {
 
     fn object(&mut self, depth: usize) -> Result<Value, String> {
         self.pos += 1;
-        let mut map = HashMap::new();
+        let mut map: Vec<(String, Value)> = Vec::new();
         self.skip_ws();
         if self.bytes.get(self.pos) == Some(&b'}') {
             self.pos += 1;
-            return Ok(Value::Dict(SharedDict::new(map)));
+            return Ok(Value::Dict(SharedDict::from_pairs(map)));
         }
         loop {
             self.skip_ws();
@@ -220,13 +220,13 @@ impl<'a> Parser<'a> {
             }
             self.pos += 1;
             let v = self.value(depth + 1)?;
-            map.insert(key, v);
+            map.push((key, v));
             self.skip_ws();
             match self.bytes.get(self.pos) {
                 Some(b',') => self.pos += 1,
                 Some(b'}') => {
                     self.pos += 1;
-                    return Ok(Value::Dict(SharedDict::new(map)));
+                    return Ok(Value::Dict(SharedDict::from_pairs(map)));
                 }
                 _ => return self.fail("expected ',' or '}'"),
             }
@@ -304,8 +304,8 @@ fn write(out: &mut String, v: &Value, indent: usize, level: usize, depth: usize)
             out.push(']');
         }
         Value::Dict(d) => {
-            let mut entries: Vec<(String, Value)> = d.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
-            entries.sort_by(|a, b| a.0.cmp(&b.0));
+            // insertion order, like Python's json.dumps
+            let entries: Vec<(String, Value)> = d.iter().collect();
             write_entries(out, &entries, indent, level, depth)?;
         }
         Value::Object(o) => {
@@ -415,7 +415,7 @@ mod tests {
     #[test]
     fn pretty_printing() {
         let v = parse(r#"{"b":[1,2],"a":{}}"#).unwrap();
-        assert_eq!(stringify(&v, 2).unwrap(), "{\n  \"a\": {},\n  \"b\": [\n    1,\n    2\n  ]\n}");
+        assert_eq!(stringify(&v, 2).unwrap(), "{\n  \"b\": [\n    1,\n    2\n  ],\n  \"a\": {}\n}");
     }
 
     #[test]

@@ -471,7 +471,7 @@ fn variadics_keyword_arguments_and_dict_comprehensions() {
 fn json_round_trips_nested_data() {
     let src = "d = json_parse('{\"a\": 1, \"b\": [1, 2, {\"c\": null}], \"s\": \"x\\\\ny\"}')\nprintln(d[\"b\"][1])\nprintln(type(d[\"b\"]))\nprintln(json_stringify(d[\"b\"]))\nprintln(json_stringify({\"k\": [true, \"q\"], \"a\": 1.5}))\nprintln(json_stringify([1, [2, 3]], 2))\ntry {\n  json_parse(\"[1,]\")\n} catch e {\n  println(\"bad json\")\n}\n";
     let out = run(src);
-    assert!(out.starts_with("2\narray\n[1,2,{\"c\":null}]\n{\"a\":1.5,\"k\":[true,\"q\"]}\n[\n  1,\n  [\n    2,\n    3\n  ]\n]\nbad json"), "{out}");
+    assert!(out.starts_with("2\narray\n[1,2,{\"c\":null}]\n{\"k\":[true,\"q\"],\"a\":1.5}\n[\n  1,\n  [\n    2,\n    3\n  ]\n]\nbad json"), "{out}");
 }
 
 #[test]

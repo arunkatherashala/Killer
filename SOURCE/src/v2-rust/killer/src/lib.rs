@@ -340,6 +340,7 @@ pub mod time_machine;
 pub mod exprsplit;             // top-level operator splitting for the expression parser
 pub mod lang_builtins;         // everyday builtins: ord/chr, padding, logs, stats, base64, sets
 pub mod text_methods;          // capitalize/title/find/count/zfill/is* and method-call fallback to builtins
+pub mod ordered_map;           // insertion-ordered map behind dictionaries
 pub mod controlflow;           // lowers match/switch/do-while/C-style for/destructuring for into core statements
 pub mod json_lang;             // strict JSON parser and serializer for json_parse / json_stringify
 pub mod imports;               // compile-time `import "file.killer"` inclusion
