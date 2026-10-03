@@ -1,0 +1,17 @@
+parsed 8 entries, 1 unparseable
+DEBUG 1
+ERROR 2
+INFO  4
+WARN  1
+slow: /api/users(1200ms)
+avg ms: 427.67
+[db1:3, db2:1]
+4
+7
+A>C A>B C>B A>C B>A B>C A>C
+tried app_rt.log
+2024-03-01
+tried no_such_file_rt.txt
+missing:no_such_file_rt.txt
+true
+false

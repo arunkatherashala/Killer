@@ -1,0 +1,33 @@
+Ann plays 0
+Bot plays 4
+bad move by Ann: occupied: 4
+Ann plays 1
+Bot plays 2
+bad move by Ann: out of range: 99
+Ann plays 7
+Bot plays 6
+ X | X | O
+---+---+---
+   | O |  
+---+---+---
+ O | X |  
+winner: O
+----
+Ann plays 8
+Bot plays 4
+bad move by Ann: occupied: 8
+Ann plays 1
+Bot plays 0
+Ann plays 2
+Bot plays 6
+Ann plays 3
+Bot plays 5
+bad move by Ann: occupied: 5
+bad move by Ann: occupied: 6
+Ann plays 7
+ O | X | X
+---+---+---
+ X | O | O
+---+---+---
+ O | X | X
+draw after 9 moves

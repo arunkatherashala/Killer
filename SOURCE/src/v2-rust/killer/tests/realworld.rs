@@ -47,6 +47,58 @@ fn program(name: &str) {
 }
 
 #[test]
+fn csv_report() {
+    program("01_csv_report");
+}
+
+#[test]
+fn tic_tac_toe() {
+    program("02_tictactoe");
+}
+
+#[test]
+fn bank_accounts() {
+    program("03_bank");
+}
+
+#[test]
+fn algorithms() {
+    program("04_algorithms");
+}
+
+#[test]
+fn calculator() {
+    program("05_calculator");
+}
+
+#[test]
+fn router() {
+    program("06_router");
+}
+
+#[test]
+fn strings() {
+    program("07_strings");
+}
+
+#[test]
+fn producer_consumer() {
+    program("08_producer_consumer");
+}
+
+#[test]
+fn inventory_events() {
+    program("09_inventory");
+}
+
+#[test]
+fn log_analyzer() {
+    program("10_log_analyzer");
+}
+
+// ---------------------------------------------------------------- regressions
+
+#[test]
 fn assigning_through_a_field_and_an_index() {
     // `this.cells[i] = x` was rejected as an invalid assignment target
     let src = "class B {\n  fn init() {\n    this.cells = [0, 0, 0]\n    this.pos = {\"x\": 1}\n  }\n  fn set(i, v) {\n    this.cells[i] = v\n    this.pos.x = v\n  }\n}\nb = new B()\nb.set(1, 7)\nprintln(b.cells)\nprintln(b.pos)\nb.cells[2] = 9\nb.pos.y = 5\nprintln(b.cells)\nprintln(b.pos)\nm = {\"rows\": [[1, 2], [3, 4]]}\nm.rows[1][0] = 30\nprintln(m)\n";

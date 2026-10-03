@@ -1,0 +1,207 @@
+// Classic algorithms: sorting, graph search, dynamic programming, sieve, matrix multiply
+fn bubble_sort(xs) {
+  a = slice(xs, 0, len(xs))
+  n = len(a)
+  for i in range(n) {
+    swapped = false
+    for j in range(n - i - 1) {
+      if a[j] > a[j + 1] {
+        t = a[j]
+        a[j] = a[j + 1]
+        a[j + 1] = t
+        swapped = true
+      }
+    }
+    if !swapped {
+      break
+    }
+  }
+  return a
+}
+
+fn merge(l, r) {
+  out = []
+  i = 0
+  j = 0
+  while i < len(l) && j < len(r) {
+    if l[i] <= r[j] {
+      push(out, l[i])
+      i = i + 1
+    } else {
+      push(out, r[j])
+      j = j + 1
+    }
+  }
+  while i < len(l) {
+    push(out, l[i])
+    i = i + 1
+  }
+  while j < len(r) {
+    push(out, r[j])
+    j = j + 1
+  }
+  return out
+}
+
+fn merge_sort(xs) {
+  if len(xs) <= 1 {
+    return xs
+  }
+  mid = len(xs) / 2
+  mid = floor(mid)
+  return merge(merge_sort(xs[0:mid]), merge_sort(xs[mid:len(xs)]))
+}
+
+fn quick_sort(xs) {
+  if len(xs) <= 1 {
+    return xs
+  }
+  pivot = xs[0]
+  less = [x for x in xs[1:len(xs)] if x < pivot]
+  more = [x for x in xs[1:len(xs)] if x >= pivot]
+  return quick_sort(less) + [pivot] + quick_sort(more)
+}
+
+data = [38, 27, 43, 3, 9, 82, 10, 3, -5, 0]
+println(bubble_sort(data))
+println(merge_sort(data))
+println(quick_sort(data))
+println(data)
+
+graph = {"A": ["B", "C"], "B": ["D"], "C": ["D", "E"], "D": ["F"], "E": ["F"], "F": []}
+
+fn bfs(g, start, goal) {
+  queue = [[start]]
+  seen = {}
+  seen[start] = true
+  while len(queue) > 0 {
+    path = queue[0]
+    queue = queue[1:len(queue)]
+    node = path[len(path) - 1]
+    if node == goal {
+      return path
+    }
+    for nb in g[node] {
+      if !(nb in seen) {
+        seen[nb] = true
+        push(queue, path + [nb])
+      }
+    }
+  }
+  return null
+}
+
+fn dfs(g, node, seen, order) {
+  seen[node] = true
+  push(order, node)
+  for nb in g[node] {
+    if !(nb in seen) {
+      dfs(g, nb, seen, order)
+    }
+  }
+  return order
+}
+
+println(bfs(graph, "A", "F"))
+println(dfs(graph, "A", {}, []))
+println(bfs(graph, "F", "A"))
+
+fn lcs(a, b) {
+  n = len(a)
+  m = len(b)
+  dp = [[0 for j in range(m + 1)] for i in range(n + 1)]
+  for i in range(1, n + 1) {
+    for j in range(1, m + 1) {
+      if a[i - 1] == b[j - 1] {
+        dp[i][j] = dp[i - 1][j - 1] + 1
+      } else {
+        dp[i][j] = max(dp[i - 1][j], dp[i][j - 1])
+      }
+    }
+  }
+  // reconstruct
+  res = ""
+  i = n
+  j = m
+  while i > 0 && j > 0 {
+    if a[i - 1] == b[j - 1] {
+      res = a[i - 1] + res
+      i = i - 1
+      j = j - 1
+    } else if dp[i - 1][j] >= dp[i][j - 1] {
+      i = i - 1
+    } else {
+      j = j - 1
+    }
+  }
+  return res
+}
+println(lcs("AGGTAB", "GXTXAYB"))
+println(lcs("ABCBDAB", "BDCABA"))
+
+fn knapsack(weights, values, cap) {
+  dp = [0 for c in range(cap + 1)]
+  for k in range(len(weights)) {
+    c = cap
+    while c >= weights[k] {
+      dp[c] = max(dp[c], dp[c - weights[k]] + values[k])
+      c = c - 1
+    }
+  }
+  return dp[cap]
+}
+println(knapsack([1, 3, 4, 5], [1, 4, 5, 7], 7))
+println(knapsack([10, 20, 30], [60, 100, 120], 50))
+
+fn sieve(n) {
+  is_p = [true for i in range(n + 1)]
+  is_p[0] = false
+  is_p[1] = false
+  i = 2
+  while i * i <= n {
+    if is_p[i] {
+      j = i * i
+      while j <= n {
+        is_p[j] = false
+        j = j + i
+      }
+    }
+    i = i + 1
+  }
+  return [k for k in range(n + 1) if is_p[k]]
+}
+ps = sieve(100)
+println(len(ps))
+println(ps)
+
+fn matmul(a, b) {
+  n = len(a)
+  m = len(b[0])
+  k = len(b)
+  c = [[0 for j in range(m)] for i in range(n)]
+  for i in range(n) {
+    for j in range(m) {
+      s = 0
+      for t in range(k) {
+        s = s + a[i][t] * b[t][j]
+      }
+      c[i][j] = s
+    }
+  }
+  return c
+}
+println(matmul([[1, 2], [3, 4]], [[5, 6], [7, 8]]))
+println(matmul([[1, 2, 3]], [[1], [2], [3]]))
+
+fn fib_memo(n, memo) {
+  if n < 2 {
+    return n
+  }
+  if n in memo {
+    return memo[n]
+  }
+  r = fib_memo(n - 1, memo) + fib_memo(n - 2, memo)
+  memo[n] = r
+  return r
+}
+println(fib_memo(70, {}))

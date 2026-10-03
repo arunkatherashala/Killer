@@ -1,0 +1,17 @@
+1 + 2 * 3 => 7
+(1 + 2) * 3 => 9
+2 ^ 3 ^ 2 => 512
+-4 + 10 / 4 => -1.5
+x = 5 => 5
+y = x * 2 + 1 => 11
+sqrt(x * x + 144) => 13
+max(x, y) - min(3, 4) => 8
+10 / (5 - 5) => error: division by zero
+2 + => error: unexpected token ''
+3 $ 4 => error: unexpected character '$' at 2
+z + 1 => error: undefined variable z
+foo(1) => error: unknown function foo
+(1 + 2 => error: expected ')' but found ''
+1 2 => error: trailing input: 2
+pi * 2 => 6.28318
+abs(-7.5) => 7.5

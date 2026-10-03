@@ -1,0 +1,111 @@
+// Tic-tac-toe with classes, a game loop over scripted input, and a tiny AI
+class Board {
+  fn init() {
+    this.cells = [" ", " ", " ", " ", " ", " ", " ", " ", " "]
+    this.moves = 0
+  }
+  fn place(idx, mark) {
+    if idx < 0 || idx > 8 {
+      throw "out of range: " + str(idx)
+    }
+    if this.cells[idx] != " " {
+      throw "occupied: " + str(idx)
+    }
+    this.cells[idx] = mark
+    this.moves = this.moves + 1
+  }
+  fn winner() {
+    lines = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]]
+    for l in lines {
+      a = this.cells[l[0]]
+      if a != " " && a == this.cells[l[1]] && a == this.cells[l[2]] {
+        return a
+      }
+    }
+    return null
+  }
+  fn full() {
+    return this.moves == 9
+  }
+  fn free() {
+    out = []
+    for i in range(9) {
+      if this.cells[i] == " " {
+        push(out, i)
+      }
+    }
+    return out
+  }
+  fn render() {
+    rows = []
+    for r in range(3) {
+      rows = rows + [" " + this.cells[r*3] + " | " + this.cells[r*3+1] + " | " + this.cells[r*3+2]]
+    }
+    return join(rows, "\n---+---+---\n")
+  }
+}
+
+class Player {
+  fn init(name, mark) {
+    this.name = name
+    this.mark = mark
+    this.wins = 0
+  }
+  fn choose(board, scripted) {
+    return scripted
+  }
+}
+
+class AIPlayer extends Player {
+  fn choose(board, scripted) {
+    free = board.free()
+    // prefer centre, then corners, then first free
+    for pref in [4, 0, 2, 6, 8] {
+      if pref in free {
+        return pref
+      }
+    }
+    return free[0]
+  }
+}
+
+fn play(script) {
+  board = new Board()
+  human = new Player("Ann", "X")
+  bot = new AIPlayer("Bot", "O")
+  players = [human, bot]
+  turn = 0
+  si = 0
+  while board.winner() == null && !board.full() {
+    p = players[turn % 2]
+    pick = null
+    if p.mark == "X" {
+      pick = p.choose(board, script[si])
+      si = si + 1
+    } else {
+      pick = p.choose(board, 0)
+    }
+    try {
+      board.place(pick, p.mark)
+      println(p.name + " plays " + str(pick))
+      turn = turn + 1
+    } catch e {
+      println("bad move by " + p.name + ": " + str(e))
+      if p.mark == "X" {
+        // scripted player skips on error
+      }
+    }
+  }
+  println(board.render())
+  w = board.winner()
+  if w == null {
+    println("draw after " + str(board.moves) + " moves")
+  } else {
+    println("winner: " + w)
+  }
+  return w
+}
+
+play([0, 4, 1, 99, 7, 8, 3, 5, 2])
+println("----")
+play([8, 8, 1, 2, 3, 5, 6, 7])

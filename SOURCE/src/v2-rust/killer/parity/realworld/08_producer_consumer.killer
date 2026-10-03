@@ -1,0 +1,97 @@
+// Producer / consumer with async_spawn, a mutex-protected counter and a channel
+total = mutex_new(0)
+processed = mutex_new([])
+
+fn work(id, n) {
+  s = 0
+  for i in range(1, n + 1) {
+    s = s + i * id
+  }
+  mutex_add(total, s)
+  return s
+}
+
+// fan out four workers, then gather their results in order
+handles = []
+for id in range(1, 5) {
+  push(handles, async_spawn(work, id, 10))
+}
+results = []
+for h in handles {
+  push(results, async_await(h))
+}
+println(results)
+println("mutex total: " + str(mutex_get(total)))
+println("sum of results: " + str(sum(results)))
+
+// producer fills a channel, consumer drains it on another thread
+ch = chan_new()
+fn produce(ch, count) {
+  for i in range(count) {
+    chan_send(ch, i * i)
+  }
+  chan_send(ch, -1)
+  return count
+}
+fn consume(ch) {
+  acc = 0
+  seen = 0
+  while true {
+    v = chan_recv(ch)
+    if v == -1 {
+      break
+    }
+    acc = acc + v
+    seen = seen + 1
+  }
+  return [seen, acc]
+}
+p = async_spawn(produce, ch, 6)
+c = async_spawn(consume, ch)
+println("produced: " + str(async_await(p)))
+r = async_await(c)
+println("consumed " + str(r[0]) + " items, sum " + str(r[1]))
+
+// a shared counter updated from many tasks
+counter = mutex_new(0)
+fn bump(k) {
+  for i in range(k) {
+    mutex_add(counter, 1)
+  }
+  return k
+}
+hs = [async_spawn(bump, 100), async_spawn(bump, 200), async_spawn(bump, 300)]
+done = 0
+for h in hs {
+  done = done + async_await(h)
+}
+println("done=" + str(done) + " counter=" + str(mutex_get(counter)))
+
+// spawn / await keyword syntax and async fn
+fn square(x) {
+  return x * x
+}
+h1 = spawn square(7)
+h2 = spawn square(8)
+println(await h1 + await h2)
+
+async fn fetch(name) {
+  return "data:" + name
+}
+a = await fetch("alpha")
+b = await fetch("beta")
+println(a + " " + b)
+
+// errors inside a task surface on await
+fn failing() {
+  throw "task failed"
+}
+try {
+  hf = async_spawn(failing)
+  async_await(hf)
+  println("not reached")
+} catch e {
+  println("caught: " + str(e))
+}
+mutex_set(processed, [1, 2, 3])
+println(mutex_get(processed))

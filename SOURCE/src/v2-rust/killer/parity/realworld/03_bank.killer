@@ -1,0 +1,129 @@
+// JSON-driven bank simulation: classes, inheritance, try/catch, finally, json round trip
+class InsufficientFunds {
+  fn init(needed, available) {
+    this.needed = needed
+    this.available = available
+  }
+  fn toString() {
+    return "InsufficientFunds(needed=" + str(this.needed) + ", available=" + str(this.available) + ")"
+  }
+}
+
+class Account {
+  fn init(owner, balance) {
+    this.owner = owner
+    this.balance = balance
+    this.history = []
+  }
+  fn deposit(amount) {
+    if amount <= 0 {
+      throw "invalid amount: " + str(amount)
+    }
+    this.balance = this.balance + amount
+    push(this.history, {"op": "deposit", "amount": amount})
+    return this
+  }
+  fn withdraw(amount) {
+    if amount > this.balance {
+      throw new InsufficientFunds(amount, this.balance)
+    }
+    this.balance = this.balance - amount
+    push(this.history, {"op": "withdraw", "amount": amount})
+    return this
+  }
+  fn kind() {
+    return "basic"
+  }
+  fn summary() {
+    return this.kind() + ":" + this.owner + "=" + str(this.balance)
+  }
+}
+
+class Savings extends Account {
+  fn init(owner, balance, rate) {
+    super.init(owner, balance)
+    this.rate = rate
+  }
+  fn kind() {
+    return "savings"
+  }
+  fn addInterest() {
+    interest = this.balance * this.rate / 100
+    this.deposit(interest)
+  }
+}
+
+class Checking extends Account {
+  fn init(owner, balance, overdraft) {
+    super.init(owner, balance)
+    this.overdraft = overdraft
+  }
+  fn kind() {
+    return "checking"
+  }
+  fn withdraw(amount) {
+    if amount > this.balance + this.overdraft {
+      throw new InsufficientFunds(amount, this.balance + this.overdraft)
+    }
+    this.balance = this.balance - amount
+    push(this.history, {"op": "withdraw", "amount": amount})
+    return this
+  }
+}
+
+config = json_parse('{"accounts": [{"type": "savings", "owner": "ann", "balance": 1000, "rate": 5}, {"type": "checking", "owner": "bob", "balance": 100, "overdraft": 50}, {"type": "basic", "owner": "cy", "balance": 10}], "ops": [["ann", "withdraw", 200], ["bob", "withdraw", 120], ["bob", "withdraw", 100], ["cy", "deposit", -5], ["cy", "deposit", 15], ["zed", "deposit", 1], ["ann", "interest", 0]]}')
+
+accounts = {}
+for spec in config["accounts"] {
+  a = null
+  if spec["type"] == "savings" {
+    a = new Savings(spec["owner"], spec["balance"], spec["rate"])
+  } else if spec["type"] == "checking" {
+    a = new Checking(spec["owner"], spec["balance"], spec["overdraft"])
+  } else {
+    a = new Account(spec["owner"], spec["balance"])
+  }
+  accounts[spec["owner"]] = a
+}
+
+ok = 0
+failed = 0
+for op in config["ops"] {
+  name = op[0]
+  try {
+    acct = accounts[name]
+    if acct == null {
+      throw "no such account: " + name
+    }
+    if op[1] == "deposit" {
+      acct.deposit(op[2])
+    } else if op[1] == "withdraw" {
+      acct.withdraw(op[2])
+    } else if op[1] == "interest" {
+      acct.addInterest()
+    }
+    ok = ok + 1
+    println("ok   " + acct.summary())
+  } catch e {
+    failed = failed + 1
+    println("FAIL " + name + " " + op[1] + ": " + str(e))
+  } finally {
+    println("  processed " + str(op))
+  }
+}
+println("ok=" + str(ok) + " failed=" + str(failed))
+
+report = []
+for name in sorted(keys(accounts)) {
+  a = accounts[name]
+  push(report, {"owner": a.owner, "kind": a.kind(), "balance": a.balance, "ops": len(a.history)})
+}
+out = json_stringify(report)
+println(out)
+back = json_parse(out)
+println(back[1]["kind"] + " " + str(back[1]["balance"]))
+total = 0
+for r in back {
+  total = total + r["balance"]
+}
+println("total=" + str(total))

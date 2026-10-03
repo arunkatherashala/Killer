@@ -1,0 +1,20 @@
+[fruit, orange, red, smelly, vegetable, yellow]
+durian       45
+apple        25
+carrot       12
+banana        0
+apple: ok
+banana: out
+carrot: ok
+durian: low
+[16, 9, 4, 1]
+sold 20 apple
+restocked banana
+cannot sell 5 durian
+sold 20 carrot
+audit apple=30
+apple,banana
+[apple, durian]
+total value: 80
+[apple, banana, durian]
+6
