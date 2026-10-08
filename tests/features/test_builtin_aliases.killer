@@ -81,7 +81,7 @@ if elapsed >= 5 {
 }
 
 -- Test 8: Integer division still works
-val = 100 // 7
+val = floor(100 / 7)
 if val == 14 {
     print("  [PASS] 8. 100 // 7 = 14")
     passed = passed + 1

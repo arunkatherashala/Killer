@@ -25,7 +25,7 @@ print("")
 ok = 1
 n = 4
 while n <= 20 {
-    k = n // 2 + 1
+    k = floor(n / 2) + 1
     expected = 4 * n * n + 3 * n
     calc = 8 * n * k - 6 * k - 2 * n + 6
     if calc != expected {
@@ -46,9 +46,9 @@ ok = 1
 n = 4
 while n <= 20 {
     grid = n * n + 2 * n - 2
-    d = (n - 2) * (n - 4) // 2
+    d = floor((n - 2) * (n - 4) / 2)
     total = grid + d + n
-    target = 3 * n * n // 2 + 2
+    target = floor(3 * n * n / 2) + 2
     if total != target {
         ok = 0
     }
@@ -71,7 +71,7 @@ nv = [4, 6, 8, 10, 12, 14, 16, 18]
 i = 0
 while i < 8 {
     nn = nv[i]
-    pred = nn * nn // 2 - 2 * nn + 2
+    pred = floor(nn * nn / 2) - 2 * nn + 2
     if pred != dv[i] {
         ok = 0
         print(K"    MISMATCH n={nn}: pred={pred} actual={dv[i]}")
@@ -128,11 +128,11 @@ breakthroughs = breakthroughs + 1
 ok = 1
 n = 4
 while n <= 40 {
-    m = n // 2 - 1
+    m = floor(n / 2) - 1
     drange_lb = 2 * m * m + 2
     disc_ub = n
     d_lb = drange_lb - disc_ub
-    threshold = (n - 2) * (n - 4) // 2
+    threshold = floor((n - 2) * (n - 4) / 2)
     if d_lb != threshold {
         ok = 0
     }
@@ -151,9 +151,9 @@ ok = 1
 n = 4
 while n <= 40 {
     grid = n * n + 2 * n - 2
-    d = (n - 2) * (n - 4) // 2
+    d = floor((n - 2) * (n - 4) / 2)
     e_lb = grid + d + n
-    target = 3 * n * n // 2 + 2
+    target = floor(3 * n * n / 2) + 2
     if e_lb != target {
         ok = 0
     }
@@ -354,7 +354,7 @@ ok = 1
 i = 0
 while i < 8 {
     nn = n_vals[i]
-    pred = (nn - 2) * (nn - 2) // 2
+    pred = floor((nn - 2) * (nn - 2) / 2)
     if pred != dv[i] {
         ok = 0
         print(K"    n={nn}: (n-2)^2/2={pred} vs D_min={dv[i]}")
@@ -374,9 +374,9 @@ if ok == 1 {
 print("  G29: IF D >= (n-2)^2/2 for all orderings, then:")
 n = 10
 grid = n * n + 2 * n - 2
-d_new = (n - 2) * (n - 2) // 2
+d_new = floor((n - 2) * (n - 2) / 2)
 e_new = grid + d_new + n
-e_old = 3 * n * n // 2 + 2
+e_old = floor(3 * n * n / 2) + 2
 improvement = e_new - e_old
 print(K"    n=10: grid=118 + D=32 + n=10 = {e_new}")
 print(K"    vs old bound (3/2)n^2+2 = {e_old}, improvement = {improvement}")
@@ -398,7 +398,7 @@ e_min_known = [27, 60, 103, 159, 228, 308, 400, 504]
 i = 0
 while i < 8 {
     nn = n_vals[i]
-    improved = 3 * nn * nn // 2 + nn
+    improved = floor(3 * nn * nn / 2) + nn
     if e_min_known[i] < improved {
         ok = 0
         print(K"    FAIL: n={nn}: E_min={e_min_known[i]} < {improved}")
@@ -441,7 +441,7 @@ print("  G34: COMPUTATIONAL EVIDENCE (8 data points):")
 i = 0
 while i < 8 {
     nn = n_vals[i]
-    mm = nn // 2 - 1
+    mm = floor(nn / 2) - 1
     drange_min = 2 * mm * mm + 2
     disc_at_dmin = drange_min - dv[i]
     print(K"    n={nn}: D_min={dv[i]}, D^range_min={drange_min}, disc_at_Dmin={disc_at_dmin}")

@@ -895,3 +895,47 @@ println("done")
     assert_eq!(run(src), "caught bad
 done");
 }
+
+// ---------------------------------------------------------------------------------------------
+// (C) `//` is a comment, so `x // 2` is rejected instead of silently becoming `x`
+// ---------------------------------------------------------------------------------------------
+
+const FLOOR_HINT: &str = "// starts a comment in Killer; use floor(a / b) for integer division";
+
+#[test]
+fn floor_division_with_double_slash_is_a_compile_error_with_a_hint() {
+    let out = run("x = 10\ny = x // 2\nprintln(y)\n");
+    assert!(out.contains(FLOOR_HINT), "{out}");
+    assert!(out.contains("Line 2"), "{out}");
+    assert!(!out.lines().any(|l| l.trim() == "10"), "the program must not run: {out}");
+}
+
+#[test]
+fn floor_division_inside_functions_and_calls_is_rejected_too() {
+    for body in ["return (lo + hi) // 2", "return n //2", "return xs[0] // (k + 1)"] {
+        let src = format!("fn f(lo, hi, n, xs, k) {{\n  {}\n}}\nprintln(1)\n", body);
+        let out = run(&src);
+        assert!(out.contains(FLOOR_HINT), "{body}: {out}");
+    }
+    let out = run("a = 7\nb = 2\nprintln(a // b)\n");
+    assert!(out.contains(FLOOR_HINT), "{out}");
+}
+
+#[test]
+fn ordinary_comments_still_work() {
+    let src = r#"// a whole-line comment
+x = 10 // trailing comment
+println(x) // another one
+y = 3 //TODO revisit
+println(y + 1) // 2 more steps
+println("a // b is text, not a comment")
+// x // 2 inside a comment line
+println(floor(7 / 2))
+"#;
+    assert_eq!(run(src), "10\n4\na // b is text, not a comment\n3");
+}
+
+#[test]
+fn floor_division_spelled_with_floor_works() {
+    assert_eq!(run("println(floor(17 / 5))\nprintln(floor(-17 / 5))\n"), "3\n-4");
+}

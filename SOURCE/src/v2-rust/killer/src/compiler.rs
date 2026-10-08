@@ -347,6 +347,13 @@ pub fn compile_killer_subset(source: &str) -> Result<Program, VmError> {
     // Every rewriting pass returns its text plus a per-line map back to its input; composing them
     // (see `sourcemap`) tells us the original file and line of each line the compiler sees.
     let (imported, map) = crate::imports::resolve_mapped(source).map_err(VmError::parse_error_simple)?;
+    // `x // 2` would silently become `x` (`//` starts a comment): make that mistake an error
+    if let Some(line) = crate::hints::silent_floor_division(&imported) {
+        return Err(remap_error(
+            VmError::parse_error_simple(format!("Line {}: {}", line, crate::hints::FLOOR_DIVISION_MESSAGE)),
+            &map,
+        ));
+    }
     let checked = crate::typecheck::process(&imported).map_err(|e| remap_error(e, &map))?;
     let (lowered, pass) = crate::controlflow::lower_mapped(&checked);
     let map = map.compose(&pass);

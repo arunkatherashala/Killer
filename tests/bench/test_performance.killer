@@ -99,7 +99,7 @@ t0 = time_ms()
 v = 1000000000
 i = 0
 while i < 1000000 {
-    v = v // 2
+    v = floor(v / 2)
     if v < 1 {
         v = 1000000000
     }
@@ -144,11 +144,11 @@ print(K"  Total benchmark time:  {total_ms}ms")
 
 -- Ops/sec calculations
 if loop_ms > 0 {
-    loop_ops = 1000000000 // loop_ms
+    loop_ops = floor(1000000000 / loop_ms)
     print(K"  Counter loop:          {loop_ops}K ops/sec")
 }
 if call_ms > 0 {
-    call_ops = 100000000 // call_ms
+    call_ops = floor(100000000 / call_ms)
     print(K"  Function calls:        {call_ops}K calls/sec")
 }
 if fib_ms > 0 {
