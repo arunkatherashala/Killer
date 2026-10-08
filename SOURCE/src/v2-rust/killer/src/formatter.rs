@@ -71,12 +71,14 @@ impl Default for FormatterConfig {
             line_length: 100,
             trailing_comma: TrailingCommaStyle::MultiLine,
             brace_style: BraceStyle::SameLine,
-            spaces_around_operators: true,
-            spaces_after_keywords: true,
+            // Operator/keyword re-spacing is opt-in: the default formatter only changes
+            // whitespace that cannot affect meaning (indentation, trailing blanks, blank runs).
+            spaces_around_operators: false,
+            spaces_after_keywords: false,
             space_before_colon: false,
             space_after_colon: true,
             uppercase_keywords: false,
-            max_blank_lines: 2,
+            max_blank_lines: 1,
         }
     }
 }
@@ -131,59 +133,27 @@ impl Formatter {
         }
     }
 
-    /// Format source code
+    /// Format source code.
+    ///
+    /// Guarantees: only whitespace outside strings and comments changes (indentation of brace
+    /// code, trailing whitespace, runs of blank lines, final newline), so the program behaves
+    /// identically, and `format(format(x)) == format(x)`. Operator / keyword re-spacing and
+    /// trailing-comma removal are applied only when enabled in the config.
     pub fn format(&mut self, source: &str) -> Result<String, String> {
         self.changes.clear();
-
-        // Apply formatting rules
-        let mut result = self.format_indentation(source)?;
-        result = self.format_spacing(&result)?;
-        result = self.format_line_breaks(&result)?;
-        result = self.format_keywords(&result)?;
-        result = self.format_trailing_commas(&result)?;
-        result = self.format_braces(&result)?;
-        result = self.cleanup_blank_lines(&result)?;
-
+        let mut result = normalize_source(source, &self.config);
+        if self.config.spaces_around_operators || self.config.spaces_after_keywords {
+            result = self.format_spacing(&result)?;
+        }
+        if self.config.trailing_comma == TrailingCommaStyle::Never {
+            result = remove_trailing_commas(&result);
+        }
         Ok(result)
     }
 
-    /// Format indentation to consistent levels
-    fn format_indentation(&mut self, source: &str) -> Result<String, String> {
-        let indent_str = if self.config.indent_style == IndentStyle::Spaces {
-            " ".repeat(self.config.indent_size)
-        } else {
-            "\t".to_string()
-        };
-
-        let mut result = String::new();
-        let mut indent_level: usize = 0;
-        
-        for line in source.lines() {
-            let trimmed = line.trim_start();
-            
-            // Count braces to determine indentation
-            if trimmed.ends_with('}') || trimmed.ends_with(']') || trimmed.ends_with(')') {
-                indent_level = indent_level.saturating_sub(1);
-            }
-
-            // Add indented line
-            if !trimmed.is_empty() {
-                result.push_str(&indent_str.repeat(indent_level));
-                result.push_str(trimmed);
-            }
-            result.push('\n');
-
-            // Update indent level
-            for ch in trimmed.chars() {
-                if ch == '{' || ch == '[' || ch == '(' {
-                    indent_level += 1;
-                } else if ch == '}' || ch == ']' || ch == ')' {
-                    indent_level = indent_level.saturating_sub(1);
-                }
-            }
-        }
-
-        Ok(result.trim_end().to_string() + "\n")
+    /// `true` when `source` is already formatted.
+    pub fn is_formatted(&mut self, source: &str) -> bool {
+        self.format(source).map_or(false, |f| f == source)
     }
 
     /// Format spacing around operators and keywords (token-aware, preserves strings/comments)
@@ -347,128 +317,6 @@ impl Formatter {
            .collect()
     }
 
-    /// Format line breaks: deduplicate blank lines, preserve all indentation.
-    fn format_line_breaks(&mut self, source: &str) -> Result<String, String> {
-        let mut result = String::new();
-        let mut blank_run = 0usize;
-
-        for line in source.lines() {
-            if line.trim().is_empty() {
-                blank_run += 1;
-                // Allow up to max_blank_lines consecutive blank lines
-                if blank_run <= self.config.max_blank_lines {
-                    result.push('\n');
-                }
-            } else {
-                blank_run = 0;
-                result.push_str(line); // preserves original indentation
-                result.push('\n');
-            }
-        }
-
-        Ok(result.trim_end().to_string() + "\n")
-    }
-
-    /// Format keywords to consistent case
-    fn format_keywords(&mut self, source: &str) -> Result<String, String> {
-        let mut result = source.to_string();
-
-        if self.config.uppercase_keywords {
-            let keywords = vec![
-                "let", "const", "fn", "class", "if", "else", "for", "while", 
-                "return", "true", "false", "null", "new", "try", "catch", 
-                "finally", "throw", "yield", "switch", "case", "default",
-            ];
-
-            for keyword in keywords {
-                // Replace lowercase with uppercase (word boundaries)
-                let _pattern = format!("\\b{}\\b", keyword);
-                let replacement = keyword.to_uppercase();
-                // Simple replacement (not regex-based)
-                let lower = format!(" {} ", keyword);
-                let upper = format!(" {} ", replacement);
-                result = result.replace(&lower, &upper);
-            }
-        }
-
-        Ok(result)
-    }
-
-    /// Format trailing commas
-    fn format_trailing_commas(&mut self, source: &str) -> Result<String, String> {
-        let mut result = source.to_string();
-
-        match self.config.trailing_comma {
-            TrailingCommaStyle::Never => {
-                // Remove trailing commas
-                result = result.replace(",]", "]");
-                result = result.replace(",}", "}");
-                result = result.replace(",)", ")");
-            }
-            TrailingCommaStyle::Always => {
-                // Add trailing commas before closing brackets
-                result = result.replace("]", ",]");
-                result = result.replace(",,]", ",]");
-            }
-            TrailingCommaStyle::MultiLine => {
-                // Add trailing commas only in multi-line structures
-                // (simplified: check for newlines before closing bracket)
-                // This is a simplified implementation
-            }
-        }
-
-        Ok(result)
-    }
-
-    /// Format brace placement
-    fn format_braces(&mut self, source: &str) -> Result<String, String> {
-        let result = source.to_string();
-
-        match self.config.brace_style {
-            BraceStyle::SameLine => {
-                // Keep braces on same line (default expected)
-                Ok(result)
-            }
-            BraceStyle::NewLine => {
-                // Move opening braces to new line
-                let mut formatted = String::new();
-                for line in result.lines() {
-                    if line.contains('{') && !line.trim().starts_with('{') {
-                        let parts: Vec<&str> = line.split('{').collect();
-                        formatted.push_str(parts[0].trim_end());
-                        formatted.push('\n');
-                        formatted.push('{');
-                    } else {
-                        formatted.push_str(line);
-                    }
-                    formatted.push('\n');
-                }
-                Ok(formatted.trim_end().to_string() + "\n")
-            }
-        }
-    }
-
-    /// Clean up excess blank lines
-    fn cleanup_blank_lines(&mut self, source: &str) -> Result<String, String> {
-        let mut result = String::new();
-        let mut blank_count = 0;
-
-        for line in source.lines() {
-            if line.trim().is_empty() {
-                blank_count += 1;
-                if blank_count <= self.config.max_blank_lines {
-                    result.push('\n');
-                }
-            } else {
-                blank_count = 0;
-                result.push_str(line);
-                result.push('\n');
-            }
-        }
-
-        Ok(result.trim_end().to_string() + "\n")
-    }
-
     /// Get all formatting changes made
     pub fn changes(&self) -> &[FormattingChange] {
         &self.changes
@@ -501,6 +349,169 @@ impl Default for Formatter {
     }
 }
 
+
+// ---------------------------------------------------------------------------------------------
+// Behaviour-preserving normalizer
+
+/// Blank out string literals and comments (columns are kept) so that brackets and keywords can
+/// be counted safely. Comment starters follow the compiler: `#` after whitespace (or at the start
+/// of the line), `//` and `--` outside strings.
+pub fn mask_code(line: &str) -> String {
+    let chars: Vec<char> = line.chars().collect();
+    let mut out = String::with_capacity(line.len());
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        let comment = (c == '#' && (i == 0 || chars[i - 1].is_whitespace()))
+            || (c == '/' && chars.get(i + 1) == Some(&'/'))
+            || (c == '-' && chars.get(i + 1) == Some(&'-'));
+        if comment {
+            out.extend(std::iter::repeat(' ').take(chars.len() - i));
+            break;
+        }
+        if c == '"' || c == '\'' {
+            // `'` only opens a string when it is not an apostrophe inside a word
+            if c == '\'' && i > 0 && chars[i - 1].is_alphanumeric() {
+                out.push(c);
+                i += 1;
+                continue;
+            }
+            let quote = c;
+            out.push(' ');
+            i += 1;
+            while i < chars.len() {
+                let d = chars[i];
+                out.push(' ');
+                i += 1;
+                if d == '\\' && i < chars.len() {
+                    out.push(' ');
+                    i += 1;
+                } else if d == quote {
+                    break;
+                }
+            }
+            continue;
+        }
+        out.push(c);
+        i += 1;
+    }
+    out
+}
+
+const BLOCK_KEYWORDS: &[&str] = &[
+    "if", "else", "elif", "while", "for", "fn", "kfn", "akfn", "class", "try", "catch", "finally",
+    "match", "switch", "do", "case", "default", "test",
+];
+
+/// True when the file mixes in indentation-sensitive syntax (offside blocks without braces,
+/// `@lang` polyglot blocks), where re-indenting could change the program.
+fn is_indentation_sensitive(lines: &[&str]) -> bool {
+    let masked: Vec<String> = lines.iter().map(|l| mask_code(l)).collect();
+    for (i, m) in masked.iter().enumerate() {
+        let t = m.trim();
+        if t.is_empty() {
+            continue;
+        }
+        if t.starts_with('@') || t.contains("= @") {
+            return true;
+        }
+        let first: String = t.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
+        if !BLOCK_KEYWORDS.contains(&first.as_str()) {
+            continue;
+        }
+        // a block opener needs a brace on this line or at the start of the next code line
+        if t.contains('{') {
+            continue;
+        }
+        let next = masked[i + 1..].iter().map(|s| s.trim()).find(|s| !s.is_empty());
+        if next.map_or(false, |n| n.starts_with('{')) {
+            continue;
+        }
+        // a statement continuing over lines (open bracket) is fine too
+        let opens = t.matches(|c| c == '(' || c == '[').count() as i64;
+        let closes = t.matches(|c| c == ')' || c == ']').count() as i64;
+        if opens > closes {
+            continue;
+        }
+        if t.ends_with(':')
+            || matches!(first.as_str(), "if" | "else" | "elif" | "while" | "for" | "fn" | "kfn" | "akfn" | "class" | "try" | "catch" | "finally" | "do")
+        {
+            return true;
+        }
+    }
+    false
+}
+
+/// Re-indent brace code, strip trailing whitespace, collapse blank-line runs, end with one newline.
+pub fn normalize_source(source: &str, config: &FormatterConfig) -> String {
+    let crlf = source.contains("\r\n");
+    let lines: Vec<&str> = source.split('\n').map(|l| l.strip_suffix('\r').unwrap_or(l)).collect();
+    let reindent = !is_indentation_sensitive(&lines);
+    let unit = if config.indent_style == IndentStyle::Spaces { " ".repeat(config.indent_size) } else { "\t".to_string() };
+    let mut out: Vec<String> = Vec::with_capacity(lines.len());
+    let mut depth: i64 = 0;
+    let mut blank_run = 0usize;
+    for line in &lines {
+        let trimmed = line.trim_end();
+        if trimmed.trim().is_empty() {
+            blank_run += 1;
+            if blank_run <= config.max_blank_lines && !out.is_empty() {
+                out.push(String::new());
+            }
+            continue;
+        }
+        blank_run = 0;
+        if reindent {
+            let body = trimmed.trim_start();
+            let masked = mask_code(body);
+            let leading_closers = masked.chars().take_while(|c| matches!(c, '}' | ']' | ')')).count() as i64;
+            let level = (depth - leading_closers).max(0) as usize;
+            for c in masked.chars() {
+                match c {
+                    '{' | '[' | '(' => depth += 1,
+                    '}' | ']' | ')' => depth = (depth - 1).max(0),
+                    _ => {}
+                }
+            }
+            out.push(format!("{}{}", unit.repeat(level), body));
+        } else {
+            out.push(trimmed.to_string());
+        }
+    }
+    while out.last().map_or(false, |l| l.is_empty()) {
+        out.pop();
+    }
+    if out.is_empty() {
+        return String::new();
+    }
+    let nl = if crlf { "\r\n" } else { "\n" };
+    let mut s = out.join(nl);
+    s.push_str(nl);
+    s
+}
+
+/// Remove `,` directly before a closing bracket (outside strings and comments).
+fn remove_trailing_commas(source: &str) -> String {
+    let mut out = String::with_capacity(source.len());
+    for (i, line) in source.split('\n').enumerate() {
+        if i > 0 {
+            out.push('\n');
+        }
+        let masked: Vec<char> = mask_code(line).chars().collect();
+        let chars: Vec<char> = line.chars().collect();
+        for (j, &c) in chars.iter().enumerate() {
+            if c == ',' && masked.get(j) == Some(&',') {
+                let next = masked[j + 1..].iter().find(|x| !x.is_whitespace());
+                if matches!(next, Some(']') | Some('}') | Some(')')) {
+                    continue;
+                }
+            }
+            out.push(c);
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -517,7 +528,7 @@ mod tests {
         let config = FormatterConfig::default();
         assert_eq!(config.indent_size, 2);
         assert_eq!(config.line_length, 100);
-        assert_eq!(config.max_blank_lines, 2);
+        assert_eq!(config.max_blank_lines, 1);
     }
 
     #[test]
@@ -536,7 +547,7 @@ mod tests {
         
         let result = formatter.format(source).unwrap();
         let blank_count = result.split("\n\n\n").count();
-        assert!(blank_count <= 2); // Max 2 blank lines
+        assert!(blank_count <= 1); // blank runs collapse
     }
 
     #[test]

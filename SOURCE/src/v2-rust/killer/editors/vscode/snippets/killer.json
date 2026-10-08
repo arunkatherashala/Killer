@@ -1,0 +1,77 @@
+{
+  "Function": {
+    "prefix": "fn",
+    "body": ["fn ${1:name}(${2:args}) {", "  $0", "}"],
+    "description": "Function definition"
+  },
+  "Class": {
+    "prefix": "class",
+    "body": ["class ${1:Name} {", "  fn init(${2:args}) {", "    $0", "  }", "}"],
+    "description": "Class with constructor"
+  },
+  "Class extends": {
+    "prefix": "classext",
+    "body": ["class ${1:Name} extends ${2:Base} {", "  fn init(${3:args}) {", "    super.init(${3:args})", "    $0", "  }", "}"],
+    "description": "Subclass"
+  },
+  "If": {
+    "prefix": "if",
+    "body": ["if ${1:condition} {", "  $0", "}"],
+    "description": "if statement"
+  },
+  "If else": {
+    "prefix": "ifelse",
+    "body": ["if ${1:condition} {", "  $2", "} else {", "  $0", "}"],
+    "description": "if/else statement"
+  },
+  "For in": {
+    "prefix": "forin",
+    "body": ["for ${1:item} in ${2:items} {", "  $0", "}"],
+    "description": "for-in loop"
+  },
+  "For range": {
+    "prefix": "forrange",
+    "body": ["for ${1:i} in range(${2:n}) {", "  $0", "}"],
+    "description": "for loop over a range"
+  },
+  "While": {
+    "prefix": "while",
+    "body": ["while ${1:condition} {", "  $0", "}"],
+    "description": "while loop"
+  },
+  "Try catch": {
+    "prefix": "try",
+    "body": ["try {", "  $1", "} catch ${2:e} {", "  $0", "}"],
+    "description": "try/catch"
+  },
+  "Try catch finally": {
+    "prefix": "tryf",
+    "body": ["try {", "  $1", "} catch ${2:e} {", "  $3", "} finally {", "  $0", "}"],
+    "description": "try/catch/finally"
+  },
+  "Match": {
+    "prefix": "match",
+    "body": ["match ${1:value} {", "  case ${2:pattern} {", "    $0", "  }", "}"],
+    "description": "match statement"
+  },
+  "Print": {
+    "prefix": "pr",
+    "body": ["print(${1:value})"],
+    "description": "print"
+  },
+  "Test block": {
+    "prefix": "test",
+    "body": ["test \"${1:name}\" {", "  assert_eq(${2:actual}, ${3:expected})", "  $0", "}"],
+    "description": "Test block for `killer test`"
+  },
+  "Import": {
+    "prefix": "import",
+    "body": ["import \"${1:module}\""],
+    "description": "import a module"
+  },
+  "Spawn": {
+    "prefix": "spawn",
+    "body": ["spawn ${1:fn_name}(${2:args})"],
+    "description": "spawn a concurrent task"
+  }
+}

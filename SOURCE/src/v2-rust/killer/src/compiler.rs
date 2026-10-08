@@ -333,6 +333,8 @@ pub fn compile_killer_subset(source: &str) -> Result<Program, VmError> {
     // Every rewriting pass returns its text plus a per-line map back to its input; composing them
     // (see `sourcemap`) tells us the original file and line of each line the compiler sees.
     let (imported, map) = crate::imports::resolve_mapped(source).map_err(VmError::parse_error_simple)?;
+    // `test "name" { }` blocks become functions (same line count, so `map` is unchanged)
+    let imported = crate::testfw::lower(&imported);
     let checked = crate::typecheck::process(&imported).map_err(|e| remap_error(e, &map))?;
     let (lowered, pass) = crate::controlflow::lower_mapped(&checked);
     let map = map.compose(&pass);
@@ -668,19 +670,8 @@ pub fn compile_killer_default(source: &str) -> Result<Program, VmError> {
 /// (see `vm::set_vm_debug_channel`).  Uses this alongside `vm::set_vm_debug_channel`
 /// to power the DAP step-debugger.
 pub fn compile_killer_debug(source: &str) -> Result<Program, VmError> {
-    let mut injected = String::new();
-    for (idx, line) in source.lines().enumerate() {
-        let trimmed = line.trim();
-        // Skip blank lines and comments
-        let is_blank = trimmed.is_empty();
-        let is_comment = trimmed.starts_with('#');
-        if !is_blank && !is_comment {
-            injected.push_str(&format!("__dl({})\n", idx + 1));
-        }
-        injected.push_str(line);
-        injected.push('\n');
-    }
-    compile_killer_subset(&injected)
+    // checkpoints go only before statements (see `dap::instrument`), so the program stays valid
+    compile_killer_subset(&crate::dap::instrument(source))
 }
 
 /// **Full AST** pipeline: compile [`crate::ast::Stmt`] trees (built programmatically or from a
@@ -6787,7 +6778,7 @@ fn patch_pending_calls(state: &mut CompilerState) -> Result<(), VmError> {
         // that name (they are common words)
         let generator_builtin = matches!(pending.function_name.as_str(), "next" | "has_next")
             && !state.functions.contains_key(&pending.function_name);
-        if generator_builtin || BUILTINS.contains(&pending.function_name.as_str()) {
+        if generator_builtin || pending.function_name == "__dl" || BUILTINS.contains(&pending.function_name.as_str()) {
             // -- Nova Galaxy: emit native opcodes instead of CallBuiltin ------
             let native_instr: Option<Instruction> = match pending.function_name.as_str() {
                 // Phase A: Trit native ALU opcodes

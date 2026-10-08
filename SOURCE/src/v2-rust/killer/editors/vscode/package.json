@@ -1,0 +1,48 @@
+{
+  "name": "killer-lang",
+  "displayName": "Killer Language",
+  "description": "Syntax highlighting, snippets, diagnostics, completion, hover and go-to-definition for the Killer scripting language.",
+  "version": "0.1.0",
+  "publisher": "killer-lang",
+  "license": "MIT",
+  "engines": { "vscode": "^1.60.0" },
+  "categories": ["Programming Languages", "Snippets", "Linters"],
+  "main": "./client/extension.js",
+  "activationEvents": ["onLanguage:killer"],
+  "contributes": {
+    "languages": [
+      {
+        "id": "killer",
+        "aliases": ["Killer", "killer"],
+        "extensions": [".killer"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "killer",
+        "scopeName": "source.killer",
+        "path": "./syntaxes/killer.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      { "language": "killer", "path": "./snippets/killer.json" }
+    ],
+    "configuration": {
+      "title": "Killer",
+      "properties": {
+        "killer.server.path": {
+          "type": "string",
+          "default": "killer_lsp",
+          "description": "Path to the killer_lsp executable (the Killer language server, speaks LSP over stdio)."
+        },
+        "killer.server.args": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Extra arguments passed to the language server."
+        }
+      }
+    }
+  }
+}

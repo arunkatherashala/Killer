@@ -3633,9 +3633,7 @@ impl BuiltinFunctions {
         if a == b {
             Ok(Value::Str("OK".to_string()))
         } else {
-            Err(VmError::runtime_error(format!(
-                "assert_eq failed: left={:?}  right={:?}", a, b
-            )))
+            Err(VmError::runtime_error(crate::testfw::assert_eq_message(a, b)))
         }
     }
 
