@@ -210,6 +210,7 @@ fn resolve_package(name: &str, constraint: &str) -> Option<(String, String, Stri
 
 // pkg_init(name, version?) → creates killer.toml
 pub fn builtin_pkg_init(args: &[Value]) -> Result<Value, VmError> {
+    crate::security::require_file_write()?;
     let name = if args.is_empty() { "my-killer-app".to_string() } else { val_str(&args[0]) };
     let version = if args.len() > 1 { val_str(&args[1]) } else { "0.1.0".to_string() };
     let m = KillerManifest::new(&name, &version);
@@ -221,6 +222,8 @@ pub fn builtin_pkg_init(args: &[Value]) -> Result<Value, VmError> {
 
 // pkg_add(name, version_constraint)
 pub fn builtin_pkg_add(args: &[Value]) -> Result<Value, VmError> {
+    crate::security::require_file_read()?;
+    crate::security::require_file_write()?;
     if args.is_empty() {
         return Err(VmError::runtime_error("pkg_add(name, version?) — package name required"));
     }
@@ -238,6 +241,8 @@ pub fn builtin_pkg_add(args: &[Value]) -> Result<Value, VmError> {
 
 // pkg_remove(name)
 pub fn builtin_pkg_remove(args: &[Value]) -> Result<Value, VmError> {
+    crate::security::require_file_read()?;
+    crate::security::require_file_write()?;
     if args.is_empty() {
         return Err(VmError::runtime_error("pkg_remove(name) — package name required"));
     }
@@ -254,6 +259,7 @@ pub fn builtin_pkg_remove(args: &[Value]) -> Result<Value, VmError> {
 
 // pkg_list() → list all deps
 pub fn builtin_pkg_list(args: &[Value]) -> Result<Value, VmError> {
+    crate::security::require_file_read()?;
     let _ = args;
     let m = find_manifest().map_err(|e| VmError::runtime_error(e))?;
     let mut out = format!("{} v{}\n", m.name, m.version);
@@ -270,6 +276,7 @@ pub fn builtin_pkg_list(args: &[Value]) -> Result<Value, VmError> {
 
 // pkg_resolve() → resolve dependency tree (local registry first, then bundled)
 pub fn builtin_pkg_resolve(args: &[Value]) -> Result<Value, VmError> {
+    crate::security::require_file_read()?;
     let _ = args;
     let m = find_manifest().map_err(|e| VmError::runtime_error(e))?;
     let mut resolved = Vec::new();
@@ -298,6 +305,8 @@ pub fn builtin_pkg_resolve(args: &[Value]) -> Result<Value, VmError> {
 
 // pkg_install() → install deps from local + bundled registry into packages/
 pub fn builtin_pkg_install(args: &[Value]) -> Result<Value, VmError> {
+    crate::security::require_file_read()?;
+    crate::security::require_file_write()?;
     let _ = args;
     let m = find_manifest().map_err(|e| VmError::runtime_error(e))?;
     let _ = std::fs::create_dir_all("packages");
@@ -341,6 +350,7 @@ pub fn builtin_pkg_install(args: &[Value]) -> Result<Value, VmError> {
 
 // pkg_info(name) → package info from local registry then bundled
 pub fn builtin_pkg_info(args: &[Value]) -> Result<Value, VmError> {
+    crate::security::require_file_read()?;
     if args.is_empty() {
         return Err(VmError::runtime_error("pkg_info(name) — package name required"));
     }
@@ -366,6 +376,7 @@ pub fn builtin_pkg_info(args: &[Value]) -> Result<Value, VmError> {
 
 // pkg_search(query) → search both local and bundled registries
 pub fn builtin_pkg_search(args: &[Value]) -> Result<Value, VmError> {
+    crate::security::require_file_read()?;
     let query = if args.is_empty() { String::new() } else { val_str(&args[0]).to_lowercase() };
     let mut results = Vec::new();
     // Local registry (shown first)
@@ -391,6 +402,8 @@ pub fn builtin_pkg_search(args: &[Value]) -> Result<Value, VmError> {
 
 // pkg_publish() → publish to the local filesystem registry (~/.killer/registry/)
 pub fn builtin_pkg_publish(args: &[Value]) -> Result<Value, VmError> {
+    crate::security::require_file_read()?;
+    crate::security::require_file_write()?;
     let _ = args;
     let m = find_manifest().map_err(|e| VmError::runtime_error(e))?;
 
@@ -446,6 +459,7 @@ pub fn builtin_pkg_publish(args: &[Value]) -> Result<Value, VmError> {
 
 // pkg_version() → current project version
 pub fn builtin_pkg_version(args: &[Value]) -> Result<Value, VmError> {
+    crate::security::require_file_read()?;
     let _ = args;
     let m = find_manifest().map_err(|e| VmError::runtime_error(e))?;
     Ok(Value::Str(format!("{} v{}", m.name, m.version)))
@@ -797,6 +811,7 @@ fn handle_lsp_connection(mut stream: TcpStream) {
 
 // lsp_start(port?) → start LSP server in background
 pub fn builtin_lsp_start(args: &[Value]) -> Result<Value, VmError> {
+    crate::security::require_network()?;
     let port = if args.is_empty() { 9257 } else {
         match &args[0] { Value::Number(n) => *n as u16, _ => 9257 }
     };
@@ -945,6 +960,8 @@ impl DapSession {
 
 // dap_start(file) → compile + spawn VM thread, pause at first checkpoint
 pub fn builtin_dap_start(args: &[Value]) -> Result<Value, VmError> {
+    crate::security::require_file_read()?;
+    crate::security::require_network()?;
     if args.is_empty() {
         return Err(VmError::runtime_error("dap_start(file) — .killer file path required"));
     }
@@ -1423,6 +1440,8 @@ function filterDocs() {
 
 // docs_generate(dir?, output?) → scan .killer files, generate HTML
 pub fn builtin_docs_generate(args: &[Value]) -> Result<Value, VmError> {
+    crate::security::require_file_read()?;
+    crate::security::require_file_write()?;
     let dir = if args.is_empty() { ".".to_string() } else { val_str(&args[0]) };
     let output = if args.len() > 1 { val_str(&args[1]) } else { "docs".to_string() };
 
@@ -1461,6 +1480,7 @@ pub fn builtin_docs_generate(args: &[Value]) -> Result<Value, VmError> {
 
 // docs_serve(port?) → serve docs directory on HTTP
 pub fn builtin_docs_serve(args: &[Value]) -> Result<Value, VmError> {
+    crate::security::require_network()?;
     let port = if args.is_empty() { 8080u16 } else {
         match &args[0] { Value::Number(n) => *n as u16, _ => 8080 }
     };
@@ -1510,6 +1530,7 @@ pub fn builtin_docs_serve(args: &[Value]) -> Result<Value, VmError> {
 
 // docs_search(query) → search across generated docs
 pub fn builtin_docs_search(args: &[Value]) -> Result<Value, VmError> {
+    crate::security::require_file_read()?;
     if args.is_empty() {
         return Err(VmError::runtime_error("docs_search(query) — search term required"));
     }
@@ -1577,6 +1598,8 @@ pub fn builtin_docs_api(args: &[Value]) -> Result<Value, VmError> {
 
 // docs_export(format?) → export as JSON
 pub fn builtin_docs_export(args: &[Value]) -> Result<Value, VmError> {
+    crate::security::require_file_read()?;
+    crate::security::require_file_write()?;
     let format = if args.is_empty() { "json".to_string() } else { val_str(&args[0]).to_lowercase() };
 
     let mut entries = Vec::new();
@@ -1643,6 +1666,7 @@ pub fn builtin_docs_export(args: &[Value]) -> Result<Value, VmError> {
 
 /// docs_reference(output_path?) → write LANGUAGE_REFERENCE.md
 pub fn builtin_docs_reference(args: &[Value]) -> Result<Value, VmError> {
+    crate::security::require_file_write()?;
     let path = if args.is_empty() {
         "LANGUAGE_REFERENCE.md".to_string()
     } else {

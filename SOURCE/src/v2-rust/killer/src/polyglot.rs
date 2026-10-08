@@ -358,19 +358,55 @@ pub fn detect_all_runtimes() -> Vec<(String, String)> {
 
 // --- Temp File Management -----------------------------------------------------
 
-/// Write code to a secure temp file. Returns the file path.
+static TEMP_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// A name in the temp directory that no other process or thread is using and that nobody can
+/// predict from the pid alone: pid + nanosecond clock + per-process counter.
+fn unique_temp_name(prefix: &str) -> String {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let seq = TEMP_SEQ.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    format!("{}_{}_{}_{}", prefix, std::process::id(), nanos, seq)
+}
+
+/// Create a fresh private directory in the temp dir (`create_dir` fails if the name already exists,
+/// so a pre-planted directory or symlink is never reused). Owner-only permissions on Unix.
+fn private_temp_dir(prefix: &str) -> Result<std::path::PathBuf, String> {
+    for _ in 0..32 {
+        let path = std::env::temp_dir().join(unique_temp_name(prefix));
+        let mut builder = fs::DirBuilder::new();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::DirBuilderExt;
+            builder.mode(0o700);
+        }
+        match builder.create(&path) {
+            Ok(()) => return Ok(path),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(format!("Cannot create temp directory: {}", e)),
+        }
+    }
+    Err("Cannot create a unique temp directory".to_string())
+}
+
+/// Write code to a fresh temp file. The file is created with `create_new` (O_EXCL), so an existing
+/// file or a symlink planted at a guessed name is never followed or truncated.
 fn write_temp_file(code: &str, ext: &str) -> Result<std::path::PathBuf, String> {
     let tmp = std::env::temp_dir();
-    // Use a unique name per call to avoid collisions
-    let id = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or(Duration::from_secs(0))
-        .subsec_nanos();
-    let filename = format!("killer_nova_galaxy_{}.{}", id, ext);
-    let path = tmp.join(&filename);
-    let mut f = fs::File::create(&path).map_err(|e| format!("Cannot create temp file: {}", e))?;
-    f.write_all(code.as_bytes()).map_err(|e| format!("Cannot write temp file: {}", e))?;
-    Ok(path)
+    for _ in 0..32 {
+        let path = tmp.join(format!("{}.{}", unique_temp_name("killer_nova_galaxy"), ext));
+        match fs::OpenOptions::new().write(true).create_new(true).open(&path) {
+            Ok(mut f) => {
+                f.write_all(code.as_bytes()).map_err(|e| format!("Cannot write temp file: {}", e))?;
+                return Ok(path);
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(format!("Cannot create temp file: {}", e)),
+        }
+    }
+    Err("Cannot create a unique temp file".to_string())
 }
 
 // Java Special Handling
@@ -399,6 +435,13 @@ fn wrap_java_if_needed(code: &str) -> String {
 
 /// Execute Java code: compile with javac, then run with java.
 fn exec_java(code: &str) -> Result<String, String> {
+    let dir = private_temp_dir("killer_java")?;
+    let result = exec_java_in(code, &dir);
+    let _ = fs::remove_dir_all(&dir);
+    result
+}
+
+fn exec_java_in(code: &str, tmp_dir: &std::path::Path) -> Result<String, String> {
     // Check javac available
     if !is_executable_available_with("javac", &["--version"]) {
         return Err(
@@ -410,7 +453,6 @@ fn exec_java(code: &str) -> Result<String, String> {
     }
 
     let wrapped = wrap_java_if_needed(code);
-    let tmp_dir = std::env::temp_dir();
     let java_file = tmp_dir.join("KillerMain.java");
     let mut f = fs::File::create(&java_file)
         .map_err(|e| format!("Cannot create Java temp file: {}", e))?;
@@ -482,13 +524,19 @@ fn wrap_c_if_needed(code: &str) -> String {
 }
 
 fn exec_c(code: &str) -> Result<String, String> {
+    let dir = private_temp_dir("killer_c")?;
+    let result = exec_c_in(code, &dir);
+    let _ = fs::remove_dir_all(&dir);
+    result
+}
+
+fn exec_c_in(code: &str, tmp_dir: &std::path::Path) -> Result<String, String> {
     // Try gcc then clang
     let compiler = if is_executable_available_with("gcc", &["--version"]) { "gcc" }
         else if is_executable_available_with("clang", &["--version"]) { "clang" }
         else { return Err("C compiler not found. Install gcc: https://gcc.gnu.org or clang: https://clang.llvm.org".to_string()); };
 
     let wrapped = wrap_c_if_needed(code);
-    let tmp_dir = std::env::temp_dir();
     let c_file  = tmp_dir.join("killer_nova_galaxy_c.c");
     let out_file = tmp_dir.join(if cfg!(target_os = "windows") {
         "killer_nova_galaxy_c.exe"
@@ -539,12 +587,18 @@ fn wrap_cpp_if_needed(code: &str) -> String {
 }
 
 fn exec_cpp(code: &str) -> Result<String, String> {
+    let dir = private_temp_dir("killer_cpp")?;
+    let result = exec_cpp_in(code, &dir);
+    let _ = fs::remove_dir_all(&dir);
+    result
+}
+
+fn exec_cpp_in(code: &str, tmp_dir: &std::path::Path) -> Result<String, String> {
     let compiler = if is_executable_available_with("g++", &["--version"]) { "g++" }
         else if is_executable_available_with("clang++", &["--version"]) { "clang++" }
         else { return Err("C++ compiler not found. Install g++: https://gcc.gnu.org or clang++: https://clang.llvm.org".to_string()); };
 
     let wrapped = wrap_cpp_if_needed(code);
-    let tmp_dir  = std::env::temp_dir();
     let cpp_file = tmp_dir.join("killer_nova_galaxy_cpp.cpp");
     let out_file = tmp_dir.join(if cfg!(target_os = "windows") {
         "killer_nova_galaxy_cpp.exe"
@@ -581,12 +635,18 @@ fn exec_cpp(code: &str) -> Result<String, String> {
 }
 
 fn exec_rust(code: &str) -> Result<String, String> {
+    let dir = private_temp_dir("killer_rust")?;
+    let result = exec_rust_in(code, &dir);
+    let _ = fs::remove_dir_all(&dir);
+    result
+}
+
+fn exec_rust_in(code: &str, tmp_dir: &std::path::Path) -> Result<String, String> {
     if !is_executable_available_with("rustc", &["--version"]) {
         return Err("Rust compiler not found. Install from: https://rustup.rs".to_string());
     }
 
     let wrapped = wrap_rust_if_needed(code);
-    let tmp_dir = std::env::temp_dir();
     let rs_file = tmp_dir.join("killer_nova_galaxy_rust.rs");
     let out_file = tmp_dir.join("killer_nova_galaxy_rust_out");
 
