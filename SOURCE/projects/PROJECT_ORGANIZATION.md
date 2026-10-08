@@ -1,7 +1,7 @@
 # Killer V2 - Complete Project Organization
 
 **Created:** March 17, 2026  
-**Status:** Production-Ready Research Archive  
+**Status:** beta (pre-release) Research Archive  
 **Total Projects:** 19  
 **Prize Money:** $6,000,000 (Millennium) + Fibonacci (Proof of Concept)
 
@@ -258,7 +258,7 @@ killer projects/[field]/[problem]/FRAMEWORK.killer
 | Test Cases | 50+ |
 | Test Pass Rate | 100% |
 | Fields Covered | 3 (CS, Math, Physics) |
-| Status | Production-Ready |
+| Status | beta (pre-release) |
 
 ---
 

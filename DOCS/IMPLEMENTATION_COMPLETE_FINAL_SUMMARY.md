@@ -212,7 +212,7 @@ The limiting factors are:
 
 ---
 
-## 🎯 STATUS: ✅ PRODUCTION READY
+## 🎯 STATUS: BETA (PRE-RELEASE)
 
 ```
 ✅ All three challenges: SOLVED

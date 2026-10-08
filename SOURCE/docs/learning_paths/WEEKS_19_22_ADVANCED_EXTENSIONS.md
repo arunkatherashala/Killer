@@ -739,7 +739,7 @@ Weeks 19-22: Advanced Enterprise Patterns
 
 # COMPETENCY MATRIX
 
-After Weeks 19-22, students will be **production-ready** for:
+After Weeks 19-22, students will be **beta (pre-release)** for:
 
 | System Type | Capability | Readiness |
 |-------------|-----------|-----------|

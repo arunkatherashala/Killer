@@ -2,7 +2,7 @@
 
 **Version**: 3.0.0  
 **Latest Release**: March 14, 2026  
-**Status**: ✅ Production-Ready
+**Status**: beta (pre-release)
 
 ---
 

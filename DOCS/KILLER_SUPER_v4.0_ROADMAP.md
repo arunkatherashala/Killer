@@ -1,5 +1,5 @@
 # KILLER SUPER v4.0 - FEATURE IMPLEMENTATION ROADMAP
-**Target:** Production-ready language with ALL missing features  
+**Target:** beta (pre-release) language with ALL missing features  
 **Timeline:** 24 weeks (Phase 20-28)  
 **Structure:** Enhance existing killer_rcore modules
 
@@ -480,7 +480,7 @@ Timeline: 2 weeks
 | **27** | DX (REPL, Formatter, Linter) | MEDIUM | 600+ | 2 weeks |
 | **28** | Documentation + Examples | LOW | 400+ | 2 weeks |
 | | | | | |
-| **TOTAL** | **Production-Ready killer_super v4.0** | **MASSIVE** | **7400+ lines** | **24 weeks** |
+| **TOTAL** | **beta (pre-release) killer_super v4.0** | **MASSIVE** | **7400+ lines** | **24 weeks** |
 
 ---
 
@@ -617,7 +617,7 @@ _TOOLS/killer_rcore/
 - ✅ Documentation generated
 
 ### FINAL RESULT
-**killer_super v4.0** = Production-ready language with:
+**killer_super v4.0** = beta (pre-release) language with:
 - ✅ 7400+ new lines of code
 - ✅ 50+ major features implemented
 - ✅ 200+ stdlib functions

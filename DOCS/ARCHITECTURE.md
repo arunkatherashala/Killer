@@ -2,7 +2,7 @@
 
 **Version**: 4.2-SUPER  
 **Date**: March 21, 2026  
-**Status**: Production-Ready (v1.1), Beta Features (v1.2 Alpha)
+**Status**: beta (pre-release) (v1.1), Beta Features (v1.2 Alpha)
 
 ---
 

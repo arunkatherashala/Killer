@@ -414,7 +414,7 @@ Documentation:
 
 ✅ **Automatic Optimization**: Router chooses LOCAL vs SPARK automatically
 
-✅ **Production-Ready**: 12 Killer programs + full documentation
+**beta (pre-release)**: 12 Killer programs + full documentation
 
 ✅ **20-40x Faster**: Parallel execution + incremental processing
 

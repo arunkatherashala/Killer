@@ -15,7 +15,7 @@ The **Killer Multi-Agent Framework** enables you to deploy **organized teams of 
 ✅ **Generic Templates** - Adapt for any problem domain
 ✅ **Built-in Orchestration** - Master coordinator manages all agents
 ✅ **Real-time Debate** - Interactive consensus building
-✅ **Production-Ready** - Tested on Millennium Problems, works for anything
+**beta (pre-release)** - Tested on Millennium Problems, works for anything
 
 ---
 
@@ -157,7 +157,7 @@ agents/
 ✅ **Scalable from 4 to 1000+ agents** - Adapt to your problem size
 ✅ **Generic Templates** - Apply to any domain
 ✅ **Built-in Orchestration** - No custom coordination code needed
-✅ **Production-Ready** - Used for billion-dollar decisions
+**beta (pre-release)** - Used for billion-dollar decisions
 
 ---
 

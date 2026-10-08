@@ -390,7 +390,7 @@ Use this timeline to stay on track:
 **When they see:**
 ✅ 39 comprehensive tests → "They actually tested this properly"
 ✅ 100% pass rate → "It's rock solid"
-✅ 0 crashes/memory leaks → "Production ready"
+✅ 0 crashes/memory leaks → "beta (pre-release)"
 ✅ Performance benchmarks → "Faster than Python"
 ✅ Simple syntax examples → "We can learn this"
 ✅ Honest limitations → "They're not overselling"

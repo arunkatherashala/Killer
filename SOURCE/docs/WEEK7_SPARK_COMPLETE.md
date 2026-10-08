@@ -333,7 +333,7 @@ Scale:       100TB+ (distributed cluster)
 
 **Killer V2 now has:**
 - 🚀 **3,000+ lines of Spark ecosystem code**
-- 📊 **8 complete, production-ready modules**
+- 📊 **8 complete, beta (pre-release) modules**
 - 🧪 **52 comprehensive tests (all passing)**
 - 📈 **30+ data transformation operations**
 - 🤖 **4 machine learning algorithms**

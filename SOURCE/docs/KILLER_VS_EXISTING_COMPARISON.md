@@ -88,7 +88,7 @@
 | **Integration** | Built-in | JVM based | External | Separate | 🟢 **Killer** |
 | **Simplicity** | Very easy | Moderate | Medium | Complex | 🟢 **Killer** |
 | **Scale** | Small streams | Large clusters | Proven massive | Proven massive | 🔴 Others |
-| **Production-ready** | Yes (embedded) | Yes (proven) | Yes (proven) | Yes (proven) | Tie |
+| **beta (pre-release)** | NO (beta) (embedded) | Yes (proven) | Yes (proven) | Yes (proven) | Tie |
 
 **Verdict**: 🏆 **Killer wins for simplicity & embedded streaming**
 

@@ -2043,5 +2043,5 @@ mod key_rotation_tests {
 ---
 
 **Status**: Ready for implementation  
-**Target Release**: v4.3 - Production Ready (April 15, 2026)  
+**Target Release**: v4.3 - beta (pre-release) (April 15, 2026)  
 **Backward Compatibility**: Maintained via accessor patterns and result types

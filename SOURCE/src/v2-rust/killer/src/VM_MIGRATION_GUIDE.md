@@ -1,6 +1,6 @@
 /// VM Architecture Migration Guide - v4.3
 /// Complete patterns for transitioning from god object to component composition
-/// Production-ready examples and best practices
+/// beta (pre-release) examples and best practices
 
 // ============================================================================
 // PART 1: BEFORE (God Object Anti-Pattern)
@@ -387,7 +387,7 @@ ESTIMATED TIMELINE:
 - Phase 5: 1 day (test migration)
 - Phase 6: 1 day (documentation)
 - Phase 7: 1 week (gradual rollout + monitoring)
-- TOTAL: ~2 weeks for production-ready migration
+- TOTAL: ~2 weeks for beta (pre-release) migration
 */
 
 // ============================================================================

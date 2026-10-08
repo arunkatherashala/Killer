@@ -677,4 +677,4 @@ PostgreSQL:
 ---
 
 Last Updated: January 2024
-Version: 2.1.0 (Production Ready)
+Version: 2.1.0 (beta (pre-release))

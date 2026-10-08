@@ -458,7 +458,7 @@ cargo turbo
 ✅ **8.48s turbo builds** with parallelization
 ✅ **Automatic fallback** to full compilation on changes
 ✅ **No external dependencies** (batch/PowerShell native)
-✅ **Production-ready** optimization chain
+**beta (pre-release)** optimization chain
 
 **Recommended**: Use `killer_ultra_fast.bat` for development (3-5ms), `cargo turbo` for full rebuilds (8.5s)
 

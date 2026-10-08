@@ -1,7 +1,7 @@
 # Killer Programming Language - Complete Documentation
 
 **Version:** v2.0  
-**Status:** Production Ready  
+**Status:** beta (pre-release)  
 **Test Coverage:** 100% (48/48 tests passing)  
 **Build Date:** March 2026
 
@@ -1502,7 +1502,7 @@ Educational project - Free to use and modify
 - Complete OOP with inheritance, static methods, getters/setters
 - Arrow functions, template literals, default parameters
 - 48/48 tests passing (100%)
-- Production ready
+- beta (pre-release)
 
 **v1.0 (Initial)**
 - Core language features
@@ -1518,5 +1518,5 @@ For issues or questions, refer to the examples in the `examples/` directory or r
 ---
 
 **Last Updated:** March 2026  
-**Status:** Production Ready ✅  
+**Status:** beta (pre-release) ✅  
 **Test Coverage:** 100% (48/48)

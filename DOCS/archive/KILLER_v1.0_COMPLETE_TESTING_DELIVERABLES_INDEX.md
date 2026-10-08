@@ -1,3 +1,5 @@
+> Note: historical report, superseded by README and parity/PARITY_REPORT.md. Claims below are not current.
+
 # KILLER v1.0 - COMPLETE TESTING DELIVERABLES INDEX
 
 **Generated:** 2026-03-20  
@@ -65,7 +67,7 @@
    ├─ Release date: 2026-03-20
    ├─ Features documented: All 14 language features
    ├─ Test results: 274 unit + 115 Mercury all PASSED
-   └─ Status: PRODUCTION READY
+   └─ Status: BETA (PRE-RELEASE)
 
 2. ✅ KILLER_v1.0_COMPREHENSIVE_TEST_REPORT.md (13.4 KB)
    ├─ 39 test cases documented
@@ -323,7 +325,7 @@ Current Version:         1.0
 Release Date:            2026-03-20
 Binary Location:         production/killer.exe
 Binary Size:             139 KB
-Status:                  ✅ PRODUCTION READY
+Status:                  BETA (PRE-RELEASE)
 ```
 
 ### How to Use
@@ -389,7 +391,7 @@ Success Rate:      100% ✅
 Rounds Completed:  7/7 ✅
 All Rounds Passed: YES ✅
 
-Status:            ✅ PRODUCTION READY
+Status:            BETA (PRE-RELEASE)
 ```
 
 ### Deployment Status

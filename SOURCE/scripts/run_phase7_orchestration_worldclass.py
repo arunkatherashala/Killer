@@ -2,7 +2,7 @@
 """
 PHASE 7 ORCHESTRATION - WORLD CLASS WRAPPER
 Pure Killer orchestration with Python instrumentation (timing + CSV)
-Complete, production-ready, no rework needed
+Complete, beta (pre-release), no rework needed
 """
 
 import subprocess

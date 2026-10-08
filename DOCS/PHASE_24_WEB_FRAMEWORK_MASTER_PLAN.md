@@ -755,7 +755,7 @@ pub struct User {
 | Throughput | 1,000+ req/sec | Load test |
 | Compilation | No warnings | cargo build |
 | Documentation | 100% | All functions documented |
-| Production Ready | ✅ | Deployment checklist |
+| beta (pre-release) | ✅ | Deployment checklist |
 
 ---
 

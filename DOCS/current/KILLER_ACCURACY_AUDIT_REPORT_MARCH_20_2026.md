@@ -181,7 +181,7 @@ Breakdown:
 **Fix Required:**
 - Either: (a) Update docs to say "Async/await IS available" 
 - Or: (b) Clarify: "Async/await exists but is marked EXPERIMENTAL" 
-- Decide: Is it production-ready or beta?
+- Decide: Is it beta (pre-release) or beta?
 - Update all docs with accurate status
 
 ---
@@ -243,7 +243,7 @@ But AI_INTEGRATION_FINAL_STATUS.md says:
   "Phases 33-35 research ongoing"
   "Phase 36 validation in progress"
 
-CONFLICT: Is it production-ready or still researching?
+CONFLICT: Is it beta (pre-release) or still researching?
 ```
 
 ---
@@ -270,7 +270,7 @@ CONFLICT: Is it production-ready or still researching?
 3. **KILLER_v1.0_PRODUCTION_RELEASE.md**
    - [ ] Change version: v1.0 → v4.0.0
    - [ ] Update test narrative to match chosen story
-   - [ ] Clarify "production ready" claim
+   - [ ] Clarify "beta (pre-release)" claim
    - **Time:** 30 min
 
 4. **Build/Verify production/killer.exe**
@@ -446,7 +446,7 @@ Then: ✅ READY TO PRESENT
 
 1. **Official Version:** Is Killer v4.0.0, v1.0, or v4.2?
 2. **Test Story:** Present to team as "39 tests" or "1,943 tests"?
-3. **Async/Await:** Is it production-ready or experimental?
+3. **Async/Await:** Is it beta (pre-release) or experimental?
 4. **Performance:** Are metrics estimates or verified benchmarks?
 5. **Binary:** Where is production/killer.exe?
 6. **Mercury Engine:** Is source code available?

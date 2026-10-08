@@ -183,7 +183,7 @@ Week 4: Testing and production deployment
 - **100% pass rate** (0 crashes, 0 memory leaks) ✓
 - ~100,000 operations/second (preliminary estimate) ✓
 - 139 KB binary ✓
-- Production ready TODAY ✓
+- beta (pre-release) TODAY ✓
 
 ### The Risks
 "I'm going to be honest about limitations:

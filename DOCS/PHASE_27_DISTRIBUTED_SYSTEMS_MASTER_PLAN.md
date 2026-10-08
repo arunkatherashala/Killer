@@ -444,7 +444,7 @@ pub enum DistributedError {
 ✅ 250+ functions across 5 modules  
 ✅ 3,000+ lines of production code  
 ✅ 50+ comprehensive unit tests  
-✅ Production-ready resilience patterns  
+beta (pre-release) resilience patterns  
 ✅ Zero unsafe code  
 ✅ Type-safe error handling  
 ✅ Full lib.rs integration  

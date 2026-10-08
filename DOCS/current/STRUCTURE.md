@@ -95,7 +95,7 @@ killer/
 
 - **Current Version**: v4.2.0
 - **Release Date**: March 20, 2026
-- **Status**: Production Ready
+- **Status**: beta (pre-release)
 - **Code Coverage**: 99.8%
 - **Total Tests**: 5,604+ (documented in _LOGS/tracking/)
 

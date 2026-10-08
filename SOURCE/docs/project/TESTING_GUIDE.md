@@ -3,7 +3,7 @@
 
 **Date**: March 8, 2026  
 **Version**: 3.0 (Self-Hosted Compiler, Zero Dependencies)  
-**Status**: ✅ Production Ready
+**Status**: beta (pre-release)
 
 ---
 

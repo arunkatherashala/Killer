@@ -501,7 +501,7 @@ finished in 0.01s
 
 ---
 
-✅ **Phase 40 is production-ready and fully tested!**
+✅ **Phase 40 is beta (pre-release) and fully tested!**
 
 For questions or enhancements, see the test suite in [phase_40_tests](PHASE_40_TESTS.md) or the implementation in [SOURCE/src/v2-rust/killer/src/phase_40_advanced_office_features.rs](../../SOURCE/src/v2-rust/killer/src/phase_40_advanced_office_features.rs).
 

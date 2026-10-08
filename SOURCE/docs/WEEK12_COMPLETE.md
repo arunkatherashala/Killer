@@ -493,7 +493,7 @@ Database operations (insert/select/update/delete) depend on SQLite performance, 
 
 ## Summary
 
-Week 12 successfully implements a **production-ready database integration layer** with:
+Week 12 successfully implements a **beta (pre-release) database integration layer** with:
 
 - ✅ Type-safe schema definitions
 - ✅ CRUD abstraction backed by SQLite

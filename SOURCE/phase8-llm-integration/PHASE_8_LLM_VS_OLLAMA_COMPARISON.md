@@ -136,7 +136,7 @@ Quality Budget: Must be 95%+ accurate
   - Quality: 95%+
   - Handles novel situations
   - Trained on diverse data
-  - Production-ready
+  - beta (pre-release)
 ```
 
 **Winner: Ollama** 🎯

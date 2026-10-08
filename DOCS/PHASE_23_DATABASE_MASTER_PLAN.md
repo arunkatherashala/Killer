@@ -490,7 +490,7 @@ Phase 26: ML Operations (Inference, Training)
 
 **Next Session:** Begin Phase 23.1 (MongoDB Foundation) — Create connection pooling, CRUD operations, initial testing suite.
 
-**Estimated Delivery:** 5 weeks for complete Phase 23 with full ARU compliance and production-ready code.
+**Estimated Delivery:** 5 weeks for complete Phase 23 with full ARU compliance and beta (pre-release) code.
 
 ---
 

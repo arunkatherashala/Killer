@@ -158,7 +158,7 @@ Eliminate context switches and TLB misses, ensure consistency.
 This achievement demonstrates that:
 
 1. **Elegance beats brute force** - Smart architecture > raw FLOPS
-2. **Killer is production-ready** - Proven at billion-agent scale
+2. **Killer is beta (pre-release)** - Proven at billion-agent scale
 3. **Cost model is revolutionary** - Consumer hardware beats $1.3B systems
 4. **The impossible is solvable** - 1T agents, <4-bit memory, 1B+ throughput all achieved
 5. **Future is actor-based** - Distributed systems work better than thread-per-task
@@ -190,7 +190,7 @@ This achievement demonstrates that:
 
 This is **the breakthrough that proves**:
 
-- ✅ Killer Language is enterprise-production ready
+- ✅ Killer Language is enterprise-beta (pre-release)
 - ✅ Actor-based concurrency is the future
 - ✅ Consumer hardware can solve billion-dollar problems
 - ✅ Smart architecture matters more than raw compute

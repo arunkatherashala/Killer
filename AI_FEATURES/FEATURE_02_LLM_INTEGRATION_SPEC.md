@@ -692,7 +692,7 @@ kfn concurrent_queries_example() {
 | Memory per client | <5 MB | N/A (waiting) |
 
 **First deployed**: Week 8, 2026  
-**Production ready**: Week 8, 2026  
+**beta (pre-release)**: Week 8, 2026  
 **Market ready**: Week 26, 2026 (v2.0 launch)
 
 ---

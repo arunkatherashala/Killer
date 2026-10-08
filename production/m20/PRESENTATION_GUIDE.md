@@ -38,7 +38,7 @@ Results:
 • 50-100x faster than Python
 • Python-like simplicity (1-2 week learning curve)
 • 139KB deployment (zero dependencies)
-• Production ready TODAY
+• beta (pre-release) TODAY
 
 I'm recommending a low-risk pilot project:
 • 1 microservice
@@ -185,7 +185,7 @@ OPTION 4: KILLER v1.0 ⭐ RECOMMENDED
 ✓ 50-100x faster than Others
 ✓ Simple to learn (1-2 weeks)
 ✓ Top-class performance (100K+ ops/sec)
-✓ Production ready (tested 39 times)
+beta (pre-release) (tested 39 times)
 Result: ✅ Perfect fit"
 ```
 

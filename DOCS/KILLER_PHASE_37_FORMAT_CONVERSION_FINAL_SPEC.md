@@ -22,7 +22,7 @@ Critical Finding:
   🚨 2 REAL-WORLD cases ONLY Option 2 handles
 ```
 
-**VERDICT: Option 2 (Parentheses) is production-ready!**
+**VERDICT: Option 2 (Parentheses) is beta (pre-release)!**
 
 ---
 
@@ -70,7 +70,7 @@ run (file.csv).to.(file.json) [compression=gzip, validation=strict]
 | **Simplicity** | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | TIE |
 | **Handles dots in names** | ⭐⭐ | ⭐⭐⭐⭐⭐ | **Option 2** |
 | **Handles `.to.` in names** | ❌ | ⭐⭐⭐⭐⭐ | **Option 2** |
-| **Production-ready** | ⚠️ Limited | ✅ Full | **Option 2** |
+| **beta (pre-release)** | ⚠️ Limited | ✅ Full | **Option 2** |
 | **Real-world coverage** | 77.8% | 100% | **Option 2** |
 | **Ambiguity-free** | ⚠️ Some edge cases | ✅ Zero | **Option 2** |
 
@@ -363,7 +363,7 @@ run (report.csv).to.([
 ║                                                                                ║
 ║                    (source.ext).to.(destination.ext)                           ║
 ║                                                                                ║
-║                     100% Coverage | Zero Edge Cases | Production-Ready         ║
+║                     100% Coverage | Zero Edge Cases | beta (pre-release)         ║
 ║                                                                                ║
 ║                     MERCURY TEST VERIFIED: 9/9 Tests PASSED ✅                ║
 ║                                                                                ║
@@ -382,7 +382,7 @@ run (report.csv).to.([
 │ ✅ Batch operations & pipelines supported                        │
 │ ✅ Real-world filename handling (dots, special chars)            │
 │ ✅ Mercury test suite: 9/9 PASSED                               │
-│ ✅ Production-ready with zero ambiguity                          │
+│ beta (pre-release) with zero ambiguity                          │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -435,7 +435,7 @@ It represents the core principle: **"Minimal syntax, maximum intelligence"**
 - ✅ Simple: `(input.csv).to.(output.json)`
 - ✅ Elegant: Looks like file paths, not code
 - ✅ Powerful: Handles ANY filename, ANY format
-- ✅ Production-ready: 100% Mercury test coverage
+- beta (pre-release): 100% Mercury test coverage
 
 ---
 

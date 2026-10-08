@@ -545,7 +545,7 @@ Before (v4.2 Initial):
 ├─ ❌ <5% test coverage
 ├─ ❌ Minimal documentation
 ├─ ✅ Good performance metrics (v1.1)
-Status: NOT production-ready
+Status: not yet stable
 
 After (v4.2-SUPER):
 ├─ ✅ Path validation hardened

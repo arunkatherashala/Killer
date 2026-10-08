@@ -387,7 +387,7 @@ Memory/agent     <5KB          4KB         5KB       ✅ Killer wins
 - ✅ Ready for immediate release
 
 ### Sign-Off
-**Status: 🟢 PRODUCTION READY**
+**Status: 🟢 BETA (PRE-RELEASE)**
 
 **Killer v2.0 is approved for release as the #1 fastest AI language.**
 

@@ -4,7 +4,7 @@
 
 **Architect:** Sai Arun Kumar - Katherashala  
 **Date:** March 21, 2026  
-**Status:** ✅ **PRODUCTION READY & FULLY DEPLOYED**  
+**Status:** **BETA (PRE-RELEASE) & FULLY DEPLOYED**  
 **Evolution:** Killer v1.0 → Killer v4.2 → Supernova Lightning Engine v1.0  
 
 ---
@@ -222,7 +222,7 @@ SECURITY:
 - ✅ Linux (Ubuntu, Fedora, Debian)
 - ✅ macOS (Intel + Apple Silicon)
 
-**Tier 2 - Production Ready:**
+**Tier 2 - beta (pre-release):**
 - ✅ iOS 12+ (arm64)
 - ✅ Android 8+ (arm64, x86)
 
@@ -477,7 +477,7 @@ The **Supernova Lightning Engine** represents a paradigm shift in runtime archit
 
 We've created an engine that makes the "impossible" possible—delivering supercomputer-level computing to consumer devices with 866 MILLION times better cost-effectiveness.
 
-**Status: ✅ REVOLUTIONARY & PRODUCTION READY**
+**Status: ✅ REVOLUTIONARY & BETA (PRE-RELEASE)**
 
 **Deployment: Ready Now**
 

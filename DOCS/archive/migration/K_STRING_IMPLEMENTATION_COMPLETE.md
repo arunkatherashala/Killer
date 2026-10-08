@@ -325,7 +325,7 @@ K-strings are now fully integrated into Killer rcore v2.2. This feature provides
 - ✅ Zero runtime overhead
 - ✅ Full type safety
 - ✅ Seamless language integration
-- ✅ Production-ready implementation
+- beta (pre-release) implementation
 
 The feature seamlessly integrates with the Killer language philosophy: **"Simple for simple things, powerful for complex things."**
 

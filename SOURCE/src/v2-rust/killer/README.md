@@ -2,8 +2,8 @@
 
 [![Rust](https://img.shields.io/badge/language-Rust-orange.svg)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-1884%20unit%20%2B%20integration%20passing-brightgreen.svg)](#testing)
-[![Version](https://img.shields.io/badge/version-2.1-blueviolet.svg)](#)
+[![Tests](https://img.shields.io/badge/tests-run%20cargo%20test%20--tests-brightgreen.svg)](#testing)
+[![Version](https://img.shields.io/badge/version-1.0.0%20beta-blueviolet.svg)](#)
 
 **Killer** is a high-performance, AI-native scripting language with a Rust-powered runtime. It combines Python-style expressiveness with native-speed execution via JIT compilation, trinary (3-valued) logic, built-in AI primitives, and a rich 600+ function standard library — all with zero external crate dependencies.
 
@@ -244,7 +244,7 @@ timings include process start-up and vary from run to run, so read the ratios, n
 dicts, objects and array building is still slower, because the JIT does not handle those yet.
 Killer is not a replacement for C, C++, Java or .NET on performance.
 
-Run the benchmarks yourself with `cargo bench --bench vm_runtime`.
+The table above is an earlier manual measurement of the numeric JIT and is not produced by a script in this repo. The reproducible benchmark runner is `python bench/run.py` (Killer vs CPython on non-numeric workloads, results in `bench/RESULTS.md`; set `KILLER_BIN` to choose the binary). Status: beta / pre-release; version is the one in `Cargo.toml`.
 
 ---
 
@@ -369,7 +369,7 @@ The constants `T_POS`, `T_ZERO` and `T_NEG` are plain names. Use `x == T_ZERO` t
 ## Testing
 
 ```bash
-# Unit tests (1884 tests)
+# Library unit tests
 cargo test --lib
 
 # Integration tests

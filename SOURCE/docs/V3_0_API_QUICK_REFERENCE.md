@@ -1,6 +1,6 @@
 # Killer v3.0 API Quick Reference Card
 
-**Version**: 3.0.0 | **Date**: March 14, 2026 | **Status**: Production-Ready
+**Version**: 3.0.0 | **Date**: March 14, 2026 | **Status**: beta (pre-release)
 
 ---
 
@@ -264,7 +264,7 @@ try {
 - **Coverage**: 80% of 150 topics
 - **Modules**: 5 major (DateTime, HTTP, JSON/CSV, WebSocket, Traits)
 - **Functions**: 23 builtin
-- **Status**: Production-ready
+- **Status**: beta (pre-release)
 - **Build**: gcc, clang, MSVC compatible
 
 ---

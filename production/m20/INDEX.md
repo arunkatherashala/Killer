@@ -1,7 +1,7 @@
 # 🚀 KILLER v1.0 - PRODUCTION PACKAGE
 
 **Location:** production/m20/  
-**Status:** ✅ PRODUCTION READY  
+**Status:** BETA (PRE-RELEASE)  
 **Date:** 2026-03-20  
 
 ---
@@ -9,7 +9,7 @@
 ## 📦 WHAT'S INSIDE
 
 ### **Core Binary**
-- `killer.exe` (139 KB) - Production-ready executable
+- `killer.exe` (139 KB) - beta (pre-release) executable
   - Fully tested: 39/39 tests PASSED
   - Zero dependencies
   - Cross-platform: Windows/Linux/Mac

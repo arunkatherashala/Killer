@@ -585,5 +585,5 @@ Killer v3.1 brings professional software engineering practices with:
 - Full backward compatibility with v3.0
 
 **Total Features Count**: 70+  
-**Language Maturity**: Production-Ready  
+**Language Maturity**: beta (pre-release)  
 **Status**: Stable & Tested

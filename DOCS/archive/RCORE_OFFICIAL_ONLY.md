@@ -15,7 +15,7 @@ Effective immediately, **Killer language uses rcore exclusively**:
 1. **Performance**: Rust backend provides true low-latency execution
 2. **Type Safety**: Strong static typing prevents runtime errors
 3. **Single Implementation**: Eliminates confusion between pcore/rcore
-4. **Production Ready**: All features in rcore are stable and tested
+4. **beta (pre-release)**: All features in rcore are stable and tested
 5. **Maintenance**: One codebase to maintain instead of two
 
 ## What This Means

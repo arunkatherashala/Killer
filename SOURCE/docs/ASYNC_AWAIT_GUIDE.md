@@ -4,7 +4,7 @@
 
 ## Overview
 
-The Killer V2 VM now includes a complete, production-ready async/await runtime that enables non-blocking, concurrent execution of I/O-bound operations. This guide covers the full implementation, architecture, and usage patterns.
+The Killer V2 VM now includes a complete, beta (pre-release) async/await runtime that enables non-blocking, concurrent execution of I/O-bound operations. This guide covers the full implementation, architecture, and usage patterns.
 
 ## Architecture
 
@@ -414,4 +414,4 @@ For issues or questions about the async/await implementation:
 **Implementation Status**: ✅ Complete  
 **Test Coverage**: 784+ tests passing  
 **Performance**: ~1.15x improvement over baseline  
-**Production Ready**: Yes
+**beta (pre-release)**: NO (beta)

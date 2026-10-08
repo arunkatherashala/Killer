@@ -230,7 +230,7 @@ Total cleanup time: Flexible based on your schedule
 **A:** Phase 1 = 20 minutes. Full cleanup = 4.5 hours across 3 days.
 
 ### Q: Do I need to do all phases?
-**A:** No. Phase 1 alone gives 30% improvement. Phases 2-5 make it production-ready.
+**A:** No. Phase 1 alone gives 30% improvement. Phases 2-5 make it beta (pre-release).
 
 ### Q: What if I'm the only developer?
 **A:** Even better. You control the timeline and can verify each phase works.
@@ -294,7 +294,7 @@ To get started, you have these files ready:
 3. Create clean, professional workspace
 
 ### Long-term:
-1. Workspace is now production-ready
+1. Workspace is now beta (pre-release)
 2. New team members can onboard in 15 minutes
 3. Zero confusion about file organization
 4. Easy to maintain and scale

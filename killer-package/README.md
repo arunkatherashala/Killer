@@ -2,7 +2,7 @@
 
 **Version**: v1.1  
 **Release Date**: March 2026  
-**Status**: Production Ready
+**Status**: beta (pre-release)
 
 ---
 

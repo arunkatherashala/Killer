@@ -146,7 +146,7 @@ Week 19 → Understand concurrency (actors)
 Week 20 → Apply real-time constraints (latency, GC)
 Week 21 → Connect systems (HTTP, RPC, services)
 Week 22 → Process at scale (MapReduce, streams)
-         = Production-ready systems programmer
+         = beta (pre-release) systems programmer
 ```
 
 ---
@@ -334,7 +334,7 @@ If expanding beyond Week 22:
 
 ---
 
-**Curriculum Status**: 🎉 **COMPLETE & PRODUCTION READY**
+**Curriculum Status**: 🎉 **COMPLETE & BETA (PRE-RELEASE)**
 
 Created: March 14, 2026  
 Total Development Time: ~40 hours of expert system design  

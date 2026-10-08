@@ -1,7 +1,7 @@
 # 🎓 Killer Language Curriculum - Complete Package
 ## Full Learning Path from Fundamentals to Production Systems
 
-**Status**: ✅ **COMPLETE & PRODUCTION READY**  
+**Status**: ✅ **COMPLETE & BETA (PRE-RELEASE)**  
 **Latest Update**: March 14, 2026  
 **Total Content**: 1,200+ learning hours, 1,670+ problems, 35+ files
 
@@ -175,7 +175,7 @@ By the end of Week 22, students should be able to build systems that:
 2. Do Weeks 12-14 (400h) - Learn verification
 3. Do Weeks 19-22 (300h) - Apply to production
 4. Capstone: Build production system
-Total: 850+ hours → production-ready engineer
+Total: 850+ hours → beta (pre-release) engineer
 ```
 
 ### Option 2: Fast Track (Weeks 15-22)

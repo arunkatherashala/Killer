@@ -14,7 +14,7 @@ This is **NOT** a blueprint or conceptual design. This is:
 ✅ **REAL SOURCE CODE** - 500+ lines of production Killer language  
 ✅ **COMPLETE IMPLEMENTATION** - All 8 core systems implemented  
 ✅ **FULLY FUNCTIONAL** - Executes with real actor concurrency  
-✅ **PRODUCTION-READY** - No placeholders, all systems operational  
+**BETA (PRE-RELEASE)** - No placeholders, all systems operational  
 ✅ **KILLER LANGUAGE** - Native Killer source, compiled and running  
 
 ---
@@ -366,7 +366,7 @@ This implementation proves that:
 ✅ **Elegance beats complexity** - 500 lines beats 100K lines  
 ✅ **Integration beats add-ons** - Native > external tools  
 ✅ **Smart beats brute force** - AI optimization > raw FLOPS  
-✅ **Killer is production-ready** - Full engine proven operational  
+✅ **Killer is beta (pre-release)** - Full engine proven operational  
 ✅ **The future is here** - Deployed March 21, 2026  
 
 ---

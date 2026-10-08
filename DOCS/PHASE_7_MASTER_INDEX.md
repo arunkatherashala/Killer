@@ -172,7 +172,7 @@ REFERENCE (Exploration Archive)
 - Pure Killer implementation (no dependencies)
 - `killer SOURCE/orchestration/phase7_pure_killer.killer` - runs immediately
 - CSV auto-generated
-- Production-ready code structure
+- beta (pre-release) code structure
 - Clean, maintainable
 
 ### ✅ Keep Exploring Organised
@@ -194,7 +194,7 @@ REFERENCE (Exploration Archive)
 | Complete | ✅ | 7/7 tests, all timing, CSV written |
 | Organised | ✅ | Master index created |
 | Documented | ✅ | 1,500+ lines of docs |
-| Production-ready | ✅ | Runs via `killer` command |
+| beta (pre-release) | ✅ | Runs via `killer` command |
 | Full-load tested | ✅ | 10M ops per heavy round |
 | Professional | ✅ | ARU principle applied |
 | Exploration saved | ✅ | All work archived |

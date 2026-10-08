@@ -131,7 +131,7 @@ Weeks 2-3: Beta Testing
 └─ Performance tune
 
 Release: April 15, 2026
-└─ v4.3 Production Ready
+└─ v4.3 beta (pre-release)
 ```
 
 ---
@@ -336,7 +336,7 @@ A: Yes! Sections 1-3 can be done independently (13 hours). Sections 4-7 are sepa
 **Q: Will this break existing code?**  
 A: No! All changes maintain backward compatibility. Public APIs unchanged. Internal refactoring only.
 
-**Q: How long until v4.3 is production-ready?**  
+**Q: How long until v4.3 is beta (pre-release)?**  
 A: March 30 (v4.3-RC1 for beta) → April 15 (v4.3 production). Total 24 days.
 
 **Q: What if we find bugs during beta?**  

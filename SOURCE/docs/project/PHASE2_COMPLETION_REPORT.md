@@ -370,7 +370,7 @@ Output:
 - [x] All 16 examples work
 - [x] Windows/macOS/Linux supported
 - [x] Installers functional
-- [ ] Production-ready executables
+- [ ] beta (pre-release) executables
 - [ ] Less than 5MB binary size
 
 ### For v3.1 (Module System)

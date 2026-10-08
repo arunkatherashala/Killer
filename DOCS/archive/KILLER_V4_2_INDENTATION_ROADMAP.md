@@ -141,7 +141,7 @@ We're making Killer **even simpler** by removing braces entirely. From v4.2 onwa
 - ✅ All 1,903 tests passing
 - ✅ Zero performance impact
 - ✅ Comprehensive error handling
-- ✅ Production-ready implementation
+- beta (pre-release) implementation
 
 ---
 

@@ -395,4 +395,4 @@ Phase 8 tasks (volunteers welcome):
 
 **Authored:** March 18, 2026  
 **Version:** 3.0  
-**Status:** Production Ready (Framework Level)
+**Status:** beta (pre-release) (Framework Level)

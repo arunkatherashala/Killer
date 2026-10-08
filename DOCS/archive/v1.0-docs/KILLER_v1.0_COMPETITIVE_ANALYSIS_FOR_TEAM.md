@@ -1,9 +1,11 @@
+> Note: historical report, superseded by README and parity/PARITY_REPORT.md. Claims below are not current.
+
 # KILLER v1.0 - COMPREHENSIVE COMPETITIVE ANALYSIS & CAPABILITIES REPORT
 
 **Analysis Date:** 2026-03-20  
 **Version:** v1.0  
 **Binary:** production/killer.exe (139 KB)  
-**Status:** Production Ready
+**Status:** beta (pre-release)
 
 ---
 
@@ -481,7 +483,7 @@ Alternative if:
 
 ## SECTION 9: ROADMAP & FUTURE IMPROVEMENTS
 
-### v1.0 Current (PRODUCTION READY) ✅
+### v1.0 Current (BETA (PRE-RELEASE)) ✅
 ```
 ✅ Core language features: COMPLETE
 ✅ Performance: EXCELLENT for VM
@@ -558,7 +560,7 @@ KILLER v1.0 = Python DX + Go performance + Rust safety + Java simplicity
 
 ## CONCLUSION
 
-**KILLER v1.0 is production-ready and recommended for:**
+**KILLER v1.0 is beta (pre-release) and recommended for:**
 - Real-time data processing
 - Microservices
 - Edge computing
@@ -577,5 +579,5 @@ KILLER v1.0 = Python DX + Go performance + Rust safety + Java simplicity
 
 **Report Generated:** 2026-03-20  
 **Version:** killer v1.0  
-**Status:** Production Ready  
+**Status:** beta (pre-release)  
 **Team Confidence Level:** ⭐⭐⭐⭐⭐ HIGH

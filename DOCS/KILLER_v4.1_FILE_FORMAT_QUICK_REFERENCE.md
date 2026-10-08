@@ -1,6 +1,6 @@
 # Killer v4.1 - File Format Operations Quick Reference
 
-**Status:** ✅ PRODUCTION READY  
+**Status:** BETA (PRE-RELEASE)  
 **Coverage:** All Phases (9-36)  
 **Formats:** 18+ supported
 

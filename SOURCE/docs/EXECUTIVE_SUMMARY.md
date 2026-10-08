@@ -144,7 +144,7 @@ Validator mutations don't fully persist through variable assignment - validators
 2. Phase 17: Memoization (100-1000x for recursion)
 3. Phase 18: Adaptive compilation (automatic strategy selection)
 
-**Outcome:** Production-ready performance (competitive with compiled languages)
+**Outcome:** beta (pre-release) performance (competitive with compiled languages)
 
 ### Option C: Add Security Features (Weeks 1-8)
 1. Phase 19: Process isolation (untrusted code safety)
@@ -155,7 +155,7 @@ Validator mutations don't fully persist through variable assignment - validators
 
 ### Option D: All of Above (Full Vision, 32 weeks)
 - Complete modern language with optimization + security
-- Production-ready for all use cases
+- beta (pre-release) for all use cases
 - Timeline: ~8 months
 
 ---

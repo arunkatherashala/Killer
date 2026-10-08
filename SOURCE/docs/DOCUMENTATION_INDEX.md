@@ -392,12 +392,12 @@ Use this checklist to track your progress:
 ✅ **41% faster execution** through automatic type specialization  
 ✅ **Native binary compilation** with zero code changes  
 ✅ **Comprehensive documentation** with examples & guides  
-✅ **Production-ready** features for real-world use  
+**beta (pre-release)** features for real-world use  
 
 **Start here:** [NATIVE_COMPILATION_GUIDE.md](docs/NATIVE_COMPILATION_GUIDE.md)
 
 ---
 
 **Last Updated:** March 11, 2026  
-**Status:** ✅ Complete & Production Ready  
+**Status:** ✅ Complete & beta (pre-release)  
 **Version:** V2.1

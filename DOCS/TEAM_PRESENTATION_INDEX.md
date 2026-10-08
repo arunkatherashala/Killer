@@ -207,7 +207,7 @@ Results:
 • 50-100x faster than Python
 • Python-like simplicity (1-2 week ramp-up)
 • 139KB deployment (zero dependencies)
-• Production ready TODAY
+• beta (pre-release) TODAY
 
 I'm recommending a low-risk pilot project:
 • 1 microservice

@@ -342,7 +342,7 @@ fn setup_auth(
 - ✅ 8 real-world examples
 - ✅ Zero-cost abstraction (compiles to simple dispatch)
 - ✅ Full backward compatibility
-- ✅ Production-ready code
+- beta (pre-release) code
 
 **Impact:** Killer now feels like a mature language with proper parameter handling, not a toy script engine.
 

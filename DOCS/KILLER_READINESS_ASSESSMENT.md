@@ -15,7 +15,7 @@
 | **LLM Integration** | ✅ COMPLETE | Custom AI with 2-5ms response time |
 | **Documentation** | ✅ EXTENSIVE | 50+ guides, architecture docs, examples |
 | **Interactive Console** | ✅ NEW | Real-time chat & task assignment |
-| **Production Ready** | ❌ NO | Missing: FFI, async/await, WebAssembly, distributed consensus |
+| **beta (pre-release)** | ❌ NO | Missing: FFI, async/await, WebAssembly, distributed consensus |
 
 ---
 

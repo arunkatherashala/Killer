@@ -1,3 +1,5 @@
+> Note: historical report, superseded by README and parity/PARITY_REPORT.md. Claims below are not current.
+
 # KILLER v1.0 - COMPREHENSIVE 7-ROUND TEST REPORT
 **Date:** 2026-03-20  
 **Binary:** production/killer.exe (139 KB)  
@@ -12,7 +14,7 @@
 - **Total Test Cases:** 39 individual tests across 7 rounds
 - **Test Coverage:** Basic functionality, Fibonacci, Arithmetic, Strings, Collections, Functions, Heavy Load, Extreme Stress
 - **Result:** 100% PASSED ✓✓✓
-- **Deployment Status:** PRODUCTION READY
+- **Deployment Status:** BETA (PRE-RELEASE)
 
 ---
 
@@ -406,7 +408,7 @@ The binary is:
 - ✅ **Functionally Complete**
 - ✅ **Performant** (meets all targets)
 - ✅ **Stable** (no crashes, no leaks)
-- ✅ **Production Ready** (deployment approved)
+- **beta (pre-release)** (deployment approved)
 
 **Status: APPROVED FOR PRODUCTION USE**
 
@@ -415,7 +417,7 @@ The binary is:
 **Generated:** 2026-03-20  
 **Version:** killer v1.0  
 **Deployment:** production/killer.exe  
-**Final Status:** ✅ PRODUCTION READY
+**Final Status:** BETA (PRE-RELEASE)
 
 ```
 ╔════════════════════════════════════════════════════════════╗
@@ -424,7 +426,7 @@ The binary is:
 ║                                                            ║
 ║    39/39 Tests PASSED ✓✓✓                                ║
 ║    100% Coverage ✓✓✓                                     ║
-║    Production Ready ✓✓✓                                  ║
+║    beta (pre-release) ✓✓✓                                  ║
 ║                                                            ║
 ╚════════════════════════════════════════════════════════════╝
 ```

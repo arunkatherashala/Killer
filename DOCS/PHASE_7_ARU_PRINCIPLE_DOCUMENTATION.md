@@ -9,7 +9,7 @@
 ## ARU Principle Implementation
 
 ### 1. Always Ready to Use
-- ✅ Pure Killer orchestration (151 lines, production-ready)
+- ✅ Pure Killer orchestration (151 lines, beta (pre-release))
 - ✅ No dependencies, no Python wrappers
 - ✅ Complete end-to-end testing
 - ✅ Automatic CSV generation via `fs::write_file()`
@@ -197,7 +197,7 @@ EXPLORATION TIMELINE:
 ### 1. Always Ready to Use
 - Pure Killer + LLM integration
 - No external dependencies
-- Production-ready on day 1
+- beta (pre-release) on day 1
 
 ### 2. Keep Exploring Organised
 - Document all LLM discovery

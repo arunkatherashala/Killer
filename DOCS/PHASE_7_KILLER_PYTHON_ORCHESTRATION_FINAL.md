@@ -210,12 +210,12 @@ python run_phase7_killer_orchestration.py
 1. **SOURCE/orchestration/phase7_orchestration_final.killer**
    - Pure Killer test logic
    - Module-level execution
-   - 63 lines, production-ready
+   - 63 lines, beta (pre-release)
 
 2. **run_phase7_killer_orchestration.py**
    - Python wrapper
    - Timing + CSV generation
-   - 146 lines, production-ready
+   - 146 lines, beta (pre-release)
 
 3. **phase7_orchestration_results_final.csv**
    - Generated output (CSV format)

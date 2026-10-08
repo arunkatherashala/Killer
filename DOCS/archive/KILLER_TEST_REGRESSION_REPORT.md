@@ -243,7 +243,7 @@ kfn f2() {
 
 ## SIGN-OFF
 
-**Status:** ✅ PRODUCTION READY
+**Status:** BETA (PRE-RELEASE)
 
 - **Unit Tests:** 274/274 PASSED
 - **Regression Tests:** ALL PASSED

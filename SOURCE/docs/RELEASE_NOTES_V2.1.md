@@ -1,7 +1,7 @@
 # Killer V2.1 - Release Notes
 
 **Release Date:** March 11, 2026  
-**Status:** ✅ Production Ready
+**Status:** beta (pre-release)
 
 ---
 
@@ -264,7 +264,7 @@ Actual speedup depends on:
 - Connection pooling for resource management
 - Async HTTP and database operations
 - **Performance**: 1.15x improvement maintained
-- **Status**: Production ready
+- **Status**: beta (pre-release)
 - **See**: [ASYNC_AWAIT_GUIDE.md](docs/ASYNC_AWAIT_GUIDE.md)
 
 ---
@@ -374,5 +374,5 @@ Killer V2.1 represents a major performance leap. Enjoy the 41% speedup on your n
 
 **Release:** Killer V2.1  
 **Date:** March 11, 2026  
-**Status:** ✅ Production Ready  
+**Status:** beta (pre-release)  
 **Next Check-in:** Q2 2026

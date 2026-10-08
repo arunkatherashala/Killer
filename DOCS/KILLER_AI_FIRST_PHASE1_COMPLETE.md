@@ -474,7 +474,7 @@ fn optimize_me(n: Int) -> Int {
 - 🎯 **Type-safe AI declarations** - compiler understands AI intent
 - 🎯 **Better IDE support** - syntax highlighting, autocomplete for AI annotations
 - 🎯 **AI-driven optimizations** - compiler can auto-apply AI hints
-- 🎯 **Production-ready** - not just library calls, language-level feature
+- 🎯 **beta (pre-release)** - not just library calls, language-level feature
 
 ---
 
@@ -604,7 +604,7 @@ SOURCE/src/v2-rust/killer_vm/
 
 ## Conclusion
 
-**Phase 1 is complete and production-ready.** ✅
+**Phase 1 is complete and beta (pre-release).** ✅
 
 The Killer programming language now has **language-level AI support**—the first step toward making it a true AI-First language. Developers can now write:
 

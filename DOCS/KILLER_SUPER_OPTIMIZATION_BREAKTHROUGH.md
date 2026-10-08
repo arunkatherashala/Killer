@@ -314,7 +314,7 @@ With 300 instances:
 
 ### Status: ✅ READY (Upgrade from Ready to Outstanding)
 
-**Performance Tier:** Outstanding (was: Production-Ready)
+**Performance Tier:** Outstanding (was: beta (pre-release))
 - Previous: 273K ops/sec baseline
 - Current: 1,629K ops/sec average (+ 6.8x)
 - Peak: 2,094K ops/sec (+ 7x)

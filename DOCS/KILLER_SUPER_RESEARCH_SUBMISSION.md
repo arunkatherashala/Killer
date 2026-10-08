@@ -19,7 +19,7 @@
 
 **Target Performance:** 500M+ operations/second
 
-**Status:** ✅ **Production-Ready** (Rust implementation, 100% complete build)
+**Status:** **beta (pre-release)** (Rust implementation, 100% complete build)
 
 ---
 
@@ -494,7 +494,7 @@ Operations vs Throughput (constant 4 workers, 8GB RAM):
 - Automatic layer selection
 - GPU offloading invisible to application
 
-### 2. **Production-Ready**
+### 2. **beta (pre-release)**
 - Error handling built-in
 - Memory management automatic
 - Priority dispatch system

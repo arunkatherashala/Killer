@@ -29,7 +29,7 @@ Killer AI should be:
 2. **Fast** — Minimal latency for inference
 3. **Simple** — Intuitive API for users
 4. **Extensible** — Support multiple backends
-5. **Reliable** — Production-ready error handling
+5. **Reliable** — beta (pre-release) error handling
 ```
 
 ### 1.2 Three-Layer Architecture

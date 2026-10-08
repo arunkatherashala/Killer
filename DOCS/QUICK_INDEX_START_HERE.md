@@ -157,7 +157,7 @@ After Presentation:
 **Why KILLER?**
 - 50-100x faster than Python
 - Python-like simplicity (1-2 week ramp-up)
-- Production ready (39/39 tests passed)
+- beta (pre-release) (39/39 tests passed)
 - Tiny deployment (139 KB binary)
 
 **Why Not Python?**

@@ -324,7 +324,7 @@ Coverage:            ~95% of ffi.rs code
 | **Functions** | 5+ | 9 |
 | **Bindings** | 3 | 3 |
 
-**Overall Quality: PRODUCTION-READY**
+**Overall Quality: BETA (PRE-RELEASE)**
 
 ---
 
@@ -398,7 +398,7 @@ Phase 20 Progress: ✅ FFI FUNCTIONAL
 ✅ **Type-safe marshaling** (safe interop)
 ✅ **Error handling** (stability)
 ✅ **Performance multiplier** (10-50x speedup available)
-✅ **Production ready** (at framework level)
+**beta (pre-release)** (at framework level)
 
 ⏳ **Next: Dynamic loading + callbacks** (Week 2)
 ⏳ **Then: Standard library** (Phase 21)

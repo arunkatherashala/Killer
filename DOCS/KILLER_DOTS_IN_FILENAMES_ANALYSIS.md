@@ -303,7 +303,7 @@ simple.csv.to.simple.json
 | **Works with dots in filenames** | ⚠️ Sometimes | ✅ Always |
 | **Risk of ambiguity** | ⚠️ 15-20% | ✅ 0% |
 | **Simplicity** | ✅ Very | ⚠️ Moderate |
-| **Production-ready** | ⚠️ Limited use | ✅ All use |
+| **beta (pre-release)** | ⚠️ Limited use | ✅ All use |
 | **Recommendation** | Only simple cases | DEFAULT |
 
 ---

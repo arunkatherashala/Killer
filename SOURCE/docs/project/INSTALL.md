@@ -1,7 +1,7 @@
 # Killer Programming Language - Installation Guide
 
 **Version:** 2.0  
-**Status:** Production Ready
+**Status:** beta (pre-release)
 
 ## Quick Start
 

@@ -361,7 +361,7 @@ This session added **critical infrastructure** for web development. DateTime + H
 3. Process **real data** from live APIs
 4. Create **complete data pipelines**
 
-**Status**: Killer v3.0 is **production-ready for teaching Weeks 19-23 content**. Ready to complete Weeks 24-25 to reach 85%+ roadmap coverage and v3.0 release candidate status.
+**Status**: Killer v3.0 is **beta (pre-release) for teaching Weeks 19-23 content**. Ready to complete Weeks 24-25 to reach 85%+ roadmap coverage and v3.0 release candidate status.
 
 ---
 

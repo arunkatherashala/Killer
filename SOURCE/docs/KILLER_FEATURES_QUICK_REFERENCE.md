@@ -354,7 +354,7 @@ OCTOBER-DECEMBER 2026
 3. ✅ **Tool Calling** (enables agents - 2-3 weeks)
 4. ✅ **Vectors** (enables RAG - 2-3 weeks)
 5. ✅ **Memory** (long-term learning - 3-4 weeks)
-6. ✅ **Error Recovery** (production-ready - 2-3 weeks)
+6. ✅ **Error Recovery** (beta (pre-release) - 2-3 weeks)
 7. ✅ **Agent Coordination** (multi-agent - 3-4 weeks)
 8. ✅ **Streaming** (real-time - 3-4 weeks)
 9. ✅ **Generics** (code reuse - 4-6 weeks, parallel)

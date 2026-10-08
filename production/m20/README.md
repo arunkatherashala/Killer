@@ -1,7 +1,7 @@
 # 📖 KILLER v1.0 - README
 
 **Version:** 1.0  
-**Status:** Production Ready ✅  
+**Status:** beta (pre-release) ✅  
 **Binary:** killer.exe (139 KB)  
 
 ---
@@ -228,7 +228,7 @@ for n in numbers
 ✅ **Fast** - 100,000+ operations/second  
 ✅ **Portable** - Single 139KB binary, no dependencies  
 ✅ **Reliable** - 39/39 tests passed, zero crashes  
-✅ **Production Ready** - Deploy immediately  
+**beta (pre-release)** - Deploy immediately  
 
 ---
 

@@ -681,7 +681,7 @@ AUGUST 2026 (Week 18-22)
 ├─ Tier 2 General availability
 ├─ Tier 3 General availability
 ├─ Documentation finalization
-└─ Status: Both tiers production-ready
+└─ Status: Both tiers beta (pre-release)
 ```
 
 ### Q4 2026: Tier 4 + Final Release

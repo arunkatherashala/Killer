@@ -253,7 +253,7 @@ Finished `dev` profile [unoptimized + debuginfo] target(s) in 23.78s
 
 ## Integration Roadmap (v3.0 → v4.0)
 
-### v3.1: Production-Ready Runtime (2-3 weeks, optional)
+### v3.1: beta (pre-release) Runtime (2-3 weeks, optional)
 ```
 ├─ Replace mock implementations with real std calls
 ├─ Full std::thread integration
@@ -427,7 +427,7 @@ async_await(f2);
 
 ## Conclusion
 
-The 4-week enhancement project is **complete and production-ready**. The Killer language now has industrial-strength support for:
+The 4-week enhancement project is **complete and beta (pre-release)**. The Killer language now has industrial-strength support for:
 
 1. **Real-time systems** (millisecond-precision timing)
 2. **Network services** (TCP sockets for HTTP)

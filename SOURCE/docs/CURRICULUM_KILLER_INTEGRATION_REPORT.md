@@ -12,7 +12,7 @@
 |-----------|--------|---------|
 | **Curriculum Materials** | ✅ Complete | 25,000+ lines, 400+ problems |
 | **Working Examples** | ✅ Complete | 13 Killer files demonstrating all patterns |
-| **Killer Language** | ✅ Production Ready | v2.1 stable, dual implementation |
+| **Killer Language** | beta (pre-release) | v2.1 stable, dual implementation |
 | **Integration** | ⏳ Partial | Examples work, some advanced features TBD |
 
 ---
@@ -328,7 +328,7 @@ NEEDED FOR WEEK 22:
 ### Current State
 - ✅ **13 working Killer examples** demonstrating all major patterns
 - ✅ **Curriculum complete** with 400+ problems
-- ✅ **Language is production-ready** v2.1
+- ✅ **Language is beta (pre-release)** v2.1
 - ⏳ **Integration is partial** - examples work, some runtime gaps
 
 ### Coverage

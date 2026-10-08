@@ -148,7 +148,7 @@
 - Tests: 5,604 (not 1,943)
 - Performance: 88K peak (not 100K+ claimed)
 - Async/Await: Available (not "not yet")
-- AI/ML: Production ready (not v2.0)
+- AI/ML: beta (pre-release) (not v2.0)
 
 ---
 

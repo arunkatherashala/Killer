@@ -2,7 +2,7 @@
 
 Welcome to the **Killer Multi-Agent Framework**!
 
-This is a production-ready system for deploying teams of AI agents to solve ANY problem through consensus-based validation.
+This is a beta (pre-release) system for deploying teams of AI agents to solve ANY problem through consensus-based validation.
 
 ---
 

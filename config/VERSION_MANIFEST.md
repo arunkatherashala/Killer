@@ -4,28 +4,28 @@
 
 ### Current Active Version
 
-**v4.0.0** ✅ ACTIVE (2026-03-20)
+**v1.0.0** (beta, pre-release) (2026-03-20)
 ```
 Filename:       killer.exe
 Location:       production/killer.exe
-Size:           139 KB
+Size:           not tracked here
 Build:          Release (optimized)
-Status:         PRODUCTION READY
-Tests:          1,943 total (40 unit + 1,903 regression) PASSED
+Status:         BETA (PRE-RELEASE)
+Tests:          see `cargo test --tests` (count changes; not pinned here)
 Deployment:     Standalone, zero dependencies
 Phases:         40+ implementation phases completed
-Cargo Version:  4.0.0 (source of truth)
+Cargo Version:  1.0.0 (source of truth)
 ```
 
 ---
 
 ## Version Storage & Backup
 
-### v4.0.0 Archive Location
+### v1.0.0 Archive Location
 ```
 Primary:        production/killer.exe
 Backup:         target/release/killer_omniscience.exe
-Archive:        [To be determined - suggest: backups/killer_v4.0.0.exe]
+Archive:        [To be determined - suggest: backups/killer_v1.0.0.exe]
 ```
 
 ### Metadata

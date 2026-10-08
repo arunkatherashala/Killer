@@ -125,8 +125,7 @@ Copy-Item killer.exe \\server\apps\
 File: `killer.exe` (139 KB)  
 Location: `production\` folder  
 Status: Ready for deployment  
-Standalone: YES ✅  
-Production-ready: YES ✅
+Standalone: YES beta (pre-release): NO (beta) ✅
 
 **You can now:**
 - ✅ Run Killer programs

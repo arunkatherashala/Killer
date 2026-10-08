@@ -280,7 +280,7 @@ Throughput: ~110 LOC/hour (including examples + docs)
 5. Maintained 0 build errors
 
 **Quality**:
-- ✅ Production-ready code
+- beta (pre-release) code
 - ✅ Comprehensive examples
 - ✅ Clear documentation
 - ✅ Test coverage

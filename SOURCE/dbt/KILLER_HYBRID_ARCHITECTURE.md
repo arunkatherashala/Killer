@@ -465,6 +465,6 @@ See output showing:
 - ✅ Automatic execution routing
 - ✅ 20-40x faster pipelines
 - ✅ 80%+ cost savings
-- ✅ Production-ready (1000+ lines of working code)
+- beta (pre-release) (1000+ lines of working code)
 
 **For data engineers:** Build data warehouses 10x faster with zero infrastructure overhead! 🚀

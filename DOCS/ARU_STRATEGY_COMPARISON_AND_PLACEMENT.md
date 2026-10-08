@@ -93,7 +93,7 @@ Write → Test → Document → Deploy anytime
 ```
 
 **Pros**:
-- ✅ Production-ready always
+- beta (pre-release) always
 - ✅ Fast deployments
 - ✅ Team confidence high
 - ✅ Few production bugs
@@ -423,7 +423,7 @@ START: What type of project?
 
 | Criteria | ARU | Cowboy | TDD | Waterfall | Lean | Agile+ARU |
 |----------|-----|--------|-----|-----------|------|-----------|
-| **Production Ready** | ⭐⭐⭐⭐⭐ | ⭐ | ⭐⭐⭐ | ⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ |
+| **beta (pre-release)** | ⭐⭐⭐⭐⭐ | ⭐ | ⭐⭐⭐ | ⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ |
 | **Speed to code** | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐ | ⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐ |
 | **Code quality** | ⭐⭐⭐⭐ | ⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ |
 | **Reliability** | ⭐⭐⭐⭐⭐ | ⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ |

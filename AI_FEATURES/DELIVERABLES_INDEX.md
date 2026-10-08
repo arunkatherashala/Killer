@@ -175,8 +175,8 @@
 - `GPUBuffer` (record): memory management
 - `GPUDeviceManager`: detection & management
 - `GPUMemoryManager`: allocation tracking
-- `GPUInferenceEngine`: single GPU inference (7.5ms/token)
-- `MultiGPUInferenceEngine`: distributed inference (2.2ms/token with 4 GPUs)
+- `GPUInferenceEngine`: single GPU inference (not measured)
+- `MultiGPUInferenceEngine`: distributed inference (latency not measured)
 
 **Examples Included:**
 - Detect available GPUs (CUDA/Metal/Vulkan)
@@ -315,10 +315,10 @@
 ### Performance Achievements
 | Metric | Value | vs Python |
 |--------|-------|-----------|
-| Vector Ops | 0.8 μs | 12.5x faster |
+| Vector Ops | not measured | not measured |
 | Async Switch | 1 μs | 100x faster |
 | Agent Scaling | 50K/core | 50x better |
-| GPU Inference | 7.5ms | 25% faster |
+| GPU Inference | not measured | not measured |
 | Memory/Agent | 8KB | 12-60x lighter |
 
 ---
@@ -388,7 +388,7 @@
 - ✅ Competitive advantage verified
 
 ### Deployment
-- ✅ Production ready
+- beta (pre-release)
 - ✅ All use cases covered
 - ✅ Examples provided
 - ✅ Integration pathways clear
@@ -457,7 +457,7 @@ AI_FEATURES/
 - ✅ 3,100+ lines of production code
 - ✅ 10-100x performance vs Python
 - ✅ Unique capabilities (native AI types, consensus)
-- ✅ Production ready
+- beta (pre-release)
 
 **All files are in:** `<repo-root>\\AI_FEATURES\`
 
@@ -467,4 +467,4 @@ AI_FEATURES/
 
 **Generated:** March 21, 2026  
 **Version:** Killer v4.2  
-**Status:** ✅ COMPLETE & PRODUCTION READY
+**Status:** ✅ COMPLETE & BETA (PRE-RELEASE)

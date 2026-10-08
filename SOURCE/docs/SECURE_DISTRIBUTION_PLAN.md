@@ -9,8 +9,8 @@
 ## Phase 1: Secure Build (NOW)
 
 ### ✅ Current Status
-- [x] killer-native.exe built (438 KB) - Production ready
-- [x] killer-python.exe built (7.0 MB) - Production ready  
+- [x] killer-native.exe built (438 KB) - beta (pre-release)
+- [x] killer-python.exe built (7.0 MB) - beta (pre-release)  
 - [x] Both independently tested and verified
 - [x] Source code remains PRIVATE (not shared)
 

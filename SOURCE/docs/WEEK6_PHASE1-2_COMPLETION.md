@@ -278,7 +278,7 @@ if self.numeric_fast_mode {
 
 ## Ready for Week 7+
 
-Phase 1-2 infrastructure is production-ready:
+Phase 1-2 infrastructure is beta (pre-release):
 - ✓ No breaking changes
 - ✓ Backward compatible
 - ✓ Can be disabled with vm flags if needed

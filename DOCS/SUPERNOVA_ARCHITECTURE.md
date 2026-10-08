@@ -572,7 +572,7 @@ The **Supernova Lightning Engine** is not just an upgrade to Killer—it's a par
 
 We've created an engine that can run miracles on any device, powered by consumer hardware, with no compromise on performance.
 
-**Status: ✅ REVOLUTIONARY & PRODUCTION-READY**
+**Status: ✅ REVOLUTIONARY & BETA (PRE-RELEASE)**
 
 ---
 

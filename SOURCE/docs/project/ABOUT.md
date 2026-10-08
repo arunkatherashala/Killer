@@ -14,7 +14,7 @@
 ### Project Information
 - **Version**: 3.0 (Self-Hosted Compiler)
 - **Release Date**: March 8, 2026
-- **Status**: Production Ready ✅
+- **Status**: beta (pre-release) ✅
 - **License**: Open Source
 - **GitHub**: https://github.com/arunaug2008-ai/Killer
 
@@ -329,7 +329,7 @@ while (i < 10) {
 
 ## FAQ
 
-**Q: Is Killer production-ready?**  
+**Q: Is Killer beta (pre-release)?**  
 A: Yes! v3.0 is ready for use. We recommend testing additional use cases.
 
 **Q: Can I use Killer for real projects?**  

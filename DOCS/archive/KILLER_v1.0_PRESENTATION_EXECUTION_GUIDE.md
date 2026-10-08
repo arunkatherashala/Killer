@@ -1,3 +1,5 @@
+> Note: historical report, superseded by README and parity/PARITY_REPORT.md. Claims below are not current.
+
 # KILLER v4.0.0 - TEAM PRESENTATION EXECUTION GUIDE
 
 **Your Step-by-Step Guide to Present KILLER to Your Team**
@@ -64,7 +66,7 @@ Let's dig in."
 
 ## 📊 SECTION 1: THE NUMBERS (10 minutes)
 
-**Goal: Establish that KILLER is production-ready**
+**Goal: Establish that KILLER is beta (pre-release)**
 
 ### Key Points to Hit:
 

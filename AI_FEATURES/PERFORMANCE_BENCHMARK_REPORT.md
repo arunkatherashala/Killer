@@ -341,7 +341,7 @@ Redis:    1ms per query but external dependency          🟰
 
 ### Scenario 4: LLM Inference Pipeline
 ```
-Killer:   7.5ms per token + native tool calling          ✅
+Killer:   per-token latency not measured + native tool calling          ✅
 Python:   10ms per token + manual tool integration        ⚠️
 Go:       15-20ms (would need specialized runtime)       ⚠️
 Rust:     6ms per token (best latency)                   ⭐
@@ -424,7 +424,7 @@ Production Maturity:     Go > Python > Rust > Node.js > Killer
 AI Agent Systems:        KILLER ⭐⭐⭐⭐⭐ (5/5)
 ```
 
-**Verdict:** Killer v2.0 is production-ready for AI applications requiring distributed agents, high concurrency, and semantic coordination.
+**Verdict:** Killer v2.0 is beta (pre-release) for AI applications requiring distributed agents, high concurrency, and semantic coordination.
 
 ---
 

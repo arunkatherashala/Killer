@@ -158,7 +158,7 @@ test_accepted(orders, "status", ["pending", "completed"])
 | dbt_tests.killer | Code | 14.5 KB | Quality validation |
 | dbt_complete_integration.killer | Code | 13.7 KB | Full example |
 | **Documentation** | Guide | **17.6 KB** | Learning path |
-| **TOTAL** | **System** | **~80 KB** | **Production-ready** |
+| **TOTAL** | **System** | **~80 KB** | **beta (pre-release)** |
 
 ---
 

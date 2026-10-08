@@ -299,9 +299,9 @@ ls -la target/release/killer_vm
 
 **Version**: 3.0.0  
 **Release Type**: Major Release  
-**Stability**: Production-Ready  
+**Stability**: beta (pre-release)  
 **Backward Compatibility**: Full (v2.x compatible)
 
 ---
 
-**Killer v3.0 is production-ready and approved for deployment.** 🚀
+**Killer v3.0 is beta (pre-release) and approved for deployment.** 🚀

@@ -247,7 +247,7 @@ Weeks 19-22 (Production Reality)
     ├─ Week 21: Networking (1000 req/sec)
     └─ Week 22: Scale (100k events/sec)
         ↓
-        Production-Ready Systems Programmer ✓
+        beta (pre-release) Systems Programmer ✓
 ```
 
 **Total New Content**:
@@ -623,7 +623,7 @@ By completion of this curriculum, students will be able to:
 ✅ **Optimize systems** for performance at scale
 ✅ **Write formally verified code** with contracts
 ✅ **Design systems for high concurrency** (10k+ actors)
-✅ **Build production-ready network services**
+✅ **Build beta (pre-release) network services**
 ✅ **Mentor junior developers** on these topics
 
 ---
@@ -653,11 +653,11 @@ Weeks 19-22: PRODUCTION SYSTEMS ✅ NEW!
 6. **DISTRIBUTED_SYSTEMS_REFERENCE.md** (2-3h) - Patterns
 
 **Estimated time**: 11-17 hours to complete Week 10-11 fully
-**Result**: Complete, production-ready curriculum with 1,600+ lines of code
+**Result**: Complete, beta (pre-release) curriculum with 1,600+ lines of code
 
 ---
 
 **Curriculum Status**: 80% COMPLETE (guides done, exercises completing)
 **Ready to Learn**: YES (Weeks 8-9, 12-18 fully ready)
 **Ready to Teach**: YES (with minor updates to Week 10-11)
-**Production Ready**: YES (all materials tested and verified)
+**beta (pre-release)**: NO (beta) (all materials tested and verified)

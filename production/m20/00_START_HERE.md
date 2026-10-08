@@ -9,7 +9,7 @@
 ## 📦 WHAT'S IN PRODUCTION/M20/
 
 ### **Binary**
-- ✅ `killer.exe` (139 KB) - Production-ready executable
+- ✅ `killer.exe` (139 KB) - beta (pre-release) executable
   - Tested: 39/39 tests PASSED (100%)
   - Zero dependencies
   - Ready to deploy immediately
@@ -285,7 +285,7 @@ production\m20\
 
 **Everything is prepared and organized in production/m20/:**
 
-✅ **Binary:** Production-ready killer.exe  
+✅ **Binary:** beta (pre-release) killer.exe  
 ✅ **Setup:** README.md with first programs  
 ✅ **Learning:** USAGE_GUIDE.md (complete curriculum)  
 ✅ **Reference:** QUICK_REFERENCE.md (print it!)  

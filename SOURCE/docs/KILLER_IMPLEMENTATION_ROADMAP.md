@@ -542,4 +542,4 @@ done
 
 **Recommendation**: Start with v2.2 Phase 1 immediately. Timing & threading are foundational for everything else.
 
-**Expected Outcome**: By Week 4, curriculum will be 85-90% realistic. By Week 12, fully production-ready.
+**Expected Outcome**: By Week 4, curriculum will be 85-90% realistic. By Week 12, fully beta (pre-release).

@@ -287,7 +287,7 @@ Detailed comparison of:
 ✅ Dependencies: Which phases it depends on
 ✅ Integration: With other phases, status
 ✅ Review: Code review status, approvals
-✅ Production: Is it production-ready?
+✅ Production: Is it beta (pre-release)?
 ✅ Blockers: What prevents next phase?
 ✅ Git: Commit hash for version control
 ```

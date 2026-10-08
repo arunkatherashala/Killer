@@ -170,7 +170,7 @@ Tasks:
 - [ ] Error handling with async
 - [ ] Performance optimization
 
-**Deliverable**: Production-ready async/await
+**Deliverable**: beta (pre-release) async/await
 ```killer
 async fn safe_fetch[n: nat](
     urls: Vector[n]

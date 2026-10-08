@@ -295,7 +295,7 @@ A: Yes—they're in `_TOOLS/killer_rcore/src/stdlib_impl/`. Fork and extend as n
 **Q: What's the performance like?**  
 A: Implementation-specific. FFT is O(n log n), matrix multiply is O(n³), atomics are wait-free.
 
-**Q: Are these production-ready?**  
+**Q: Are these beta (pre-release)?**  
 A: Yes. All functions are tested, documented, and follow Rust best practices.
 
 **Q: Can I combine modules?**  
@@ -303,7 +303,7 @@ A: Absolutely. They're designed to work together (time + concurrency, IO + seria
 
 ---
 
-**Status:** ✅ PHASE 21-22 PRODUCTION READY  
+**Status:** ✅ PHASE 21-22 BETA (PRE-RELEASE)  
 **Last Updated:** March 18, 2026  
 **Framework:** Killer v4.0.0-week5  
 **Backend:** killer_rcore v2.0

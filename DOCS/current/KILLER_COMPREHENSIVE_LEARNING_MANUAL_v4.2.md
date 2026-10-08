@@ -3,7 +3,7 @@
 **Version:** 4.2  
 **Date:** March 20, 2026  
 **For:** Team Learning & Public Market Release  
-**Status:** Production Ready
+**Status:** beta (pre-release)
 
 ---
 
@@ -2455,7 +2455,7 @@ https://pkg.killer-lang.org
 **Date:** March 20, 2026  
 **Total Pages:** 100+ (estimated)  
 **Author:** Killer Development Team  
-**Status:** Production Ready for Team Training & Market Release  
+**Status:** beta (pre-release) for Team Training & Market Release  
 
 **This manual contains:**
 - âœ… 15 comprehensive chapters

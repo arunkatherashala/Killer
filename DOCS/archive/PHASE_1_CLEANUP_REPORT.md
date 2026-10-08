@@ -205,7 +205,7 @@ Both options are safe - fully reversible
 1. Complete Phase 3-5
 2. Update version numbers
 3. Git commit
-4. Workspace is production-ready
+4. Workspace is beta (pre-release)
 
 ---
 

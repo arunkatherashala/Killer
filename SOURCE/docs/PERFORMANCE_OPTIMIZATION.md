@@ -2,7 +2,7 @@
 
 **Document Version:** 1.0  
 **Date:** March 11, 2026  
-**Status:** Production Ready ✅
+**Status:** beta (pre-release) ✅
 
 ## Table of Contents
 
@@ -19,7 +19,7 @@
 
 ## Executive Summary
 
-Killer V2 native compilation (`--emit-rust` backend) delivers **production-ready performance** with automatic type specialization:
+Killer V2 native compilation (`--emit-rust` backend) delivers **beta (pre-release) performance** with automatic type specialization:
 
 - **41% faster** than baseline Rust VM
 - **1.69x speedup** over pure bytecode interpreter
@@ -583,4 +583,4 @@ chmod +x /usr/local/bin/my_program
 
 **Last Updated:** March 11, 2026  
 **Maintained By:** Killer Development Team  
-**Status:** ✅ Production Ready
+**Status:** beta (pre-release)

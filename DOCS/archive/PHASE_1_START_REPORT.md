@@ -137,7 +137,7 @@ Actual Hours: 8 (so far)
 LOC Target: 1,300 | LOC Done: 195
 Performance Impact: <5% regression (expected)
 Security: ✅ Hardened
-Production Ready: No (until Phase 4)
+beta (pre-release): No (until Phase 4)
 Known Limitations: Mercuri integration pending (99% complete)
 ```
 

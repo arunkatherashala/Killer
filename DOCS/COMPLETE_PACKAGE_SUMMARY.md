@@ -221,7 +221,7 @@ FOR LEARNING (Teach Your Team):
 
 **Reference:** ✅ Quick reference card for daily use
 
-**Binary:** ✅ Production-ready killer.exe (139 KB)
+**Binary:** beta (pre-release) killer.exe (139 KB)
 
 **Everything:** ✅ Ready to present, teach, and deploy TODAY
 

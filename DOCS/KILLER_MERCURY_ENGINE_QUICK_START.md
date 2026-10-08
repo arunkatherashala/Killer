@@ -1,6 +1,6 @@
 # KILLER_MERCURY_ENGINE v1.0 - Quick Start Guide
 
-**Status:** ✅ Production Ready  
+**Status:** beta (pre-release)  
 **Version:** 1.0  
 **Last Updated:** March 19, 2026
 
@@ -137,7 +137,7 @@ Status: ✅ 25/25 PASSED
 ### Success Indicator
 ```
 ✨ KILLER_MERCURY_ENGINE - Phase 33-36 (ML/Data/RL/AI) COMPLETE!
-🚀 All 115 tests validated - Production-Ready Testing Platform
+🚀 All 115 tests validated - beta (pre-release) Testing Platform
 
 Status: ✅ READY FOR PRODUCTION
 ```
@@ -302,7 +302,7 @@ for i in {1..5}; do time ./Killer_Mercury_Engine.exe; done
 A: On every commit (CI/CD), daily regression tests recommended.
 
 **Q: Can I use this for production validation?**
-A: Yes! It's production-ready. Designed for deployment verification.
+A: Yes! It's beta (pre-release). Designed for deployment verification.
 
 **Q: Does it support distributed testing?**
 A: Phase 36+ (coming soon) will add distributed multi-machine support.
@@ -333,7 +333,7 @@ A: Q&A <2ms, SuperAgent <2ms. Both exceed production requirements 30-50x.
 ║  PASS:     115/115 ✅                                     ║
 ║                                                            ║
 ║  Latency: <2ms (AI), <1ms (ML/Data)                       ║
-║  Real-time: ✅ Production Ready                           ║
+║  Real-time: beta (pre-release)                           ║
 ║  Deterministic: ✅ Reproducible                           ║
 ║                                                            ║
 ║  Phases: ML | Data | RL | AI                              ║
@@ -353,6 +353,6 @@ For Killer v4.1 docs, see [Killer Language Documentation]
 ---
 
 **KILLER_MERCURY_ENGINE v1.0**  
-Production-ready testing platform  
+beta (pre-release) testing platform  
 Powered by Actor-Based Parallelism  
 ✅ 115/115 Tests Passing

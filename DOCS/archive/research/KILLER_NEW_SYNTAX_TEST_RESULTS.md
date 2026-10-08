@@ -141,4 +141,4 @@ kfn f2() {
 - **Compilation Time**: 6.33 seconds
 - **Warnings**: 16 (non-blocking)
 
-**Status**: ✅ PRODUCTION READY
+**Status**: BETA (PRE-RELEASE)

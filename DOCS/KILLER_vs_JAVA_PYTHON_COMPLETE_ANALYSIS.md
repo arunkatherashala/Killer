@@ -368,7 +368,7 @@ Killer is missing **30+ significant features** compared to Java and Python combi
 **Phase 20-22** (6-8 weeks): FFI + observability + distributed testing
 **Phase 23-25** (6-8 weeks): Async/await + basic web framework + Kubernetes hooks
 **Phase 26-28** (6-8 weeks): Package manager v0.1 + IDE LSP + debugger
-**Result:** Production-ready for specialized use cases (NOT general-purpose replacement)
+**Result:** beta (pre-release) for specialized use cases (NOT general-purpose replacement)
 
 ---
 

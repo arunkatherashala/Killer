@@ -3,7 +3,7 @@
 **Version:** 1.0  
 **Date:** 2026-03-20  
 **Binary:** killer.exe  
-**Status:** Production Ready ✅
+**Status:** beta (pre-release) ✅
 
 ---
 

@@ -1,3 +1,5 @@
+> Note: historical report, superseded by README and parity/PARITY_REPORT.md. Claims below are not current.
+
 # KILLER v1.0 - DEPLOYMENT VERIFICATION CHECKLIST
 
 **Date:** 2026-03-20  
@@ -219,7 +221,7 @@ Binary Location:     production/killer.exe
 Binary Size:         139 KB
 Format:              Windows PE x64
 Compression:         Maximum (-O3)
-Status:              PRODUCTION READY ✅
+Status:              BETA (PRE-RELEASE) ✅
 ```
 
 ### Documentation Files Created
@@ -298,7 +300,7 @@ Archive:  backups/killer_v1.0.exe (recommended)
 ```
 Binary Location:      production/killer.exe
 Size:                 139 KB
-Status:               ✅ PRODUCTION READY
+Status:               BETA (PRE-RELEASE)
 Test Status:          ✅ ALL TESTS PASSED (39/39)
 Quality:              ✅ EXCELLENT (100% accuracy)
 Performance:          ✅ MEETS ALL TARGETS
@@ -391,4 +393,4 @@ If critical issue found:
 
 Generated: 2026-03-20  
 Version: killer v1.0  
-Status: ✅ PRODUCTION READY
+Status: BETA (PRE-RELEASE)

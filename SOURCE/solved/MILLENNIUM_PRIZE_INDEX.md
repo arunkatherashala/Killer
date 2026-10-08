@@ -237,6 +237,6 @@
 
 **Archive Created:** March 17, 2026  
 **Language:** Killer V2  
-**Status:** Complete & Production-Ready  
+**Status:** Complete & beta (pre-release)  
 **Prize Pool:** $6,000,000 (Waiting for Solutions)
 

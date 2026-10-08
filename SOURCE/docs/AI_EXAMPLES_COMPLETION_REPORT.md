@@ -181,7 +181,7 @@ killer ../../../examples/ai_07_providers.killer
 - 9 functions callable from Killer language
 - Multiple backend support (OpenAI, Local ONNX)
 - Advanced features (caching, error handling, configuration)
-- Production-ready foundation
+- beta (pre-release) foundation
 
 ### 2. Comprehensive Examples
 - 7 example programs covering all AI operations
@@ -196,7 +196,7 @@ killer ../../../examples/ai_07_providers.killer
 - Common usage patterns
 - Performance tips
 
-### 4. Production Ready
+### 4. beta (pre-release)
 - Zero compilation errors
 - All functions validated
 - Error handling included

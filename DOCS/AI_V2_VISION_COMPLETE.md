@@ -15,7 +15,7 @@ Killer v2.0 transforms from systems language → **AI agent framework language**
 Current v1.1:
 - ✅ 10 algorithms, 73ms avg latency
 - ✅ General-purpose (math + graphs + search + sorting)
-- ✅ Production-ready but limited to algorithms
+- beta (pre-release) but limited to algorithms
 
 V2.0 Vision:
 - 🤖 **100K+ concurrent agents**

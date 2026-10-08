@@ -328,7 +328,7 @@ Lower Throughput Operations (Complex):
 
 ### For Release Notes
 
-- All modules demonstrate production-ready performance
+- All modules demonstrate beta (pre-release) performance
 - Benchmarks show excellent scaling characteristics
 - Async versions in roadmap will unlock 10-50x improvements
 - Current performance baseline suitable for teaching and prototyping
@@ -350,7 +350,7 @@ Lower Throughput Operations (Complex):
 
 ## Conclusion
 
-The Killer v3.0 performance benchmarking suite demonstrates that all five API modules are production-ready, with:
+The Killer v3.0 performance benchmarking suite demonstrates that all five API modules are beta (pre-release), with:
 
 - ✅ **DateTime API**: Lightweight, suitable for all scenarios
 - ✅ **JSON/CSV API**: Fast serialization, room for optimization in parsing

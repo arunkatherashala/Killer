@@ -1,9 +1,11 @@
+> Note: historical report, superseded by README and parity/PARITY_REPORT.md. Claims below are not current.
+
 # 🎯 KILLER v1.0 - COMPREHENSIVE 7-ROUND TESTING COMPLETE
 
 **Completion Date:** 2026-03-20  
 **Binary:** production/killer.exe (139 KB)  
 **Test Status:** ✅ 39/39 PASSED (100%)  
-**Overall Status:** ✅ PRODUCTION READY
+**Overall Status:** BETA (PRE-RELEASE)
 
 ---
 
@@ -341,7 +343,7 @@ Status:                 ✅ APPROVED FOR PRODUCTION
 ### Final Verdict ✅
 ```
 ┌─────────────────────────────────────────────┐
-│  KILLER v1.0 - PRODUCTION READY             │
+│  KILLER v1.0 - BETA (PRE-RELEASE)             │
 │                                             │
 │  ✅ 39/39 Tests PASSED                     │
 │  ✅ All 7 Rounds COMPLETED                 │
@@ -495,6 +497,6 @@ The production binary is ready for immediate deployment.
 
 **Generated:** 2026-03-20  
 **Version:** killer v1.0  
-**Status:** ✅ PRODUCTION READY  
+**Status:** BETA (PRE-RELEASE)  
 **Test Completion:** 100%  
 **Deployment Status:** APPROVED ✅

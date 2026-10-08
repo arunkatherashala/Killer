@@ -1,6 +1,6 @@
 # KILLER_MERCURY_ENGINE v1.0 - Official Specification
 
-**Status:** ✅ PRODUCTION READY  
+**Status:** BETA (PRE-RELEASE)  
 **Version:** 1.0  
 **Release Date:** March 19, 2026  
 **Purpose:** Unified testing platform for Killer v4.1 Extended (all phases)
@@ -348,7 +348,7 @@ See [KILLER_Mercury_Engine_API_Reference.md]
 
 ## Official Status
 
-**KILLER_MERCURY_ENGINE v1.0 is PRODUCTION READY**
+**KILLER_MERCURY_ENGINE v1.0 is BETA (PRE-RELEASE)**
 
 - ✅ 115/115 tests passing consistently
 - ✅ Sub-millisecond latencies verified

@@ -24,7 +24,7 @@ Killer has **5 key limitations**:
 - 300+ hours of learning
 - 365+ problems
 - Patterns and workarounds
-- Production-ready techniques
+- beta (pre-release) techniques
 - **Ready Now** ✅
 
 **Track B: Language Enhancement** (Killer v2.5 → v4.0)
@@ -551,7 +551,7 @@ Week 11 (Distributed) → Week 22 (Processing)
 ## Phase 1: Immediate (✅ Complete)
 - Weeks 1-18: 900+ hours
 - 1,325+ problems
-- Production-ready patterns
+- beta (pre-release) patterns
 - **Status**: Ready now
 
 ## Phase 2: Applied (🟡 Ready to execute)

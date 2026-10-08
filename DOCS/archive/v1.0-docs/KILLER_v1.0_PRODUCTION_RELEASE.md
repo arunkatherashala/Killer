@@ -1,7 +1,9 @@
+> Note: historical report, superseded by README and parity/PARITY_REPORT.md. Claims below are not current.
+
 # KILLER v4.0.0 - PRODUCTION RELEASE NOTES
 
 **Release Date:** March 20, 2026  
-**Status:** ✅ PRODUCTION READY  
+**Status:** BETA (PRE-RELEASE)  
 **Build:** killer_omniscience.exe v4.0.0  
 **Deployment:** production/killer.exe
 **Version Updated:** Corrected from v1.0 to v4.0.0 (matches Cargo.toml)
@@ -217,7 +219,7 @@ All documented features are working correctly.
 ### v1.0 - First Production Release
 ```
 Date:       2026-03-20
-Status:     ✅ PRODUCTION READY
+Status:     BETA (PRE-RELEASE)
 Binary:     killer.exe (139 KB)
 Tests:      274 unit + 115 Mercury = 389 total ✅
 Build:      Release (optimized, -O3)

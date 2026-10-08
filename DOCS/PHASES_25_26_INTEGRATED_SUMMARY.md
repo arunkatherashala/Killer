@@ -67,7 +67,7 @@ TOTAL     | v1.0 Complete          | 1,537+    | 18,795   | 297+  | 32
 | **Web** | 6 | 310 | HTTP server, routing, templates, sessions, auth, middleware |
 | **Real-Time** | 5 | 250 | WebSocket, GraphQL, file upload, streaming, SSE |
 | **Security** | 5 | 250 | OAuth 2.0, RBAC, ABAC, sessions, token management |
-| **TOTAL** | **32** | **1,537+** | **Production-ready framework** |
+| **TOTAL** | **32** | **1,537+** | **beta (pre-release) framework** |
 
 ---
 
@@ -279,7 +279,7 @@ let correlation = compute_correlation(&dataset1, &dataset2);
 **Killer's advantage:** 
 - Comprehensive + Concurrent + Secure
 - All in one language (no polyglot)
-- Production-ready patterns built-in
+- beta (pre-release) patterns built-in
 - Designed for real-time systems
 
 ---

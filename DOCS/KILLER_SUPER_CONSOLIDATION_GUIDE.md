@@ -74,7 +74,7 @@ Time ─────────────────────────
 | **Compilation** | `cargo build --bin killer_super` |
 | **Interaction** | 2-way stdin/stdout (✅ WORKING) |
 | **Modes** | 6 (Question Answering, Code Gen, Analysis, Optimization, Debugging, Architecture) |
-| **Status** | ✅ Production ready (framework level) |
+| **Status** | beta (pre-release) (framework level) |
 | **Phase** | Phase 8 (ready for LLM integration) |
 
 ---
@@ -219,7 +219,7 @@ echo "0" | killer_super.exe
 
 ## Summary
 
-**killer_super v3.0** is the officially released, unified, production-ready Rust implementation of the Killer AI agent system. It consolidates 3 prior eras of development into a single, clean, 2-way interactive binary ready for Phase 8 LLM integration.
+**killer_super v3.0** is the officially released, unified, beta (pre-release) Rust implementation of the Killer AI agent system. It consolidates 3 prior eras of development into a single, clean, 2-way interactive binary ready for Phase 8 LLM integration.
 
 Status: ✅ **APPROVED FOR PRODUCTION**
 

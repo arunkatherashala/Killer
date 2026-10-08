@@ -10,7 +10,7 @@ Killer is available in **two independent implementations**:
 - **Approach:** Compiled Rust VM with bytecode interpreter
 - **Performance:** Fast, memory-safe, single executable
 - **Requirements:** None (fully standalone)
-- **Status:** Production-ready ✅
+- **Status:** beta (pre-release) ✅
 
 **Usage:**
 ```bash
@@ -52,7 +52,7 @@ python .\main.py program.killer
 | **Distribution** | Single file | Requires Python |
 | **Performance** | Optimized (release build) | Interpreted |
 | **Dependencies** | None | Python 3.7+ |
-| **Production Ready** | ✅ Yes | ⚠️ Reference only |
+| **beta (pre-release)** | ✅ NO (beta) | ⚠️ Reference only |
 
 ---
 
@@ -159,4 +159,4 @@ Deploying production app?       → killer-native.exe (V2)
 
 ---
 
-**Summary:** Two production-ready versions, same language, different implementation. Users get V2's speed; developers get V1's transparency.
+**Summary:** Two beta (pre-release) versions, same language, different implementation. Users get V2's speed; developers get V1's transparency.

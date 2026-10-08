@@ -4,7 +4,7 @@
 
 ## Overview
 
-This directory contains the complete source code implementation of the Supernova Lightning Engine - a production-ready runtime system built entirely in Killer language with native AI, voice, and vision integration.
+This directory contains the complete source code implementation of the Supernova Lightning Engine - a beta (pre-release) runtime system built entirely in Killer language with native AI, voice, and vision integration.
 
 ## Architecture
 
@@ -116,7 +116,7 @@ See `_CURRENT_WORK/` for:
 
 ## Status
 
-✅ **PRODUCTION READY**
+**BETA (PRE-RELEASE)**
 
 - All 8 systems fully implemented
 - Compiled and executed successfully

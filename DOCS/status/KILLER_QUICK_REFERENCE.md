@@ -372,7 +372,7 @@ ENTERPRISE (March 2026, Phases 37-42)
 ├─ Phase 41: Template Support - Mail-merge (36 tests)
 └─ Phase 42: Advanced Templates - Filters/Loops (61 tests)
 
-TOTAL: 11,000+ TESTS | 0 BUILD ERRORS | PRODUCTION READY ✅
+TOTAL: 11,000+ TESTS | 0 BUILD ERRORS | BETA (PRE-RELEASE) ✅
 ```
 
 ---
@@ -656,7 +656,7 @@ kfn render_invoice(order) {
 ✅ **Security** - Mandatory sandbox (Assassin Layer)  
 ✅ **AI-Native** - LLM, agents at language level  
 ✅ **Developer-Friendly** - Clean syntax, helpful errors  
-✅ **Production-Ready** - 42 phases, 11,000+ tests  
+**beta (pre-release)** - 42 phases, 11,000+ tests  
 ✅ **Format Flexibility** - 18+ formats, office support  
 
 **Perfect for:**

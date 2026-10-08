@@ -439,7 +439,7 @@ pandoc manual.md -o manual.docx --toc
 - Check Pandoc docs: https://pandoc.org
 
 🚀 **Ready to Publish!**
-- Your Word manual is production-ready
+- Your Word manual is beta (pre-release)
 - Share with confidence
 - Collect feedback from team
 

@@ -24,7 +24,7 @@ KILLER v2.0 ARCHITECTURE:
     ┌────┴──┐      ┌───┴───┐             ┌───┴────┐
     │ EdTech│      │ DBT Hybrid         │ Examples│
     │Curriculum   │ (Already Built)    │4 Showcase
-    │(12 Stages)  │ (Production Ready) │
+    │(12 Stages)  │ (beta (pre-release)) │
     └────────┘    └─────────┘         └────────┘
          │              │                      │
     Learn → Code   Optimize → Deploy   Understand → Build
@@ -245,7 +245,7 @@ KILLER v2.0 ARCHITECTURE:
 **Deliverables**:
 - ✅ Complete v2.0 (10 features integrated)
 - ✅ 12-stage educational curriculum
-- ✅ 4 core examples (production-ready)
+- ✅ 4 core examples (beta (pre-release))
 - ✅ 8+ learner projects
 - ✅ Performance benchmarks vs Python/TensorFlow
 - ✅ GitHub repository (300+ stars target)
@@ -333,7 +333,7 @@ KILLER v2.0 ARCHITECTURE:
 <repo-root>\\
 
 ├── SOURCE\
-│   ├── dbt\                     (Already built - production ready)
+│   ├── dbt\                     (Already built - beta (pre-release))
 │   │   ├── incremental_engine.killer
 │   │   ├── dbt_models.killer
 │   │   ├── dbt_snapshot.killer

@@ -213,7 +213,7 @@ RELEASE: v2.2.0 August 15, 2026
 **Week 18 Milestone**: + Contracts ✓ **v2.2.0 RELEASE**
 - Formal pre/postconditions
 - Safe polymorphism
-- Production-ready
+- beta (pre-release)
 
 ---
 

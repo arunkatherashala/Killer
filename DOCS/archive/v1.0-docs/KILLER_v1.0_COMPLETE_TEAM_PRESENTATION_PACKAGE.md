@@ -1,3 +1,5 @@
+> Note: historical report, superseded by README and parity/PARITY_REPORT.md. Claims below are not current.
+
 # KILLER v1.0 - COMPLETE TEAM PRESENTATION PACKAGE
 
 **Prepared for:** Team Meeting / Management Presentation  
@@ -270,7 +272,7 @@ We tested KILLER v1.0 with a comprehensive 7-round test suite:
 ✓ 100,000 operations per second
 ✓ Simple Python-like syntax
 ✓ Tiny 139KB binary for deployment
-✓ Production ready TODAY
+beta (pre-release) TODAY
 
 In the next 30 minutes, I'll show you why this is the right choice
 for our next generation of microservices."
@@ -474,7 +476,7 @@ Everything is prepared for your team presentation:
 ### Confidence Level: ⭐⭐⭐⭐⭐ VERY HIGH
 
 **Your team will see:**
-1. A fully tested, production-ready language
+1. A fully tested, beta (pre-release) language
 2. Clear performance advantages over Python
 3. Simpler learning curve than Go/Rust
 4. Honest assessment of limitations

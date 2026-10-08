@@ -13,7 +13,7 @@
 | Markdown files at root | 60+ | ~15 | -45 files moved ✓ |
 | Current docs accessible | Confused | In docs/current/ | Organized ✓ |
 | Archive docs accessible | Scattered | In docs/archive/ | Organized ✓ |
-| docs/current/ files | N/A | 13 | Production-ready ✓ |
+| docs/current/ files | N/A | 13 | beta (pre-release) ✓ |
 | docs/archive/ files | N/A | 47 | Historical docs ✓ |
 | Duplicate reference files | 5 | 0 | Consolidated ✓ |
 | Root clutter | HIGH | LOWER | 45+ files cleaner ✓ |

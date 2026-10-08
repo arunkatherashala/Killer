@@ -1,3 +1,5 @@
+> Note: historical report, superseded by README and parity/PARITY_REPORT.md. Claims below are not current.
+
 # KILLER v4.0.0 - TEAM PRESENTATION DECK
 
 **Presentation Date:** 2026-03-20  
@@ -314,7 +316,7 @@ KILLER:  Equally fast (good VM)
 **Q3: When do we get async/await?**
 ```
 KILLER:  Planned for v2.0 (Q4 2026)
-         v1.0 is production ready WITHOUT it
+         v1.0 is beta (pre-release) WITHOUT it
          Actor model handles concurrency well
          Most use cases don't need async yet
 ```
@@ -455,7 +457,7 @@ def fibonacci(n):
 ```
 ╔════════════════════════════════════════════════════════════╗
 ║                                                            ║
-║  KILLER v1.0: PRODUCTION READY TODAY                      ║
+║  KILLER v1.0: BETA (PRE-RELEASE) TODAY                      ║
 ║                                                            ║
 ║  ✅ 39 comprehensive tests - ALL PASSED                  ║
 ║  ✅ Zero memory leaks                                     ║
@@ -513,7 +515,7 @@ WHAT DOES IT SCORE?
 - Overall: 80/100
 
 WHEN CAN WE START?
-TODAY! Binary is production ready.
+TODAY! Binary is beta (pre-release).
 First project: Next 30 days.
 ROI: Significant cost savings starting week 1.
 
@@ -531,6 +533,6 @@ See presentation slides for details.
 ```
 ╔════════════════════════════════════════════════════════════╗
 ║  KILLER v1.0 - READY FOR YOUR TEAM TO USE TODAY          ║
-║  Tested, proven, production-ready, and recommended        ║
+║  Tested, proven, beta (pre-release), and recommended        ║
 ╚════════════════════════════════════════════════════════════╝
 ```

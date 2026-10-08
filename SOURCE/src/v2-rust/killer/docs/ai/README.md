@@ -228,4 +228,4 @@ Killer AI Framework is part of the Killer language - MIT License
 
 **Last Updated**: March 18, 2026  
 **Version**: Phase 5-6 (Pre-release)  
-**Status**: Production-ready for basic use, expanding functionality
+**Status**: beta (pre-release) for basic use, expanding functionality

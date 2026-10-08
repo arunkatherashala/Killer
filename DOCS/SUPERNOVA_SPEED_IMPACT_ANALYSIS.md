@@ -60,7 +60,7 @@ Status: ✅ Fast (13.8B ops/sec)
 Killer = Complete enterprise platform
 Status: ✅ Still fast (13.8B ops/sec)
         ✅ Complete (integrated runtime)
-        ✅ Production ready (voice, vision, energy)
+        beta (pre-release) (voice, vision, energy)
         ✅ Enterprise features (monitoring, dashboard)
         ✅ Users can interact naturally
 ```
@@ -207,7 +207,7 @@ Enterprise Ready: 1000x better (lab tool → production deployment)
 
 ---
 
-**Bottom Line:** Supernova doesn't make Killer faster. Supernova makes a fast experimental system into a fast, complete, production-ready enterprise platform.
+**Bottom Line:** Supernova doesn't make Killer faster. Supernova makes a fast experimental system into a fast, complete, beta (pre-release) enterprise platform.
 
 **Speed:** 13.8B ops/sec (unchanged, already maxed)  
 **Capability:** 10-100,000x better (now you can actually use it)

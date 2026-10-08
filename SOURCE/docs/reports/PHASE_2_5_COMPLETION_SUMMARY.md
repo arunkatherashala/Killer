@@ -394,7 +394,7 @@ Killer/
 - ✅ Complete marketing strategy ready to execute
 - ✅ Clear roadmap for Phase 3 (OOP) and beyond
 
-**The language is production-ready. We're just waiting on:**
+**The language is beta (pre-release). We're just waiting on:**
 1. System setup (Rust installation)
 2. Binary compilation
 3. Final testing
@@ -426,4 +426,4 @@ In a crowded language ecosystem, Killer stands out because:
 ---
 
 *Last Updated: March 2026*  
-*Status: ✅ PRODUCTION READY (pending system setup)*
+*Status: BETA (PRE-RELEASE) (pending system setup)*

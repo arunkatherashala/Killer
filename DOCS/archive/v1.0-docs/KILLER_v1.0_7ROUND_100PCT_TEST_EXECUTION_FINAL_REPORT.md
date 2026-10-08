@@ -1,3 +1,5 @@
+> Note: historical report, superseded by README and parity/PARITY_REPORT.md. Claims below are not current.
+
 # KILLER v1.0 - 7-ROUND 100% TEST EXECUTION FINAL REPORT
 
 **Test Execution Date:** 2026-03-20  
@@ -511,4 +513,4 @@ VERDICT: killer.exe v1.0 is ready for production deployment.
 **Generated:** 2026-03-20  
 **Version:** killer v1.0  
 **Test Completion:** 100%  
-**Final Status:** ✅ PRODUCTION READY
+**Final Status:** BETA (PRE-RELEASE)

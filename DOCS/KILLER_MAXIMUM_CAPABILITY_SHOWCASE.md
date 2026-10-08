@@ -47,7 +47,7 @@ Layer 4: PRACTICAL (What works today)
 ├─ Total agents: 10 Million (10M) ✓ PROVEN
 ├─ Total memory: 25 MB per machine
 ├─ Throughput: 100M-500M msg/sec ✓ DEMONSTRATED
-└─ Result: Production-ready
+└─ Result: beta (pre-release)
 
 
 === BUILD 1: AGGRESSIVE SHOWCASE (Close to your goal) ===

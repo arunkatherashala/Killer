@@ -75,7 +75,7 @@
 ### Feature #10: GPU Acceleration ✅
 - CUDA/Metal/Vulkan support
 - Single & multi-GPU inference
-- Auto-batching (7.5ms/token single, 2.2ms/token 4-GPU)
+- Auto-batching (per-token latency not measured)
 - Memory pooling + optimization
 - ~400 lines | 4 tests
 
@@ -121,7 +121,7 @@ Vector Operations:      Not applicable (Node is interpreted)
 
 ## 📦 COMPLETE FILE LISTING
 
-### Feature Code (All Production-Ready)
+### Feature Code (All beta (pre-release))
 1. `FEATURE_03_TOOL_CALLING.killer` - 400 lines
 2. `FEATURE_04_GENERICS.killer` - 350 lines
 3. `FEATURE_05_VECTORS.killer` - 400 lines
@@ -277,7 +277,7 @@ Automatic retry, circuit breaker, fallback patterns
 | Performance vs Python | 5x+ | 10-100x | ✅ |
 | Agent Scaling | 10K/core | 50K/core | ✅ |
 | Async Latency | <2μs | 1μs | ✅ |
-| Production Ready | Yes | Yes | ✅ |
+| beta (pre-release) | NO (beta) | Yes | ✅ |
 
 ---
 
@@ -286,7 +286,7 @@ Automatic retry, circuit breaker, fallback patterns
 ```
 ╔═══════════════════════════════════════════════════════════╗
 ║                                                           ║
-║     KILLER V2.0 IS PRODUCTION READY ✅                   ║
+║     KILLER V2.0 IS BETA (PRE-RELEASE) ✅                   ║
 ║                                                           ║
 ║  All 10 AI Features: COMPLETE                            ║
 ║  Tests: 38/38 PASSING                                    ║

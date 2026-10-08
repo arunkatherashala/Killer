@@ -107,7 +107,7 @@ Evening: No broken builds, happy team
 
 #### ARU Pros ✅
 
-- ✅ Production ready always
+- beta (pre-release) always
 - ✅ Fast deployments (minutes)
 - ✅ Few production bugs
 - ✅ Team confidence high
@@ -606,7 +606,7 @@ Common factor: 2-week sprints, daily standups,
 
 | Criteria | ARU | Cowboy | TDD | Waterfall | Lean | Agile+ARU |
 |----------|:---:|:------:|:---:|:---------:|:----:|:----------:|
-| **Production Ready** | ⭐⭐⭐⭐⭐ | ⭐ | ⭐⭐⭐ | ⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ |
+| **beta (pre-release)** | ⭐⭐⭐⭐⭐ | ⭐ | ⭐⭐⭐ | ⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ |
 | **Speed to Code** | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐ | ⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐ |
 | **Code Quality** | ⭐⭐⭐⭐ | ⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ |
 | **Reliability** | ⭐⭐⭐⭐⭐ | ⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ |
@@ -697,7 +697,7 @@ Decision Point: "Do we scale this?"
   If YES:  Refactor for ARU (Week 1)
            Add testing (Week 2)
            Setup CI/CD (Week 1)
-           Production ready → ARU
+           beta (pre-release) → ARU
   
 Result: More reliable, ready to scale
 Time: 2-3 weeks refactoring
@@ -712,7 +712,7 @@ Decision Point: "Is this production now?"
   If YES:  Add tests (Week 1)
            Setup CI/CD (Week 1)
            Refactor (Week 2)
-           Production ready → ARU
+           beta (pre-release) → ARU
            
 Result: No longer fragile
 Quality: Improves dramatically

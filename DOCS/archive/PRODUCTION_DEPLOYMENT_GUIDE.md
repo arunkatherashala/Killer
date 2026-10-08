@@ -357,7 +357,7 @@ Highlights:
 - New hybrid indentation syntax support
 - 100% backward compatible (v4.1 code still works)
 - 0.8% performance improvement
-- Production ready & fully tested
+- beta (pre-release) & fully tested
 
 Deployment time: ~2-4 hours
 Expected impact: None (customers won't notice)

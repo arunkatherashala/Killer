@@ -225,7 +225,7 @@ Write-Host "  Sequential Throughput:   $throughput req/sec" -ForegroundColor Gre
 Write-Host "  Stress Throughput:       $stressThroughput req/sec" -ForegroundColor Green
 Write-Host "  Crash Rate:              0% (0 errors in 80 requests)" -ForegroundColor Green
 
-Write-Host "`nStatus: ✅ PRODUCTION READY - ALL TESTS PASSED" -ForegroundColor Green
+Write-Host "`nStatus: ✅ BETA (PRE-RELEASE) - ALL TESTS PASSED" -ForegroundColor Green
 Write-Host "`nSaving detailed report to: $OutputFile`n"
 
 $report | Out-File -FilePath $OutputFile -Encoding UTF8 -Force

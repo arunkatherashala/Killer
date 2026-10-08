@@ -7,7 +7,7 @@
 **Pure Killer Orchestration + Python Instrumentation**
 - Killer handles: Test logic (all 7 rounds, 10M operations)
 - Python handles: Timing, CSV persistence, reporting
-- No loose ends, no partial work, production-ready
+- No loose ends, no partial work, beta (pre-release)
 
 ---
 
@@ -134,7 +134,7 @@ Generated results (7 rows)
 - Subprocess pattern from existing tests
 - Simple marker-based parsing (ROUND_START/END)
 
-✅ **Production Ready**
+**beta (pre-release)**
 - Full-load testing (100K×100 operatio per round)
 - Millisecond-precision timing
 - CSV persistence

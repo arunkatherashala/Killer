@@ -510,7 +510,7 @@ Multi-format:    Transitive (A→B→C)
 ✅ **YES - Comprehensive support** across 36 phases
 ✅ **Multiple formats:** CSV, JSON, Parquet, HDF5, Arrow, database formats, more
 ✅ **Full operations:** Read, write, stream, convert, validate, compress, encrypt
-✅ **Production-ready:** Phase 34 proven with 30K rows/sec throughput
+**beta (pre-release):** Phase 34 proven with 30K rows/sec throughput
 ✅ **Real-time capable:** Sub-millisecond latencies for format conversion
 ✅ **Scalable:** Streaming support for datasets >1TB
 ✅ **Secure:** Built-in encryption (AES-256), hashing (SHA-256)

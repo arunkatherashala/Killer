@@ -1,7 +1,7 @@
 # KILLER: STAGE 2 - MATHEMATICS FOR ML
 ## Foundation: Linear Algebra, Calculus, Probability, Optimization
 
-**Status**: Production Ready  
+**Status**: beta (pre-release)  
 **Dependency**: Killer v1.1+ (Stage 1 complete)  
 **Enables**: Stages 3-12 (all ML/AI algorithms)  
 **Timeline**: Weeks 1-6  
@@ -886,6 +886,6 @@ kfn vector_string(v: Vector) -> String {
 - ✅ Pure Rust backend (no interpretation)
 - ✅ GPU-ready (Vector<Float> → GPU JIT in v2.0 Feature #10)
 - ✅ 100-1000x faster than Python NumPy loops
-- ✅ Production-ready (full error handling)
+- beta (pre-release) (full error handling)
 
 **Next**: With this math library, you can build all ML algorithms in Stages 3-12! 🚀

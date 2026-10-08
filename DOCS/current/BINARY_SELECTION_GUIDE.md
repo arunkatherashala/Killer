@@ -5,7 +5,7 @@
 **Best for:** General-purpose Killer language execution  
 **Recommended for:** Most users and deployments  
 **Size:** 8.5MB (smallest + feature-rich)  
-**Status:** Production-ready ✅
+**Status:** beta (pre-release) ✅
 
 ---
 
@@ -185,7 +185,7 @@ run_killer.exe my_program.killer
 
 Deploy this binary for production.
 It handles 99% of Killer programs.
-Small, fast, reliable, production-ready.
+Small, fast, reliable, beta (pre-release).
 ```
 
 ### If Specific Need Arises:

@@ -1095,7 +1095,7 @@ Features #8, #9: Error Recovery, Streaming
 Curriculum:
   Stage 12: AI Agents & AGI
   All benchmarks vs Python
-Deliverable: Production-ready agents, perf comparison
+Deliverable: beta (pre-release) agents, perf comparison
 
 
 WEEK 21-26: FINAL POLISH + LAUNCH

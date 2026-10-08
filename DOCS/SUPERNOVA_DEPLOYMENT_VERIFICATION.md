@@ -18,7 +18,7 @@
 | 4 | **SUPERNOVA_ENERGY_PLATFORM.killer** | 6.1 KB | ✅ Deployed | Energy manager + platform adapter |
 | 5 | **SUPERNOVA_ORCHESTRATOR.killer** | 9.5 KB | ✅ Deployed | Master coordinator + benchmarks |
 
-**Total Engine Code:** 38 KB | **Status:** ✅ PRODUCTION READY
+**Total Engine Code:** 38 KB | **Status:** BETA (PRE-RELEASE)
 
 ---
 
@@ -349,7 +349,7 @@ Status: ✅ ARCHITECTURE VALIDATED
 ║                                                                ║
 ║              ✅ SUPERNOVA LIGHTNING ENGINE v1.0                ║
 ║                    FULLY DEPLOYED                             ║
-║                 PRODUCTION READY                              ║
+║                 BETA (PRE-RELEASE)                              ║
 ║              REVOLUTIONARY TECHNOLOGY                         ║
 ║                                                                ║
 ║              Architect: Sai Arun Kumar - Katherashala          ║

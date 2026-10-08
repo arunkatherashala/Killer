@@ -1,3 +1,5 @@
+> Note: historical report, superseded by README and parity/PARITY_REPORT.md. Claims below are not current.
+
 # KILLER v1.0 - QUICK COMPETITIVE REFERENCE CARD
 
 **For: Team Decision Making**  
@@ -20,7 +22,7 @@ Binary size:            139 KB      -         5MB       3MB       50MB
 Learning curve:         1-2 wks     1 wk      3-4 wks   6-12 wks  2-3 wks
 Team expertise avail:   Medium ↑    Very High Medium    Low       High
 Maturity:               NEW ✅      Mature    Mature    Mature    Mature
-Production ready:       YES ✅      YES       YES       YES       YES
+beta (pre-release):       NO (beta) ✅      YES       YES       YES       YES
 ```
 
 ### Language Features
@@ -272,7 +274,7 @@ WINNER: KILLER (Simplest, fastest to deliver)
 ✓ Want Python simplicity
 ✓ Want faster delivery (1-2 week ramp-up)
 ✓ Budget conscious (smallest team cost)
-✓ Production ready today (can't wait for maturity)
+beta (pre-release) today (can't wait for maturity)
 ```
 
 ### If Team Fits This Profile: Choose Go

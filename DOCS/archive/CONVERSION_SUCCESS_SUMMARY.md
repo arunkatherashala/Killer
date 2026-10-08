@@ -21,7 +21,7 @@
 | **Examples** | 100+ code samples |
 | **Pages** | 100+ equivalent pages |
 | **Content** | Beginner to Advanced |
-| **Status** | ✅ Production Ready |
+| **Status** | beta (pre-release) |
 
 ---
 

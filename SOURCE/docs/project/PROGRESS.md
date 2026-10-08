@@ -3,7 +3,7 @@
 **Project**: Killer - Self-Hosted Programming Language  
 **Creator**: Katherashala Sai Arun Kumar  
 **Current Version**: 3.0 (Released March 9, 2026)  
-**Status**: ✅ Production Ready
+**Status**: beta (pre-release)
 
 ---
 
@@ -371,7 +371,7 @@ killer hello.killer
 
 🎯 **Self-Hosting**: Killer interpreter written in Killer itself  
 🎯 **Zero Dependencies**: Complete standalone executable  
-🎯 **Production Ready**: v3.0 stable release  
+🎯 **beta (pre-release)**: v3.0 stable release  
 🎯 **Transparent**: Full source code visible for audit  
 🎯 **Easy Installation**: No admin required, automatic setup  
 🎯 **User Ready**: Can create and run custom programs  
@@ -390,7 +390,7 @@ killer hello.killer
 
 ## Conclusion
 
-Killer v3.0 is a **fully functional, production-ready programming language** with:
+Killer v3.0 is a **fully functional, beta (pre-release) programming language** with:
 - ✅ Complete self-hosted interpreter
 - ✅ Working bootstrap compiler
 - ✅ Cross-platform installation
