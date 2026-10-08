@@ -55,16 +55,22 @@ first-class values (variables, arguments, return values, callbacks, lambdas, clo
 
 **Deliberate design decisions, now documented by the probes rather than hidden as failures:**
 
-- `//` starts a comment (C/JS style), so integer division is spelled `floor(a / b)`.
+- `//` starts a comment (C/JS style), so integer division is spelled `floor(a / b)`. The mistake `x // 2` is a
+  compile error with that hint: a `//` after an expression-ending token and followed by an operand (a number or `(`,
+  a name glued to it, or a name already used earlier) is rejected; `// prose`, `//TODO` and full-line comments are
+  comments. For exact integer division of big values use `idiv(a, b)`.
 - Assignment inside a function is local unless declared `global` (the Python rule).
 - `regex_match(text, pattern)` takes the text first.
-- Closures capture the enclosing variables they use when they are created and keep their own copy
-  between calls; two closures made by the same call do not share captured variables.
+- Closures share the variables they capture: a local that a nested function assigns (or that the enclosing
+  function reassigns after the nested definition) lives in one shared cell per call, so the counter
+  `inc`/`get`/`reset` trio works. Loop variables and `let` bindings are fresh per iteration (like JS `let`); a
+  plain assigned variable is one variable per call (Python rule).
 - Generators are lazy coroutines: calling a function that contains `yield` returns a generator
   without running the body, and each `next(g)` / `for` iteration resumes it to the next `yield`
   (infinite generators, on-demand side effects, `has_next(g)`). A generator that is abandoned
   part-way (for example after `break`) keeps its suspended frame until the program ends.
-- A `return`, `break` or `continue` that leaves a `try` skips that `try`'s `finally` body.
+- `finally` runs on every exit of its `try`: normal end, caught or uncaught error, `return`, `break`, `continue`; a
+  `return`/`throw` inside `finally` overrides the pending one.
 - Error line numbers can be shifted when a program uses lambdas, `match`/`switch`, `do-while`,
   C-style `for` or `import`, because those are rewritten to core statements before compiling.
 

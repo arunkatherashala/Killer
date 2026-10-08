@@ -1058,3 +1058,32 @@ println(len)
 "#;
     assert_eq!(run(src), "hi\n[1, 2]\n3\n[1, 2]\n9\n4\n5");
 }
+
+#[test]
+fn snake_case_builtin_aliases_work() {
+    let path = std::env::temp_dir().join(format!("killer_alias_{}.txt", std::process::id()));
+    let p = path.to_string_lossy().replace('\', "/");
+    let src = format!(
+        r#"
+println(format("{{}} is {{:.2}}", "pi", 3.14159))
+println(format("{{1}}-{{0}}", "a", "b"))
+println(substr("hello", 1, 3))
+println(substr("hello", -2))
+println(to_string(5) + "!")
+println(parse_int("42") + 1)
+println(to_int(3.7))
+println(to_float("2.5") + 1)
+println(type_of(1))
+println(time_now() > 1000)
+file_write("{p}", "abc")
+println(file_exists("{p}"))
+file_append("{p}", "def")
+println(file_read("{p}"))
+file_delete("{p}")
+println(file_exists("{p}"))
+"#
+    );
+    let out = run(&src);
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(out, "pi is 3.14\nb-a\nell\nlo\n5!\n43\n3\n3.5\nnumber\ntrue\ntrue\nabcdef\nfalse");
+}

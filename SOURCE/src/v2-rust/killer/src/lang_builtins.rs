@@ -566,6 +566,87 @@ pub fn call(name: &str, args: &[Value]) -> Option<Result<Value, VmError>> {
                 _ => err("insert() expects (array, index, value)"),
             }
         })(),
+        // format("{} is {:.2}", name, x): `{}` next argument, `{N}` argument N, `{:.2}` precision,
+        // `{{` / `}}` literal braces
+        "format" => (|| {
+            if args.is_empty() {
+                return err("format() expects a format string");
+            }
+            let fmt = string(&args[0], "format")?;
+            let rest = &args[1..];
+            let mut out = String::new();
+            let mut next = 0usize;
+            let chars: Vec<char> = fmt.chars().collect();
+            let mut i = 0;
+            while i < chars.len() {
+                let c = chars[i];
+                if c == '{' && chars.get(i + 1) == Some(&'{') {
+                    out.push('{');
+                    i += 2;
+                } else if c == '}' && chars.get(i + 1) == Some(&'}') {
+                    out.push('}');
+                    i += 2;
+                } else if c == '{' {
+                    let Some(close) = chars[i..].iter().position(|x| *x == '}') else {
+                        return err("format(): unclosed `{` in the format string");
+                    };
+                    let spec: String = chars[i + 1..i + close].iter().collect();
+                    let (which, style) = match spec.split_once(':') {
+                        Some((w, st)) => (w, st),
+                        None => (spec.as_str(), ""),
+                    };
+                    let index = if which.is_empty() {
+                        next += 1;
+                        next - 1
+                    } else {
+                        match which.parse::<usize>() {
+                            Ok(n) => n,
+                            Err(_) => return err(format!("format(): bad placeholder `{{{}}}`", spec)),
+                        }
+                    };
+                    let Some(value) = rest.get(index) else {
+                        return err(format!("format(): placeholder {} has no argument", index));
+                    };
+                    let text = match (style.strip_prefix('.').and_then(|p| p.trim_end_matches('f').parse::<usize>().ok()), value) {
+                        (Some(places), Value::Number(n)) => format!("{:.*}", places, n),
+                        _ => format!("{}", value),
+                    };
+                    out.push_str(&text);
+                    i += close + 1;
+                } else {
+                    out.push(c);
+                    i += 1;
+                }
+            }
+            Ok(Value::Str(out))
+        })(),
+        // substr(s, start, len): characters, a negative start counts from the end
+        "substr" => (|| {
+            let a = arity("substr", args, 2, 3)?;
+            let s: Vec<char> = string(&a[0], "substr")?.chars().collect();
+            let n = s.len() as i64;
+            let mut start = int(&a[1], "substr")?;
+            if start < 0 {
+                start = (n + start).max(0);
+            }
+            let start = start.min(n);
+            let len = match a.get(2) {
+                Some(v) => int(v, "substr")?.max(0),
+                None => n - start,
+            };
+            let end = (start + len).min(n);
+            Ok(Value::Str(s[start as usize..end as usize].iter().collect()))
+        })(),
+        // time_now(): seconds since the Unix epoch, with fractions
+        "time_now" => (|| {
+            arity("time_now", args, 0, 0)?;
+            let d = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs_f64())
+                .unwrap_or(0.0);
+            Ok(Value::Number(d))
+        })(),
+        "to_float" => return call("float", args),
         _ => return None,
     })
 }
