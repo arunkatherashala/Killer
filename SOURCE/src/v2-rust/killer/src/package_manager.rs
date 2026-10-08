@@ -2,7 +2,6 @@
 // Features: Package metadata, dependency resolution, version management, registry operations
 
 use std::collections::{HashMap, BTreeMap};
-use crate::value::Value;
 
 /// Semantic version
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -19,9 +18,14 @@ impl Version {
 
     /// Parse from string "1.2.3"
     pub fn parse(version_str: &str) -> Result<Self, String> {
+        let version_str = version_str.trim();
+        let version_str = version_str.split('+').next().unwrap_or(version_str); // build metadata is ignored
+        if version_str.contains('-') {
+            return Err(format!("Invalid version '{}': pre-release versions are not supported", version_str));
+        }
         let parts: Vec<&str> = version_str.split('.').collect();
         if parts.len() != 3 {
-            return Err("Invalid version format".to_string());
+            return Err(format!("Invalid version '{}': expected MAJOR.MINOR.PATCH", version_str));
         }
 
         let major = parts[0].parse::<u32>()
@@ -66,6 +70,163 @@ impl Version {
     }
 }
 
+impl std::fmt::Display for Version {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}.{}.{}", self.major, self.minor, self.patch)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Op {
+    Exact,
+    Gt,
+    Ge,
+    Lt,
+    Le,
+    Caret,
+    Tilde,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct Comparator {
+    op: Op,
+    major: u32,
+    minor: Option<u32>,
+    patch: Option<u32>,
+}
+
+fn is_op_only(s: &str) -> bool {
+    !s.is_empty() && s.chars().all(|c| "^~<>=".contains(c))
+}
+
+/// A version requirement: comparators joined by `,` (or spaces), all of which must hold.
+///
+/// Syntax: `^1.2.3` (caret: compatible, 0.x aware), `~1.2.3` (tilde: patch updates only),
+/// `>=1.0`, `>1`, `<2.0.0`, `<=1.5`, `=1.2.3` or a bare `1.2.3` (exact), `1.2` / `1.2.x` / `1.*`
+/// (any patch / minor), `*` (anything), and ranges such as `>=1.0, <2.0` or `>=1.0 <2.0`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct VersionReq {
+    comps: Vec<Comparator>,
+    text: String,
+}
+
+impl VersionReq {
+    pub fn any() -> Self {
+        VersionReq { comps: Vec::new(), text: "*".to_string() }
+    }
+
+    pub fn parse(text: &str) -> Result<Self, String> {
+        let t = text.trim();
+        if t.is_empty() || t == "*" {
+            return Ok(Self::any());
+        }
+        // an operator may be separated from its version by a space (">= 1.0")
+        let mut toks: Vec<String> = Vec::new();
+        for part in t.split(',').flat_map(|p| p.split_whitespace()) {
+            match toks.last_mut() {
+                Some(last) if is_op_only(last) => last.push_str(part),
+                _ => toks.push(part.to_string()),
+            }
+        }
+        let bad = || format!("invalid version requirement '{}'", t);
+        let mut comps = Vec::new();
+        for tok in toks {
+            let (op, rest) = if let Some(r) = tok.strip_prefix(">=") {
+                (Op::Ge, r)
+            } else if let Some(r) = tok.strip_prefix("<=") {
+                (Op::Le, r)
+            } else if let Some(r) = tok.strip_prefix('>') {
+                (Op::Gt, r)
+            } else if let Some(r) = tok.strip_prefix('<') {
+                (Op::Lt, r)
+            } else if let Some(r) = tok.strip_prefix('^') {
+                (Op::Caret, r)
+            } else if let Some(r) = tok.strip_prefix('~') {
+                (Op::Tilde, r)
+            } else if let Some(r) = tok.strip_prefix('=') {
+                (Op::Exact, r)
+            } else {
+                (Op::Exact, tok.as_str())
+            };
+            if rest == "*" {
+                continue;
+            }
+            let mut nums = [None, None, None];
+            let parts: Vec<&str> = rest.split('.').collect();
+            if parts.len() > 3 || rest.contains('-') {
+                return Err(bad());
+            }
+            for (i, p) in parts.iter().enumerate() {
+                if matches!(*p, "x" | "X" | "*") {
+                    break;
+                }
+                nums[i] = Some(p.parse::<u32>().map_err(|_| bad())?);
+            }
+            let Some(major) = nums[0] else { return Err(bad()) };
+            comps.push(Comparator { op, major, minor: nums[1], patch: nums[2] });
+        }
+        Ok(VersionReq { comps, text: t.to_string() })
+    }
+
+    pub fn matches(&self, v: &Version) -> bool {
+        self.comps.iter().all(|c| c.matches(v))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.text
+    }
+}
+
+impl std::fmt::Display for VersionReq {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.text)
+    }
+}
+
+impl Comparator {
+    fn lower(&self) -> Version {
+        Version::new(self.major, self.minor.unwrap_or(0), self.patch.unwrap_or(0))
+    }
+    /// First version above everything the partial version names ("1.2" -> 1.3.0, "1" -> 2.0.0).
+    fn next_after_partial(&self) -> Version {
+        match (self.minor, self.patch) {
+            (None, _) => Version::new(self.major + 1, 0, 0),
+            (Some(m), None) => Version::new(self.major, m + 1, 0),
+            (Some(m), Some(p)) => Version::new(self.major, m, p + 1),
+        }
+    }
+    fn matches(&self, v: &Version) -> bool {
+        let lo = self.lower();
+        match self.op {
+            Op::Exact => *v >= lo && *v < self.next_after_partial(),
+            Op::Ge => *v >= lo,
+            Op::Gt => *v >= self.next_after_partial(),
+            Op::Lt => *v < lo,
+            Op::Le => *v < self.next_after_partial(),
+            Op::Tilde => {
+                let hi = match self.minor {
+                    None => Version::new(self.major + 1, 0, 0),
+                    Some(m) => Version::new(self.major, m + 1, 0),
+                };
+                *v >= lo && *v < hi
+            }
+            Op::Caret => {
+                let hi = if self.major > 0 {
+                    Version::new(self.major + 1, 0, 0)
+                } else {
+                    match (self.minor, self.patch) {
+                        (None, _) => Version::new(1, 0, 0),
+                        (Some(m), None) => Version::new(0, m + 1, 0),
+                        (Some(m), Some(_)) if m > 0 => Version::new(0, m + 1, 0),
+                        (Some(_), Some(p)) => Version::new(0, 0, p + 1),
+                    }
+                };
+                *v >= lo && *v < hi
+            }
+        }
+    }
+}
+
 /// Dependency specification
 #[derive(Clone, Debug)]
 pub struct Dependency {
@@ -89,36 +250,10 @@ impl Dependency {
         self
     }
 
-    /// Check if version satisfies constraint
+    /// Check if version satisfies constraint (see [`VersionReq`] for the syntax; an
+    /// unparsable constraint matches nothing).
     pub fn satisfies(&self, version: &Version) -> bool {
-        if self.version_constraint == "*" {
-            return true;
-        }
-
-        if self.version_constraint.starts_with('^') {
-            // Caret: compatible with version (same major)
-            if let Ok(required) = Version::parse(&self.version_constraint[1..]) {
-                return required.is_compatible(version) && version >= &required;
-            }
-        } else if self.version_constraint.starts_with('~') {
-            // Tilde: compatible patch
-            if let Ok(required) = Version::parse(&self.version_constraint[1..]) {
-                return required.major == version.major 
-                    && required.minor == version.minor 
-                    && version >= &required;
-            }
-        } else if self.version_constraint.starts_with(">=") {
-            if let Ok(required) = Version::parse(&self.version_constraint[2..]) {
-                return version >= &required;
-            }
-        } else {
-            // Exact version
-            if let Ok(required) = Version::parse(&self.version_constraint) {
-                return version == &required;
-            }
-        }
-
-        false
+        VersionReq::parse(&self.version_constraint).map_or(false, |r| r.matches(version))
     }
 }
 
@@ -242,7 +377,7 @@ impl PackageRegistry {
     /// Get latest version of package
     pub fn get_latest(&self, name: &str) -> Option<Package> {
         self.packages.get(name)
-            .and_then(|versions| versions.last())
+            .and_then(|versions| versions.iter().max_by(|a, b| a.version.cmp(&b.version)))
             .cloned()
     }
 
@@ -257,10 +392,8 @@ impl PackageRegistry {
     pub fn find_compatible(&self, name: &str, constraint: &str) -> Option<Package> {
         self.packages.get(name)
             .and_then(|versions| {
-                versions.iter().rev().find(|p| {
-                    let dep = Dependency::new(name.to_string(), constraint.to_string());
-                    dep.satisfies(&p.version)
-                })
+                let dep = Dependency::new(name.to_string(), constraint.to_string());
+                versions.iter().filter(|p| dep.satisfies(&p.version)).max_by(|a, b| a.version.cmp(&b.version))
             })
             .cloned()
     }
@@ -328,15 +461,17 @@ impl DependencyResolver {
         Ok(())
     }
 
-    /// Resolve single dependency
+    /// Resolve single dependency. A version chosen earlier must also satisfy later requirements;
+    /// otherwise the error names both the package and the requirement that failed.
     fn resolve_dependency(&mut self, dep: &Dependency) -> Result<(), String> {
         if let Some(existing_version) = self.resolved.get(&dep.name) {
             if !dep.satisfies(existing_version) {
-                self.conflicts.push(format!(
+                let msg = format!(
                     "Conflict: {} requires {}, but {} is already resolved",
                     dep.name, dep.version_constraint, existing_version.to_string()
-                ));
-                return Err("Dependency conflict".to_string());
+                );
+                self.conflicts.push(msg.clone());
+                return Err(msg);
             }
             return Ok(());
         }
@@ -618,5 +753,39 @@ mod tests {
         registry.publish(pkg2).unwrap();
         
         assert_eq!(registry.package_count(), 2);
+    }
+
+    fn req_matches(req: &str, v: &str) -> bool {
+        VersionReq::parse(req).unwrap().matches(&Version::parse(v).unwrap())
+    }
+
+    #[test]
+    fn requirement_syntax() {
+        assert!(req_matches("^1.2.3", "1.9.0") && !req_matches("^1.2.3", "2.0.0") && !req_matches("^1.2.3", "1.2.2"));
+        assert!(req_matches("^0.2.3", "0.2.9") && !req_matches("^0.2.3", "0.3.0"));
+        assert!(req_matches("^0.0.3", "0.0.3") && !req_matches("^0.0.3", "0.0.4"));
+        assert!(req_matches("~1.2.3", "1.2.9") && !req_matches("~1.2.3", "1.3.0"));
+        assert!(req_matches("~1", "1.9.9") && !req_matches("~1", "2.0.0"));
+        assert!(req_matches(">=1.0", "1.0.0") && req_matches(">1", "2.0.0") && !req_matches(">1", "1.9.9"));
+        assert!(req_matches("<2.0.0", "1.99.0") && !req_matches("<2.0.0", "2.0.0"));
+        assert!(req_matches("<=1.5", "1.5.9") && !req_matches("<=1.5", "1.6.0"));
+        assert!(req_matches("1.2.3", "1.2.3") && !req_matches("1.2.3", "1.2.4"));
+        assert!(req_matches("=1.2.3", "1.2.3"));
+        assert!(req_matches("1.2", "1.2.7") && !req_matches("1.2", "1.3.0"));
+        assert!(req_matches("1.*", "1.7.0") && req_matches("*", "9.9.9"));
+        assert!(req_matches(">=1.0, <2.0", "1.5.0") && !req_matches(">=1.0, <2.0", "2.0.0"));
+        assert!(req_matches(">= 1.0 < 2.0", "1.5.0") && !req_matches(">= 1.0 < 2.0", "0.9.0"));
+        assert!(VersionReq::parse("^x").is_err() && VersionReq::parse("1.2.3.4").is_err());
+    }
+
+    #[test]
+    fn latest_is_the_highest_version_not_the_last_published() {
+        let mut r = PackageRegistry::new();
+        r.publish(Package::new("p".into(), Version::new(1, 2, 0))).unwrap();
+        r.publish(Package::new("p".into(), Version::new(1, 10, 0))).unwrap();
+        r.publish(Package::new("p".into(), Version::new(1, 3, 0))).unwrap();
+        assert_eq!(r.get_latest("p").unwrap().version, Version::new(1, 10, 0));
+        assert_eq!(r.find_compatible("p", "~1.2.0").unwrap().version, Version::new(1, 2, 0));
+        assert_eq!(r.find_compatible("p", "^1").unwrap().version, Version::new(1, 10, 0));
     }
 }
