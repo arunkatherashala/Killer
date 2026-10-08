@@ -1,0 +1,106 @@
+# Builds release binaries when a tag like v1.0.0 is pushed and attaches them
+# (plus SHA256 sums) to the GitHub release. Not runnable locally.
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+env:
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.target-name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target-name: linux-x64
+            rust-target: x86_64-unknown-linux-gnu
+            archive: tar.gz
+          - os: windows-latest
+            target-name: windows-x64
+            rust-target: x86_64-pc-windows-msvc
+            archive: zip
+          - os: macos-13
+            target-name: macos-x64
+            rust-target: x86_64-apple-darwin
+            archive: tar.gz
+          - os: macos-latest
+            target-name: macos-arm64
+            rust-target: aarch64-apple-darwin
+            archive: tar.gz
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "SOURCE/src/v2-rust/killer"
+
+      # The crate has no src/bin/killer.rs, so killer_super is the only binary shipped.
+      - name: Build killer_super
+        working-directory: SOURCE/src/v2-rust/killer
+        run: cargo build --release --bin killer_super --target ${{ matrix.rust-target }}
+
+      - name: Package (unix)
+        if: matrix.archive == 'tar.gz'
+        shell: bash
+        run: |
+          set -euo pipefail
+          name="killer_super-${GITHUB_REF_NAME}-${{ matrix.target-name }}"
+          mkdir "$name"
+          cp "SOURCE/src/v2-rust/killer/target/${{ matrix.rust-target }}/release/killer_super" "$name/"
+          cp LICENSE README.md "$name/"
+          tar -czf "$name.tar.gz" "$name"
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "$name.tar.gz" > "$name.tar.gz.sha256"
+          else
+            shasum -a 256 "$name.tar.gz" > "$name.tar.gz.sha256"
+          fi
+          echo "ASSET=$name.tar.gz" >> "$GITHUB_ENV"
+
+      - name: Package (windows)
+        if: matrix.archive == 'zip'
+        shell: pwsh
+        run: |
+          $name = "killer_super-$env:GITHUB_REF_NAME-${{ matrix.target-name }}"
+          New-Item -ItemType Directory $name | Out-Null
+          Copy-Item "SOURCE/src/v2-rust/killer/target/${{ matrix.rust-target }}/release/killer_super.exe" $name
+          Copy-Item LICENSE, README.md $name
+          Compress-Archive -Path $name -DestinationPath "$name.zip"
+          $hash = (Get-FileHash "$name.zip" -Algorithm SHA256).Hash.ToLower()
+          "$hash  $name.zip" | Out-File -Encoding ascii "$name.zip.sha256"
+          "ASSET=$name.zip" | Out-File -Append -Encoding ascii $env:GITHUB_ENV
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target-name }}
+          path: |
+            ${{ env.ASSET }}
+            ${{ env.ASSET }}.sha256
+
+  publish:
+    name: Publish release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Combined checksums
+        run: cd dist && cat *.sha256 > SHA256SUMS && ls -l
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+          prerelease: true
