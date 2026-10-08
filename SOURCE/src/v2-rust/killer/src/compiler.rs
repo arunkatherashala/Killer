@@ -3003,6 +3003,17 @@ fn compile_for_each_line_statement(
 
     let body_start = state.instructions.len();
 
+    // The loop variable is stored by name each iteration. A variable that already lives in a slot
+    // (or is a parameter) is read through that slot, so copy the new value over it: the loop then
+    // rebinds it whatever it was bound to before, and keeps its last value afterwards.
+    if let Some(&slot) = context.slot_map.get(var_name) {
+        state.instructions.push(Instruction::Load(var_name.to_string()));
+        state.instructions.push(Instruction::StoreSlot(slot));
+    } else if let Some(&index) = context.params.get(var_name) {
+        state.instructions.push(Instruction::Load(var_name.to_string()));
+        state.instructions.push(Instruction::Store(format!("arg{}", index)));
+    }
+
     context.loop_stack.push(LoopContext {
         loop_start,
         break_jumps: Vec::new(),

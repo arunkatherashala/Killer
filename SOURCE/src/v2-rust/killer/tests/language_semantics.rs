@@ -939,3 +939,57 @@ println(floor(7 / 2))
 fn floor_division_spelled_with_floor_works() {
     assert_eq!(run("println(floor(17 / 5))\nprintln(floor(-17 / 5))\n"), "3\n-4");
 }
+
+// ---------------------------------------------------------------------------------------------
+// `for x in ...` rebinds a variable that already exists
+// ---------------------------------------------------------------------------------------------
+
+#[test]
+fn for_loop_rebinds_an_existing_top_level_variable() {
+    let src = "i = 7\nfor i in range(3) {\n  println(i)\n}\nprintln(i)\n";
+    assert_eq!(run(src), "0\n1\n2\n2");
+}
+
+#[test]
+fn for_loop_rebinds_an_existing_local_and_a_parameter() {
+    let src = r#"
+fn f(p) {
+  j = 9
+  for j in range(2) {
+    println(j)
+  }
+  for p in [5, 6] {
+    println(p)
+  }
+  return j + p
+}
+println(f(1))
+"#;
+    assert_eq!(run(src), "0\n1\n5\n6\n7");
+}
+
+#[test]
+fn for_loop_over_an_empty_list_keeps_the_old_value() {
+    assert_eq!(run("k = 4\nfor k in [] {\n  println(\"x\")\n}\nprintln(k)\n"), "4");
+}
+
+#[test]
+fn for_loop_after_catch_variable_and_after_c_style_for() {
+    let src = r#"
+try {
+  throw "boom"
+} catch e {
+  println(e)
+}
+for e in range(2) {
+  println(e)
+}
+for (n = 0; n < 2; n = n + 1) {
+  println("c" + str(n))
+}
+for n in [10, 11] {
+  println(n)
+}
+"#;
+    assert_eq!(run(src), "boom\n0\n1\nc0\nc1\n10\n11");
+}
