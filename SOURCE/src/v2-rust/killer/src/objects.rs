@@ -15,7 +15,7 @@ impl ObjectManager {
     ) -> Result<ObjectInstance, VmError> {
         let mut instance = ObjectInstance {
             class_name: class_name.to_string(),
-            fields: HashMap::new(),
+            fields: Default::default(),
         };
 
         // Extract methods from class_info

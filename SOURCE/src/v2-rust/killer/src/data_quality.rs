@@ -1264,7 +1264,7 @@ mod tests {
         
         let mut obj = ObjectInstance {
             class_name: "User".to_string(),
-            fields: HashMap::new(),
+            fields: Default::default(),
         };
         obj.fields.insert("id".to_string(), Value::Number(123.0));
         obj.fields.insert("name".to_string(), Value::Str("Alice".to_string()));
@@ -1283,7 +1283,7 @@ mod tests {
         
         let mut obj = ObjectInstance {
             class_name: "User".to_string(),
-            fields: HashMap::new(),
+            fields: Default::default(),
         };
         obj.fields.insert("id".to_string(), Value::Number(456.0));
         
@@ -1300,7 +1300,7 @@ mod tests {
         
         let mut obj = ObjectInstance {
             class_name: "User".to_string(),
-            fields: HashMap::new(),
+            fields: Default::default(),
         };
         obj.fields.insert("name".to_string(), Value::Str("Bob".to_string()));
         obj.fields.insert("email".to_string(), Value::Str("bob@test.com".to_string()));
@@ -1318,7 +1318,7 @@ mod tests {
         
         let mut obj = ObjectInstance {
             class_name: "User".to_string(),
-            fields: HashMap::new(),
+            fields: Default::default(),
         };
         obj.fields.insert("name".to_string(), Value::Str("Alice".to_string()));
         obj.fields.insert("email".to_string(), Value::Null);
@@ -1336,7 +1336,7 @@ mod tests {
         
         let mut obj = ObjectInstance {
             class_name: "User".to_string(),
-            fields: HashMap::new(),
+            fields: Default::default(),
         };
         obj.fields.insert("id".to_string(), Value::Number(789.0));
         obj.fields.insert("name".to_string(), Value::Str("Charlie".to_string()));
@@ -1354,7 +1354,7 @@ mod tests {
         
         let mut obj = ObjectInstance {
             class_name: "User".to_string(),
-            fields: HashMap::new(),
+            fields: Default::default(),
         };
         obj.fields.insert("id".to_string(), Value::Number(101.0));
         obj.fields.insert("name".to_string(), Value::Str("David".to_string()));
@@ -1372,7 +1372,7 @@ mod tests {
         
         let mut obj = ObjectInstance {
             class_name: "User".to_string(),
-            fields: HashMap::new(),
+            fields: Default::default(),
         };
         obj.fields.insert("id".to_string(), Value::Number(202.0));
         obj.fields.insert("name".to_string(), Value::Str("Eve".to_string()));
@@ -1391,7 +1391,7 @@ mod tests {
         
         let mut obj = ObjectInstance {
             class_name: "User".to_string(),
-            fields: HashMap::new(),
+            fields: Default::default(),
         };
         obj.fields.insert("id".to_string(), Value::Number(303.0));
         
@@ -1407,7 +1407,7 @@ mod tests {
         
         let mut obj = ObjectInstance {
             class_name: "User".to_string(),
-            fields: HashMap::new(),
+            fields: Default::default(),
         };
         obj.fields.insert("id".to_string(), Value::Number(404.0));
         
@@ -1424,7 +1424,7 @@ mod tests {
         
         let mut obj = ObjectInstance {
             class_name: "Product".to_string(),
-            fields: HashMap::new(),
+            fields: Default::default(),
         };
         obj.fields.insert("id".to_string(), Value::Number(505.0));
         
