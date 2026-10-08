@@ -9,6 +9,8 @@ pub enum Instruction {
     ConstNull,
     /// Move the named variable into a shared cell (no-op when it already is one).
     BoxVar(String),
+    /// Push an arbitrary-precision integer literal (`123n`, `0xFFn`; the text without the `n`).
+    ConstBigInt(String),
     ConstFunc { params: Vec<String>, bytecode_start: usize, captured_names: Vec<String> },
     EnterScope,
     ExitScope,

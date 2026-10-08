@@ -104,6 +104,7 @@ fn is_truthy(v: &Value) -> bool {
         Value::Number(n) => *n != 0.0 && !n.is_nan(),
         Value::Str(s) => !s.is_empty(),
         Value::Array(a) => !a.is_empty(),
+        Value::BigInt(b) => !b.is_zero(),
         _ => true,
     }
 }
@@ -397,6 +398,12 @@ impl BuiltinFunctions {
             // Math functions
             "sqrt" => Self::sqrt(args),
             "pow" => Self::pow(args),
+            "big" | "factorial" | "divmod" | "idiv" | "powmod" | "isqrt" | "bit_length" => {
+                crate::bigint_ops::call(name, args).map_err(VmError::runtime_error)
+            }
+            "gcd" if args.iter().any(|a| matches!(a, Value::BigInt(_))) => {
+                crate::bigint_ops::call(name, args).map_err(VmError::runtime_error)
+            }
             "bit_and" => Self::bit_and(args),
             "bit_or" => Self::bit_or(args),
             "bit_xor" => Self::bit_xor(args),
@@ -1427,6 +1434,7 @@ impl BuiltinFunctions {
             Value::Set(_) => "set",
             Value::TaskError(_) => "error",
             Value::Cell(_) => "cell",
+            Value::BigInt(_) => "bigint",
         };
         Ok(Value::Str(type_name.to_string()))
     }
@@ -2000,6 +2008,9 @@ impl BuiltinFunctions {
             (Value::Number(base), Value::Number(exp)) => {
                 Ok(Value::Number(base.powf(*exp)))
             }
+            (a, b) if crate::bigint_ops::involves(a, b) => {
+                crate::bigint_ops::arith(crate::bigint_ops::Op::Pow, a, b).map_err(VmError::runtime_error)
+            }
             _ => Err(VmError::runtime_error(
                 "pow() expects numbers".to_string(),
             )),
@@ -2088,6 +2099,7 @@ impl BuiltinFunctions {
         }
         match &args[0] {
             Value::Number(n) => Ok(Value::Number(n.abs())),
+            Value::BigInt(b) => Ok(crate::bigint_ops::big(b.abs())),
             Value::Uncertain { value, margin } => Ok(crate::uncertain::abs(*value, *margin)),
             Value::Gauss { mean, sigma } => Ok(crate::uncertain::abs_gauss(*mean, *sigma)),
             _ => Err(VmError::runtime_error(
@@ -3858,6 +3870,8 @@ impl BuiltinFunctions {
                     let value_str = match value {
                         Value::Str(s) => format!("\"{}\"", s.replace("\"", "\\\"")),
                         Value::Number(n) => n.to_string(),
+                        Value::BigInt(b) => b.to_string(),
+                        Value::Array(_) => crate::bigint_ops::json_array(&value),
                         Value::Bool(b) => b.to_string(),
                         Value::Null => "null".to_string(),
                         _ => format!("\"{}\"", value),
@@ -3868,6 +3882,8 @@ impl BuiltinFunctions {
             }
             Value::Str(s) => format!("\"{}\"", s.replace("\"", "\\\"")),
             Value::Number(n) => n.to_string(),
+            Value::BigInt(b) => b.to_string(),
+            Value::Array(_) => crate::bigint_ops::json_array(&args[0]),
             Value::Bool(b) => b.to_string(),
             Value::Null => "null".to_string(),
             _ => format!("null"),

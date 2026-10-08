@@ -598,6 +598,8 @@ pub enum Value {
     /// assigns lives in one of these so every closure and the enclosing call see the same value.
     /// Only ever stored in a scope or in `Captures`; variable loads/stores see through it.
     Cell(Rc<RefCell<Value>>),
+    /// Arbitrary-precision integer (`123n`, `big(x)`, `factorial(n)`); see `bigint_ops` for the rules.
+    BigInt(Rc<crate::bigint::BigInt>),
     Null,
 }
 
@@ -658,6 +660,7 @@ impl Display for Value {
             Value::Function { params, .. } => write!(f, "<function({})>", params.join(", ")),
             Value::Generator(_) => write!(f, "<generator>"),
             Value::Cell(c) => write!(f, "{}", c.borrow()),
+            Value::BigInt(b) => write!(f, "{}", b),
             Value::QualityWrapped(quality) => write!(f, "<quality score={:.2}>", quality.get_trim_score()),
             Value::Trit(t) => match t {
                 -1 => write!(f, "T_NEG"),
@@ -752,6 +755,7 @@ impl Value {
             Value::Future(_) => "future",
             Value::TaskError(_) => "error",
             Value::Cell(_) => "cell",
+            Value::BigInt(_) => "bigint",
             Value::Integer(_) => "integer",
             Value::Bytes(_) => "bytes",
             Value::Pointer(_) => "pointer",

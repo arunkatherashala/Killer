@@ -1,0 +1,288 @@
+//! Operators and builtins on [`Value::BigInt`].
+//!
+//! Rules (also in DOCS.md):
+//! * `Number` arithmetic is untouched: nothing promotes to `BigInt` unless an operand already is one.
+//! * `BigInt` with `BigInt` or with an *integral* `Number`/`Integer`: exact `BigInt` result.
+//! * `BigInt` with a non-integral (or non-finite) `Number`: the `BigInt` becomes an `f64` and the
+//!   result is a `Number`.
+//! * `/`: exact `BigInt` when the division is exact, otherwise a `Number` (float) quotient.
+//! * `%` and `idiv`/`divmod` use floor semantics (the remainder has the sign of the divisor).
+//! * `**`: a non-negative integral exponent gives an exact `BigInt` (guarded against absurd sizes);
+//!   a negative or fractional exponent gives a `Number`.
+//! * comparisons with a `Number` are exact.
+
+use crate::bigint::BigInt;
+use crate::value::Value;
+use std::cmp::Ordering;
+use std::rc::Rc;
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Op {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
+    Pow,
+}
+
+impl Op {
+    fn symbol(self) -> &'static str {
+        match self {
+            Op::Add => "+",
+            Op::Sub => "-",
+            Op::Mul => "*",
+            Op::Div => "/",
+            Op::Mod => "%",
+            Op::Pow => "**",
+        }
+    }
+}
+
+/// The digits of a bigint literal (`123n` -> `123`, `0xFFn` -> `0xFF`), or `None` if `expr` is not one.
+pub fn literal_text(expr: &str) -> Option<&str> {
+    let body = expr.strip_suffix('n')?;
+    let valid = if let Some(hex) = body.strip_prefix("0x").or_else(|| body.strip_prefix("0X")) {
+        !hex.is_empty() && hex.bytes().all(|c| c.is_ascii_hexdigit() || c == b'_')
+    } else {
+        !body.is_empty() && body.bytes().all(|c| c.is_ascii_digit() || c == b'_') && body.as_bytes()[0].is_ascii_digit()
+    };
+    if valid { Some(body) } else { None }
+}
+
+/// True when either operand is a `BigInt` (the only case this module handles).
+#[inline]
+pub fn involves(a: &Value, b: &Value) -> bool {
+    matches!(a, Value::BigInt(_)) || matches!(b, Value::BigInt(_))
+}
+
+pub fn big(v: BigInt) -> Value {
+    Value::BigInt(Rc::new(v))
+}
+
+/// An operand reduced to what the arithmetic needs.
+enum Operand {
+    Int(BigInt),
+    Float(f64),
+}
+
+fn operand(v: &Value, op: Op, side: &str) -> Result<Operand, String> {
+    match v {
+        Value::BigInt(b) => Ok(Operand::Int((**b).clone())),
+        Value::Number(n) => Ok(match BigInt::from_f64(*n) {
+            Some(b) => Operand::Int(b),
+            None => Operand::Float(*n),
+        }),
+        Value::Integer(i) => Ok(Operand::Int(BigInt::from_i64(*i))),
+        Value::Bool(b) => Ok(Operand::Int(BigInt::from_i64(*b as i64))),
+        other => Err(format!(
+            "Type error in '{}': {} operand must be a number or bigint, got {}",
+            op.symbol(),
+            side,
+            other.type_name()
+        )),
+    }
+}
+
+fn as_f64(o: &Operand) -> f64 {
+    match o {
+        Operand::Int(b) => b.to_f64(),
+        Operand::Float(f) => *f,
+    }
+}
+
+/// `lhs op rhs` where at least one side is a `BigInt`.
+pub fn arith(op: Op, lhs: &Value, rhs: &Value) -> Result<Value, String> {
+    let a = operand(lhs, op, "left")?;
+    let b = operand(rhs, op, "right")?;
+    let (x, y) = match (&a, &b) {
+        (Operand::Int(x), Operand::Int(y)) => (x, y),
+        _ => return Ok(float_arith(op, as_f64(&a), as_f64(&b))),
+    };
+    Ok(match op {
+        Op::Add => big(x.add(y)),
+        Op::Sub => big(x.sub(y)),
+        Op::Mul => big(x.mul(y)),
+        Op::Div => {
+            let (q, r) = x.divmod(y).ok_or_else(|| "Division by zero".to_string())?;
+            if r.is_zero() {
+                big(q)
+            } else {
+                Value::Number(x.to_f64() / y.to_f64())
+            }
+        }
+        Op::Mod => {
+            let (_, r) = x.divmod(y).ok_or_else(|| "Modulo by zero".to_string())?;
+            big(r)
+        }
+        Op::Pow => {
+            if y.is_negative() {
+                Value::Number(x.to_f64().powf(y.to_f64()))
+            } else {
+                let exp = y.to_i64().ok_or_else(|| "exponent too large".to_string())? as u64;
+                big(x.pow(exp)?)
+            }
+        }
+    })
+}
+
+fn float_arith(op: Op, x: f64, y: f64) -> Value {
+    Value::Number(match op {
+        Op::Add => x + y,
+        Op::Sub => x - y,
+        Op::Mul => x * y,
+        Op::Div => x / y,
+        Op::Mod => x - y * (x / y).floor(),
+        Op::Pow => x.powf(y),
+    })
+}
+
+/// Exact ordering of a `BigInt` against another number. `None` for NaN or a non-numeric operand.
+pub fn compare(lhs: &Value, rhs: &Value) -> Option<Ordering> {
+    match (lhs, rhs) {
+        (Value::BigInt(a), Value::BigInt(b)) => Some(a.cmp(b)),
+        (Value::BigInt(a), Value::Number(n)) => a.cmp_f64(*n),
+        (Value::Number(n), Value::BigInt(b)) => b.cmp_f64(*n).map(Ordering::reverse),
+        (Value::BigInt(a), Value::Integer(i)) => Some((**a).cmp(&BigInt::from_i64(*i))),
+        (Value::Integer(i), Value::BigInt(b)) => Some(BigInt::from_i64(*i).cmp(b)),
+        _ => None,
+    }
+}
+
+/// `==` with at least one `BigInt` operand.
+pub fn equals(lhs: &Value, rhs: &Value) -> bool {
+    compare(lhs, rhs) == Some(Ordering::Equal)
+}
+
+/// Ordering for `< <= > >=`; an error message when the operands cannot be compared.
+pub fn order(lhs: &Value, rhs: &Value) -> Result<Option<Ordering>, String> {
+    match (lhs, rhs) {
+        (Value::BigInt(_) | Value::Number(_) | Value::Integer(_), Value::BigInt(_) | Value::Number(_) | Value::Integer(_)) => {
+            Ok(compare(lhs, rhs))
+        }
+        _ => Err(format!("Cannot compare {} with {}", lhs.type_name(), rhs.type_name())),
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// builtins
+// ---------------------------------------------------------------------------------------------
+
+/// Convert a builtin argument to a `BigInt` (integral numbers, bigints, integer strings).
+fn to_big(v: &Value, fname: &str) -> Result<BigInt, String> {
+    match v {
+        Value::BigInt(b) => Ok((**b).clone()),
+        Value::Number(n) => BigInt::from_f64(*n)
+            .ok_or_else(|| format!("{}(): expected an integer, got {}", fname, v)),
+        Value::Integer(i) => Ok(BigInt::from_i64(*i)),
+        Value::Str(s) => BigInt::parse(s).map_err(|e| format!("{}(): {}", fname, e)),
+        other => Err(format!("{}(): expected an integer, got {}", fname, other.type_name())),
+    }
+}
+
+fn arity(args: &[Value], n: usize, usage: &str) -> Result<(), String> {
+    if args.len() != n {
+        Err(format!("{} expects {} argument{}", usage, n, if n == 1 { "" } else { "s" }))
+    } else {
+        Ok(())
+    }
+}
+
+/// A result narrowed back to a `Number` when every input was one.
+fn narrow(b: BigInt) -> Value {
+    Value::Number(b.to_f64())
+}
+
+/// The bigint builtins: `big`, `factorial`, `divmod`, `idiv`, `powmod`, `isqrt`, `bit_length`, `gcd`.
+pub fn call(name: &str, args: &[Value]) -> Result<Value, String> {
+    let any_big = args.iter().any(|a| matches!(a, Value::BigInt(_)));
+    match name {
+        "big" => {
+            arity(args, 1, "big(x)")?;
+            Ok(big(to_big(&args[0], "big")?))
+        }
+        "factorial" => {
+            arity(args, 1, "factorial(n)")?;
+            let n = to_big(&args[0], "factorial")?;
+            if n.is_negative() {
+                return Err("factorial(): negative argument".to_string());
+            }
+            let n = n.to_i64().ok_or_else(|| "factorial(): argument too large".to_string())? as u64;
+            Ok(big(BigInt::factorial(n)?))
+        }
+        "divmod" | "idiv" => {
+            arity(args, 2, &format!("{}(a, b)", name))?;
+            let (a, b) = (&args[0], &args[1]);
+            let all_numbers = !any_big && matches!(a, Value::Number(_)) && matches!(b, Value::Number(_));
+            if all_numbers || (!any_big && (matches!(a, Value::Number(n) if BigInt::from_f64(*n).is_none()) || matches!(b, Value::Number(n) if BigInt::from_f64(*n).is_none()))) {
+                // plain floats: floor semantics on f64
+                let (x, y) = match (a, b) {
+                    (Value::Number(x), Value::Number(y)) => (*x, *y),
+                    _ => return Err(format!("{}(): expected numbers", name)),
+                };
+                if y == 0.0 {
+                    return Err("Division by zero".to_string());
+                }
+                let q = (x / y).floor();
+                return Ok(if name == "idiv" {
+                    Value::Number(q)
+                } else {
+                    Value::from(vec![Value::Number(q), Value::Number(x - y * q)])
+                });
+            }
+            let (x, y) = (to_big(a, name)?, to_big(b, name)?);
+            let (q, r) = x.divmod(&y).ok_or_else(|| "Division by zero".to_string())?;
+            Ok(if name == "idiv" { big(q) } else { Value::from(vec![big(q), big(r)]) })
+        }
+        "powmod" => {
+            arity(args, 3, "powmod(base, exp, mod)")?;
+            let all_numbers = !any_big && args.iter().all(|a| matches!(a, Value::Number(_)));
+            let r = to_big(&args[0], "powmod")?.powmod(&to_big(&args[1], "powmod")?, &to_big(&args[2], "powmod")?)?;
+            Ok(if all_numbers { narrow(r) } else { big(r) })
+        }
+        "isqrt" => {
+            arity(args, 1, "isqrt(n)")?;
+            let r = to_big(&args[0], "isqrt")?.isqrt().ok_or_else(|| "isqrt(): negative argument".to_string())?;
+            Ok(if any_big { big(r) } else { narrow(r) })
+        }
+        "bit_length" => {
+            arity(args, 1, "bit_length(n)")?;
+            Ok(Value::Number(to_big(&args[0], "bit_length")?.bit_length() as f64))
+        }
+        "gcd" => {
+            if args.len() < 2 {
+                return Err("gcd() expects at least 2 arguments".to_string());
+            }
+            let mut acc = to_big(&args[0], "gcd")?;
+            for a in &args[1..] {
+                acc = acc.gcd(&to_big(a, "gcd")?);
+            }
+            Ok(if any_big { big(acc) } else { narrow(acc) })
+        }
+        _ => Err(format!("unknown bigint builtin `{}`", name)),
+    }
+}
+
+/// JSON text of an array value (numbers, bigints as plain number text, strings, bools, null,
+/// nested arrays and dicts).
+pub fn json_array(v: &Value) -> String {
+    fn item(v: &Value) -> String {
+        match v {
+            Value::Str(s) => format!("\"{}\"", s.replace('"', "\\\"")),
+            Value::Number(n) => n.to_string(),
+            Value::BigInt(b) => b.to_string(),
+            Value::Bool(b) => b.to_string(),
+            Value::Null => "null".to_string(),
+            Value::Array(_) => json_array(v),
+            Value::Dict(d) => {
+                let parts: Vec<String> = d.iter().map(|(k, x)| format!("\"{}\":{}", k, item(&x))).collect();
+                format!("{{{}}}", parts.join(","))
+            }
+            other => format!("\"{}\"", other),
+        }
+    }
+    match v {
+        Value::Array(a) => format!("[{}]", a.to_vec().iter().map(item).collect::<Vec<_>>().join(",")),
+        other => item(other),
+    }
+}

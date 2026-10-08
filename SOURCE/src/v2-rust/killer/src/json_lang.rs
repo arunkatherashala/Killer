@@ -285,6 +285,7 @@ fn write(out: &mut String, v: &Value, indent: usize, level: usize, depth: usize)
             }
         }
         Value::Integer(i) => out.push_str(&i.to_string()),
+        Value::BigInt(b) => out.push_str(&b.to_string()),
         Value::Str(s) => escape_into(out, s),
         Value::Array(a) => {
             let items = a.to_vec();

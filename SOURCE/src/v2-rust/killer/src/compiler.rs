@@ -3919,6 +3919,12 @@ fn compile_expr_str(
         return Ok(());
     }
 
+    // `123n` / `0xFFn`: arbitrary-precision integer literal
+    if let Some(text) = crate::bigint_ops::literal_text(expr) {
+        state.instructions.push(Instruction::ConstBigInt(text.to_string()));
+        return Ok(());
+    }
+
     // `new ClassName(args)` — object instantiation
     if let Some(rest) = expr.strip_prefix("new ") {
         let rest = rest.trim();
@@ -6647,6 +6653,7 @@ fn patch_pending_calls(state: &mut CompilerState) -> Result<(), VmError> {
         "ord", "chr", "pad_left", "pad_right", "repeat", "strip", "lstrip", "rstrip", "startsWith", "endsWith",
         "base64_encode", "base64_decode", "hmac_sha256", "float", "bool", "log", "log2", "log10", "exp", "cbrt",
         "trunc", "sign", "atan2", "hypot", "asin", "acos", "atan", "sinh", "cosh", "tanh", "degrees", "radians",
+        "big", "factorial", "divmod", "idiv", "powmod", "isqrt", "bit_length", // arbitrary-precision integers
         "gcd", "lcm", "mean", "median", "variance", "stdev", "pvariance", "pstdev", "env", "args", "exit",
         "sleep", "assert", "set", "delete", "insert", "gc_stats", "jit_stats", "instanceof", "dict_from_pairs",
         "mutex_new", "mutex_get", "mutex_set", "mutex_add", "mutex_free",
@@ -6891,7 +6898,12 @@ fn patch_pending_calls(state: &mut CompilerState) -> Result<(), VmError> {
         // that name (they are common words)
         let generator_builtin = matches!(pending.function_name.as_str(), "next" | "has_next")
             && !state.functions.contains_key(&pending.function_name);
-        if generator_builtin || BUILTINS.contains(&pending.function_name.as_str()) {
+        // the bigint builtins use common names: a function of the same name in the script wins
+        let user_override = matches!(
+            pending.function_name.as_str(),
+            "big" | "factorial" | "divmod" | "idiv" | "powmod" | "isqrt" | "bit_length"
+        ) && state.functions.contains_key(&pending.function_name);
+        if (generator_builtin || BUILTINS.contains(&pending.function_name.as_str())) && !user_override {
             // -- Nova Galaxy: emit native opcodes instead of CallBuiltin ------
             let native_instr: Option<Instruction> = match pending.function_name.as_str() {
                 // Phase A: Trit native ALU opcodes

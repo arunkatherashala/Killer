@@ -347,6 +347,7 @@ pub mod sourcemap;             // per-line origin tracking across the source-rew
 pub mod hints;                 // friendlier explanations for well-known compile mistakes
 pub mod imports;               // compile-time `import "file.killer"` inclusion
 pub mod bigint;                // arbitrary-precision integers (Value::BigInt)
+pub mod bigint_ops;            // BigInt operators and builtins
 pub mod closure_scan;          // which closure-captured locals must be shared cells
 pub mod lambda;                // lifts anonymous functions (fn(x){..}, x => ..) into named ones
 pub mod sugar;               // surface syntax sugar rewritten to core Killer before compiling

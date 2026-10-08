@@ -974,6 +974,10 @@ impl VirtualMachine {
                     }
                     self.stack.push(func);
                 }
+                Instruction::ConstBigInt(text) => {
+                    let value = crate::bigint::BigInt::parse(text).map_err(VmError::runtime_error)?;
+                    self.stack.push(crate::bigint_ops::big(value));
+                }
                 Instruction::BoxVar(name) => {
                     for scope in self.scopes.iter_mut().rev() {
                         if let Some(slot) = scope.get_mut(name.as_str()) {
@@ -1371,6 +1375,10 @@ impl VirtualMachine {
                                 // Number + Quality = Number (auto-unwrap)
                                 self.stack.push(Value::Number(n + q.quality()));
                             }
+                            (a, b) if crate::bigint_ops::involves(a, b) => {
+                                let r = crate::bigint_ops::arith(crate::bigint_ops::Op::Add, a, b).map_err(VmError::runtime_error)?;
+                                self.stack.push(r);
+                            }
                             _ => return Err(VmError::runtime_error("Cannot add these types".to_string())),
                         }
                     }
@@ -1413,6 +1421,10 @@ impl VirtualMachine {
                         // `a - b` on two sets is their difference
                         Value::Set(_) if matches!(rhs, Value::Set(_)) => {
                             self.stack.push(BuiltinFunctions::call("set_difference", &[lhs.clone(), rhs])?);
+                        }
+                        _ if crate::bigint_ops::involves(&lhs, &rhs) => {
+                            let r = crate::bigint_ops::arith(crate::bigint_ops::Op::Sub, &lhs, &rhs).map_err(VmError::runtime_error)?;
+                            self.stack.push(r);
                         }
                         _ => {
                             // Fall back to numeric subtraction
@@ -1470,6 +1482,9 @@ impl VirtualMachine {
                                 self.stack.push(Value::Integer(l.wrapping_mul(*r)));
                             } else if let Some(repeated) = repeat_sequence(&lhs, &rhs) {
                                 self.stack.push(repeated.map_err(VmError::runtime_error)?);
+                            } else if crate::bigint_ops::involves(&lhs, &rhs) {
+                                let r = crate::bigint_ops::arith(crate::bigint_ops::Op::Mul, &lhs, &rhs).map_err(VmError::runtime_error)?;
+                                self.stack.push(r);
                             } else {
                             // Fall back to numeric multiplication
                             let lhs_num = match lhs {
@@ -1518,6 +1533,20 @@ impl VirtualMachine {
                                 return Err(VmError::runtime_error(
                                     format!("Cannot divide: {} does not define __div__ method", obj.class_name())
                                 ));
+                            }
+                        }
+                        _ if crate::bigint_ops::involves(&lhs, &rhs) => {
+                            match crate::bigint_ops::arith(crate::bigint_ops::Op::Div, &lhs, &rhs) {
+                                Ok(r) => self.stack.push(r),
+                                Err(e) if e != "Division by zero" => return Err(VmError::runtime_error(e)),
+                                Err(_) => match self.exception_manager.handle_arithmetic_error("Division by zero") {
+                                    Ok(Some(target)) => {
+                                        self.ip = target;
+                                        continue;
+                                    }
+                                    Ok(None) => return Err(VmError::runtime_error("Division by zero".to_string())),
+                                    Err(e) => return Err(e),
+                                },
                             }
                         }
                         _ => {
@@ -1588,6 +1617,26 @@ impl VirtualMachine {
                         .push(Value::Number((lhs_num / rhs_num).floor()));
                 }
                 Instruction::Mod => {
+                    if matches!(self.stack.last(), Some(Value::BigInt(_)))
+                        || (self.stack.len() >= 2 && matches!(self.stack[self.stack.len() - 2], Value::BigInt(_)))
+                    {
+                        let rhs = self.pop_value()?;
+                        let lhs = self.pop_value()?;
+                        match crate::bigint_ops::arith(crate::bigint_ops::Op::Mod, &lhs, &rhs) {
+                            Ok(r) => self.stack.push(r),
+                            Err(e) if e != "Modulo by zero" => return Err(VmError::runtime_error(e)),
+                            Err(_) => match self.exception_manager.handle_arithmetic_error("Modulo by zero") {
+                                Ok(Some(target)) => {
+                                    self.ip = target;
+                                    continue;
+                                }
+                                Ok(None) => return Err(VmError::runtime_error("Modulo by zero".to_string())),
+                                Err(e) => return Err(e),
+                            },
+                        }
+                        self.ip += 1;
+                        continue;
+                    }
                     let rhs = self.pop_number()?;
                     if rhs == 0.0 {
                         match self.exception_manager.handle_arithmetic_error("Modulo by zero") {
@@ -1694,6 +1743,7 @@ impl VirtualMachine {
                             let eq = match (&lhs, &rhs) {
                                 (Value::Integer(a), Value::Number(b)) => *a as f64 == *b,
                                 (Value::Number(a), Value::Integer(b)) => *a == *b as f64,
+                                (a, b) if crate::bigint_ops::involves(a, b) => crate::bigint_ops::equals(a, b),
                                 _ => lhs == rhs,
                             };
                             self.stack.push(Value::Bool(eq));
@@ -1741,6 +1791,7 @@ impl VirtualMachine {
                             let ne = match (&lhs, &rhs) {
                                 (Value::Integer(a), Value::Number(b)) => *a as f64 != *b,
                                 (Value::Number(a), Value::Integer(b)) => *a != *b as f64,
+                                (a, b) if crate::bigint_ops::involves(a, b) => !crate::bigint_ops::equals(a, b),
                                 _ => lhs != rhs,
                             };
                             self.stack.push(Value::Bool(ne));
@@ -1786,6 +1837,12 @@ impl VirtualMachine {
                         }
                         _ => {
                             // Fall back to numeric comparison
+                            if crate::bigint_ops::involves(&lhs, &rhs) {
+                                let ord = crate::bigint_ops::order(&lhs, &rhs).map_err(VmError::runtime_error)?;
+                                self.stack.push(Value::Bool(matches!(ord, Some(o) if o == std::cmp::Ordering::Greater)));
+                                self.ip += 1;
+                                continue;
+                            }
                             let lhs_num = self.value_to_number(&lhs)?;
                             let rhs_num = self.value_to_number(&rhs)?;
                             self.stack.push(Value::Bool(lhs_num > rhs_num));
@@ -1830,6 +1887,12 @@ impl VirtualMachine {
                             }
                         }
                         _ => {
+                            if crate::bigint_ops::involves(&lhs, &rhs) {
+                                let ord = crate::bigint_ops::order(&lhs, &rhs).map_err(VmError::runtime_error)?;
+                                self.stack.push(Value::Bool(matches!(ord, Some(o) if o != std::cmp::Ordering::Less)));
+                                self.ip += 1;
+                                continue;
+                            }
                             let lhs_num = self.value_to_number(&lhs)?;
                             let rhs_num = self.value_to_number(&rhs)?;
                             self.stack.push(Value::Bool(lhs_num >= rhs_num));
@@ -1877,6 +1940,12 @@ impl VirtualMachine {
                                 }
                             }
                             _ => {
+                                if crate::bigint_ops::involves(&lhs, &rhs) {
+                                    let ord = crate::bigint_ops::order(&lhs, &rhs).map_err(VmError::runtime_error)?;
+                                    self.stack.push(Value::Bool(matches!(ord, Some(o) if o == std::cmp::Ordering::Less)));
+                                    self.ip += 1;
+                                    continue;
+                                }
                                 let lhs_num = self.value_to_number(&lhs)?;
                                 let rhs_num = self.value_to_number(&rhs)?;
                                 self.stack.push(Value::Bool(lhs_num < rhs_num));
@@ -1922,6 +1991,12 @@ impl VirtualMachine {
                             }
                         }
                         _ => {
+                            if crate::bigint_ops::involves(&lhs, &rhs) {
+                                let ord = crate::bigint_ops::order(&lhs, &rhs).map_err(VmError::runtime_error)?;
+                                self.stack.push(Value::Bool(matches!(ord, Some(o) if o != std::cmp::Ordering::Greater)));
+                                self.ip += 1;
+                                continue;
+                            }
                             let lhs_num = self.value_to_number(&lhs)?;
                             let rhs_num = self.value_to_number(&rhs)?;
                             self.stack.push(Value::Bool(lhs_num <= rhs_num));
@@ -2927,6 +3002,7 @@ impl VirtualMachine {
                                 Value::Set(_) => "set",
                                 Value::TaskError(_) => "error",
                                 Value::Cell(_) => "cell",
+                                Value::BigInt(_) => "bigint",
                             };
                             Value::Str(type_name.to_string())
                         }
@@ -6058,6 +6134,20 @@ impl VirtualMachine {
     /// three-valued (pushes a Trit); anything else is a type error.
     fn slot_const_cmp_fallback(&mut self, idx: usize, n: f64, op: crate::uncertain::CmpOp, what: &str) -> Result<(), VmError> {
         let val = self.locals_stack.last().and_then(|f| f.get(idx)).cloned().unwrap_or(Value::Null);
+        if let Value::BigInt(_) = val {
+            use std::cmp::Ordering::*;
+            let ord = crate::bigint_ops::compare(&val, &Value::Number(n));
+            let r = match op {
+                crate::uncertain::CmpOp::Lt => ord == Some(Less),
+                crate::uncertain::CmpOp::Le => matches!(ord, Some(Less | Equal)),
+                crate::uncertain::CmpOp::Gt => ord == Some(Greater),
+                crate::uncertain::CmpOp::Ge => matches!(ord, Some(Greater | Equal)),
+                crate::uncertain::CmpOp::Eq => ord == Some(Equal),
+                crate::uncertain::CmpOp::Ne => ord != Some(Equal),
+            };
+            self.stack.push(Value::Bool(r));
+            return Ok(());
+        }
         match crate::uncertain::compare(op, &val, &Value::Number(n)) {
             Some(r) => {
                 let v = r.map_err(VmError::runtime_error)?;
@@ -6071,6 +6161,19 @@ impl VirtualMachine {
     /// Fused `slot = slot +/- const` on a slot that is not a plain number (uncertain values).
     fn slot_const_arith_fallback(&mut self, idx: usize, n: f64, op: crate::uncertain::BinOp, what: &str) -> Result<(), VmError> {
         let val = self.locals_stack.last().and_then(|f| f.get(idx)).cloned().unwrap_or(Value::Null);
+        if let Value::BigInt(_) = val {
+            let bop = match op {
+                crate::uncertain::BinOp::Add => crate::bigint_ops::Op::Add,
+                crate::uncertain::BinOp::Sub => crate::bigint_ops::Op::Sub,
+                crate::uncertain::BinOp::Mul => crate::bigint_ops::Op::Mul,
+                crate::uncertain::BinOp::Div => crate::bigint_ops::Op::Div,
+            };
+            let v = crate::bigint_ops::arith(bop, &val, &Value::Number(n)).map_err(VmError::runtime_error)?;
+            if let Some(frame) = self.locals_stack.last_mut() {
+                frame[idx] = v;
+            }
+            return Ok(());
+        }
         match crate::uncertain::binary(op, &val, &Value::Number(n)) {
             Some(r) => {
                 let v = r.map_err(VmError::runtime_error)?;
@@ -6135,6 +6238,7 @@ impl VirtualMachine {
             Value::Set(s) => !s.is_empty(),
             Value::TaskError(_) => true,
             Value::Cell(c) => !matches!(&*c.borrow(), Value::Null | Value::Bool(false)),
+            Value::BigInt(b) => !b.is_zero(),
         }
     }
 
@@ -6465,6 +6569,7 @@ impl VirtualMachine {
             Value::QualityWrapped(q) => Ok(q.quality()),
             Value::Bool(b) => Ok(if *b { 1.0 } else { 0.0 }),
             Value::Pointer(p) => Ok(*p as f64),
+            Value::BigInt(b) => Ok(b.to_f64()),
             _ => Err(VmError::runtime_error("Cannot convert value to number".to_string())),
         }
     }
