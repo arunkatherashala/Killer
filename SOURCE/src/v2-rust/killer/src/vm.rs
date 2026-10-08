@@ -2721,6 +2721,13 @@ impl VirtualMachine {
                                     .flat_map(|s| s.iter())
                                     .map(|(k, v)| (k.clone(), format!("{}", v)))
                                     .collect();
+                                // inside a function also report the top-level scope, marked with `::`
+                                let mut vars = vars;
+                                if self.scopes.len() > 1 {
+                                    if let Some(g) = self.scopes.first() {
+                                        vars.extend(g.iter().map(|(k, v)| (format!("::{k}"), format!("{}", v))));
+                                    }
+                                }
                                 let _ = tx.send((line, vars));
                                 match rx.recv() {
                                     Ok(true) => false,

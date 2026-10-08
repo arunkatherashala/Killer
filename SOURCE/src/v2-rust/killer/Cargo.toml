@@ -260,6 +260,10 @@ path = "src/bin/killer.rs"
 name = "killer_lsp"
 path = "src/bin/killer_lsp.rs"
 
+[[bin]]
+name = "killer_dap"
+path = "src/bin/killer_dap.rs"
+
 [profile.release]
 opt-level = 3
 lto = "fat"

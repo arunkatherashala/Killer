@@ -345,6 +345,7 @@ pub mod controlflow;           // lowers match/switch/do-while/C-style for/destr
 pub mod json_lang;             // strict JSON parser and serializer for json_parse / json_stringify
 pub mod sourcemap;             // per-line origin tracking across the source-rewriting passes
 pub mod lsp_core;              // language server (LSP over stdio) used by killer_lsp / `killer lsp`
+pub mod dap;                   // Debug Adapter Protocol server (`killer_dap`)
 pub mod testfw;                // test blocks, assert diffs, `killer test`, JUnit XML
 pub mod cli_tools;             // fmt / lint / run helpers behind the `killer` driver
 pub mod hints;                 // friendlier explanations for well-known compile mistakes
