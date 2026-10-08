@@ -141,6 +141,9 @@ impl SharedArray {
     }
 
     pub fn fmt_bracketed(&self, f: &mut Formatter<'_>) -> FmtResult {
+        let Some(_guard) = DisplayGuard::enter() else {
+            return write!(f, "[...]");
+        };
         write!(f, "[")?;
         for (i, v) in self.0.borrow().iter().enumerate() {
             if i > 0 {
@@ -620,6 +623,38 @@ impl SetKey {
     }
 }
 
+thread_local! {
+    /// (nesting depth, remaining container budget) of the `Display` call in progress on this thread.
+    static DISPLAY_STATE: std::cell::Cell<(u32, u32)> = const { std::cell::Cell::new((0, 0)) };
+}
+
+/// Keeps `Display` of self-referencing or enormously shared structures finite: containers nested
+/// deeper than 64 levels, or more than 2 million containers in one print, are shown as `...`.
+struct DisplayGuard;
+
+impl DisplayGuard {
+    fn enter() -> Option<DisplayGuard> {
+        DISPLAY_STATE.with(|c| {
+            let (depth, budget) = c.get();
+            let budget = if depth == 0 { 2_000_000 } else { budget };
+            if depth >= 64 || budget == 0 {
+                return None;
+            }
+            c.set((depth + 1, budget - 1));
+            Some(DisplayGuard)
+        })
+    }
+}
+
+impl Drop for DisplayGuard {
+    fn drop(&mut self) {
+        DISPLAY_STATE.with(|c| {
+            let (depth, budget) = c.get();
+            c.set((depth.saturating_sub(1), budget));
+        });
+    }
+}
+
 impl Display for Value {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
@@ -634,6 +669,9 @@ impl Display for Value {
             Value::Str(s) => write!(f, "{s}"),
             Value::Array(arr) => arr.fmt_bracketed(f),
             Value::Dict(dict) => {
+                let Some(_guard) = DisplayGuard::enter() else {
+                    return write!(f, "{{...}}");
+                };
                 write!(f, "{{")?;
                 let mut first = true;
                 for (k, v) in dict.iter() {
@@ -679,6 +717,9 @@ impl Display for Value {
             Value::Uncertain { value, margin } => write!(f, "{} ± {}", value, margin),
             Value::Gauss { mean, sigma } => write!(f, "{} ± {}σ", mean, sigma),
             Value::Set(s) => {
+                let Some(_guard) = DisplayGuard::enter() else {
+                    return write!(f, "{{...}}");
+                };
                 let items: Vec<String> = s.iter().map(|k| format!("{}", k.to_value())).collect();
                 write!(f, "{{{}}}", items.join(", "))
             }
@@ -717,7 +758,12 @@ impl Value {
                 value: Box::new(value.detached()),
                 confidence: *confidence,
                 reason: reason.clone(),
+                let key = d.rc_ptr();
+                if let Some(done) = memo.get(&key) {
+                    return done.clone();
+                }
             },
+                memo.insert(key, Value::Dict(copy.clone()));
             Value::Set(s) => Value::Set(s.copy()),
             other => other.clone(),
         }

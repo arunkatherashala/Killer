@@ -2,6 +2,9 @@
 use crate::value::Value;
 use crate::error::VmError;
 
+/// Largest list `range()` will materialise (32M elements).
+pub const MAX_RANGE_LEN: usize = 1 << 25;
+
 // ── FFI for mmap / VirtualAlloc ──────────────────────────────────────────────
 #[cfg(target_os = "windows")]
 extern "system" {
@@ -1378,19 +1381,30 @@ impl BuiltinFunctions {
             ));
         }
 
-        let mut result = Vec::new();
-        if step > 0 {
-            let mut i = start;
-            while i < end {
-                result.push(Value::Number(i as f64));
-                i += step;
-            }
+        Self::range_values(start, end, step)
+    }
+
+    /// Materialise `start..end` by `step`, refusing absurd sizes (`range(1e12)`) with a clear error.
+    pub(crate) fn range_values(start: i64, end: i64, step: i64) -> Result<Value, VmError> {
+        let (s, e, st) = (start as i128, end as i128, step as i128);
+        let len = if st > 0 {
+            if e > s { (e - s + st - 1) / st } else { 0 }
+        } else if s > e {
+            (s - e + (-st) - 1) / (-st)
         } else {
-            let mut i = start;
-            while i > end {
-                result.push(Value::Number(i as f64));
-                i += step;
-            }
+            0
+        };
+        if len > MAX_RANGE_LEN as i128 {
+            return Err(VmError::runtime_error(format!(
+                "range is too large ({} elements, limit {}); use a while loop for huge counts",
+                len, MAX_RANGE_LEN
+            )));
+        }
+        let mut result = Vec::with_capacity(len as usize);
+        let mut i = s;
+        for _ in 0..len {
+            result.push(Value::Number(i as f64));
+            i += st;
         }
         Ok(Value::from(result))
     }
@@ -1763,6 +1777,7 @@ impl BuiltinFunctions {
             }
             _ => Err(VmError::runtime_error(
                 "repeat() expects string and number".to_string(),
+                crate::vm::check_string_size(s.len().saturating_mul(times))?;
             )),
         }
     }
@@ -11088,7 +11103,7 @@ The fact that you shared this means something. What's underneath it  what are 
         if args.len() != 2 { return Err(VmError::runtime_error("mem_read_u16() expects 2 arguments (buf, offset)".to_string())); }
         let buf = match &args[0] { Value::Bytes(b) => b, _ => return Err(VmError::runtime_error("mem_read_u16: first arg must be bytes".to_string())) };
         let off = match &args[1] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("mem_read_u16: offset must be numeric".to_string())) };
-        if off + 2 > buf.len() { return Err(VmError::runtime_error("mem_read_u16: out of bounds".to_string())); }
+        if off.saturating_add(2) > buf.len() { return Err(VmError::runtime_error("mem_read_u16: out of bounds".to_string())); }
         let val = u16::from_le_bytes([buf[off], buf[off+1]]);
         Ok(Value::Integer(val as i64))
     }
@@ -11097,7 +11112,7 @@ The fact that you shared this means something. What's underneath it  what are 
         if args.len() != 2 { return Err(VmError::runtime_error("mem_read_u32() expects 2 arguments (buf, offset)".to_string())); }
         let buf = match &args[0] { Value::Bytes(b) => b, _ => return Err(VmError::runtime_error("mem_read_u32: first arg must be bytes".to_string())) };
         let off = match &args[1] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("mem_read_u32: offset must be numeric".to_string())) };
-        if off + 4 > buf.len() { return Err(VmError::runtime_error("mem_read_u32: out of bounds".to_string())); }
+        if off.saturating_add(4) > buf.len() { return Err(VmError::runtime_error("mem_read_u32: out of bounds".to_string())); }
         let val = u32::from_le_bytes([buf[off], buf[off+1], buf[off+2], buf[off+3]]);
         Ok(Value::Integer(val as i64))
     }
@@ -11106,7 +11121,7 @@ The fact that you shared this means something. What's underneath it  what are 
         if args.len() != 2 { return Err(VmError::runtime_error("mem_read_u64() expects 2 arguments (buf, offset)".to_string())); }
         let buf = match &args[0] { Value::Bytes(b) => b, _ => return Err(VmError::runtime_error("mem_read_u64: first arg must be bytes".to_string())) };
         let off = match &args[1] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("mem_read_u64: offset must be numeric".to_string())) };
-        if off + 8 > buf.len() { return Err(VmError::runtime_error("mem_read_u64: out of bounds".to_string())); }
+        if off.saturating_add(8) > buf.len() { return Err(VmError::runtime_error("mem_read_u64: out of bounds".to_string())); }
         let val = u64::from_le_bytes([buf[off], buf[off+1], buf[off+2], buf[off+3], buf[off+4], buf[off+5], buf[off+6], buf[off+7]]);
         Ok(Value::Integer(val as i64))
     }
@@ -11126,7 +11141,7 @@ The fact that you shared this means something. What's underneath it  what are 
         let mut buf = match &args[0] { Value::Bytes(b) => b.clone(), _ => return Err(VmError::runtime_error("mem_write_u16: first arg must be bytes".to_string())) };
         let off = match &args[1] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("mem_write_u16: offset must be numeric".to_string())) };
         let val = match &args[2] { Value::Number(n) => *n as u16, Value::Integer(n) => *n as u16, _ => return Err(VmError::runtime_error("mem_write_u16: value must be numeric".to_string())) };
-        if off + 2 > buf.len() { return Err(VmError::runtime_error("mem_write_u16: out of bounds".to_string())); }
+        if off.saturating_add(2) > buf.len() { return Err(VmError::runtime_error("mem_write_u16: out of bounds".to_string())); }
         let bytes = val.to_le_bytes();
         buf[off] = bytes[0]; buf[off+1] = bytes[1];
         Ok(Value::Bytes(buf))
@@ -11137,7 +11152,7 @@ The fact that you shared this means something. What's underneath it  what are 
         let mut buf = match &args[0] { Value::Bytes(b) => b.clone(), _ => return Err(VmError::runtime_error("mem_write_u32: first arg must be bytes".to_string())) };
         let off = match &args[1] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("mem_write_u32: offset must be numeric".to_string())) };
         let val = match &args[2] { Value::Number(n) => *n as u32, Value::Integer(n) => *n as u32, _ => return Err(VmError::runtime_error("mem_write_u32: value must be numeric".to_string())) };
-        if off + 4 > buf.len() { return Err(VmError::runtime_error("mem_write_u32: out of bounds".to_string())); }
+        if off.saturating_add(4) > buf.len() { return Err(VmError::runtime_error("mem_write_u32: out of bounds".to_string())); }
         let bytes = val.to_le_bytes();
         buf[off..off+4].copy_from_slice(&bytes);
         Ok(Value::Bytes(buf))
@@ -11148,7 +11163,7 @@ The fact that you shared this means something. What's underneath it  what are 
         let mut buf = match &args[0] { Value::Bytes(b) => b.clone(), _ => return Err(VmError::runtime_error("mem_write_u64: first arg must be bytes".to_string())) };
         let off = match &args[1] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("mem_write_u64: offset must be numeric".to_string())) };
         let val = match &args[2] { Value::Number(n) => *n as u64, Value::Integer(n) => *n as u64, _ => return Err(VmError::runtime_error("mem_write_u64: value must be numeric".to_string())) };
-        if off + 8 > buf.len() { return Err(VmError::runtime_error("mem_write_u64: out of bounds".to_string())); }
+        if off.saturating_add(8) > buf.len() { return Err(VmError::runtime_error("mem_write_u64: out of bounds".to_string())); }
         let bytes = val.to_le_bytes();
         buf[off..off+8].copy_from_slice(&bytes);
         Ok(Value::Bytes(buf))
@@ -11170,7 +11185,7 @@ The fact that you shared this means something. What's underneath it  what are 
         if args.len() != 2 { return Err(VmError::runtime_error("volatile_read_u16(buf, offset)".to_string())); }
         let buf = match &args[0] { Value::Bytes(b) => b, _ => return Err(VmError::runtime_error("volatile_read_u16: first arg must be bytes".to_string())) };
         let off = match &args[1] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("volatile_read_u16: offset must be numeric".to_string())) };
-        if off + 2 > buf.len() { return Err(VmError::runtime_error("volatile_read_u16: out of bounds".to_string())); }
+        if off.saturating_add(2) > buf.len() { return Err(VmError::runtime_error("volatile_read_u16: out of bounds".to_string())); }
         let val = unsafe { std::ptr::read_volatile((buf.as_ptr().add(off)) as *const u16) };
         Ok(Value::Integer(val as i64))
     }
@@ -11179,7 +11194,7 @@ The fact that you shared this means something. What's underneath it  what are 
         if args.len() != 2 { return Err(VmError::runtime_error("volatile_read_u32(buf, offset)".to_string())); }
         let buf = match &args[0] { Value::Bytes(b) => b, _ => return Err(VmError::runtime_error("volatile_read_u32: first arg must be bytes".to_string())) };
         let off = match &args[1] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("volatile_read_u32: offset must be numeric".to_string())) };
-        if off + 4 > buf.len() { return Err(VmError::runtime_error("volatile_read_u32: out of bounds".to_string())); }
+        if off.saturating_add(4) > buf.len() { return Err(VmError::runtime_error("volatile_read_u32: out of bounds".to_string())); }
         let val = unsafe { std::ptr::read_volatile((buf.as_ptr().add(off)) as *const u32) };
         Ok(Value::Integer(val as i64))
     }
@@ -11188,7 +11203,7 @@ The fact that you shared this means something. What's underneath it  what are 
         if args.len() != 2 { return Err(VmError::runtime_error("volatile_read_u64(buf, offset)".to_string())); }
         let buf = match &args[0] { Value::Bytes(b) => b, _ => return Err(VmError::runtime_error("volatile_read_u64: first arg must be bytes".to_string())) };
         let off = match &args[1] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("volatile_read_u64: offset must be numeric".to_string())) };
-        if off + 8 > buf.len() { return Err(VmError::runtime_error("volatile_read_u64: out of bounds".to_string())); }
+        if off.saturating_add(8) > buf.len() { return Err(VmError::runtime_error("volatile_read_u64: out of bounds".to_string())); }
         let val = unsafe { std::ptr::read_volatile((buf.as_ptr().add(off)) as *const u64) };
         Ok(Value::Integer(val as i64))
     }
@@ -11208,7 +11223,7 @@ The fact that you shared this means something. What's underneath it  what are 
         let mut buf = match &args[0] { Value::Bytes(b) => b.clone(), _ => return Err(VmError::runtime_error("volatile_write_u16: first arg must be bytes".to_string())) };
         let off = match &args[1] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("volatile_write_u16: offset must be numeric".to_string())) };
         let val = match &args[2] { Value::Number(n) => *n as u16, Value::Integer(n) => *n as u16, _ => return Err(VmError::runtime_error("volatile_write_u16: value must be numeric".to_string())) };
-        if off + 2 > buf.len() { return Err(VmError::runtime_error("volatile_write_u16: out of bounds".to_string())); }
+        if off.saturating_add(2) > buf.len() { return Err(VmError::runtime_error("volatile_write_u16: out of bounds".to_string())); }
         unsafe { std::ptr::write_volatile((buf.as_mut_ptr().add(off)) as *mut u16, val); }
         Ok(Value::Bytes(buf))
     }
@@ -11218,7 +11233,7 @@ The fact that you shared this means something. What's underneath it  what are 
         let mut buf = match &args[0] { Value::Bytes(b) => b.clone(), _ => return Err(VmError::runtime_error("volatile_write_u32: first arg must be bytes".to_string())) };
         let off = match &args[1] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("volatile_write_u32: offset must be numeric".to_string())) };
         let val = match &args[2] { Value::Number(n) => *n as u32, Value::Integer(n) => *n as u32, _ => return Err(VmError::runtime_error("volatile_write_u32: value must be numeric".to_string())) };
-        if off + 4 > buf.len() { return Err(VmError::runtime_error("volatile_write_u32: out of bounds".to_string())); }
+        if off.saturating_add(4) > buf.len() { return Err(VmError::runtime_error("volatile_write_u32: out of bounds".to_string())); }
         unsafe { std::ptr::write_volatile((buf.as_mut_ptr().add(off)) as *mut u32, val); }
         Ok(Value::Bytes(buf))
     }
@@ -11228,7 +11243,7 @@ The fact that you shared this means something. What's underneath it  what are 
         let mut buf = match &args[0] { Value::Bytes(b) => b.clone(), _ => return Err(VmError::runtime_error("volatile_write_u64: first arg must be bytes".to_string())) };
         let off = match &args[1] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("volatile_write_u64: offset must be numeric".to_string())) };
         let val = match &args[2] { Value::Number(n) => *n as u64, Value::Integer(n) => *n as u64, _ => return Err(VmError::runtime_error("volatile_write_u64: value must be numeric".to_string())) };
-        if off + 8 > buf.len() { return Err(VmError::runtime_error("volatile_write_u64: out of bounds".to_string())); }
+        if off.saturating_add(8) > buf.len() { return Err(VmError::runtime_error("volatile_write_u64: out of bounds".to_string())); }
         unsafe { std::ptr::write_volatile((buf.as_mut_ptr().add(off)) as *mut u64, val); }
         Ok(Value::Bytes(buf))
     }
@@ -11604,7 +11619,7 @@ The fact that you shared this means something. What's underneath it  what are 
         if block_size > 1_048_576 { return Err(VmError::runtime_error("disk_read_block: max block size 1MB".to_string())); }
         use std::io::{Read, Seek, SeekFrom};
         let mut f = std::fs::File::open(&path).map_err(|e| VmError::runtime_error(format!("disk_read_block: {}", e)))?;
-        f.seek(SeekFrom::Start(block_num * block_size as u64)).map_err(|e| VmError::runtime_error(format!("disk_read_block: seek error: {}", e)))?;
+        f.seek(SeekFrom::Start(block_num.saturating_mul(block_size as u64))).map_err(|e| VmError::runtime_error(format!("disk_read_block: seek error: {}", e)))?;
         let mut buf = vec![0u8; block_size];
         let n = f.read(&mut buf).map_err(|e| VmError::runtime_error(format!("disk_read_block: read error: {}", e)))?;
         buf.truncate(n);
@@ -11618,7 +11633,7 @@ The fact that you shared this means something. What's underneath it  what are 
         let data = match &args[2] { Value::Bytes(b) => b, _ => return Err(VmError::runtime_error("disk_write_block: data must be bytes".to_string())) };
         use std::io::{Write, Seek, SeekFrom};
         let mut f = std::fs::OpenOptions::new().write(true).create(true).open(&path).map_err(|e| VmError::runtime_error(format!("disk_write_block: {}", e)))?;
-        f.seek(SeekFrom::Start(block_num * data.len() as u64)).map_err(|e| VmError::runtime_error(format!("disk_write_block: seek error: {}", e)))?;
+        f.seek(SeekFrom::Start(block_num.saturating_mul(data.len() as u64))).map_err(|e| VmError::runtime_error(format!("disk_write_block: seek error: {}", e)))?;
         f.write_all(data).map_err(|e| VmError::runtime_error(format!("disk_write_block: write error: {}", e)))?;
         Ok(Value::Integer(data.len() as i64))
     }

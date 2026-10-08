@@ -294,6 +294,7 @@ pub fn call(name: &str, args: &[Value]) -> Option<Result<Value, VmError>> {
             let a = arity(name, args, 2, 3)?;
             let s = string(&a[0], name)?;
             let width = int(&a[1], name)?.max(0) as usize;
+            crate::vm::check_string_size(width)?;
             let fill = match a.get(2) {
                 Some(Value::Str(f)) if f.chars().count() == 1 => f.chars().next().unwrap(),
                 None => ' ',

@@ -346,6 +346,7 @@ pub mod json_lang;             // strict JSON parser and serializer for json_par
 pub mod sourcemap;             // per-line origin tracking across the source-rewriting passes
 pub mod hints;                 // friendlier explanations for well-known compile mistakes
 pub mod imports;               // compile-time `import "file.killer"` inclusion
+pub mod limits;               // structural limits (nesting depth, expression length) checked before compiling
 pub mod lambda;                // lifts anonymous functions (fn(x){..}, x => ..) into named ones
 pub mod sugar;               // surface syntax sugar rewritten to core Killer before compiling
 pub mod uncertain;             // interval arithmetic and three-valued comparison for `believe` values

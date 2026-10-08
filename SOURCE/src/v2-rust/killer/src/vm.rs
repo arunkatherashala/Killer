@@ -197,6 +197,31 @@ fn repeat_sequence(lhs: &Value, rhs: &Value) -> Option<Result<Value, String>> {
 /// Return address used for calls made from Rust (see `call_value_nested`).
 const NESTED_RETURN: usize = usize::MAX;
 
+/// Largest string a script may build (matches the `*` repeat limit).
+pub(crate) const MAX_STRING_BYTES: usize = 1 << 28;
+/// Largest list a script may build by concatenation (matches the `*` repeat limit).
+pub(crate) const MAX_ARRAY_LEN: usize = 1 << 24;
+
+/// Refuse to build a string of more than [`MAX_STRING_BYTES`] bytes (`"x" * n`, `repeat`, padding).
+#[inline]
+pub(crate) fn check_string_size(bytes: usize) -> Result<(), VmError> {
+    if bytes > MAX_STRING_BYTES {
+        Err(string_too_large())
+    } else {
+        Ok(())
+    }
+}
+
+#[cold]
+fn string_too_large() -> VmError {
+    VmError::runtime_error("string is too large (limit 256 MB)".to_string())
+}
+
+/// Maximum Killer call depth (heap-allocated frames) before `stack overflow: recursion too deep`.
+const MAX_CALL_DEPTH: usize = 100_000;
+/// Maximum nesting of Rust-level interpreter re-entries (callbacks, operator methods, generators).
+const MAX_NATIVE_DEPTH: u32 = 400;
+
 /// Builtins that take a function: `map`, `filter`, `reduce`, `sorted`.
 fn is_callback_builtin(id: u16) -> bool {
     matches!(id, 10 | 42 | 43 | 44 | 45)
@@ -266,6 +291,8 @@ pub struct VirtualMachine {
     loop_pattern_detector: crate::loop_pattern_detection::LoopPatternDetector,  // Loop optimization hints (5-10%)
     
     // SECURITY: Recursion depth limiting (March 2026)
+    /// Nesting depth of Rust-level re-entries into the interpreter (callbacks, operator methods, generators).
+    native_depth: u32,
     recursion_guard: RecursionGuard,  // Prevents stack overflow from infinite recursion
 
     /// Optional per-`run` instruction / wall-clock budget (hosts: call [`set_execution_budget`](VirtualMachine::set_execution_budget)).
@@ -343,6 +370,7 @@ impl Default for VirtualMachine {
             value_buffer_pool: crate::allocation_pool::ValueBufferPool::default(),
             scope_var_cache: crate::allocation_pool::ScopeVariableCache::new(),
             loop_pattern_detector: crate::loop_pattern_detection::LoopPatternDetector::new(),
+            native_depth: 0,
             recursion_guard: RecursionGuard::new(crate::security::MAX_RECURSION_DEPTH),
             execution_budget: None,
             exec_step_counter: 0,
@@ -475,6 +503,7 @@ impl VirtualMachine {
     /// JIT/optimization fields are untouched (they're disabled in new_for_spawn VMs).
     pub fn reset_for_reuse(&mut self) {
         self.stack.clear();
+            native_depth: 0,
         self.scopes.clear();
         self.call_stack.clear();
         self.ip = 0;
@@ -636,6 +665,30 @@ impl VirtualMachine {
                                 "Execution time limit exceeded (max {} ms, elapsed {} ms)",
                                 b.max_wall_ms, ms
                             ),
+    /// Cheap guard for Killer-level calls: the call stack lives on the heap, so only memory is at risk.
+    #[inline(always)]
+    fn check_call_depth(&self) -> Result<(), VmError> {
+        if self.call_stack.len() >= MAX_CALL_DEPTH {
+            return Err(Self::stack_overflow_error());
+        }
+        Ok(())
+    }
+
+    #[cold]
+    fn stack_overflow_error() -> VmError {
+        VmError::runtime_error("stack overflow: recursion too deep".to_string())
+    }
+
+    /// Guard for re-entering the interpreter from Rust (each level uses native stack).
+    #[inline]
+    fn enter_native(&mut self) -> Result<(), VmError> {
+        if self.native_depth >= MAX_NATIVE_DEPTH || self.call_stack.len() >= MAX_CALL_DEPTH {
+            return Err(Self::stack_overflow_error());
+        }
+        self.native_depth += 1;
+        Ok(())
+    }
+
                             location: None,
                             suggestion: Some(
                                 "Raise ExecutionBudget::max_wall_ms or optimize hot loops.".into(),
@@ -1100,6 +1153,9 @@ impl VirtualMachine {
                                         self.stack.push(r);
                                         self.ip += 3;
                                         continue;
+                                if l.len() + r.len() > MAX_STRING_BYTES {
+                                    return Err(string_too_large());
+                                }
                                     }
                                     Value::Str(s.clone())
                                 }
@@ -1348,18 +1404,30 @@ impl VirtualMachine {
                                 self.stack.push(Value::Number(q.quality() + n));
                             }
                             (Value::Number(n), Value::QualityWrapped(q)) => {
+                                if l.len() + r.len() > MAX_STRING_BYTES {
+                                    return Err(string_too_large());
+                                }
                                 // Number + Quality = Number (auto-unwrap)
                                 self.stack.push(Value::Number(n + q.quality()));
                             }
                             _ => return Err(VmError::runtime_error("Cannot add these types".to_string())),
+                                if l.len() + r.len() > MAX_STRING_BYTES {
+                                    return Err(string_too_large());
+                                }
                         }
                     }
                 }
                 Instruction::Sub => {
+                                if l.len() + r.len() > MAX_STRING_BYTES {
+                                    return Err(string_too_large());
+                                }
                     // Phase 12: Check for __sub__ operator overload
                     let rhs = self.pop_value()?;
                     let lhs = self.pop_value()?;
                     if crate::uncertain::is_uncertain(&lhs) || crate::uncertain::is_uncertain(&rhs) {
+                                if l.len() + r.len() > MAX_ARRAY_LEN {
+                                    return Err(VmError::runtime_error("list is too large".to_string()));
+                                }
                         if let Some(r) = crate::uncertain::binary(crate::uncertain::BinOp::Sub, &lhs, &rhs) {
                             self.stack.push(r.map_err(VmError::runtime_error)?);
                             self.ip += 1;
@@ -2455,6 +2523,7 @@ impl VirtualMachine {
                     // Stack: [function, arg0 .. argN-1]. The function sits below its arguments.
                     if self.stack.len() < *arg_count + 1 {
                         return Err(VmError::runtime_error("Stack underflow".to_string()));
+                    self.check_call_depth()?;
                     }
                     let func_at = self.stack.len() - *arg_count - 1;
                     let func_value = self.stack.remove(func_at);
@@ -2499,6 +2568,7 @@ impl VirtualMachine {
                     }
                     let return_ip = self.call_stack.pop().ok_or_else(|| {
                         VmError::runtime_error("RET used without active CALL".to_string())
+                            self.check_call_depth()?;
                     })?;
                     if return_ip == NESTED_RETURN {
                         // finished a call made from Rust (map/filter/sorted callbacks); the
@@ -2860,21 +2930,7 @@ impl VirtualMachine {
                                 ));
                             }
                             
-                            let mut result = Vec::new();
-                            if step > 0 {
-                                let mut i = start;
-                                while i < end {
-                                    result.push(Value::Number(i as f64));
-                                    i += step;
-                                }
-                            } else {
-                                let mut i = start;
-                                while i > end {
-                                    result.push(Value::Number(i as f64));
-                                    i += step;
-                                }
-                            }
-                            Value::from(result)
+                            BuiltinFunctions::range_values(start, end, step)?
                         }
                         "type" => {
                             if args.len() != 1 {
@@ -3399,6 +3455,7 @@ impl VirtualMachine {
                                 Value::Array(arr) => {
                                     let callback = &args[1];
                                     if !matches!(callback, Value::Function { .. }) {
+                                    check_string_size(s.len().saturating_mul(times))?;
                                         return Err(VmError::runtime_error("map() callback must be a function".to_string()));
                                     }
                                     
@@ -4020,6 +4077,7 @@ impl VirtualMachine {
 
                     // Pop constructor arguments if init(...) exists.
                     let mut ctor_args: Vec<Value> = Vec::new();
+                            self.check_call_depth()?;
                     if let Some((params, _body)) = class_info.methods.get("init") {
                         for _ in 0..params.len() {
                             ctor_args.push(self.pop_value()?);
@@ -4076,6 +4134,7 @@ impl VirtualMachine {
                                 };
 
                                 let assigned = match value {
+                        self.check_call_depth()?;
                                     crate::ast::Expr::Identifier(name) => {
                                         param_bindings.get(name).cloned().unwrap_or(Value::Null)
                                     }
@@ -4141,6 +4200,7 @@ impl VirtualMachine {
                                 &current_class,
                                 method_name,
                                 *arg_count
+                            self.check_call_depth()?;
                             ) {
                                 method_bytecode_start = Some(cached_start);
                             }
@@ -4267,6 +4327,7 @@ impl VirtualMachine {
                                     };
                                     Value::Number(n.sqrt())
                                 }
+                                self.check_call_depth()?;
                                 "pow" => {
                                     let base = match args.get(0) {
                                         Some(Value::Number(n)) => *n,
@@ -4602,6 +4663,7 @@ impl VirtualMachine {
                                     if args.len() != 1 {
                                         return Err(VmError::runtime_error("endsWith() expects 1 argument".to_string()));
                                     }
+                                self.check_call_depth()?;
                                     let suffix = match &args[0] {
                                         Value::Str(v) => v,
                                         _ => return Err(VmError::runtime_error("endsWith() expects string argument".to_string())),
@@ -4682,6 +4744,7 @@ impl VirtualMachine {
                                     let to = end.min(len);
                                     let (begin, finish) = if from <= to { (from, to) } else { (to, from) };
                                     Value::Str(s.chars().skip(begin).take(finish - begin).collect())
+                                    check_string_size(s.len().saturating_mul(times))?;
                                 }
                                 "charAt" => {
                                     if args.len() != 1 {
@@ -4692,6 +4755,7 @@ impl VirtualMachine {
                                     let idx = match &args[0] {
                                         Value::Number(n) => *n as usize,
                                         _ => {
+                                    check_string_size(target_len)?;
                                             return Err(VmError::runtime_error(
                                                 "charAt() index must be a number".to_string(),
                                             ))
@@ -4716,6 +4780,7 @@ impl VirtualMachine {
                                     let len = s.chars().count();
                                     let from = start.min(len);
                                     let to = end.min(len);
+                                    check_string_size(target_len)?;
                                     let (begin, finish) = if from <= to { (from, to) } else { (to, from) };
                                     Value::Str(s.chars().skip(begin).take(finish - begin).collect())
                                 }
@@ -5426,6 +5491,7 @@ impl VirtualMachine {
                 Instruction::FinallyEnter => {
                     // Finally block entered - no additional handling needed
                 }
+                            self.check_call_depth()?;
                 Instruction::Throw => {
                     let value = self.pop_value()?;
                     match self.exception_manager.throw(value.clone()) {
@@ -5897,6 +5963,13 @@ impl VirtualMachine {
                 self.scopes.truncate(base_scopes);
                 self.locals_stack.truncate(base_locals);
                 Err(e)
+        self.enter_native()?;
+        let r = self.gen_resume_inner(id, program);
+        self.native_depth -= 1;
+        r
+    }
+
+    fn gen_resume_inner(&mut self, id: &str, program: &Program) -> Result<Option<Value>, VmError> {
             }
         }
     }
@@ -5971,6 +6044,13 @@ impl VirtualMachine {
                 for item in arr.to_vec() {
                     out.push(self.call_value_nested(&f, vec![item], program)?);
                 }
+        self.enter_native()?;
+        let r = self.call_value_nested_inner(func, args, program);
+        self.native_depth -= 1;
+        r
+    }
+
+    fn call_value_nested_inner(&mut self, func: &Value, args: Vec<Value>, program: &Program) -> Result<Value, VmError> {
                 Ok(Value::from(out))
             }
             43 => {
@@ -6431,6 +6511,19 @@ impl VirtualMachine {
         &self, 
         class_name: &str, 
         method_name: &str,
+    ) -> Result<Value, VmError> {
+        self.enter_native()?;
+        let r = self.call_method_nested_inner(this, start, args, program);
+        self.native_depth -= 1;
+        r
+    }
+
+    fn call_method_nested_inner(
+        &mut self,
+        this: Value,
+        start: usize,
+        args: Vec<Value>,
+        program: &Program,
         program: &Program
     ) -> Option<(usize, Vec<String>)> {
         let mut current_class = class_name.to_string();
@@ -6538,6 +6631,13 @@ impl VirtualMachine {
                                     "Type error in '+': cannot add {} and {}\n  Hint: use str(x) to convert to string before concatenating",
                                     lhs.type_name(), rhs.type_name()
                                 ))),
+        self.enter_native()?;
+        let r = self.call_function_sync_inner(func, args, program);
+        self.native_depth -= 1;
+        r
+    }
+
+    fn call_function_sync_inner(&mut self, func: &Value, args: Vec<Value>, program: &Program) ->Result<Value, VmError> {
                             }
                         }
                         Instruction::Sub => {
