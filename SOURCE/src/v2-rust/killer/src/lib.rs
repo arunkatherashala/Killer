@@ -351,6 +351,7 @@ pub mod pkg_files;             // package file set, content hash, archive format
 pub mod pkg_manifest;          // killer.toml and killer.lock
 pub mod pkg_paths;             // where bare imports find installed packages
 pub mod pkg_registry;          // file / HTTP package registries
+pub mod pkg_cli;               // killer_pkg subcommands (new, add, install, publish, ...)
 pub mod pkg_resolve;           // dependency resolution with conflict diagnostics
 pub mod imports;               // compile-time `import "file.killer"` inclusion
 pub mod lambda;                // lifts anonymous functions (fn(x){..}, x => ..) into named ones

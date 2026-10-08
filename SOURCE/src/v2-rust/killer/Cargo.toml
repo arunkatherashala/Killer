@@ -105,6 +105,10 @@ name = "killer_ui"
 path = "src/bin/killer_ui.rs"
 
 [[bin]]
+name = "killer_pkg"
+path = "src/bin/killer_pkg.rs"
+
+[[bin]]
 name = "killer_super"
 path = "src/bin/killer_super.rs"
 

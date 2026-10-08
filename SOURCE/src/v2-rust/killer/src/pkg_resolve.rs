@@ -30,7 +30,7 @@ pub trait PackageIndex {
     fn candidates(&mut self, name: &str, spec: &DepSpec, from_dir: &Path) -> Result<Vec<Candidate>, String>;
     fn manifest(&mut self, name: &str, cand: &Candidate) -> Result<Manifest, String>;
     /// Directory of a candidate whose own relative path dependencies must be resolved (path/git).
-    fn package_dir(&mut self, cand: &Candidate) -> Option<PathBuf>;
+    fn package_dir(&mut self, name: &str, cand: &Candidate) -> Option<PathBuf>;
 }
 
 #[derive(Clone, Debug)]
@@ -172,7 +172,7 @@ impl<'a> Solver<'a> {
 
     fn try_candidate(&mut self, st: &State, name: &str, cand: Candidate) -> Result<State, String> {
         let manifest = self.index.manifest(name, &cand)?;
-        let dir = self.index.package_dir(&cand);
+        let dir = self.index.package_dir(name, &cand);
         let who = format!("{} {}", name, cand.version);
         let mut next = st.clone();
         next.chosen.insert(name.to_string(), cand.clone());
@@ -285,7 +285,7 @@ mod tests {
                 dev_dependencies: vec![],
             })
         }
-        fn package_dir(&mut self, _c: &Candidate) -> Option<PathBuf> {
+        fn package_dir(&mut self, _n: &str, _c: &Candidate) -> Option<PathBuf> {
             None
         }
     }
