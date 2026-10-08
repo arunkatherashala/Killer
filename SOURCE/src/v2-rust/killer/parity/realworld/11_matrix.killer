@@ -1,0 +1,171 @@
+// Matrix and numeric code: multiply, transpose, determinant, Gaussian elimination, power, Newton iteration
+fn zeros(r, c) {
+  m = []
+  for i in range(r) {
+    row = []
+    for j in range(c) {
+      push(row, 0)
+    }
+    push(m, row)
+  }
+  return m
+}
+
+fn identity(n) {
+  m = zeros(n, n)
+  for i in range(n) {
+    m[i][i] = 1
+  }
+  return m
+}
+
+fn matmul(a, b) {
+  n = len(a)
+  k = len(b)
+  p = len(b[0])
+  out = zeros(n, p)
+  for i in range(n) {
+    for j in range(p) {
+      s = 0
+      for t in range(k) {
+        s = s + a[i][t] * b[t][j]
+      }
+      out[i][j] = s
+    }
+  }
+  return out
+}
+
+fn transpose(a) {
+  out = zeros(len(a[0]), len(a))
+  for i in range(len(a)) {
+    for j in range(len(a[0])) {
+      out[j][i] = a[i][j]
+    }
+  }
+  return out
+}
+
+fn minor(m, skip) {
+  out = []
+  for i in range(1, len(m)) {
+    row = []
+    for j in range(len(m)) {
+      if j != skip {
+        push(row, m[i][j])
+      }
+    }
+    push(out, row)
+  }
+  return out
+}
+
+fn det(m) {
+  n = len(m)
+  if n == 1 {
+    return m[0][0]
+  }
+  if n == 2 {
+    return m[0][0] * m[1][1] - m[0][1] * m[1][0]
+  }
+  total = 0
+  sign = 1
+  for c in range(n) {
+    total = total + sign * m[0][c] * det(minor(m, c))
+    sign = 0 - sign
+  }
+  return total
+}
+
+fn mat_pow(m, p) {
+  result = identity(len(m))
+  base = m
+  while p > 0 {
+    if p % 2 == 1 {
+      result = matmul(result, base)
+    }
+    base = matmul(base, base)
+    p = floor(p / 2)
+  }
+  return result
+}
+
+// solve a x = b by Gaussian elimination with partial pivoting
+fn solve(a, b) {
+  n = len(a)
+  m = []
+  for i in range(n) {
+    row = []
+    for j in range(n) {
+      push(row, a[i][j] * 1.0)
+    }
+    push(row, b[i] * 1.0)
+    push(m, row)
+  }
+  for col in range(n) {
+    best = col
+    for r in range(col + 1, n) {
+      if abs(m[r][col]) > abs(m[best][col]) {
+        best = r
+      }
+    }
+    tmp = m[col]
+    m[col] = m[best]
+    m[best] = tmp
+    for r in range(col + 1, n) {
+      f = m[r][col] / m[col][col]
+      for c in range(col, n + 1) {
+        m[r][c] = m[r][c] - f * m[col][c]
+      }
+    }
+  }
+  x = zeros(1, n)[0]
+  i = n - 1
+  while i >= 0 {
+    s = m[i][n]
+    for j in range(i + 1, n) {
+      s = s - m[i][j] * x[j]
+    }
+    x[i] = s / m[i][i]
+    i = i - 1
+  }
+  return x
+}
+
+fn show(m) {
+  for row in m {
+    cells = []
+    for v in row {
+      push(cells, pad_left(str(v), 4, " "))
+    }
+    println("[" + join(cells, ",") + " ]")
+  }
+}
+
+fn newton_sqrt(x) {
+  g = x / 2.0
+  for i in range(30) {
+    g = (g + x / g) / 2
+  }
+  return g
+}
+
+a = [[1, 2, 3], [4, 5, 6]]
+b = [[7, 8], [9, 10], [11, 12]]
+println("A x B")
+show(matmul(a, b))
+println("transpose of A")
+show(transpose(a))
+println("det: " + str(det([[2, 0, 1], [1, 3, 2], [1, 1, 1]])))
+println("det 4x4: " + str(det([[1, 2, 3, 4], [5, 6, 7, 8], [2, 6, 4, 8], [3, 1, 1, 2]])))
+fibm = mat_pow([[1, 1], [1, 0]], 30)
+println("fib(30) via matrix power: " + str(fibm[0][1]))
+x = solve([[2, 1, -1], [-3, -1, 2], [-2, 1, 2]], [8, -11, -3])
+parts = []
+for v in x {
+  push(parts, str(round(v * 1000) / 1000))
+}
+println("solution: " + join(parts, " "))
+println("sqrt(2) = " + str(round(newton_sqrt(2) * 1000000) / 1000000))
+println("sqrt(144) = " + str(round(newton_sqrt(144))))
+println("identity check: " + str(matmul(identity(3), identity(3)) == identity(3)))

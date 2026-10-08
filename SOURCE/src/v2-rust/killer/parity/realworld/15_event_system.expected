@@ -1,0 +1,22 @@
+[high, once, 5, low, any]
+[high, 12, low, any]
+total after two emits: 12
+handlers for data: 3
+true
+false
+[13, low, any]
+[any]
+high saw data 5
+once saw data 5
+low saw data 5
+any saw data 5
+high saw data 7
+low saw data 7
+any saw data 7
+low saw data 1
+any saw data 1
+any saw other 0
+[data:5, data:4, data:3, other:1]
+[4]
+[killer, victim]
+[killer]

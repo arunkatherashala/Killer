@@ -238,7 +238,7 @@ impl BuiltinFunctions {
             }
             50 => Self::dict_get(args),
             51 => Self::dict_setdefault(args),
-            52 => Self::reverse(args),
+            52 => Self::reversed(args),
             53 => Self::bit_and(args),
             54 => Self::bit_or(args),
             55 => Self::bit_xor(args),
@@ -374,7 +374,7 @@ impl BuiltinFunctions {
             "push" => Self::push(args),
             "pop" => Self::pop(args),
             "reverse" => Self::reverse(args),
-            "reversed" => Self::reverse(args),
+            "reversed" => Self::reversed(args),
             "copy" => Self::value_copy(args),
             "join" => Self::join(args),
             "slice" => Self::slice(args),
@@ -1826,6 +1826,22 @@ impl BuiltinFunctions {
         }
     }
 
+    /// `reversed(x)`: a new reversed array (or string); the argument is left untouched.
+    fn reversed(args: &[Value]) -> Result<Value, VmError> {
+        if args.len() != 1 {
+            return Err(VmError::runtime_error("reversed() expects 1 argument".to_string()));
+        }
+        match &args[0] {
+            Value::Array(arr) => {
+                let mut items = arr.to_vec();
+                items.reverse();
+                Ok(Value::from(items))
+            }
+            Value::Str(s) => Ok(Value::Str(s.chars().rev().collect())),
+            _ => Err(VmError::runtime_error("reversed() expects an array or string".to_string())),
+        }
+    }
+
     fn reverse(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 1 {
             return Err(VmError::runtime_error(
@@ -2846,6 +2862,7 @@ impl BuiltinFunctions {
     }
 
     fn file_copy(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_read()?;
         crate::security::require_file_write()?;
         match args {
             [Value::Str(src), Value::Str(dst)] => {
@@ -2856,13 +2873,13 @@ impl BuiltinFunctions {
     }
 
     fn rename_file(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_read()?;
         crate::security::require_file_write()?;
         match args {
             [Value::Str(src), Value::Str(dst)] => {
                 Ok(Value::Bool(std::fs::rename(src, dst).is_ok()))
             }
             _ => Err(VmError::runtime_error("renameFile(src, dst) expects two strings".to_string())),
-        crate::security::require_file_read()?;
         }
     }
 
@@ -2873,7 +2890,6 @@ impl BuiltinFunctions {
                 Value::Str(s) => p.push(s),
                 _ => return Err(VmError::runtime_error("pathJoin() expects string segments".to_string())),
             }
-        crate::security::require_file_read()?;
         }
         Ok(Value::Str(p.to_string_lossy().into_owned()))
     }
@@ -3742,6 +3758,7 @@ impl BuiltinFunctions {
 
     #[allow(dead_code)]
     fn http_get(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_network()?;
         use crate::http::http_get_request;
         
         if args.len() != 1 {
@@ -3758,7 +3775,6 @@ impl BuiltinFunctions {
                 ))
             }
         };
-        crate::security::require_network()?;
 
         match http_get_request(url) {
             Ok(response) => {
@@ -3774,6 +3790,7 @@ impl BuiltinFunctions {
 
     #[allow(dead_code)]
     fn http_post(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_network()?;
         use crate::http::http_post_request;
         
         if args.len() != 2 {
@@ -3790,7 +3807,6 @@ impl BuiltinFunctions {
                 ))
             }
         };
-        crate::security::require_network()?;
 
         let body = match &args[1] {
             Value::Str(s) => s.clone(),
@@ -11344,6 +11360,7 @@ The fact that you shared this means something. What's underneath it  what are 
 
     #[cfg(target_os = "windows")]
     fn mmap_alloc(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_ffi()?;
         if args.len() != 1 { return Err(VmError::runtime_error("mmap_alloc(size)".to_string())); }
         let size = match &args[0] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("mmap_alloc: size must be numeric".to_string())) };
         if size > 1_073_741_824 { return Err(VmError::runtime_error("mmap_alloc: max 1GB".to_string())); }
@@ -11356,11 +11373,11 @@ The fact that you shared this means something. What's underneath it  what are 
     }
     #[cfg(not(target_os = "windows"))]
     fn mmap_alloc(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_ffi()?;
         if args.len() != 1 { return Err(VmError::runtime_error("mmap_alloc(size)".to_string())); }
         let size = match &args[0] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("mmap_alloc: size must be numeric".to_string())) };
         if size > 1_073_741_824 { return Err(VmError::runtime_error("mmap_alloc: max 1GB".to_string())); }
         let ptr = unsafe {
-        crate::security::require_ffi()?;
             libc_mmap(std::ptr::null_mut(), size, 0x3 /* PROT_READ|PROT_WRITE */, 0x22 /* MAP_PRIVATE|MAP_ANONYMOUS */, -1, 0)
         };
         if ptr == usize::MAX as *mut u8 { return Err(VmError::runtime_error("mmap_alloc: mmap failed".to_string())); }
@@ -11369,15 +11386,16 @@ The fact that you shared this means something. What's underneath it  what are 
 
     #[cfg(target_os = "windows")]
     fn mmap_free(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_ffi()?;
         if args.len() != 1 { return Err(VmError::runtime_error("mmap_free(ptr)".to_string())); }
         let ptr = match &args[0] { Value::Pointer(p) => *p, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("mmap_free: argument must be pointer".to_string())) };
         let ok = unsafe { winapi_virtual_free(ptr as *mut u8, 0, 0x8000 /* MEM_RELEASE */) };
         if ok == 0 { return Err(VmError::runtime_error("mmap_free: VirtualFree failed".to_string())); }
-        crate::security::require_ffi()?;
         Ok(Value::Null)
     }
     #[cfg(not(target_os = "windows"))]
     fn mmap_free(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_ffi()?;
         if args.len() != 2 { return Err(VmError::runtime_error("mmap_free(ptr, size)".to_string())); }
         let ptr = match &args[0] { Value::Pointer(p) => *p, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("mmap_free: argument must be pointer".to_string())) };
         let size = match &args[1] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("mmap_free: size must be numeric".to_string())) };
@@ -11395,16 +11413,15 @@ The fact that you shared this means something. What's underneath it  what are 
             let dst = (base + off) as *mut u8;
             std::ptr::copy_nonoverlapping(data.as_ptr(), dst, data.len());
         }
-        crate::security::require_ffi()?;
         Ok(Value::Null)
     }
 
     fn mmap_read(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_ffi()?;
         if args.len() != 3 { return Err(VmError::runtime_error("mmap_read(ptr, offset, len)".to_string())); }
         let base = match &args[0] { Value::Pointer(p) => *p, _ => return Err(VmError::runtime_error("mmap_read: first arg must be pointer".to_string())) };
         let off = match &args[1] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("mmap_read: offset must be numeric".to_string())) };
         let len = match &args[2] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("mmap_read: len must be numeric".to_string())) };
-        crate::security::require_ffi()?;
         if len > 1_073_741_824 { return Err(VmError::runtime_error("mmap_read: max 1GB".to_string())); }
         let mut buf = vec![0u8; len];
         unsafe {
@@ -11416,8 +11433,8 @@ The fact that you shared this means something. What's underneath it  what are 
 
     #[cfg(target_os = "windows")]
     fn mmap_exec(args: &[Value]) -> Result<Value, VmError> {
-        if args.len() != 2 { return Err(VmError::runtime_error("mmap_exec(ptr, size)  make memory executable".to_string())); }
         crate::security::require_ffi()?;
+        if args.len() != 2 { return Err(VmError::runtime_error("mmap_exec(ptr, size)  make memory executable".to_string())); }
         let ptr = match &args[0] { Value::Pointer(p) => *p, _ => return Err(VmError::runtime_error("mmap_exec: first arg must be pointer".to_string())) };
         let size = match &args[1] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("mmap_exec: size must be numeric".to_string())) };
         let mut old_protect: u32 = 0;
@@ -11428,12 +11445,12 @@ The fact that you shared this means something. What's underneath it  what are 
     }
     #[cfg(not(target_os = "windows"))]
     fn mmap_exec(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_ffi()?;
         if args.len() != 2 { return Err(VmError::runtime_error("mmap_exec(ptr, size)  make memory executable".to_string())); }
         let ptr = match &args[0] { Value::Pointer(p) => *p, _ => return Err(VmError::runtime_error("mmap_exec: first arg must be pointer".to_string())) };
         let size = match &args[1] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("mmap_exec: size must be numeric".to_string())) };
         // PROT_READ|PROT_WRITE|PROT_EXEC = 7
         let ok = unsafe { libc_mprotect(ptr as *mut u8, size, 7) };
-        crate::security::require_ffi()?;
         if ok != 0 { return Err(VmError::runtime_error("mmap_exec: mprotect failed".to_string())); }
         Ok(Value::Null)
     }
@@ -11445,7 +11462,6 @@ The fact that you shared this means something. What's underneath it  what are 
         let n = match &args[0] { Value::Number(v) => *v as i64, Value::Integer(v) => *v, _ => return Err(VmError::runtime_error("int_to_bytes_le: argument must be numeric".to_string())) };
         Ok(Value::Bytes(n.to_le_bytes().to_vec()))
     }
-        crate::security::require_ffi()?;
 
     fn int_to_bytes_be(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 1 { return Err(VmError::runtime_error("int_to_bytes_be(n)".to_string())); }
@@ -11479,6 +11495,7 @@ The fact that you shared this means something. What's underneath it  what are 
     }
 
     fn env_get(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_process_spawn()?;
         if args.len() != 1 { return Err(VmError::runtime_error("env_get(name)".to_string())); }
         let name = match &args[0] { Value::Str(s) => s, _ => return Err(VmError::runtime_error("env_get: name must be string".to_string())) };
         match std::env::var(name) {
@@ -11488,6 +11505,7 @@ The fact that you shared this means something. What's underneath it  what are 
     }
 
     fn env_set(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_process_spawn()?;
         if args.len() != 2 { return Err(VmError::runtime_error("env_set(name, value)".to_string())); }
         let name = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(VmError::runtime_error("env_set: name must be string".to_string())) };
         let val = match &args[1] { Value::Str(s) => s.clone(), _ => format!("{}", args[1]) };
@@ -11495,8 +11513,8 @@ The fact that you shared this means something. What's underneath it  what are 
         Ok(Value::Null)
     }
 
-        crate::security::require_process_spawn()?;
     fn process_exit(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_process_spawn()?;
         let code = if args.is_empty() { 0 } else {
             match &args[0] { Value::Number(n) => *n as i32, Value::Integer(n) => *n as i32, _ => 1 }
         };
@@ -11505,7 +11523,6 @@ The fact that you shared this means something. What's underneath it  what are 
 
     fn errno(_args: &[Value]) -> Result<Value, VmError> {
         Ok(Value::Integer(std::io::Error::last_os_error().raw_os_error().unwrap_or(0) as i64))
-        crate::security::require_process_spawn()?;
     }
 
     // ── Sizeof / Alignof ─────────────────────────────────────────────────────
@@ -11514,7 +11531,6 @@ The fact that you shared this means something. What's underneath it  what are 
         if args.len() != 1 { return Err(VmError::runtime_error("sizeof(value)".to_string())); }
         let size = match &args[0] {
             Value::Number(_) => 8,       // f64
-        crate::security::require_process_spawn()?;
             Value::Integer(_) => 8,      // i64
             Value::Bool(_) => 1,
             Value::Str(s) => s.len(),
@@ -11630,6 +11646,7 @@ The fact that you shared this means something. What's underneath it  what are 
     // ── Disk raw block I/O (uses file-backed simulation) ─────────────────────
 
     fn disk_read_block(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_read()?;
         if args.len() != 3 { return Err(VmError::runtime_error("disk_read_block(path, block_num, block_size)".to_string())); }
         let path = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(VmError::runtime_error("disk_read_block: path must be string".to_string())) };
         let block_num = match &args[1] { Value::Number(n) => *n as u64, Value::Integer(n) => *n as u64, _ => return Err(VmError::runtime_error("disk_read_block: block_num must be numeric".to_string())) };
@@ -11645,8 +11662,8 @@ The fact that you shared this means something. What's underneath it  what are 
     }
 
     fn disk_write_block(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_write()?;
         if args.len() != 3 { return Err(VmError::runtime_error("disk_write_block(path, block_num, data)".to_string())); }
-        crate::security::require_file_read()?;
         let path = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(VmError::runtime_error("disk_write_block: path must be string".to_string())) };
         let block_num = match &args[1] { Value::Number(n) => *n as u64, Value::Integer(n) => *n as u64, _ => return Err(VmError::runtime_error("disk_write_block: block_num must be numeric".to_string())) };
         let data = match &args[2] { Value::Bytes(b) => b, _ => return Err(VmError::runtime_error("disk_write_block: data must be bytes".to_string())) };
@@ -11662,7 +11679,6 @@ The fact that you shared this means something. What's underneath it  what are 
     fn page_alloc(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 1 { return Err(VmError::runtime_error("page_alloc(num_pages)".to_string())); }
         let num = match &args[0] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("page_alloc: argument must be numeric".to_string())) };
-        crate::security::require_file_write()?;
         let size = num * 4096; // 4KB pages
         if size > 1_073_741_824 { return Err(VmError::runtime_error("page_alloc: max 1GB".to_string())); }
         Ok(Value::Bytes(vec![0u8; size]))
@@ -11674,6 +11690,7 @@ The fact that you shared this means something. What's underneath it  what are 
     }
 
     fn page_map(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_ffi()?;
         if args.len() != 3 { return Err(VmError::runtime_error("page_map(page_table, virtual_page, physical_page)".to_string())); }
         let mut pt = match &args[0] { Value::Bytes(b) => b.clone(), _ => return Err(VmError::runtime_error("page_map: page_table must be bytes".to_string())) };
         let virt = match &args[1] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("page_map: virtual_page must be numeric".to_string())) };
@@ -11690,7 +11707,6 @@ The fact that you shared this means something. What's underneath it  what are 
     }
 
     // ===== v2.3: OS-Level Hardware Primitives =====
-        crate::security::require_ffi()?;
 
     /// cpuid(leaf)  simulated CPUID instruction, returns dict with eax/ebx/ecx/edx
     fn cpuid(args: &[Value]) -> Result<Value, VmError> {
@@ -11824,6 +11840,7 @@ The fact that you shared this means something. What's underneath it  what are 
 
     /// call_native(code)  simulate executing native x86 code, returns EAX value as Number
     fn call_native(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_ffi()?;
         if args.len() != 1 {
             return Err(VmError::runtime_error("call_native(code) expects 1 argument".to_string()));
         }
@@ -11840,7 +11857,6 @@ The fact that you shared this means something. What's underneath it  what are 
                 }
                 buf
             }
-        crate::security::require_ffi()?;
             _ => return Err(VmError::runtime_error("call_native: argument must be bytes or pointer".to_string())),
         };
         // Simulate: scan for MOV EAX, imm32 (opcode 0xB8) and extract the immediate
@@ -11886,6 +11902,7 @@ The fact that you shared this means something. What's underneath it  what are 
     }
 
     fn builtin_kore_query(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_read()?;
         if args.is_empty() {
             return Err(VmError::runtime_error("kore_query() expects 1 argument (sql)".to_string()));
         }
@@ -11897,40 +11914,42 @@ The fact that you shared this means something. What's underneath it  what are 
     }
 
     fn builtin_kore_query_table(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_read()?;
         if args.is_empty() {
             return Err(VmError::runtime_error("kore_query_table() expects 1 argument (sql)".to_string()));
         }
         let sql = args[0].to_string();
         match crate::kore_query::kore_query(&sql) {
-        crate::security::require_file_read()?;
             Ok(result) => Ok(Value::Str(result.display_table(50))),
             Err(e)     => Err(VmError::runtime_error(format!("kore_query_table error: {}", e))),
         }
     }
 
     fn builtin_kore_query_csv(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_read()?;
         if args.is_empty() {
             return Err(VmError::runtime_error("kore_query_csv() expects 1 argument (sql)".to_string()));
         }
         let sql = args[0].to_string();
         match crate::kore_query::kore_query(&sql) {
-        crate::security::require_file_read()?;
             Ok(result) => Ok(Value::Str(result.to_csv())),
             Err(e)     => Err(VmError::runtime_error(format!("kore_query_csv error: {}", e))),
         }
     }
 
     fn builtin_kore_txn_begin(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_read()?;
         if args.is_empty() {
             return Err(VmError::runtime_error("kore_txn_begin() expects 1 argument (path)".to_string()));
         }
         let path = args[0].to_string();
         let id = crate::txn_registry::txn_begin(&path);
-        crate::security::require_file_read()?;
         Ok(Value::Number(id as f64))
     }
 
     fn builtin_kore_txn_commit(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_read()?;
+        crate::security::require_file_write()?;
         if args.len() < 2 {
             return Err(VmError::runtime_error("kore_txn_commit() expects 2 arguments (id, message)".to_string()));
         }
@@ -11938,7 +11957,6 @@ The fact that you shared this means something. What's underneath it  what are 
             Value::Number(n) => *n as i64,
             _ => return Err(VmError::runtime_error("kore_txn_commit: id must be a number".to_string())),
         };
-        crate::security::require_file_read()?;
         let msg = args[1].to_string();
         match crate::txn_registry::txn_commit(id, &msg) {
             Ok(version) => Ok(Value::Number(version as f64)),
@@ -11947,9 +11965,8 @@ The fact that you shared this means something. What's underneath it  what are 
     }
 
     fn builtin_kore_txn_abort(args: &[Value]) -> Result<Value, VmError> {
-        if args.is_empty() {
-        crate::security::require_file_read()?;
         crate::security::require_file_write()?;
+        if args.is_empty() {
             return Err(VmError::runtime_error("kore_txn_abort() expects 1 argument (id)".to_string()));
         }
         let id = match &args[0] {
@@ -11961,11 +11978,11 @@ The fact that you shared this means something. What's underneath it  what are 
     }
 
     fn builtin_kore_versions(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_read()?;
         if args.is_empty() {
             return Err(VmError::runtime_error("kore_versions() expects 1 argument (path)".to_string()));
         }
         let path = args[0].to_string();
-        crate::security::require_file_write()?;
         let versions = crate::kore_txn::list_versions(&path);
         use crate::value::SharedArray;
         let arr: Vec<Value> = versions.into_iter().map(Value::Str).collect();
@@ -11973,12 +11990,13 @@ The fact that you shared this means something. What's underneath it  what are 
     }
 
     fn builtin_kore_checkout(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_read()?;
+        crate::security::require_file_write()?;
         if args.len() < 2 {
             return Err(VmError::runtime_error("kore_checkout() expects 2 arguments (path, version)".to_string()));
         }
         let path = args[0].to_string();
         let ver = match &args[1] {
-        crate::security::require_file_read()?;
             Value::Number(n) => *n as u64,
             _ => return Err(VmError::runtime_error("kore_checkout: version must be a number".to_string())),
         };
@@ -11989,9 +12007,8 @@ The fact that you shared this means something. What's underneath it  what are 
     }
 
     fn builtin_kore_as_of(args: &[Value]) -> Result<Value, VmError> {
-        if args.len() < 2 {
         crate::security::require_file_read()?;
-        crate::security::require_file_write()?;
+        if args.len() < 2 {
             return Err(VmError::runtime_error("kore_as_of() expects 2 arguments (path, timestamp_ms)".to_string()));
         }
         let path = args[0].to_string();
@@ -12006,8 +12023,8 @@ The fact that you shared this means something. What's underneath it  what are 
     }
 
     fn builtin_kore_diff(args: &[Value]) -> Result<Value, VmError> {
-        if args.len() < 3 {
         crate::security::require_file_read()?;
+        if args.len() < 3 {
             return Err(VmError::runtime_error("kore_diff() expects 3 arguments (path, v1, v2)".to_string()));
         }
         let path = args[0].to_string();
@@ -12023,7 +12040,6 @@ The fact that you shared this means something. What's underneath it  what are 
             Ok((added, removed, changed)) => {
                 let mut map = std::collections::HashMap::new();
                 map.insert("added".to_string(),   Value::Number(added as f64));
-        crate::security::require_file_read()?;
                 map.insert("removed".to_string(), Value::Number(removed as f64));
                 map.insert("changed".to_string(), Value::Number(changed as f64));
                 Ok(Value::Dict(crate::value::SharedDict::new(map)))
@@ -12033,6 +12049,8 @@ The fact that you shared this means something. What's underneath it  what are 
     }
 
     fn builtin_kore2_from_csv(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_read()?;
+        crate::security::require_file_write()?;
         if args.len() < 2 {
             return Err(VmError::runtime_error("kore2_from_csv() expects 2 arguments (csv_path, kore_path)".to_string()));
         }
@@ -12045,12 +12063,12 @@ The fact that you shared this means something. What's underneath it  what are 
     }
 
     fn builtin_kore2_to_csv(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_read()?;
+        crate::security::require_file_write()?;
         if args.len() < 2 {
             return Err(VmError::runtime_error("kore2_to_csv() expects 2 arguments (kore_path, csv_path)".to_string()));
         }
         let kore = args[0].to_string();
-        crate::security::require_file_read()?;
-        crate::security::require_file_write()?;
         let csv  = args[1].to_string();
         match crate::kore_v2::kore_to_csv(&kore, &csv) {
             Ok(msg) => Ok(Value::Str(msg)),
@@ -12059,12 +12077,11 @@ The fact that you shared this means something. What's underneath it  what are 
     }
 
     fn builtin_kore2_filter(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_read()?;
         if args.len() < 4 {
             return Err(VmError::runtime_error(
                 "kore2_filter() expects 4 arguments (path, col, op, val)".to_string()
             ));
-        crate::security::require_file_read()?;
-        crate::security::require_file_write()?;
         }
         let path    = args[0].to_string();
         let col     = args[1].to_string();
@@ -12077,7 +12094,6 @@ The fact that you shared this means something. What's underneath it  what are 
         } else {
             crate::kore_v2::KVal::Str(val_str)
         };
-        crate::security::require_file_read()?;
         let reader = crate::kore_v2::KoreReader::open(&path)
             .map_err(|e| VmError::runtime_error(format!("kore2_filter open error: {}", e)))?;
         let rows = reader.filter_pushdown(&col, &op, &filter_val);
@@ -12085,6 +12101,7 @@ The fact that you shared this means something. What's underneath it  what are 
     }
 
     fn builtin_kore2_stats(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_read()?;
         if args.len() < 2 {
             return Err(VmError::runtime_error("kore2_stats() expects 2 arguments (path, col)".to_string()));
         }
@@ -12101,13 +12118,13 @@ The fact that you shared this means something. What's underneath it  what are 
                 map.insert("min_str".to_string(),    Value::Str(stats.min_str.clone()));
                 map.insert("max_str".to_string(),    Value::Str(stats.max_str.clone()));
                 Ok(Value::Dict(crate::value::SharedDict::new(map)))
-        crate::security::require_file_read()?;
             }
             None => Err(VmError::runtime_error(format!("kore2_stats: column '{}' not found", col))),
         }
     }
 
     fn builtin_kore2_read_row(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_read()?;
         if args.len() < 2 {
             return Err(VmError::runtime_error("kore2_read_row() expects 2 arguments (path, idx)".to_string()));
         }
@@ -12124,12 +12141,12 @@ The fact that you shared this means something. What's underneath it  what are 
                 let vals: Vec<Value> = row.iter().map(|k| Self::kval_to_value(k)).collect();
                 Ok(Value::Array(SharedArray::new(vals)))
             }
-        crate::security::require_file_read()?;
             None => Ok(Value::Null),
         }
     }
 
     fn builtin_kore2_read_range(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_read()?;
         if args.len() < 3 {
             return Err(VmError::runtime_error("kore2_read_range() expects 3 arguments (path, start, end)".to_string()));
         }
@@ -12146,10 +12163,10 @@ The fact that you shared this means something. What's underneath it  what are 
             .map_err(|e| VmError::runtime_error(format!("kore2_read_range open error: {}", e)))?;
         let rows = reader.read_row_range(start, end);
         Ok(Self::rows_to_value(rows))
-        crate::security::require_file_read()?;
     }
 
     fn builtin_kore2_info(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_read()?;
         if args.is_empty() {
             return Err(VmError::runtime_error("kore2_info() expects 1 argument (path)".to_string()));
         }
@@ -12160,24 +12177,24 @@ The fact that you shared this means something. What's underneath it  what are 
     }
 
     fn builtin_kore2_read(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_read()?;
         if args.is_empty() {
             return Err(VmError::runtime_error("kore2_read() expects 1 argument (path)".to_string()));
         }
         let path = args[0].to_string();
         let reader = crate::kore_v2::KoreReader::open(&path)
             .map_err(|e| VmError::runtime_error(format!("kore2_read open error: {}", e)))?;
-        crate::security::require_file_read()?;
         Ok(Self::rows_to_value(reader.read_all()))
     }
 
     fn builtin_kore2_read_col(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_read()?;
         if args.len() < 2 {
             return Err(VmError::runtime_error("kore2_read_col() expects 2 arguments (path, col)".to_string()));
         }
         let path = args[0].to_string();
         let col  = args[1].to_string();
         let reader = crate::kore_v2::KoreReader::open(&path)
-        crate::security::require_file_read()?;
             .map_err(|e| VmError::runtime_error(format!("kore2_read_col open error: {}", e)))?;
         match reader.read_column(&col) {
             Some(col_data) => {
@@ -12188,7 +12205,6 @@ The fact that you shared this means something. What's underneath it  what are 
             None => Err(VmError::runtime_error(format!("kore2_read_col: column '{}' not found", col))),
         }
     }
-        crate::security::require_file_read()?;
 
     // ══════════════════════════════════════════════════════════════════════════
     // KORE Engine FFI builtins (Phase 2)
@@ -12215,6 +12231,7 @@ The fact that you shared this means something. What's underneath it  what are 
 
     /// `kore_ctx_csv(id, table_name, csv_path)` → Str ("ok" or error)
     fn builtin_kore_ctx_csv(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_read()?;
         if args.len() < 3 {
             return Err(VmError::runtime_error("kore_ctx_csv() expects 3 arguments (id, table, path)".to_string()));
         }
@@ -12231,7 +12248,6 @@ The fact that you shared this means something. What's underneath it  what are 
     fn builtin_kore_ctx_load(args: &[Value]) -> Result<Value, VmError> {
         Self::builtin_kore_ctx_csv(args)
     }
-        crate::security::require_file_read()?;
 
     /// `kore_sql(id, sql)` → Array of Array of Str (rows × cols)
     fn builtin_kore_sql(args: &[Value]) -> Result<Value, VmError> {

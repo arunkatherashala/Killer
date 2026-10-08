@@ -1,0 +1,10 @@
+[0, 1, 2, 2, 3, 4, 5, 6, 7, 8, 9]
+[99, 77, 64]
+[1:deploy hotfix, 1:fix outage, 2:review PR, 2:write report, 3:refactor]
+A   0  A
+B   7  A->B
+C   9  A->C
+D  20  A->C->D
+E  20  A->C->F->E
+F  11  A->C->F
+[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]

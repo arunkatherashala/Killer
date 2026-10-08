@@ -1,0 +1,199 @@
+// A tiny unit-test framework written in Killer: assertions throw, a runner isolates failures and reports
+class AssertionFailure {
+  fn init(message) {
+    this.message = message
+  }
+  fn toString() {
+    return "AssertionFailure: " + this.message
+  }
+}
+
+fn assert_equal(actual, expected, label) {
+  if actual != expected {
+    throw new AssertionFailure(label + ": expected " + str(expected) + " but got " + str(actual))
+  }
+}
+
+fn assert_true(cond, label) {
+  if !cond {
+    throw new AssertionFailure(label + ": expected true")
+  }
+}
+
+fn assert_raises(f, needle, label) {
+  raised = false
+  try {
+    f()
+  } catch e {
+    raised = true
+    if !contains(str(e), needle) {
+      throw new AssertionFailure(label + ": error '" + str(e) + "' does not mention '" + needle + "'")
+    }
+  }
+  if !raised {
+    throw new AssertionFailure(label + ": nothing was raised")
+  }
+}
+
+class Runner {
+  fn init() {
+    this.tests = []
+    this.passed = 0
+    this.failed = 0
+    this.errors = 0
+    this.report = []
+    this.setup = null
+  }
+  fn before_each(f) {
+    this.setup = f
+  }
+  fn add(name, f) {
+    push(this.tests, {"name": name, "fn": f})
+  }
+  fn run() {
+    for t in this.tests {
+      ctx = {}
+      status = "ok"
+      detail = ""
+      try {
+        if this.setup != null {
+          this.setup(ctx)
+        }
+        f = t["fn"]
+        f(ctx)
+        this.passed = this.passed + 1
+      } catch e {
+        if type(e) == "AssertionFailure" {
+          status = "FAIL"
+          detail = e.message
+          this.failed = this.failed + 1
+        } else {
+          status = "ERROR"
+          detail = str(e)
+          this.errors = this.errors + 1
+        }
+      }
+      line = pad_right(t["name"], 28, ".") + " " + status
+      push(this.report, line)
+      if detail != "" {
+        push(this.report, "    " + detail)
+      }
+    }
+    return this
+  }
+  fn summary() {
+    total = this.passed + this.failed + this.errors
+    return f"{total} tests: {this.passed} passed, {this.failed} failed, {this.errors} errors"
+  }
+}
+
+// code under test
+fn slugify(s) {
+  out = ""
+  prev_dash = true
+  for c in lower(s) {
+    if (c >= "a" && c <= "z") || (c >= "0" && c <= "9") {
+      out = out + c
+      prev_dash = false
+    } else if !prev_dash {
+      out = out + "-"
+      prev_dash = true
+    }
+  }
+  if len(out) > 0 && out[len(out) - 1] == "-" {
+    out = out[0:len(out) - 1]
+  }
+  return out
+}
+
+fn parse_kv(line) {
+  parts = split(line, "=")
+  if len(parts) != 2 {
+    throw "bad pair: " + line
+  }
+  return [trim(parts[0]), trim(parts[1])]
+}
+
+fn clamp(x, lo, hi) {
+  if x < lo {
+    return lo
+  }
+  if x > hi {
+    return hi
+  }
+  return x
+}
+
+class Stack {
+  fn init() {
+    this.items = []
+  }
+  fn push_item(x) {
+    push(this.items, x)
+  }
+  fn pop_item() {
+    if len(this.items) == 0 {
+      throw "stack is empty"
+    }
+    return pop(this.items)
+  }
+}
+
+r = new Runner()
+r.before_each(fn(ctx) {
+  ctx["stack"] = new Stack()
+})
+r.add("slugify basic", fn(ctx) {
+  assert_equal(slugify("Hello, World!"), "hello-world", "basic")
+})
+r.add("slugify collapses runs", fn(ctx) {
+  assert_equal(slugify("  a   b -- c  "), "a-b-c", "runs")
+})
+r.add("slugify empty", fn(ctx) {
+  assert_equal(slugify("!!!"), "", "empty")
+})
+r.add("parse_kv trims", fn(ctx) {
+  assert_equal(parse_kv(" name = Ada "), ["name", "Ada"], "trim")
+})
+r.add("parse_kv rejects junk", fn(ctx) {
+  assert_raises(fn() {
+    parse_kv("no equals sign")
+  }, "bad pair", "junk")
+})
+r.add("clamp bounds", fn(ctx) {
+  assert_equal(clamp(5, 0, 3), 3, "high")
+  assert_equal(clamp(-5, 0, 3), 0, "low")
+  assert_equal(clamp(2, 0, 3), 2, "inside")
+})
+r.add("stack lifo", fn(ctx) {
+  s = ctx["stack"]
+  s.push_item(1)
+  s.push_item(2)
+  assert_equal(s.pop_item(), 2, "first pop")
+  assert_equal(s.pop_item(), 1, "second pop")
+})
+r.add("stack underflow raises", fn(ctx) {
+  assert_raises(fn() {
+    ctx["stack"].pop_item()
+  }, "empty", "underflow")
+})
+r.add("deliberate failure", fn(ctx) {
+  assert_equal(clamp(10, 0, 3), 10, "this one is wrong on purpose")
+})
+r.add("deliberate crash", fn(ctx) {
+  throw "kaboom"
+})
+r.add("wrong message", fn(ctx) {
+  assert_raises(fn() {
+    parse_kv("x")
+  }, "zzz", "message")
+})
+r.add("assert_true", fn(ctx) {
+  assert_true(len(ctx) == 1, "ctx has the stack only")
+})
+
+r.run()
+for line in r.report {
+  println(line)
+}
+println(r.summary())

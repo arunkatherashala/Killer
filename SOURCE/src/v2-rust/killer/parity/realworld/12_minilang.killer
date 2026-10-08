@@ -1,0 +1,278 @@
+// A small imperative language: character state machine lexer, recursive-descent parser, tree-walking interpreter
+fn is_digit(c) {
+  return c >= "0" && c <= "9"
+}
+
+fn is_alpha(c) {
+  return (c >= "a" && c <= "z") || c == "_"
+}
+
+fn lex(src) {
+  toks = []
+  i = 0
+  n = len(src)
+  while i < n {
+    c = src[i]
+    if c == " " || c == "\n" {
+      i = i + 1
+    } else if is_digit(c) {
+      j = i
+      while j < n && is_digit(src[j]) {
+        j = j + 1
+      }
+      push(toks, ["num", int(src[i:j])])
+      i = j
+    } else if is_alpha(c) {
+      j = i
+      while j < n && (is_alpha(src[j]) || is_digit(src[j])) {
+        j = j + 1
+      }
+      word = src[i:j]
+      if word in ["let", "while", "if", "else", "print"] {
+        push(toks, ["kw", word])
+      } else {
+        push(toks, ["id", word])
+      }
+      i = j
+    } else {
+      two = ""
+      if i + 1 < n {
+        two = src[i:i + 2]
+      }
+      if two in ["==", "!=", "<=", ">="] {
+        push(toks, ["op", two])
+        i = i + 2
+      } else if c in "+-*/%<>=(){};" {
+        push(toks, ["op", c])
+        i = i + 1
+      } else {
+        throw "bad character " + c
+      }
+    }
+  }
+  return toks
+}
+
+class Parser {
+  fn init(toks) {
+    this.toks = toks
+    this.pos = 0
+  }
+  fn at_end() {
+    return this.pos >= len(this.toks)
+  }
+  fn peek_is(v) {
+    return !this.at_end() && this.toks[this.pos][1] == v && this.toks[this.pos][0] != "num"
+  }
+  fn eat(v) {
+    if !this.peek_is(v) {
+      got = "end of input"
+      if !this.at_end() {
+        got = str(this.toks[this.pos][1])
+      }
+      throw "expected " + v + " but got " + got
+    }
+    this.pos = this.pos + 1
+  }
+  fn program() {
+    stmts = []
+    while !this.at_end() {
+      push(stmts, this.statement())
+    }
+    return stmts
+  }
+  fn block() {
+    this.eat("{")
+    stmts = []
+    while !this.peek_is("}") {
+      if this.at_end() {
+        throw "unexpected end of input"
+      }
+      push(stmts, this.statement())
+    }
+    this.eat("}")
+    return stmts
+  }
+  fn statement() {
+    if this.peek_is("let") {
+      this.eat("let")
+      name = this.toks[this.pos][1]
+      this.pos = this.pos + 1
+      this.eat("=")
+      e = this.expr()
+      this.eat(";")
+      return ["let", name, e]
+    }
+    if this.peek_is("print") {
+      this.eat("print")
+      e = this.expr()
+      this.eat(";")
+      return ["print", e]
+    }
+    if this.peek_is("while") {
+      this.eat("while")
+      cond = this.expr()
+      return ["while", cond, this.block()]
+    }
+    if this.peek_is("if") {
+      this.eat("if")
+      cond = this.expr()
+      then = this.block()
+      other = []
+      if this.peek_is("else") {
+        this.eat("else")
+        other = this.block()
+      }
+      return ["if", cond, then, other]
+    }
+    name = this.toks[this.pos][1]
+    this.pos = this.pos + 1
+    this.eat("=")
+    e = this.expr()
+    this.eat(";")
+    return ["assign", name, e]
+  }
+  fn expr() {
+    left = this.arith()
+    for op in ["==", "!=", "<=", ">=", "<", ">"] {
+      if this.peek_is(op) {
+        this.eat(op)
+        return ["bin", op, left, this.arith()]
+      }
+    }
+    return left
+  }
+  fn arith() {
+    left = this.term()
+    while this.peek_is("+") || this.peek_is("-") {
+      op = this.toks[this.pos][1]
+      this.pos = this.pos + 1
+      left = ["bin", op, left, this.term()]
+    }
+    return left
+  }
+  fn term() {
+    left = this.atom()
+    while this.peek_is("*") || this.peek_is("/") || this.peek_is("%") {
+      op = this.toks[this.pos][1]
+      this.pos = this.pos + 1
+      left = ["bin", op, left, this.atom()]
+    }
+    return left
+  }
+  fn atom() {
+    t = this.toks[this.pos]
+    if t[0] == "num" {
+      this.pos = this.pos + 1
+      return ["num", t[1]]
+    }
+    if t[0] == "id" {
+      this.pos = this.pos + 1
+      return ["var", t[1]]
+    }
+    this.eat("(")
+    e = this.expr()
+    this.eat(")")
+    return e
+  }
+}
+
+fn evaluate(e, env) {
+  kind = e[0]
+  if kind == "num" {
+    return e[1]
+  }
+  if kind == "var" {
+    if !(e[1] in env) {
+      throw "undefined variable " + e[1]
+    }
+    return env[e[1]]
+  }
+  a = evaluate(e[2], env)
+  b = evaluate(e[3], env)
+  op = e[1]
+  if op == "+" {
+    return a + b
+  }
+  if op == "-" {
+    return a - b
+  }
+  if op == "*" {
+    return a * b
+  }
+  if op == "/" {
+    if b == 0 {
+      throw "division by zero"
+    }
+    return floor(a / b)
+  }
+  if op == "%" {
+    return a % b
+  }
+  if op == "==" {
+    return a == b
+  }
+  if op == "!=" {
+    return a != b
+  }
+  if op == "<" {
+    return a < b
+  }
+  if op == ">" {
+    return a > b
+  }
+  if op == "<=" {
+    return a <= b
+  }
+  return a >= b
+}
+
+fn run_block(stmts, env, out) {
+  for s in stmts {
+    kind = s[0]
+    if kind == "let" || kind == "assign" {
+      env[s[1]] = evaluate(s[2], env)
+    } else if kind == "print" {
+      push(out, str(evaluate(s[1], env)))
+    } else if kind == "while" {
+      guard = 0
+      while evaluate(s[1], env) {
+        run_block(s[2], env, out)
+        guard = guard + 1
+        if guard > 1000 {
+          throw "loop limit exceeded"
+        }
+      }
+    } else if kind == "if" {
+      if evaluate(s[1], env) {
+        run_block(s[2], env, out)
+      } else {
+        run_block(s[3], env, out)
+      }
+    }
+  }
+}
+
+fn run_program(name, src) {
+  println("== " + name)
+  try {
+    toks = lex(src)
+    ast = new Parser(toks).program()
+    out = []
+    run_block(ast, {}, out)
+    println(join(out, " "))
+  } catch e {
+    println("error: " + e)
+  }
+}
+
+run_program("factorial", "let n = 10; let f = 1; while n > 1 { f = f * n; n = n - 1; } print f;")
+run_program("fizz", "let i = 1; while i <= 15 { if i % 15 == 0 { print 0 - 15; } else { if i % 3 == 0 { print 3; } else { if i % 5 == 0 { print 5; } } } i = i + 1; }")
+run_program("gcd", "let a = 1071; let b = 462; while b != 0 { let t = b; b = a % b; a = t; } print a;")
+run_program("primes", "let n = 2; while n < 30 { let d = 2; let p = 1; while d * d <= n { if n % d == 0 { p = 0; } d = d + 1; } if p == 1 { print n; } n = n + 1; }")
+run_program("div zero", "let x = 5; print x / (x - 5);")
+run_program("undefined", "print y + 1;")
+run_program("syntax", "let x = ;")
+run_program("missing brace", "while 1 < 2 { print 1;")
+run_program("runaway", "let x = 0; while 1 == 1 { x = x + 1; }")
+run_program("bad char", "let x = 5 $ 3;")

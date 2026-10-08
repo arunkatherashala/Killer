@@ -1,0 +1,160 @@
+// Calendar arithmetic written from scratch: leap years, day of week, day numbers, adding days, differences, a month grid
+fn is_leap(y) {
+  return (y % 4 == 0 && y % 100 != 0) || y % 400 == 0
+}
+
+fn days_in_month(y, m) {
+  if m == 2 {
+    if is_leap(y) {
+      return 29
+    }
+    return 28
+  }
+  if m in [4, 6, 9, 11] {
+    return 30
+  }
+  return 31
+}
+
+// days since 1970-01-01 (negative before the epoch)
+fn to_days(y, m, d) {
+  days = 0
+  if y >= 1970 {
+    for yy in range(1970, y) {
+      days = days + 365
+      if is_leap(yy) {
+        days = days + 1
+      }
+    }
+  } else {
+    for yy in range(y, 1970) {
+      days = days - 365
+      if is_leap(yy) {
+        days = days - 1
+      }
+    }
+  }
+  for mm in range(1, m) {
+    days = days + days_in_month(y, mm)
+  }
+  return days + d - 1
+}
+
+fn from_days(n) {
+  y = 1970
+  while n < 0 {
+    y = y - 1
+    n = n + 365
+    if is_leap(y) {
+      n = n + 1
+    }
+  }
+  while true {
+    ylen = 365
+    if is_leap(y) {
+      ylen = 366
+    }
+    if n >= ylen {
+      n = n - ylen
+      y = y + 1
+    } else {
+      break
+    }
+  }
+  m = 1
+  while n >= days_in_month(y, m) {
+    n = n - days_in_month(y, m)
+    m = m + 1
+  }
+  return [y, m, n + 1]
+}
+
+fn weekday_name(days) {
+  names = ["Thursday", "Friday", "Saturday", "Sunday", "Monday", "Tuesday", "Wednesday"]
+  return names[((days % 7) + 7) % 7]
+}
+
+fn fmt(date) {
+  return str(date[0]) + "-" + pad_left(str(date[1]), 2, "0") + "-" + pad_left(str(date[2]), 2, "0")
+}
+
+fn add_days(date, n) {
+  return from_days(to_days(date[0], date[1], date[2]) + n)
+}
+
+fn diff_days(a, b) {
+  return to_days(b[0], b[1], b[2]) - to_days(a[0], a[1], a[2])
+}
+
+fn add_months(date, n) {
+  total = date[0] * 12 + (date[1] - 1) + n
+  y = floor(total / 12)
+  m = total % 12 + 1
+  d = date[2]
+  if d > days_in_month(y, m) {
+    d = days_in_month(y, m)
+  }
+  return [y, m, d]
+}
+
+println("leap years: " + str([1900, 2000, 2023, 2024, 2100].filter(fn(y) {
+  return is_leap(y)
+})))
+d = [2024, 2, 28]
+for i in range(4) {
+  println(fmt(d) + " " + weekday_name(to_days(d[0], d[1], d[2])))
+  d = add_days(d, 1)
+}
+println("epoch: " + fmt(from_days(0)) + " " + weekday_name(0))
+println("2000-01-01 is day " + str(to_days(2000, 1, 1)) + ", " + weekday_name(to_days(2000, 1, 1)))
+println("1969-12-31 is day " + str(to_days(1969, 12, 31)) + ", " + weekday_name(to_days(1969, 12, 31)))
+println("1900-03-01: " + weekday_name(to_days(1900, 3, 1)))
+println("days between 2024-01-01 and 2024-12-25: " + str(diff_days([2024, 1, 1], [2024, 12, 25])))
+println("days between 1999-12-31 and 2000-03-01: " + str(diff_days([1999, 12, 31], [2000, 3, 1])))
+println("100 days after 2023-11-20: " + fmt(add_days([2023, 11, 20], 100)))
+println("1000 days before 2024-06-15: " + fmt(add_days([2024, 6, 15], -1000)))
+println("add months: " + fmt(add_months([2024, 1, 31], 1)) + " " + fmt(add_months([2024, 1, 31], 13)) + " " + fmt(add_months([2024, 3, 31], -1)))
+
+// round trip every day of 2023..2025 through the day number
+ok = true
+n0 = to_days(2023, 1, 1)
+for n in range(n0, n0 + 1096) {
+  t = from_days(n)
+  if to_days(t[0], t[1], t[2]) != n {
+    ok = false
+  }
+}
+println("round trip ok: " + str(ok))
+
+// month grid, weeks start on Monday
+fn month_grid(y, m) {
+  println(center_title(y, m))
+  println("Mo Tu We Th Fr Sa Su")
+  first = to_days(y, m, 1)
+  offset = ((first + 3) % 7 + 7) % 7
+  line = repeat("   ", offset)
+  col = offset
+  for day in range(1, days_in_month(y, m) + 1) {
+    line = line + pad_left(str(day), 2, " ")
+    col = col + 1
+    if col == 7 {
+      println(line)
+      line = ""
+      col = 0
+    } else {
+      line = line + " "
+    }
+  }
+  if col > 0 {
+    println(trim(line))
+  }
+}
+
+fn center_title(y, m) {
+  names = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+  t = names[m - 1] + " " + str(y)
+  return repeat(" ", floor((20 - len(t)) / 2)) + t
+}
+
+month_grid(2024, 2)
+month_grid(2023, 10)

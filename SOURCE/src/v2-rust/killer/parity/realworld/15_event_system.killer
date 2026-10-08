@@ -1,0 +1,138 @@
+// Event system built from closures: priorities, once-handlers, unsubscribe, wildcard listeners, queued dispatch
+class Emitter {
+  fn init() {
+    this.handlers = {}
+    this.next_id = 1
+    this.log = []
+  }
+  fn on(event, priority, fn_handler) {
+    if !(event in this.handlers) {
+      this.handlers[event] = []
+    }
+    id = this.next_id
+    this.next_id = this.next_id + 1
+    push(this.handlers[event], {"id": id, "priority": priority, "fn": fn_handler, "once": false})
+    return id
+  }
+  fn once(event, priority, fn_handler) {
+    id = this.on(event, priority, fn_handler)
+    for h in this.handlers[event] {
+      if h["id"] == id {
+        h["once"] = true
+      }
+    }
+    return id
+  }
+  fn off(id) {
+    removed = false
+    for event in keys(this.handlers) {
+      kept = []
+      for h in this.handlers[event] {
+        if h["id"] == id {
+          removed = true
+        } else {
+          push(kept, h)
+        }
+      }
+      this.handlers[event] = kept
+    }
+    return removed
+  }
+  fn emit(event, payload) {
+    results = []
+    names = [event, "*"]
+    pending = []
+    for name in names {
+      if name in this.handlers {
+        for h in this.handlers[name] {
+          push(pending, h)
+        }
+      }
+    }
+    ordered = sorted(pending, fn(h) {
+      return 0 - h["priority"] * 1000 + h["id"]
+    })
+    for h in ordered {
+      f = h["fn"]
+      push(results, f(event, payload))
+      if h["once"] {
+        this.off(h["id"])
+      }
+    }
+    push(this.log, event + ":" + str(len(results)))
+    return results
+  }
+  fn count(event) {
+    if event in this.handlers {
+      return len(this.handlers[event])
+    }
+    return 0
+  }
+}
+
+em = new Emitter()
+trace = []
+
+fn make_logger(tag) {
+  fn log(event, payload) {
+    push(trace, tag + " saw " + event + " " + str(payload))
+    return tag
+  }
+  return log
+}
+
+acc = {"total": 0}
+fn accumulate(event, payload) {
+  acc["total"] = acc["total"] + payload
+  return acc["total"]
+}
+
+low = em.on("data", 1, make_logger("low"))
+high = em.on("data", 10, make_logger("high"))
+em.on("data", 5, accumulate)
+once_id = em.once("data", 7, make_logger("once"))
+em.on("*", 0, make_logger("any"))
+
+println(em.emit("data", 5))
+println(em.emit("data", 7))
+println("total after two emits: " + str(acc["total"]))
+println("handlers for data: " + str(em.count("data")))
+println(em.off(high))
+println(em.off(high))
+println(em.emit("data", 1))
+println(em.emit("other", 0))
+for line in trace {
+  println(line)
+}
+println(em.log)
+
+// counter closure shared by several subscribers
+fn make_counter() {
+  n = 0
+  fn bump(event, payload) {
+    n = n + 1
+    return n
+  }
+  return bump
+}
+
+bus = new Emitter()
+shared = make_counter()
+bus.on("tick", 1, shared)
+bus.on("tock", 1, shared)
+for i in range(3) {
+  bus.emit("tick", i)
+}
+println(bus.emit("tock", 0))
+
+// a handler that unsubscribes another handler while the event is being dispatched
+chain = new Emitter()
+victim = chain.on("go", 1, fn(e, p) {
+  return "victim"
+})
+chain.on("go", 2, fn(e, p) {
+  chain.off(victim)
+  return "killer"
+})
+println(chain.emit("go", 0))
+println(chain.emit("go", 0))
