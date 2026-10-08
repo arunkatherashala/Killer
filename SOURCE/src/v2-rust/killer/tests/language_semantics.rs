@@ -1062,7 +1062,7 @@ println(len)
 #[test]
 fn snake_case_builtin_aliases_work() {
     let path = std::env::temp_dir().join(format!("killer_alias_{}.txt", std::process::id()));
-    let p = path.to_string_lossy().replace('\', "/");
+    let p = path.to_string_lossy().replace(std::path::MAIN_SEPARATOR, "/");
     let src = format!(
         r#"
 println(format("{{}} is {{:.2}}", "pi", 3.14159))
