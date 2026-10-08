@@ -805,3 +805,533 @@ mod tests {
             .any(|v| v.rule == "no-hardcoded-test-data"));
     }
 }
+
+// =============================================================================================
+// Rules for the language as it is: `lint_killer` (used by `killer lint`)
+// =============================================================================================
+//
+// The rules below work on the source text (comments and strings masked), not on tokens of an
+// imagined grammar, so they agree with what the compiler accepts. Rule ids:
+//
+//   undefined-function     error    call of a name that is not a function, class, variable or builtin
+//   unused-variable        warning  variable assigned but never read
+//   unreachable-code       warning  statement after return / throw / break / continue
+//   shadowed-builtin       warning  function, class, parameter or variable named like a builtin
+//   floor-division-comment warning  `a // 2` is a comment in Killer, not integer division
+//
+// Suppression: `# lint:ignore RULE[, RULE...]` (or `// lint:ignore ...` / `-- lint:ignore ...`)
+// on the offending line, or alone on the line above it. `lint:ignore` without a rule id ignores
+// every rule; `lint:ignore-file RULE` anywhere ignores the rule for the whole file.
+
+pub const LINT_RULES: &[(&str, LintSeverity, &str)] = &[
+    ("undefined-function", LintSeverity::Error, "call of an undefined function"),
+    ("unused-variable", LintSeverity::Warning, "variable assigned but never read"),
+    ("unreachable-code", LintSeverity::Warning, "code after return/throw/break/continue"),
+    ("shadowed-builtin", LintSeverity::Warning, "name shadows a builtin function"),
+    ("floor-division-comment", LintSeverity::Warning, "`//` starts a comment, it is not integer division"),
+];
+
+struct SrcLine<'a> {
+    raw: &'a str,
+    /// strings and comments blanked (columns preserved)
+    masked: String,
+    /// code part of the raw line (comment removed, strings kept)
+    code: String,
+    depth_before: i64,
+    depth_after: i64,
+}
+
+fn words_with_pos(s: &str) -> Vec<(usize, String)> {
+    let chars: Vec<char> = s.chars().collect();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i].is_alphabetic() || chars[i] == '_' {
+            let st = i;
+            while i < chars.len() && (chars[i].is_alphanumeric() || chars[i] == '_') {
+                i += 1;
+            }
+            out.push((st, chars[st..i].iter().collect()));
+        } else if chars[i].is_ascii_digit() {
+            while i < chars.len() && (chars[i].is_alphanumeric() || chars[i] == '_' || chars[i] == '.') {
+                i += 1;
+            }
+        } else {
+            i += 1;
+        }
+    }
+    out
+}
+
+fn prev_non_space(chars: &[char], i: usize) -> Option<char> {
+    chars[..i].iter().rev().find(|c| !c.is_whitespace()).copied()
+}
+
+/// Statement-start assignment target of a masked line: `x = ...`, `let x = ...`, `global x = ...`.
+fn assignment_target(masked: &str) -> Option<(usize, String)> {
+    let chars: Vec<char> = masked.chars().collect();
+    let skip_ws = |mut i: usize| {
+        while i < chars.len() && chars[i].is_whitespace() {
+            i += 1;
+        }
+        i
+    };
+    let word = |i: usize| -> Option<String> {
+        let w: String = chars[i.min(chars.len())..].iter().take_while(|c| c.is_alphanumeric() || **c == '_').collect();
+        if w.is_empty() || w.chars().next().map_or(true, |c| c.is_ascii_digit()) {
+            None
+        } else {
+            Some(w)
+        }
+    };
+    let mut start = skip_ws(0);
+    let mut w = word(start)?;
+    if w == "let" || w == "global" {
+        start = skip_ws(start + w.chars().count());
+        w = word(start)?;
+    }
+    if crate::lsp_core::KEYWORDS.contains(&w.as_str()) {
+        return None;
+    }
+    let after = skip_ws(start + w.chars().count());
+    if chars.get(after) == Some(&'=') && !matches!(chars.get(after + 1), Some('=') | Some('>')) {
+        Some((start, w))
+    } else {
+        None
+    }
+}
+
+/// Index (char) where a trailing comment starts in `raw`, or the line length.
+fn comment_start_col(raw: &str) -> usize {
+    let rc: Vec<char> = raw.chars().collect();
+    let mut i = 0;
+    let mut in_str: Option<char> = None;
+    while i < rc.len() {
+        let c = rc[i];
+        if let Some(q) = in_str {
+            if c == '\\' {
+                i += 2;
+                continue;
+            }
+            if c == q {
+                in_str = None;
+            }
+            i += 1;
+            continue;
+        }
+        if c == '"' || (c == '\'' && !(i > 0 && rc[i - 1].is_alphanumeric())) {
+            in_str = Some(c);
+        } else if (c == '#' && (i == 0 || rc[i - 1].is_whitespace()))
+            || (c == '/' && rc.get(i + 1) == Some(&'/'))
+            || (c == '-' && rc.get(i + 1) == Some(&'-'))
+        {
+            return i;
+        }
+        i += 1;
+    }
+    rc.len()
+}
+
+struct FnInfo {
+    name: String,
+    start: usize,
+    end: usize,
+    params: Vec<String>,
+    is_method: bool,
+}
+
+fn split_params(masked: &str) -> Vec<String> {
+    let open = match masked.find('(') {
+        Some(o) => o,
+        None => return Vec::new(),
+    };
+    let mut d = 0;
+    let mut ptxt = String::new();
+    for c in masked[open..].chars() {
+        if c == '(' {
+            d += 1;
+            if d == 1 {
+                continue;
+            }
+        }
+        if c == ')' {
+            d -= 1;
+            if d == 0 {
+                break;
+            }
+        }
+        ptxt.push(c);
+    }
+    let mut dd = 0;
+    let mut part = String::new();
+    let mut parts = Vec::new();
+    for c in ptxt.chars() {
+        match c {
+            '(' | '[' | '{' => dd += 1,
+            ')' | ']' | '}' => dd -= 1,
+            _ => {}
+        }
+        if c == ',' && dd == 0 {
+            parts.push(std::mem::take(&mut part));
+        } else {
+            part.push(c);
+        }
+    }
+    parts.push(part);
+    parts.iter().filter_map(|p| words_with_pos(p).first().map(|(_, w)| w.clone())).collect()
+}
+
+/// Lint Killer source with the rules above. Violations are sorted by line.
+pub fn lint_killer(source: &str) -> Vec<LintViolation> {
+    let mut lines: Vec<SrcLine> = Vec::new();
+    let mut depth = 0i64;
+    for raw in source.lines() {
+        let masked = crate::formatter::mask_code(raw);
+        let code: String = raw.chars().take(comment_start_col(raw)).collect();
+        let before = depth;
+        for c in masked.chars() {
+            match c {
+                '{' | '[' | '(' => depth += 1,
+                '}' | ']' | ')' => depth = (depth - 1).max(0),
+                _ => {}
+            }
+        }
+        lines.push(SrcLine { raw, masked, code, depth_before: before, depth_after: depth });
+    }
+    if lines.is_empty() {
+        return Vec::new();
+    }
+
+    let builtins = crate::lsp_core::builtin_names();
+    let mut out: Vec<LintViolation> = Vec::new();
+    let mut add = |rule: &str, ln: usize, col: usize, msg: String| {
+        let sev = LINT_RULES.iter().find(|r| r.0 == rule).map(|r| r.1).unwrap_or(LintSeverity::Warning);
+        out.push(LintViolation::new(rule.to_string(), sev, msg).with_line(ln + 1).with_column(col + 1));
+    };
+
+    // ---- structure: functions, classes, parameters ---------------------------------------
+    let find_end = |start: usize| -> usize {
+        let d0 = lines[start].depth_before;
+        let mut i = start;
+        let mut seen_open = false;
+        loop {
+            if lines[i].depth_after > d0 {
+                seen_open = true;
+            }
+            if seen_open && lines[i].depth_after <= d0 {
+                return i;
+            }
+            if !seen_open && i > start + 1 {
+                return start; // no block follows
+            }
+            i += 1;
+            if i >= lines.len() {
+                return lines.len() - 1;
+            }
+        }
+    };
+    let mut fns: Vec<FnInfo> = Vec::new();
+    let mut class_names: Vec<(String, usize, usize)> = Vec::new();
+    let mut has_import = false;
+    for (i, l) in lines.iter().enumerate() {
+        let ws = words_with_pos(l.masked.trim());
+        let first = ws.first().map(|(_, w)| w.as_str()).unwrap_or("");
+        if first == "import" || first == "from" {
+            has_import = true;
+        }
+        let name_idx = if first == "async" { 2 } else { 1 };
+        let kind = if first == "async" { ws.get(1).map(|(_, w)| w.as_str()).unwrap_or("") } else { first };
+        if matches!(kind, "fn" | "kfn" | "akfn") {
+            if let Some((_, name)) = ws.get(name_idx) {
+                fns.push(FnInfo { name: name.clone(), start: i, end: find_end(i), params: split_params(&l.masked), is_method: false });
+            }
+        } else if first == "class" {
+            if let Some((_, name)) = ws.get(1) {
+                class_names.push((name.clone(), i, find_end(i)));
+            }
+        }
+    }
+    for f in fns.iter_mut() {
+        f.is_method = class_names.iter().any(|(_, s, e)| f.start > *s && f.start <= *e && lines[f.start].depth_before == lines[*s].depth_before + 1);
+    }
+
+    // ---- names defined anywhere --------------------------------------------------------------
+    // A name counts as defined when it is a function or class, or appears anywhere other than as
+    // the callee of a call (assignment, parameter, loop variable, lambda parameter, ...).
+    let mut defined: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for f in &fns {
+        defined.insert(f.name.clone());
+    }
+    for (c, _, _) in &class_names {
+        defined.insert(c.clone());
+    }
+    for l in &lines {
+        let mc: Vec<char> = l.masked.chars().collect();
+        for (p, w) in words_with_pos(&l.masked) {
+            let end = p + w.chars().count();
+            let next = mc[end..].iter().find(|c| !c.is_whitespace());
+            if prev_non_space(&mc, p) == Some('.') {
+                continue;
+            }
+            if next != Some(&'(') {
+                defined.insert(w);
+            }
+        }
+    }
+
+    // ---- undefined-function --------------------------------------------------------------------
+    if !has_import {
+        for (i, l) in lines.iter().enumerate() {
+            let mc: Vec<char> = l.masked.chars().collect();
+            let ws = words_with_pos(&l.masked);
+            for (k, (p, w)) in ws.iter().enumerate() {
+                let end = p + w.chars().count();
+                if mc[end..].iter().find(|c| !c.is_whitespace()) != Some(&'(') || prev_non_space(&mc, *p) == Some('.') {
+                    continue;
+                }
+                let prev_word = if k > 0 { ws[k - 1].1.as_str() } else { "" };
+                if matches!(prev_word, "fn" | "kfn" | "akfn" | "class" | "new" | "test") {
+                    continue;
+                }
+                if defined.contains(w)
+                    || builtins.contains(&w.as_str())
+                    || crate::lsp_core::KEYWORDS.contains(&w.as_str())
+                    || matches!(w.as_str(), "super" | "this" | "assert_throws")
+                {
+                    continue;
+                }
+                add("undefined-function", i, *p, format!("call of undefined function `{w}`"));
+            }
+        }
+    }
+
+    // ---- shadowed-builtin ------------------------------------------------------------------------
+    let is_builtin = |n: &str| builtins.contains(&n);
+    for f in &fns {
+        if !f.is_method && is_builtin(&f.name) {
+            let col = lines[f.start].masked.find(f.name.as_str()).unwrap_or(0);
+            add("shadowed-builtin", f.start, col, format!("function `{}` shadows the builtin of the same name", f.name));
+        }
+        for p in &f.params {
+            if is_builtin(p) {
+                let col = lines[f.start].masked.find(p.as_str()).unwrap_or(0);
+                add("shadowed-builtin", f.start, col, format!("parameter `{p}` shadows the builtin of the same name"));
+            }
+        }
+    }
+    for (c, s, _) in &class_names {
+        if is_builtin(c) {
+            add("shadowed-builtin", *s, lines[*s].masked.find(c.as_str()).unwrap_or(0), format!("class `{c}` shadows the builtin of the same name"));
+        }
+    }
+    let mut shadow_seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for (i, l) in lines.iter().enumerate() {
+        if let Some((col, name)) = assignment_target(&l.masked) {
+            if is_builtin(&name) && shadow_seen.insert(name.clone()) {
+                add("shadowed-builtin", i, col, format!("variable `{name}` shadows the builtin of the same name"));
+            }
+        }
+    }
+
+    // ---- unused-variable ----------------------------------------------------------------------
+    // Count word occurrences (in code, strings included, so `k"{x}"` counts as a read) against
+    // the number of assignments to the name.
+    let count_in = |range: &std::ops::RangeInclusive<usize>, name: &str| -> (usize, usize, Option<(usize, usize)>) {
+        let mut occurrences = 0usize;
+        let mut targets = 0usize;
+        let mut first_target: Option<(usize, usize)> = None;
+        for i in range.clone() {
+            let l = &lines[i];
+            let cc: Vec<char> = l.code.chars().collect();
+            for (p, w) in words_with_pos(&l.code) {
+                if w == name && prev_non_space(&cc, p) != Some('.') {
+                    occurrences += 1;
+                }
+            }
+            if let Some((col, n)) = assignment_target(&l.masked) {
+                if n == name {
+                    targets += 1;
+                    if first_target.is_none() {
+                        first_target = Some((i, col));
+                    }
+                }
+            }
+        }
+        (occurrences, targets, first_target)
+    };
+    let mut check_unused = |range: std::ops::RangeInclusive<usize>, top_level_only: bool, params: &[String], add: &mut dyn FnMut(&str, usize, usize, String)| {
+        let mut names: Vec<String> = Vec::new();
+        for i in range.clone() {
+            if top_level_only && lines[i].depth_before != 0 {
+                continue;
+            }
+            if let Some((_, n)) = assignment_target(&lines[i].masked) {
+                if !names.contains(&n) {
+                    names.push(n);
+                }
+            }
+        }
+        for n in names {
+            if n.starts_with('_') || params.contains(&n) {
+                continue;
+            }
+            let (occ, targets, first) = count_in(&range, &n);
+            if occ > targets {
+                continue;
+            }
+            if let Some((i, col)) = first {
+                // `global x` reaches the outer scope: not a local
+                let declared_global = range.clone().any(|j| {
+                    let ws = words_with_pos(&lines[j].masked);
+                    ws.first().map_or(false, |(_, w)| w == "global") && ws.iter().skip(1).any(|(_, w)| *w == n)
+                });
+                if !declared_global {
+                    add("unused-variable", i, col, format!("variable `{n}` is assigned but never used"));
+                }
+            }
+        }
+    };
+    check_unused(0..=lines.len() - 1, true, &[], &mut add);
+    for f in &fns {
+        if f.end > f.start {
+            check_unused(f.start + 1..=f.end, false, &f.params, &mut add);
+        }
+    }
+
+    // ---- unreachable-code ---------------------------------------------------------------------
+    for i in 0..lines.len() {
+        let t = lines[i].masked.trim();
+        let first: String = t.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
+        if !matches!(first.as_str(), "return" | "throw" | "break" | "continue") {
+            continue;
+        }
+        if lines[i].depth_after != lines[i].depth_before {
+            continue; // `return [` continues on the next lines
+        }
+        if t.ends_with(|c| matches!(c, '+' | '-' | '*' | '/' | ',' | '&' | '|' | '=')) {
+            continue;
+        }
+        if let Some(j) = (i + 1..lines.len()).find(|&j| !lines[j].masked.trim().is_empty()) {
+            let nt = lines[j].masked.trim();
+            let nfirst: String = nt.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
+            if lines[j].depth_before == lines[i].depth_before
+                && !nt.starts_with(|c| matches!(c, '}' | ')' | ']' | ':'))
+                && !matches!(nfirst.as_str(), "case" | "default" | "else" | "elif" | "catch" | "finally")
+            {
+                let col = lines[j].masked.chars().count() - lines[j].masked.trim_start().chars().count();
+                add("unreachable-code", j, col, format!("code after `{first}` is never executed"));
+            }
+        }
+    }
+
+    // ---- floor-division-comment ------------------------------------------------------------------
+    for (i, l) in lines.iter().enumerate() {
+        let cs = comment_start_col(l.raw);
+        let rc: Vec<char> = l.raw.chars().collect();
+        if cs + 1 >= rc.len() || rc[cs] != '/' || rc[cs + 1] != '/' {
+            continue;
+        }
+        let before: String = rc[..cs].iter().collect::<String>().trim_end().to_string();
+        let after: String = rc[cs + 2..].iter().collect::<String>().trim().to_string();
+        let ends_operand = before.chars().last().map_or(false, |c| c.is_alphanumeric() || c == '_' || c == ')' || c == ']');
+        let in_expr = before.contains('=') || before.trim_start().starts_with("return");
+        let numeric_after = after.chars().next().map_or(false, |c| c.is_ascii_digit())
+            && after.trim_end_matches(|c| matches!(c, ')' | ']' | ' ')).chars().all(|c| c.is_ascii_digit() || c == '.' || c == '_');
+        if ends_operand && (crate::hints::floor_division_hint(l.raw).is_some() || (in_expr && numeric_after)) {
+            add("floor-division-comment", i, cs, "`//` starts a comment in Killer; use floor(a / b) for integer division".to_string());
+        }
+    }
+
+    // ---- suppression -----------------------------------------------------------------------------
+    let parse_ignore = |text: &str, marker: &str| -> Option<Vec<String>> {
+        let i = text.find(marker)?;
+        Some(
+            text[i + marker.len()..]
+                .split(|c: char| c == ',' || c.is_whitespace())
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string())
+                .collect(),
+        )
+    };
+    let mut file_ignores: Vec<String> = Vec::new();
+    let mut line_ignores: Vec<Vec<String>> = vec![Vec::new(); lines.len() + 1];
+    for (i, l) in lines.iter().enumerate() {
+        if let Some(r) = parse_ignore(l.raw, "lint:ignore-file") {
+            file_ignores.extend(r);
+            continue;
+        }
+        if let Some(mut r) = parse_ignore(l.raw, "lint:ignore") {
+            if r.is_empty() {
+                r.push("*".to_string());
+            }
+            let target = if l.code.trim().is_empty() { i + 1 } else { i };
+            line_ignores[target].extend(r);
+        }
+    }
+    out.retain(|v| {
+        let ln = v.line.unwrap_or(1) - 1;
+        let ign = |list: &Vec<String>| list.iter().any(|r| r == "*" || *r == v.rule);
+        !(ign(&file_ignores) || line_ignores.get(ln).map_or(false, |l| ign(l)))
+    });
+    out.sort_by_key(|v| (v.line, v.column));
+    out.dedup_by(|a, b| a.line == b.line && a.rule == b.rule && a.message == b.message);
+    out
+}
+
+#[cfg(test)]
+mod killer_rule_tests {
+    use super::*;
+
+    fn rules(src: &str) -> Vec<(String, usize)> {
+        lint_killer(src).into_iter().map(|v| (v.rule, v.line.unwrap())).collect()
+    }
+
+    #[test]
+    fn undefined_function() {
+        let r = rules("fn a() {\n  return 1\n}\nprint(a())\nprnt(2)\n");
+        assert_eq!(r, vec![("undefined-function".to_string(), 5)]);
+    }
+
+    #[test]
+    fn unused_variable_in_function() {
+        let r = rules("fn f(a) {\n  unused = a + 1\n  used = 2\n  return used\n}\nprint(f(1))\n");
+        assert_eq!(r, vec![("unused-variable".to_string(), 2)]);
+    }
+
+    #[test]
+    fn interpolation_counts_as_use() {
+        let r = rules("fn f() {\n  name = \"x\"\n  return k\"hi {name}\"\n}\nprint(f())\n");
+        assert!(r.is_empty(), "{r:?}");
+    }
+
+    #[test]
+    fn unreachable_after_return() {
+        let r = rules("fn f() {\n  return 1\n  print(2)\n}\nprint(f())\n");
+        assert_eq!(r, vec![("unreachable-code".to_string(), 3)]);
+        assert!(rules("fn f(a) {\n  if a {\n    return 1\n  } else {\n    return 2\n  }\n}\nprint(f(1))\n").is_empty());
+    }
+
+    #[test]
+    fn shadowed_builtin() {
+        let r = rules("len = 3\nprint(len)\nfn max(a) {\n  return a\n}\nprint(max(1))\n");
+        assert!(r.contains(&("shadowed-builtin".to_string(), 1)), "{r:?}");
+        assert!(r.contains(&("shadowed-builtin".to_string(), 3)), "{r:?}");
+    }
+
+    #[test]
+    fn floor_division_comment() {
+        let r = rules("n = 9\nhalf = n // 2\nprint(half)\n");
+        assert_eq!(r, vec![("floor-division-comment".to_string(), 2)]);
+        assert!(rules("x = 5 # // 2 is fine here\nprint(x)\n").is_empty());
+        assert!(rules("print(\"a // 2\")\n").is_empty());
+    }
+
+    #[test]
+    fn suppression() {
+        assert!(rules("prnt(1) # lint:ignore undefined-function\n").is_empty());
+        assert!(rules("# lint:ignore undefined-function\nprnt(1)\n").is_empty());
+        assert!(rules("# lint:ignore-file undefined-function\nprnt(1)\nprnt(2)\n").is_empty());
+        assert_eq!(rules("prnt(1) # lint:ignore unused-variable\n").len(), 1);
+    }
+}
