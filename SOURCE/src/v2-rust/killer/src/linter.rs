@@ -1067,6 +1067,14 @@ pub fn lint_killer(source: &str) -> Vec<LintViolation> {
     }
     for l in &lines {
         let mc: Vec<char> = l.masked.chars().collect();
+        // `name(params) => expr` defines a function
+        if l.masked.contains("=>") {
+            if let Some((_, w)) = words_with_pos(l.masked.trim_start()).first() {
+                if l.masked.trim_start()[w.len()..].starts_with('(') {
+                    defined.insert(w.clone());
+                }
+            }
+        }
         for (p, w) in words_with_pos(&l.masked) {
             let end = p + w.chars().count();
             let next = mc[end..].iter().find(|c| !c.is_whitespace());
@@ -1333,5 +1341,10 @@ mod killer_rule_tests {
         assert!(rules("# lint:ignore undefined-function\nprnt(1)\n").is_empty());
         assert!(rules("# lint:ignore-file undefined-function\nprnt(1)\nprnt(2)\n").is_empty());
         assert_eq!(rules("prnt(1) # lint:ignore unused-variable\n").len(), 1);
+    }
+
+    #[test]
+    fn arrow_function_definitions_are_defined() {
+        assert!(rules("add(a, b) => a + b\nprint(add(1, 2))\n").is_empty());
     }
 }
