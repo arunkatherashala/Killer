@@ -6787,7 +6787,7 @@ fn patch_pending_calls(state: &mut CompilerState) -> Result<(), VmError> {
         // that name (they are common words)
         let generator_builtin = matches!(pending.function_name.as_str(), "next" | "has_next")
             && !state.functions.contains_key(&pending.function_name);
-        if generator_builtin || BUILTINS.contains(&pending.function_name.as_str()) {
+        if generator_builtin || BUILTINS.contains(&pending.function_name.as_str()) || crate::net_ai::is_builtin(&pending.function_name) {
             // -- Nova Galaxy: emit native opcodes instead of CallBuiltin ------
             let native_instr: Option<Instruction> = match pending.function_name.as_str() {
                 // Phase A: Trit native ALU opcodes

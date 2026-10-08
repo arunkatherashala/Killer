@@ -2787,6 +2787,12 @@ impl VirtualMachine {
                         self.ip += 1;
                         continue;
                     }
+                    if let Some(r) = crate::http_serve::vm_call(self, name, &args, program) {
+                        let v = r?;
+                        self.stack.push(v);
+                        self.ip += 1;
+                        continue;
+                    }
                     if name == "gc_stats" {
                         let (tracked, allocs) = crate::gc::gc_stats();
                         let mut d = std::collections::HashMap::new();

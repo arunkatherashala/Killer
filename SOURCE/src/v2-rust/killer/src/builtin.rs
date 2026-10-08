@@ -1250,6 +1250,9 @@ impl BuiltinFunctions {
                 if let Some(result) = crate::lang_builtins::call(name, args) {
                     return result;
                 }
+                if let Some(result) = crate::net_ai::call(name, args) {
+                    return result;
+                }
                 if let Some(result) = crate::text_methods::call(name, args) {
                     return result;
                 }

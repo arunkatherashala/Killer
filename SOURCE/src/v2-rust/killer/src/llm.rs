@@ -507,41 +507,16 @@ fn complete_groq(config: &LlmConfig, messages: &[LlmMessage]) -> Result<LlmRespo
 /// Run curl to POST JSON and return response body.
 /// curl is pre-installed on Windows 10+, macOS, Linux.
 fn curl_post(url: &str, headers: &[String], body: &str, timeout_s: u64) -> Result<String, String> {
-    // Security: validate URL starts with https:// (prevent SSRF to internal hosts)
-    if !url.starts_with("https://") {
-        return Err(format!("LLM URL must use HTTPS. Got: {}", &url[..url.len().min(50)]));
-    }
-
-    let timeout_str = timeout_s.to_string();
-    let mut args = vec![
-        "-s",                     // silent (no progress bar)
-        "--fail-with-body",       // return body even on HTTP errors
-        "--max-time", &timeout_str,
-        "-X", "POST", url,
-    ];
-
-    // Add headers
-    let header_args: Vec<String> = headers.iter()
-        .flat_map(|h| vec!["-H".to_string(), h.clone()])
+    // Goes through http_req: URL, API-key headers and body travel on curl's stdin (-K -),
+    // never on the command line, TLS verification is on, and http:// is limited to loopback.
+    let mut spec = crate::http_req::ReqSpec::new("POST", url);
+    spec.headers = headers
+        .iter()
+        .filter_map(|h| h.split_once(':').map(|(k, v)| (k.trim().to_string(), v.trim().to_string())))
         .collect();
-    let header_refs: Vec<&str> = header_args.iter().map(|s| s.as_str()).collect();
-
-    args.extend_from_slice(&header_refs);
-    args.extend_from_slice(&["-d", body]);
-
-    let output = Command::new("curl")
-        .args(&args)
-        .output()
-        .map_err(|e| format!("curl not found or failed to run: {}. Install curl or use Ollama (no curl needed).", e))?;
-
-    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-
-    if stdout.is_empty() && !stderr.is_empty() {
-        return Err(format!("curl error: {}", stderr.trim()));
-    }
-
-    Ok(stdout)
+    spec.body = Some(body.to_string());
+    spec.timeout_s = timeout_s as f64;
+    crate::http_req::exec(&spec).map(|r| r.body)
 }
 
 // --- JSON helpers (no serde, no deps) ----------------------------------------

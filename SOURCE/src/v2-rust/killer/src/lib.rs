@@ -338,6 +338,9 @@ pub mod time_machine;
 
 // -- LLM Integration (native, zero external deps) -----------------------------
 pub mod exprsplit;             // top-level operator splitting for the expression parser
+pub mod net_ai;                // network + AI building blocks: serve/route, http_request, vec_*, chunking, logging
+pub mod http_serve;            // real HTTP server with Killer handlers
+pub mod http_req;              // hardened curl core for the http_* client builtins
 pub mod lang_builtins;         // everyday builtins: ord/chr, padding, logs, stats, base64, sets
 pub mod text_methods;          // capitalize/title/find/count/zfill/is* and method-call fallback to builtins
 pub mod ordered_map;           // insertion-ordered map behind dictionaries
