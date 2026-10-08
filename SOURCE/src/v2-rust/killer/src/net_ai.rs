@@ -7,15 +7,21 @@ use crate::error::VmError;
 use crate::value::Value;
 
 pub fn is_builtin(name: &str) -> bool {
-    crate::http_serve::NAMES.contains(&name) || name == "http_request"
+    crate::http_serve::NAMES.contains(&name)
+        || name == "http_request"
+        || crate::vec_builtins::NAMES.contains(&name)
+        || crate::rag_builtins::NAMES.contains(&name)
+        || crate::embed_builtins::NAMES.contains(&name)
+        || crate::log_builtins::NAMES.contains(&name)
 }
 
 pub fn call(name: &str, args: &[Value]) -> Option<Result<Value, VmError>> {
-    if let Some(r) = crate::http_serve::call(name, args) {
-        return Some(r);
+    if name == "http_request" {
+        return Some(crate::http_req::builtin_http_request(args));
     }
-    match name {
-        "http_request" => Some(crate::http_req::builtin_http_request(args)),
-        _ => None,
-    }
+    crate::http_serve::call(name, args)
+        .or_else(|| crate::vec_builtins::call(name, args))
+        .or_else(|| crate::rag_builtins::call(name, args))
+        .or_else(|| crate::embed_builtins::call(name, args))
+        .or_else(|| crate::log_builtins::call(name, args))
 }

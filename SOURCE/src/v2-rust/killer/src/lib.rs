@@ -340,6 +340,10 @@ pub mod time_machine;
 pub mod exprsplit;             // top-level operator splitting for the expression parser
 pub mod net_ai;                // network + AI building blocks: serve/route, http_request, vec_*, chunking, logging
 pub mod http_serve;            // real HTTP server with Killer handlers
+pub mod vec_builtins;          // dense vector store: vec_new/add/search/save, cosine, dot, top_k
+pub mod rag_builtins;          // chunk_text, chunk_by_sentence, count_tokens, build_rag_prompt
+pub mod embed_builtins;        // mock_embed, llm_embed_batch, llm_embed(opts, text)
+pub mod log_builtins;          // log_info/warn/error, load_env
 pub mod http_req;              // hardened curl core for the http_* client builtins
 pub mod lang_builtins;         // everyday builtins: ord/chr, padding, logs, stats, base64, sets
 pub mod text_methods;          // capitalize/title/find/count/zfill/is* and method-call fallback to builtins
