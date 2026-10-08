@@ -5635,7 +5635,10 @@ impl VirtualMachine {
                             self.store_var(&k, v)?;
                         }
                     }
-                    // If not found, silently ignore (optional imports are common)
+                    else if !crate::imports::is_legacy_import(path) {
+                        return Err(VmError::runtime_error(format!("cannot find import '{}' (looked in the script folder, packages/ and .killer/packages/)", path)));
+                    }
+                    // legacy standard-library style names are accepted as no-ops
                 }
 
                 // ── Unique Killer features ────────────────────────────────────

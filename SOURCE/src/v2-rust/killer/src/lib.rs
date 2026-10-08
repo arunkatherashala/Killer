@@ -349,6 +349,7 @@ pub mod package_manager;      // semver versions/requirements and in-memory regi
 pub mod pkg_toml;              // TOML subset for killer.toml / killer.lock
 pub mod pkg_files;             // package file set, content hash, archive format
 pub mod pkg_manifest;          // killer.toml and killer.lock
+pub mod pkg_paths;             // where bare imports find installed packages
 pub mod pkg_resolve;           // dependency resolution with conflict diagnostics
 pub mod imports;               // compile-time `import "file.killer"` inclusion
 pub mod lambda;                // lifts anonymous functions (fn(x){..}, x => ..) into named ones
