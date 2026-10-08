@@ -398,6 +398,14 @@ impl BuiltinFunctions {
             // Math functions
             "sqrt" => Self::sqrt(args),
             "pow" => Self::pow(args),
+            // `for k, v in d`: a dict becomes a list of [key, value] pairs, everything else is returned as is
+            "__iter_pairs" => match args.first() {
+                Some(Value::Dict(d)) => Ok(Value::from(
+                    d.iter().map(|(k, v)| Value::from(vec![Value::Str(k), v])).collect::<Vec<_>>(),
+                )),
+                Some(other) => Ok(other.clone()),
+                None => Err(VmError::runtime_error("__iter_pairs() expects 1 argument".to_string())),
+            },
             "big" | "factorial" | "divmod" | "idiv" | "powmod" | "isqrt" | "bit_length" => {
                 crate::bigint_ops::call(name, args).map_err(VmError::runtime_error)
             }
@@ -432,6 +440,17 @@ impl BuiltinFunctions {
             "isFinite" => Self::is_finite(args),
             
             // File I/O
+            // snake_case aliases of the camelCase file builtins and of the conversions
+            "file_read" => Self::read_file(args),
+            "file_write" => Self::write_file(args),
+            "file_append" => Self::append_file(args),
+            "file_exists" => Self::file_exists(args),
+            "file_delete" => Self::delete_file(args),
+            "parse_int" => Self::parse_int(args),
+            "parse_float" => Self::parse_float(args),
+            "to_int" => Self::int(args),
+            "to_string" => Self::str(args),
+            "type_of" => Self::type_of(args),
             "readFile" => Self::read_file(args),
             "writeFile" => Self::write_file(args),
             "appendFile" => Self::append_file(args),

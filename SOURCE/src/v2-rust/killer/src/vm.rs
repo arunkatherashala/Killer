@@ -978,6 +978,17 @@ impl VirtualMachine {
                     let value = crate::bigint::BigInt::parse(text).map_err(VmError::runtime_error)?;
                     self.stack.push(crate::bigint_ops::big(value));
                 }
+                Instruction::LoadOrBuiltin { name, start, arity } => {
+                    let value = match self.load_var(name) {
+                        Ok(v) => v,
+                        Err(_) => Value::Function {
+                            params: (0..*arity).map(|i| format!("arg{}", i)).collect(),
+                            bytecode_start: *start,
+                            captured: Default::default(),
+                        },
+                    };
+                    self.stack.push(value);
+                }
                 Instruction::BoxVar(name) => {
                     for scope in self.scopes.iter_mut().rev() {
                         if let Some(slot) = scope.get_mut(name.as_str()) {

@@ -243,6 +243,8 @@ struct CompilerState {
     function_arities: HashMap<usize, usize>,
     functions: HashMap<String, FunctionMeta>,
     pending_calls: Vec<PendingCall>,
+    /// Bytecode start of the function wrapper made for each builtin used as a value.
+    builtin_wrappers: HashMap<String, usize>,
     pending_spawn_calls: Vec<PendingCall>,  // v2.2: SpawnCallDirect forward refs
     function_counter: usize,
     /// Track top-level variable names so function bodies can reference them
@@ -4184,6 +4186,14 @@ fn compile_expr_str(
         // PERF: emit slot load for known locals, fallback to named load otherwise
         if let Some(&slot) = context.slot_map.get(expr) {
             state.instructions.push(Instruction::LoadSlot(slot));
+        } else if builtin_value_arity(expr).is_some()
+            && !context.outer_vars.contains(expr)
+            && !state.known_top_level_vars.contains(expr)
+            && !state.functions.contains_key(expr)
+        {
+            // a bare builtin name (`f = print`, `map(xs, str)`): a variable of that name wins at run
+            // time, otherwise the builtin is wrapped in a callable function value
+            emit_builtin_value(expr, state);
         } else {
             state.instructions.push(Instruction::Load(expr.to_string()));
         }
@@ -6664,7 +6674,7 @@ fn patch_pending_calls(state: &mut CompilerState) -> Result<(), VmError> {
         "ord", "chr", "pad_left", "pad_right", "repeat", "strip", "lstrip", "rstrip", "startsWith", "endsWith",
         "base64_encode", "base64_decode", "hmac_sha256", "float", "bool", "log", "log2", "log10", "exp", "cbrt",
         "trunc", "sign", "atan2", "hypot", "asin", "acos", "atan", "sinh", "cosh", "tanh", "degrees", "radians",
-        "big", "factorial", "divmod", "idiv", "powmod", "isqrt", "bit_length", // arbitrary-precision integers
+        "__iter_pairs", "big", "factorial", "divmod", "idiv", "powmod", "isqrt", "bit_length", // arbitrary-precision integers
         "gcd", "lcm", "mean", "median", "variance", "stdev", "pvariance", "pstdev", "env", "args", "exit",
         "sleep", "assert", "set", "delete", "insert", "gc_stats", "jit_stats", "instanceof", "dict_from_pairs",
         "mutex_new", "mutex_get", "mutex_set", "mutex_add", "mutex_free",
@@ -6845,18 +6855,7 @@ fn patch_pending_calls(state: &mut CompilerState) -> Result<(), VmError> {
         "doc_parse", "doc_check",
         "ui_core_version", "ui_headless_tick", "ui_headless_snapshot_json", "ui_health", "ui_help", "ui_native_window",
         // ── Android Modules ──
-        "mic_init", "mic_start", "mic_stop", "mic_status", "mic_save",
-        "mic_encode_m4a", "mic_set_quality", "mic_get_level",
-        "call_detect_start", "call_detect_stop", "call_detect_status",
-        "phone_contacts", "phone_call_log", "phone_info",
-        "phone_sms_send", "phone_sms_read", "phone_battery",
-        "phone_network", "phone_volume_set", "phone_vibrate",
-        "service_start_foreground", "service_stop_foreground", "service_is_running",
-        "service_notification", "service_notification_update",
-        "service_auto_start_enable", "service_auto_start_disable",
-        "service_wake_lock", "service_wake_unlock",
-        "service_request_permissions", "service_check_permissions",
-        "service_schedule_task", "service_cancel_task",
+        "mic_status", "service_is_running",
         "secure_encrypt", "secure_decrypt", "secure_hash", "secure_hash_file",
         "secure_random_bytes", "secure_pin_set", "secure_pin_verify", "secure_pin_is_set",
         "secure_lock", "secure_is_locked", "secure_unlock",
@@ -7588,6 +7587,69 @@ fn try_ui_assign_sugar(raw_line: &str) -> Option<String> {
 
 /// True when a `{` after `before` opens a dictionary literal rather than a block: it follows an
 /// operator or opening bracket (`x = {`, `f({`, `[{`, `a, {`, `k: {`) or `return`.
+/// How many arguments the function value wrapping builtin `name` takes, or `None` when the name is
+/// not a builtin that can be used as a value.
+fn builtin_value_arity(name: &str) -> Option<usize> {
+    const BINARY: &[&str] = &[
+        "pow", "push", "contains", "index_of", "join", "split", "concat", "gcd", "lcm", "divmod", "idiv", "atan2",
+        "hypot", "min", "max", "starts_with", "ends_with", "repeat", "get", "powmod_2",
+    ];
+    const EXTRA: &[&str] = &[
+        "print", "println", "float", "bool", "to_string", "to_int", "to_float", "parse_int", "parse_float", "chr",
+        "ord", "sign", "trunc", "log", "exp", "factorial", "big", "isqrt", "len", "str", "int", "type", "abs",
+    ];
+    if BINARY.contains(&name) {
+        return Some(2);
+    }
+    if EXTRA.contains(&name) || crate::builtin::BUILTIN_ID_TABLE.iter().any(|(n, _)| *n == name) {
+        return Some(1);
+    }
+    None
+}
+
+/// Push the value of builtin `name`: a script variable of that name if there is one at run time,
+/// else a function value wrapping the builtin (the wrapper is emitted once per program).
+fn emit_builtin_value(name: &str, state: &mut CompilerState) {
+    let arity = builtin_value_arity(name).unwrap_or(1);
+    let start = match state.builtin_wrappers.get(name) {
+        Some(&start) => start,
+        None => {
+            let skip = state.instructions.len();
+            state.instructions.push(Instruction::Jump(usize::MAX));
+            let start = state.instructions.len();
+            state.function_arities.insert(start, arity);
+            for i in 0..arity {
+                state.instructions.push(Instruction::Load(format!("arg{}", i)));
+            }
+            state.instructions.push(Instruction::CallBuiltin(name.to_string(), arity));
+            state.instructions.push(Instruction::Ret);
+            let after = state.instructions.len();
+            state.instructions[skip] = Instruction::Jump(after);
+            state.builtin_wrappers.insert(name.to_string(), start);
+            start
+        }
+    };
+    state.instructions.push(Instruction::LoadOrBuiltin { name: name.to_string(), start, arity });
+}
+
+/// True when the text before a `{` is a control-statement header (`if x`, `for a in b`, `else`,
+/// `while c`, `try`, `catch e`, ...) so the braces hold a block, even when it all fits on one line.
+fn brace_opens_control_block(before: &str) -> bool {
+    let b = before.trim();
+    if brace_opens_literal(b) || b.ends_with(" in") || b.ends_with(" of") {
+        return false;
+    }
+    let word: String = b.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
+    let rest = &b[word.len()..];
+    match word.as_str() {
+        "if" | "elif" | "while" | "for" => rest.starts_with(|c: char| c.is_whitespace() || c == '('),
+        "else" => rest.trim().is_empty() || rest.trim_start().starts_with("if"),
+        "try" | "finally" | "do" => rest.trim().is_empty(),
+        "catch" => true,
+        _ => false,
+    }
+}
+
 fn brace_opens_literal(before: &str) -> bool {
     let b = before.trim_end();
     b.ends_with(['=', '(', '[', ',', ':']) && !b.ends_with("==")
@@ -7677,7 +7739,9 @@ fn normalize_lines(source: &str) -> Vec<(usize, String)> {
                         i += clen + 1;
                         continue;
                     }
-                    if let Some(end) = consume_balanced_curly_line(&text, i) {
+                    // `if c { stmt }`, `for x in xs { stmt }`: a one-line block, not a dict literal
+                    let one_line_block = brace_opens_control_block(&current);
+                    if let (false, Some(end)) = (one_line_block, consume_balanced_curly_line(&text, i)) {
                         let literal = text[i..end].to_string();
                         current.push_str(&literal);
                         i = end;

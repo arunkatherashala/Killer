@@ -993,3 +993,68 @@ for n in [10, 11] {
 "#;
     assert_eq!(run(src), "boom\n0\n1\nc0\nc1\n10\n11");
 }
+
+// ---------------------------------------------------------------------------------------------
+// one-line blocks, `for k, v in dict`, builtins as values, snake_case builtin aliases
+// ---------------------------------------------------------------------------------------------
+
+#[test]
+fn one_line_blocks_parse() {
+    let src = r#"
+c = true
+if c { println("yes") }
+if !c { println("no") } else { println("else") }
+for x in [1, 2] { println(x) }
+n = 0
+while n < 2 { n = n + 1 }
+println(n)
+d = {"a": 1}
+println(d)
+println(len({"x": 1, "y": 2}))
+try { throw "e" } catch err { println("caught " + err) }
+"#;
+    assert_eq!(run(src), "yes\nelse\n1\n2\n2\n{a: 1}\n2\ncaught e");
+}
+
+#[test]
+fn for_key_value_over_a_dict_iterates_pairs() {
+    let src = r#"
+d = {"a": 1, "b": 2}
+out = []
+for k, v in d {
+  push(out, k + "=" + str(v))
+}
+println(sorted(out))
+keys_seen = []
+for k in d {
+  push(keys_seen, k)
+}
+println(sorted(keys_seen))
+for i, x in enumerate(["p", "q"]) {
+  println(str(i) + x)
+}
+for a, b in [[1, 2], [3, 4]] {
+  println(a + b)
+}
+"#;
+    assert_eq!(run(src), "[a=1, b=2]\n[a, b]\n0p\n1q\n3\n7");
+}
+
+#[test]
+fn builtins_are_first_class_values() {
+    let src = r#"
+f = print
+f("hi")
+println(map([1, 2], str))
+g = len
+println(g([1, 2, 3]))
+println(map([-1, 2], abs))
+h = max
+println(h(3, 9))
+fs = [str, len]
+println(fs[1]("abcd"))
+len = 5
+println(len)
+"#;
+    assert_eq!(run(src), "hi\n[1, 2]\n3\n[1, 2]\n9\n4\n5");
+}

@@ -105,6 +105,7 @@ fn visit_code_addresses(code: &mut [Instruction], f: &mut dyn FnMut(&mut usize))
                 *exit = m(*exit);
             }
             Instruction::ConstFunc { bytecode_start, .. } => *bytecode_start = m(*bytecode_start),
+            Instruction::LoadOrBuiltin { start, .. } => *start = m(*start),
             Instruction::RegisterLive { instr_start, .. } => *instr_start = m(*instr_start),
             Instruction::TryBegin { catch_target, body_end } => {
                 // usize::MAX marks a `try` with no catch: not an address
