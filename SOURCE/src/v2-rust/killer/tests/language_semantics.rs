@@ -353,7 +353,7 @@ class Maker {
     return n
   }
 }
-b = Maker()
+b = new Maker()
 println(b.make())
 "#;
     assert_eq!(run(src), "2");
@@ -400,3 +400,498 @@ println(f(false))
     assert_eq!(run(src), "11\n12");
 }
 
+// ---------------------------------------------------------------------------------------------
+// (B) `finally` runs on every way out of a `try`
+// ---------------------------------------------------------------------------------------------
+
+#[test]
+fn finally_after_normal_completion() {
+    let src = "try {\n  println(\"body\")\n} finally {\n  println(\"fin\")\n}\nprintln(\"after\")\n";
+    assert_eq!(run(src), "body\nfin\nafter");
+}
+
+#[test]
+fn finally_after_a_caught_error() {
+    let src = "try {\n  throw \"x\"\n} catch e {\n  println(\"caught \" + e)\n} finally {\n  println(\"fin\")\n}\nprintln(\"after\")\n";
+    assert_eq!(run(src), "caught x\nfin\nafter");
+}
+
+#[test]
+fn finally_runs_then_an_uncaught_error_propagates_to_the_outer_catch() {
+    let src = r#"
+try {
+  try {
+    throw "inner"
+  } finally {
+    println("fin")
+  }
+  println("not reached")
+} catch e {
+  println("outer caught " + e)
+}
+"#;
+    assert_eq!(run(src), "fin\nouter caught inner");
+}
+
+#[test]
+fn finally_runs_before_an_uncaught_error_aborts_the_program() {
+    let out = run("try {\n  throw \"boom\"\n} finally {\n  println(\"cleanup\")\n}\nprintln(\"not reached\")\n");
+    assert!(out.starts_with("cleanup\n"), "{out}");
+    assert!(out.contains("boom"), "{out}");
+    assert!(!out.contains("not reached"), "{out}");
+}
+
+#[test]
+fn finally_runs_for_a_runtime_error_without_catch() {
+    let out = run("fn f() {\n  try {\n    x = nope_undefined + 1\n  } finally {\n    println(\"cleanup\")\n  }\n}\ntry {\n  f()\n} catch e {\n  println(\"caught\")\n}\n");
+    assert_eq!(out, "cleanup\ncaught");
+}
+
+#[test]
+fn finally_runs_on_return_and_the_value_is_computed_first() {
+    let src = r#"
+fn f() {
+  x = 1
+  try {
+    return x
+  } finally {
+    x = 2
+    println("fin " + str(x))
+  }
+}
+println(f())
+"#;
+    assert_eq!(run(src), "fin 2\n1");
+}
+
+#[test]
+fn return_expression_is_evaluated_before_finally_side_effects() {
+    let src = r#"
+log = []
+fn side() {
+  push(log, "eval")
+  return 7
+}
+fn f() {
+  try {
+    return side()
+  } finally {
+    push(log, "finally")
+  }
+}
+v = f()
+println(v)
+println(log)
+"#;
+    assert_eq!(run(src), "7\n[eval, finally]");
+}
+
+#[test]
+fn finally_runs_once_on_return_from_try_and_from_catch() {
+    let src = r#"
+fn a() {
+  try {
+    return "a"
+  } finally {
+    println("fin a")
+  }
+}
+fn b() {
+  try {
+    throw "x"
+  } catch e {
+    return "b"
+  } finally {
+    println("fin b")
+  }
+}
+println(a())
+println(b())
+"#;
+    assert_eq!(run(src), "fin a\na\nfin b\nb");
+}
+
+#[test]
+fn return_in_finally_overrides_the_try_return() {
+    let src = "fn f() {\n  try {\n    return 1\n  } finally {\n    return 2\n  }\n}\nprintln(f())\n";
+    assert_eq!(run(src), "2");
+}
+
+#[test]
+fn return_in_finally_swallows_a_thrown_error() {
+    let src = "fn f() {\n  try {\n    throw \"x\"\n  } finally {\n    return 5\n  }\n}\nprintln(f())\nprintln(\"after\")\n";
+    assert_eq!(run(src), "5\nafter");
+}
+
+#[test]
+fn throw_in_finally_replaces_the_pending_return() {
+    let src = r#"
+fn f() {
+  try {
+    return 1
+  } finally {
+    throw "from finally"
+  }
+}
+try {
+  println(f())
+} catch e {
+  println("caught " + e)
+}
+"#;
+    assert_eq!(run(src), "caught from finally");
+}
+
+#[test]
+fn throw_in_finally_replaces_the_pending_error() {
+    let src = r#"
+try {
+  try {
+    throw "first"
+  } finally {
+    throw "second"
+  }
+} catch e {
+  println(e)
+}
+"#;
+    assert_eq!(run(src), "second");
+}
+
+#[test]
+fn catch_that_throws_still_runs_finally() {
+    let src = r#"
+try {
+  try {
+    throw "a"
+  } catch e {
+    throw "b"
+  } finally {
+    println("fin")
+  }
+} catch e {
+  println("outer " + e)
+}
+"#;
+    assert_eq!(run(src), "fin\nouter b");
+}
+
+#[test]
+fn nested_finally_blocks_run_inside_out() {
+    let src = r#"
+fn f() {
+  try {
+    try {
+      return "r"
+    } finally {
+      println("inner")
+    }
+  } finally {
+    println("outer")
+  }
+}
+println(f())
+"#;
+    assert_eq!(run(src), "inner\nouter\nr");
+}
+
+#[test]
+fn finally_runs_each_iteration_and_on_break_and_continue() {
+    let src = r#"
+for i in range(5) {
+  try {
+    if i == 1 {
+      continue
+    }
+    if i == 3 {
+      break
+    }
+    println("body " + str(i))
+  } finally {
+    println("fin " + str(i))
+  }
+}
+println("done")
+"#;
+    assert_eq!(run(src), "body 0\nfin 0\nfin 1\nbody 2\nfin 2\nfin 3\ndone");
+}
+
+#[test]
+fn finally_on_break_and_continue_in_while_loops() {
+    let src = r#"
+fn f() {
+  i = 0
+  n = 0
+  while true {
+    i = i + 1
+    try {
+      if i == 2 {
+        continue
+      }
+      if i > 4 {
+        break
+      }
+      n = n + 10
+    } finally {
+      n = n + 1
+    }
+  }
+  return n
+}
+println(f())
+"#;
+    // i=1: +10 +1, i=2: +1, i=3: +10 +1, i=4: +10 +1, i=5: break +1 => 35
+    assert_eq!(run(src), "35");
+}
+
+#[test]
+fn break_in_an_inner_loop_does_not_run_the_outer_try_finally() {
+    let src = r#"
+try {
+  for i in range(3) {
+    if i == 1 {
+      break
+    }
+    println(i)
+  }
+  println("after loop")
+} finally {
+  println("fin")
+}
+"#;
+    assert_eq!(run(src), "0\nafter loop\nfin");
+}
+
+#[test]
+fn break_out_of_nested_loops_runs_only_the_finally_inside_the_loop() {
+    let src = r#"
+for i in range(2) {
+  try {
+    for j in range(3) {
+      try {
+        if j == 1 {
+          break
+        }
+        println("j " + str(j))
+      } finally {
+        println("inner fin " + str(j))
+      }
+    }
+  } finally {
+    println("outer fin " + str(i))
+  }
+}
+"#;
+    assert_eq!(run(src), "j 0\ninner fin 0\ninner fin 1\nouter fin 0\nj 0\ninner fin 0\ninner fin 1\nouter fin 1");
+}
+
+#[test]
+fn return_from_inside_a_loop_inside_try_runs_finally() {
+    let src = r#"
+fn find(xs, target) {
+  try {
+    for x in xs {
+      if x == target {
+        return "found"
+      }
+    }
+    return "missing"
+  } finally {
+    println("searched")
+  }
+}
+println(find([1, 2, 3], 2))
+println(find([1, 2, 3], 9))
+"#;
+    assert_eq!(run(src), "searched\nfound\nsearched\nmissing");
+}
+
+#[test]
+fn finally_with_errors_thrown_by_a_called_function() {
+    let src = r#"
+fn boom() {
+  throw "deep"
+}
+fn run() {
+  try {
+    boom()
+  } finally {
+    println("run cleanup")
+  }
+}
+try {
+  run()
+} catch e {
+  println("main caught " + e)
+}
+"#;
+    assert_eq!(run(src), "run cleanup\nmain caught deep");
+}
+
+#[test]
+fn finally_in_methods() {
+    let src = r#"
+class Res {
+  kfn init() {
+    this.log = []
+  }
+  kfn use(fail) {
+    try {
+      if fail {
+        throw "bad"
+      }
+      push(this.log, "ok")
+      return "done"
+    } catch e {
+      push(this.log, "caught")
+      return "failed"
+    } finally {
+      push(this.log, "closed")
+    }
+  }
+}
+r = new Res()
+println(r.use(false))
+println(r.use(true))
+println(r.log)
+"#;
+    assert_eq!(run(src), "done\nfailed\n[ok, closed, caught, closed]");
+}
+
+#[test]
+fn finally_in_a_generator_runs_when_it_completes() {
+    let src = r#"
+fn gen() {
+  try {
+    yield 1
+    yield 2
+  } finally {
+    println("gen cleanup")
+  }
+}
+for v in gen() {
+  println(v)
+}
+println("end")
+"#;
+    assert_eq!(run(src), "1\n2\ngen cleanup\nend");
+}
+
+#[test]
+fn finally_inside_a_closure_with_shared_state() {
+    let src = r#"
+fn make() {
+  depth = 0
+  fn guarded() {
+    depth = depth + 1
+    try {
+      return depth
+    } finally {
+      depth = depth - 1
+    }
+  }
+  fn current() {
+    return depth
+  }
+  return [guarded, current]
+}
+p = make()
+println(p[0]())
+println(p[1]())
+"#;
+    assert_eq!(run(src), "1\n0");
+}
+
+#[test]
+fn try_inside_finally_and_finally_inside_catch() {
+    let src = r#"
+try {
+  throw "x"
+} catch e {
+  try {
+    println("in catch")
+  } finally {
+    println("catch finally")
+  }
+} finally {
+  try {
+    throw "y"
+  } catch e2 {
+    println("handled " + e2)
+  }
+  println("main finally")
+}
+"#;
+    assert_eq!(run(src), "in catch\ncatch finally\nhandled y\nmain finally");
+}
+
+#[test]
+fn continue_in_catch_runs_finally() {
+    let src = r#"
+for i in range(3) {
+  try {
+    if i == 1 {
+      throw "skip"
+    }
+    println("ok " + str(i))
+  } catch e {
+    println("catch " + str(i))
+    continue
+  } finally {
+    println("fin " + str(i))
+  }
+  println("tail " + str(i))
+}
+"#;
+    assert_eq!(run(src), "ok 0\nfin 0\ntail 0\ncatch 1\nfin 1\nok 2\nfin 2\ntail 2");
+}
+
+#[test]
+fn finally_in_a_recursive_function_runs_once_per_call() {
+    let src = r#"
+count = 0
+fn walk(n) {
+  try {
+    if n == 0 {
+      return 0
+    }
+    return 1 + walk(n - 1)
+  } finally {
+    global count
+    count = count + 1
+  }
+}
+println(walk(4))
+println(count)
+"#;
+    assert_eq!(run(src), "4
+5");
+}
+
+#[test]
+fn finally_after_an_error_inside_a_loop_body_with_catch_outside() {
+    let src = r#"
+fn f() {
+  out = []
+  for i in range(3) {
+    try {
+      if i == 1 {
+        throw "bad"
+      }
+      push(out, i)
+    } finally {
+      push(out, "f" + str(i))
+    }
+  }
+  return out
+}
+try {
+  f()
+} catch e {
+  println("caught " + e)
+}
+println("done")
+"#;
+    assert_eq!(run(src), "caught bad
+done");
+}
