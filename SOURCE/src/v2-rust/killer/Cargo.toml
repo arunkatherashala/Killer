@@ -253,6 +253,10 @@ name = "phase_e_tiny"
 path = "src/bin/phase_e_tiny.rs"
 
 [[bin]]
+name = "killer"
+path = "src/bin/killer.rs"
+
+[[bin]]
 name = "killer_lsp"
 path = "src/bin/killer_lsp.rs"
 

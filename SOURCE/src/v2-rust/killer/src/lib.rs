@@ -346,6 +346,7 @@ pub mod json_lang;             // strict JSON parser and serializer for json_par
 pub mod sourcemap;             // per-line origin tracking across the source-rewriting passes
 pub mod lsp_core;              // language server (LSP over stdio) used by killer_lsp / `killer lsp`
 pub mod testfw;                // test blocks, assert diffs, `killer test`, JUnit XML
+pub mod cli_tools;             // fmt / lint / run helpers behind the `killer` driver
 pub mod hints;                 // friendlier explanations for well-known compile mistakes
 pub mod imports;               // compile-time `import "file.killer"` inclusion
 pub mod lambda;                // lifts anonymous functions (fn(x){..}, x => ..) into named ones
