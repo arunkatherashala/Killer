@@ -2269,6 +2269,17 @@ impl BuiltinFunctions {
                             _ => std::cmp::Ordering::Equal,
                         });
                     }
+                    // bigints (optionally mixed with numbers) sort by exact value
+                    Some(Value::BigInt(_)) => {
+                        out.sort_by(|a, b| {
+                            crate::bigint_ops::compare(a, b)
+                                .or_else(|| match (a, b) {
+                                    (Value::Number(x), Value::Number(y)) => x.partial_cmp(y),
+                                    _ => None,
+                                })
+                                .unwrap_or(std::cmp::Ordering::Equal)
+                        });
+                    }
                     // pairs / rows sort lexicographically, like Python's lists
                     Some(Value::Array(_)) => {
                         out.sort_by(|a, b| Self::cmp_sortable(a, b));
