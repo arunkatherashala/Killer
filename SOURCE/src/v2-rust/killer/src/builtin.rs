@@ -3182,7 +3182,8 @@ impl BuiltinFunctions {
                 "spawn_thread() expects 1 argument (value/closure)".to_string(),
             ));
         }
-        let val = args[0].clone();
+        // the new thread owns an independent copy (no Rc is ever shared between threads)
+        let val = args[0].detached();
         let slot: std::sync::Arc<std::sync::Mutex<Option<Box<Value>>>> =
             std::sync::Arc::new(std::sync::Mutex::new(None));
         let slot_clone = std::sync::Arc::clone(&slot);
@@ -3210,7 +3211,8 @@ impl BuiltinFunctions {
                 "async_spawn() expects 1 argument (value or closure)".to_string(),
             ));
         }
-        let val = args[0].clone();
+        // the new thread owns an independent copy (no Rc is ever shared between threads)
+        let val = args[0].detached();
         let slot: std::sync::Arc<std::sync::Mutex<Option<Box<Value>>>> =
             std::sync::Arc::new(std::sync::Mutex::new(None));
         let slot_clone = std::sync::Arc::clone(&slot);
@@ -3259,7 +3261,7 @@ impl BuiltinFunctions {
     }
 
     fn builtin_spawn(args: &[Value]) -> Result<Value, VmError> {
-        let val = args.first().cloned().unwrap_or(Value::Null);
+        let val = args.first().map(Value::detached).unwrap_or(Value::Null);
         let slot: std::sync::Arc<std::sync::Mutex<Option<Box<Value>>>> =
             std::sync::Arc::new(std::sync::Mutex::new(None));
         let slot_clone = std::sync::Arc::clone(&slot);
@@ -3305,7 +3307,7 @@ impl BuiltinFunctions {
                         let guard = handle.0.lock()
                             .map_err(|e| VmError::runtime_error(format!("Future lock: {}", e)))?;
                         if let Some(v) = guard.as_ref() {
-                            return Ok(*v.clone());
+                            return Ok(v.detached());
                         }
                     }
                     if std::time::Instant::now() >= deadline {
@@ -3334,7 +3336,7 @@ impl BuiltinFunctions {
                         let guard = handle.0.lock()
                             .map_err(|e| VmError::runtime_error(format!("Future lock: {}", e)))?;
                         if let Some(v) = guard.as_ref() {
-                            results.push(*v.clone());
+                            results.push(v.detached());
                             break;
                         }
                         drop(guard);
@@ -3365,7 +3367,7 @@ impl BuiltinFunctions {
                         let guard = handle.0.lock()
                             .map_err(|e| VmError::runtime_error(format!("{}", e)))?;
                         if let Some(v) = guard.as_ref() {
-                            return Ok(*v.clone());
+                            return Ok(v.detached());
                         }
                     }
                     other => return Ok(other),
@@ -3380,7 +3382,7 @@ impl BuiltinFunctions {
 
     /// async_resolve(value) → wrap a value in an already-resolved future handle
     fn builtin_async_resolve(args: &[Value]) -> Result<Value, VmError> {
-        let val = args.first().cloned().unwrap_or(Value::Null);
+        let val = args.first().map(Value::detached).unwrap_or(Value::Null);
         let handle = crate::value::FutureHandle(
             std::sync::Arc::new(std::sync::Mutex::new(Some(Box::new(val)))),
         );

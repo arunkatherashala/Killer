@@ -401,6 +401,31 @@ struct TaskContext {
     method_names: crate::fast_hash::FastSet<String>,
 }
 
+/// Stack for spawned task threads: the interpreter re-enters itself natively for callbacks, operator
+/// methods and generators (bounded by `MAX_NATIVE_DEPTH`), which needs far more than the 2 MB default.
+/// Only address space is reserved; pages are committed as they are touched.
+const SPAWN_STACK_BYTES: usize = 128 * 1024 * 1024;
+
+/// Start `run_spawned_task` on a new OS thread. When the thread cannot be created the future is
+/// resolved with an error instead of panicking the caller.
+fn spawn_task_thread(
+    task: TaskContext,
+    func: Value,
+    args: Vec<Value>,
+    slot: std::sync::Arc<std::sync::Mutex<Option<Box<Value>>>>,
+) {
+    let failed_slot = std::sync::Arc::clone(&slot);
+    let spawned = std::thread::Builder::new()
+        .name("killer-task".to_string())
+        .stack_size(SPAWN_STACK_BYTES)
+        .spawn(move || run_spawned_task(task, func, args, slot));
+    if spawned.is_err() {
+        *failed_slot.lock().unwrap() = Some(Box::new(Value::TaskError(Box::new(Value::Str(
+            "could not start a thread for this task".to_string(),
+        )))));
+    }
+}
+
 /// Body of a spawned OS thread: run `func(args)` on a pooled VM and publish either its (detached)
 /// result or its error in the future slot. A panic is reported as an error too, so that `await`
 /// never waits for a result that cannot arrive.
@@ -513,6 +538,14 @@ impl VirtualMachine {
         self.current_program = None;
         self.yielded_values.clear();
         self.collecting_yields = false;
+        // nothing of the finished task may leak into the next one (or keep its values alive)
+        self.handlers.clear();
+        self.pending_throw = None;
+        self.closure_frames.clear();
+        self.gen_ctx.clear();
+        self.gen_yielded = None;
+        self.generator_manager = GeneratorManager::default();
+        self.native_depth = 0;
     }
 
     // ========== REPL / Diagnostics ========================================
@@ -5602,10 +5635,11 @@ impl VirtualMachine {
                             let task = self.task_context(program);
                             let func = func.detached();
                             let args: Vec<Value> = args.iter().map(Value::detached).collect();
-                            std::thread::spawn(move || run_spawned_task(task, func, args, fut_clone));
+                            spawn_task_thread(task, func, args, fut_clone);
                         }
                         other => {
-                            *fut_clone.lock().unwrap() = Some(Box::new(other));
+                            // a plain value resolves immediately, as an independent copy
+                            *fut_clone.lock().unwrap() = Some(Box::new(other.detached()));
                         }
                     }
                     self.stack.push(Value::Future(crate::value::FutureHandle(future)));
@@ -5631,7 +5665,7 @@ impl VirtualMachine {
                         bytecode_start,
                         captured: Default::default(),
                     };
-                    std::thread::spawn(move || run_spawned_task(task, func, args, fut_clone));
+                    spawn_task_thread(task, func, args, fut_clone);
 
                     self.stack.push(Value::Future(crate::value::FutureHandle(future)));
                 }
