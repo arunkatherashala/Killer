@@ -240,6 +240,8 @@ struct LoopContext {
 #[derive(Debug, Default)]
 struct CompilerState {
     instructions: Vec<Instruction>,
+    /// Frame slots currently held by list-comprehension temporaries (offsets above `next_slot`).
+    lc_temps: u16,
     function_arities: HashMap<usize, usize>,
     functions: HashMap<String, FunctionMeta>,
     pending_calls: Vec<PendingCall>,
@@ -4448,16 +4450,23 @@ fn compile_list_comprehension(
     state: &mut CompilerState,
     context: &CompileContext,
 ) -> Result<(), VmError> {
-    let uid = state.instructions.len();
     let named_locals_base = state.named_locals.len();
-    let result = format!("__lcR_{}", uid);
+    // Hidden iterator/index/result temporaries live in frame slots above the ones in use
+    // (`context` is shared, so they are handed out by a counter on the compiler state).
+    let temps_base = state.lc_temps;
+    let mut take_slot = |state: &mut CompilerState| -> u16 {
+        let s = context.next_slot.saturating_add(state.lc_temps);
+        state.lc_temps += 1;
+        s
+    };
+    let result = take_slot(state);
     state.instructions.push(Instruction::BuildArray(0));
-    state.instructions.push(Instruction::Store(result.clone()));
+    state.instructions.push(Instruction::StoreSlot(result));
 
     // names introduced by earlier clauses are hidden from outer slots in later ones
     let mut hidden: Vec<String> = Vec::new();
-    // per clause: loop start, index of the exit jump, index temp, indices of its filter jumps
-    let mut frames: Vec<(usize, usize, String, Vec<usize>)> = Vec::new();
+    // per clause: loop start (ForNext), index of its generic-path exit jump, its filter jumps
+    let mut frames: Vec<(usize, usize, Vec<usize>)> = Vec::new();
     for (level, clause) in clauses.iter().enumerate() {
         let vars: Vec<String> = clause.names.split(',').map(|n| n.trim().to_string()).collect();
         if vars.iter().any(|v| !is_valid_name(v)) {
@@ -4467,33 +4476,49 @@ fn compile_list_comprehension(
             )));
         }
         let scope = shadowed_context(context, &hidden);
-        let (items, index, elem) = (
-            format!("__lcI_{}_{}", uid, level),
-            format!("__lcX_{}_{}", uid, level),
-            format!("__lcE_{}_{}", uid, level),
-        );
+        let iter_slot = take_slot(state);
+        let idx_slot = take_slot(state);
+        // the element of a destructuring clause is staged in a named temporary
+        let first = if vars.len() == 1 {
+            vars[0].clone()
+        } else {
+            format!("__lcE_{}_{}", state.instructions.len(), level)
+        };
         compile_expr_str(&clause.iterable, line_no, state, &scope)?;
-        state.instructions.push(Instruction::Store(items.clone()));
+        state.instructions.push(Instruction::StoreSlot(iter_slot));
         state.instructions.push(Instruction::ConstNum(0.0));
-        state.instructions.push(Instruction::Store(index.clone()));
+        state.instructions.push(Instruction::StoreSlot(idx_slot));
 
         let loop_start = state.instructions.len();
-        state.instructions.push(Instruction::Load(index.clone()));
-        state.instructions.push(Instruction::Load(items.clone()));
+        state.instructions.push(Instruction::ForNext {
+            iter: iter_slot,
+            idx: idx_slot,
+            var: first.clone(),
+            body: usize::MAX,
+            exit: usize::MAX,
+        });
+        // generic path (dict / set / other iterables): idx < len(iter), var = iter[idx], idx += 1
+        state.instructions.push(Instruction::LoadSlot(idx_slot));
+        state.instructions.push(Instruction::LoadSlot(iter_slot));
         state.instructions.push(Instruction::CallBuiltin("len".to_string(), 1));
         state.instructions.push(Instruction::Lt);
         let exit_jump = state.instructions.len();
         state.instructions.push(Instruction::JumpIfFalse(usize::MAX));
-
-        state.instructions.push(Instruction::Load(items));
-        state.instructions.push(Instruction::Load(index.clone()));
+        state.instructions.push(Instruction::LoadSlot(iter_slot));
+        state.instructions.push(Instruction::LoadSlot(idx_slot));
         state.instructions.push(Instruction::IndexRead);
-        if vars.len() == 1 {
-            state.instructions.push(Instruction::StoreLocal(vars[0].clone()));
-        } else {
-            state.instructions.push(Instruction::Store(elem.clone()));
+        state.instructions.push(Instruction::StoreLocal(first.clone()));
+        state.instructions.push(Instruction::LoadSlot(idx_slot));
+        state.instructions.push(Instruction::ConstNum(1.0));
+        state.instructions.push(Instruction::Add);
+        state.instructions.push(Instruction::StoreSlot(idx_slot));
+        let body_start = state.instructions.len();
+        if let Instruction::ForNext { body, .. } = &mut state.instructions[loop_start] {
+            *body = body_start;
+        }
+        if vars.len() != 1 {
             for (k, name) in vars.iter().enumerate() {
-                state.instructions.push(Instruction::Load(elem.clone()));
+                state.instructions.push(Instruction::Load(first.clone()));
                 state.instructions.push(Instruction::ConstNum(k as f64));
                 state.instructions.push(Instruction::IndexRead);
                 state.instructions.push(Instruction::StoreLocal(name.clone()));
@@ -4508,33 +4533,29 @@ fn compile_list_comprehension(
         for cond in &clause.conditions {
             compile_expr_str(cond, line_no, state, &scope)?;
             filter_jumps.push(state.instructions.len());
-            state.instructions.push(Instruction::JumpIfFalse(usize::MAX));
+            state.instructions.push(Instruction::JumpIfFalse(loop_start));
         }
-        frames.push((loop_start, exit_jump, index, filter_jumps));
+        frames.push((loop_start, exit_jump, filter_jumps));
     }
 
     let scope = shadowed_context(context, &hidden);
-    state.instructions.push(Instruction::Load(result.clone()));
+    state.instructions.push(Instruction::LoadSlot(result));
     compile_expr_str(element, line_no, state, &scope)?;
     state.instructions.push(Instruction::CallBuiltin("push".to_string(), 2));
     state.instructions.push(Instruction::Pop);
 
-    // close the loops innermost first; every level has a "next element" point that bumps its index
-    for (loop_start, exit_jump, index, filter_jumps) in frames.iter().rev() {
-        let next = state.instructions.len();
-        for at in filter_jumps {
-            state.instructions[*at] = Instruction::JumpIfFalse(next);
-        }
-        state.instructions.push(Instruction::Load(index.clone()));
-        state.instructions.push(Instruction::ConstNum(1.0));
-        state.instructions.push(Instruction::Add);
-        state.instructions.push(Instruction::Store(index.clone()));
+    // close the loops innermost first; a level's exit continues at its parent's "next element"
+    for (loop_start, exit_jump, _) in frames.iter().rev() {
         state.instructions.push(Instruction::Jump(*loop_start));
         let end = state.instructions.len();
         state.instructions[*exit_jump] = Instruction::JumpIfFalse(end);
+        if let Instruction::ForNext { exit, .. } = &mut state.instructions[*loop_start] {
+            *exit = end;
+        }
     }
     state.named_locals.truncate(named_locals_base);
-    state.instructions.push(Instruction::Load(result));
+    state.instructions.push(Instruction::LoadSlot(result));
+    state.lc_temps = temps_base;
     Ok(())
 }
 
