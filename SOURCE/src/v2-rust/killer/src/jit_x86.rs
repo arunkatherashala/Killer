@@ -270,6 +270,15 @@ pub(crate) struct ExecPage {
 
 impl ExecPage {
     pub(crate) fn alloc(size: usize) -> Option<Self> {
+        // The emitted machine code is x86-64 only: on any other architecture (aarch64, ...)
+        // refuse to allocate executable memory so every caller falls back to the interpreter.
+        #[cfg(not(target_arch = "x86_64"))]
+        {
+            let _ = size;
+            return None;
+        }
+        #[cfg(target_arch = "x86_64")]
+        {
         #[cfg(target_os = "windows")]
         unsafe {
             // Windows: VirtualAlloc
@@ -281,6 +290,7 @@ impl ExecPage {
             // Unix: mmap
             let ptr = unix_mmap(size)?;
             Some(ExecPage { ptr, size })
+        }
         }
     }
 
@@ -678,7 +688,7 @@ pub fn run_jit_sum_range(entry: &JitEntry, start: f64, limit: f64, step: f64) ->
     unsafe { (entry.func)(start, limit, step) }
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_arch = "x86_64"))]
 mod tests {
     use super::*;
 
