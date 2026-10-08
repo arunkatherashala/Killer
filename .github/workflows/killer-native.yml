@@ -18,7 +18,11 @@ env:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
     defaults:
       run:
         working-directory: SOURCE/src/v2-rust/killer
@@ -27,8 +31,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Build
         run: cargo build
-      - name: Unit tests
-        run: cargo test --lib
+      - name: All tests (lib + integration)
+        run: cargo test --tests
       - name: Pipeline conformance
         run: cargo test --test pipeline_conformance
       - name: Trit / three-valued semantics
