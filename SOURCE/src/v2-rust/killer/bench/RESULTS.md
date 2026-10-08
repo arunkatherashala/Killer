@@ -64,6 +64,36 @@ String building by repeated concatenation, large `sorted`/list operations (level
 | `IndexWrite` without redundant `store_var`; method inline cache; cached `init` lookup | recursion_objects 4.8x less CPU (3.9 -> 0.8 s), obj_methods ~30% |
 | `s[i]`/`len(s)` on a string slot without copying the string | str_index ~8% at 20k chars; asymptotic win for long strings |
 
+## Round 2 (non-numeric gaps, commits 7372b95, cfcc2c1, 121fc7f)
+
+The machine was heavily loaded (a release build took 115 minutes), so wall-clock ratios were
+meaningless. These numbers are **CPU seconds (kernel+user, best of 3) of the same benchmark with the
+previous binary and the new one**, which is the only comparison that held up under load.
+
+| Benchmark | CPU before (s) | CPU after (s) | Change | What did it |
+|-----------|---------------:|--------------:|-------:|-------------|
+| list_comp | 1.50 | 1.22 | -19% | comprehension iterator/index/result in frame slots, `ForNext` (7372b95) |
+| nested_data | 0.67 | 0.52 | -22% | literal-key dict read without cloning the key (`ConstStr`+`IndexRead` peephole) (121fc7f) |
+| obj_methods | 0.50 | 0.41 | -18% | pooled scope tables per call, FNV hasher for object fields (121fc7f) |
+| recursion_objects | 0.69 | 0.44 | -36% | same two changes |
+| str_index | 0.34 | 0.30 | -12% | `for ch in s` splits into characters once (121fc7f) |
+| closures | 1.19 | 1.09 | -8% | scope-table pool |
+| json_bench | 0.36 | 0.38 | noise | parse/stringify fast paths (cfcc2c1): no measurable win at this size |
+| dict_ops | 0.42 | 0.42 | noise | number keys without `String` (121fc7f): no measurable win |
+| word_freq | 0.28 | 0.33 | noise | untouched |
+
+Numeric JIT unchanged: `fib(32)` 0.062 s -> 0.047 s; 5M-iteration `while` loop 0.23-0.28 s before and
+0.27-0.30 s after (the spread between repeated runs of the same binary is as large as the difference).
+`cargo test --tests` and the 166 parity probes pass.
+
+Still slower than CPython (see the table at the top for ratios under a quiet machine): list
+comprehensions (the loop body still goes through `CallBuiltin("push")` and a named loop variable
+`StoreLocal`), method calls (one `HashMap` insert with a `String` key per `this`/`argN` binding),
+string indexing (not changed: caching an ASCII flag needs a change to `Value::Str`, a plain `String`
+used in thousands of places; a cache keyed by pointer/length would be unsound when a string is freed
+and another with the same length lands at the same address), dict reads that clone string values,
+JSON, and try/catch.
+
 ## Bug found while writing the benchmarks (not fixed here)
 `k in some_dict` with a numeric `k` raises `contains() expects string, array, dict or set`
 (string keys work), and `if !(x in d) { ... }` is a parse error ("condition must be followed by `{`").
