@@ -252,6 +252,10 @@ path = "src/bin/phase_d_quantum_ready.rs"
 name = "phase_e_tiny"
 path = "src/bin/phase_e_tiny.rs"
 
+[[bin]]
+name = "killer_lsp"
+path = "src/bin/killer_lsp.rs"
+
 [profile.release]
 opt-level = 3
 lto = "fat"

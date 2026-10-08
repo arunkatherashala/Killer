@@ -344,6 +344,7 @@ pub mod ordered_map;           // insertion-ordered map behind dictionaries
 pub mod controlflow;           // lowers match/switch/do-while/C-style for/destructuring for into core statements
 pub mod json_lang;             // strict JSON parser and serializer for json_parse / json_stringify
 pub mod sourcemap;             // per-line origin tracking across the source-rewriting passes
+pub mod lsp_core;              // language server (LSP over stdio) used by killer_lsp / `killer lsp`
 pub mod hints;                 // friendlier explanations for well-known compile mistakes
 pub mod imports;               // compile-time `import "file.killer"` inclusion
 pub mod lambda;                // lifts anonymous functions (fn(x){..}, x => ..) into named ones
