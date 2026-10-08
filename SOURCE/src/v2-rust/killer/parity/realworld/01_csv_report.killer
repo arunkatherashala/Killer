@@ -1,0 +1,65 @@
+// CSV / text-processing tool: parse sales data, aggregate, sort, print a report
+data = "region,product,units,price\nnorth,widget,10,2.5\nsouth,gadget,3,10\nnorth,gadget,4,10\neast,widget,7,2.5\nsouth,widget,1,2.5\neast,gizmo,2,99.99\nwest,gizmo,5,99.99\n"
+writeFile("sales_rt.csv", data)
+
+text = readFile("sales_rt.csv")
+lines = split(trim(text), "\n")
+header = split(lines[0], ",")
+println("columns: " + join(header, "|"))
+
+rows = []
+for i in range(1, len(lines)) {
+  parts = split(lines[i], ",")
+  row = {}
+  for j in range(len(header)) {
+    row[header[j]] = parts[j]
+  }
+  row["units"] = int(row["units"])
+  row["price"] = float(row["price"])
+  row["total"] = row["units"] * row["price"]
+  push(rows, row)
+}
+println("rows: " + str(len(rows)))
+
+by_region = {}
+by_product = {}
+for r in rows {
+  if !(r["region"] in by_region) {
+    by_region[r["region"]] = 0
+  }
+  by_region[r["region"]] = by_region[r["region"]] + r["total"]
+  by_product[r["product"]] = (by_product[r["product"]] ?? 0) + r["units"]
+}
+
+fn neg_total(pair) {
+  return 0 - pair[1]
+}
+
+println("== revenue by region ==")
+for pair in sorted(entries(by_region), neg_total) {
+  println(pad_right(pair[0], 8, " ") + pad_left(str(pair[1]), 10, " "))
+}
+
+println("== units by product ==")
+prods = sorted(keys(by_product))
+for p in prods {
+  println(f"{p}: {by_product[p]}")
+}
+
+grand = 0
+for r in rows {
+  grand = grand + r["total"]
+}
+println("grand total: " + str(round(grand * 100) / 100))
+
+big = [r for r in rows if r["total"] > 20]
+println("big orders: " + join([r["region"] + "/" + r["product"] for r in big], ", "))
+
+best = rows[0]
+for r in rows {
+  if r["total"] > best["total"] {
+    best = r
+  }
+}
+println("best: " + best["region"] + " " + best["product"] + " " + str(best["total"]))
+println(upper("done") + "!")

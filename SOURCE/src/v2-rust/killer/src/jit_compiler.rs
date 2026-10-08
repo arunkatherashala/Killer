@@ -76,7 +76,11 @@ impl JitCompiler {
                     // These are complex and shouldn't be JIT compiled
                     return false;
                 }
-                Instruction::Jump(_) | Instruction::JumpIfFalse(_) => {
+                Instruction::Jump(_)
+                | Instruction::JumpIfFalse(_)
+                | Instruction::AndShort(_)
+                | Instruction::OrShort(_)
+                | Instruction::CoalesceShort(_) => {
                     has_jumps = true;
                 }
                 _ => {}

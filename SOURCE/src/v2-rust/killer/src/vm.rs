@@ -364,6 +364,49 @@ impl Default for VirtualMachine {
     }
 }
 
+/// State copied into a spawned task (see [`VirtualMachine::task_context`]).
+struct TaskContext {
+    program: std::sync::Arc<Program>,
+    capabilities: CapabilitySet,
+    globals: Vec<(String, Value)>,
+    classes: HashMap<String, ClassInfo>,
+    method_names: crate::fast_hash::FastSet<String>,
+}
+
+/// Body of a spawned OS thread: run `func(args)` on a pooled VM and publish either its (detached)
+/// result or its error in the future slot. A panic is reported as an error too, so that `await`
+/// never waits for a result that cannot arrive.
+fn run_spawned_task(
+    task: TaskContext,
+    func: Value,
+    args: Vec<Value>,
+    slot: std::sync::Arc<std::sync::Mutex<Option<Box<Value>>>>,
+) {
+    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let _cap_guard = CapabilityScopeGuard::install(task.capabilities.clone());
+        let mut child = VirtualMachine::acquire_spawn_vm();
+        child.capabilities = task.capabilities.clone();
+        child.current_program = Some(std::sync::Arc::clone(&task.program));
+        child.classes = task.classes.clone();
+        child.method_names = task.method_names.clone();
+        let mut root: crate::fast_hash::FastMap<String, Value> = Default::default();
+        root.extend(task.globals.iter().cloned());
+        child.scopes.push(root);
+        let result = match child.call_value_nested(&func, args, &task.program) {
+            Ok(v) => v.detached(),
+            // keep the thrown value itself (`throw {"code": 1}`), else the error text
+            Err(e) => Value::TaskError(Box::new(match child.pending_throw.take() {
+                Some(thrown) => thrown.detached(),
+                None => Value::Str(error_message_for_catch(&e)),
+            })),
+        };
+        VirtualMachine::release_spawn_vm(child);
+        result
+    }));
+    let result = outcome.unwrap_or_else(|_| Value::TaskError(Box::new(Value::Str("task panicked".to_string()))));
+    *slot.lock().unwrap() = Some(Box::new(result));
+}
+
 impl VirtualMachine {
     pub fn new() -> Self {
         Self::default()
@@ -612,6 +655,24 @@ impl VirtualMachine {
             self.current_program = Some(std::sync::Arc::new(program.clone()));
         }
         std::sync::Arc::clone(self.current_program.as_ref().unwrap())
+    }
+
+    /// Everything a spawned task needs from this VM: the program, the capabilities, a detached
+    /// snapshot of the top-level variables (so tasks can read globals such as mutex handles) and
+    /// the class table.
+    fn task_context(&mut self, program: &Program) -> TaskContext {
+        let globals = self
+            .scopes
+            .first()
+            .map(|root| root.iter().map(|(k, v)| (k.clone(), v.detached())).collect())
+            .unwrap_or_default();
+        TaskContext {
+            program: self.program_arc_for_spawn(program),
+            capabilities: crate::security::current_capabilities(),
+            globals,
+            classes: self.classes.clone(),
+            method_names: self.method_names.clone(),
+        }
     }
 
     pub fn run(&mut self, program: &Program) -> Result<(), VmError> {
@@ -951,6 +1012,18 @@ impl VirtualMachine {
                             continue;
                         }
                         _ => {
+                            // `for k in dict` walks the keys and `for x in set` the members (as Python does)
+                            let as_list = match self.locals_stack.last().and_then(|f| f.get(iter_i)) {
+                                Some(Value::Dict(d)) => Some(d.keys().into_iter().map(Value::Str).collect::<Vec<_>>()),
+                                Some(Value::Set(s)) => Some(s.iter().map(|k| k.to_value()).collect::<Vec<_>>()),
+                                _ => None,
+                            };
+                            if let Some(items) = as_list {
+                                if let Some(frame) = self.locals_stack.last_mut() {
+                                    frame[iter_i] = Value::from(items);
+                                }
+                                continue;
+                            }
                             // a generator is resumed once per iteration (lazily)
                             let gen_id = match self.locals_stack.last().and_then(|f| f.get(iter_i)) {
                                 Some(Value::Generator(id)) => Some(id.clone()),
@@ -1317,6 +1390,10 @@ impl VirtualMachine {
                                 ));
                             }
                         }
+                        // `a - b` on two sets is their difference
+                        Value::Set(_) if matches!(rhs, Value::Set(_)) => {
+                            self.stack.push(BuiltinFunctions::call("set_difference", &[lhs.clone(), rhs])?);
+                        }
                         _ => {
                             // Fall back to numeric subtraction
                             let lhs_num = match lhs {
@@ -1526,6 +1603,30 @@ impl VirtualMachine {
                     } else {
                         self.stack
                             .push(Value::Bool(self.is_truthy(&lhs) || self.is_truthy(&rhs)));
+                    }
+                }
+                Instruction::AndShort(target) => {
+                    let lhs = self.stack.last().cloned().unwrap_or(Value::Null);
+                    if !matches!(lhs, Value::Trit(_)) && !self.is_truthy(&lhs) {
+                        *self.stack.last_mut().unwrap() = Value::Bool(false);
+                        self.ip = *target;
+                        continue;
+                    }
+                }
+                Instruction::OrShort(target) => {
+                    let lhs = self.stack.last().cloned().unwrap_or(Value::Null);
+                    if !matches!(lhs, Value::Trit(_)) && self.is_truthy(&lhs) {
+                        *self.stack.last_mut().unwrap() = Value::Bool(true);
+                        self.ip = *target;
+                        continue;
+                    }
+                }
+                Instruction::CoalesceShort(target) => {
+                    if matches!(self.stack.last(), Some(Value::Null) | None) {
+                        self.stack.pop();
+                    } else {
+                        self.ip = *target;
+                        continue;
                     }
                 }
                 Instruction::Not => {
@@ -2459,7 +2560,8 @@ impl VirtualMachine {
                     self.stack.push(Value::from(elements));
                 }
                 Instruction::BuildDict(count) => {
-                    let mut dict = HashMap::new();
+                    // pairs were pushed in source order; keep that order (a repeated key: last wins)
+                    let mut pairs = Vec::with_capacity(*count);
                     for _ in 0..*count {
                         let value = self.pop_value()?;
                         let key_val = self.pop_value()?;
@@ -2468,9 +2570,10 @@ impl VirtualMachine {
                             Value::Number(n) => n.to_string(),
                             _ => format!("{key_val}"),
                         };
-                        dict.insert(key, value);
+                        pairs.push((key, value));
                     }
-                    self.stack.push(Value::Dict(crate::value::SharedDict::new(dict)));
+                    pairs.reverse();
+                    self.stack.push(Value::Dict(crate::value::SharedDict::from_pairs(pairs)));
                 }
                 Instruction::NewQuality => {
                     let value = self.pop_value()?;
@@ -2802,6 +2905,7 @@ impl VirtualMachine {
                                 Value::Uncertain { .. } => "uncertain",
                                 Value::Gauss { .. } => "gauss",
                                 Value::Set(_) => "set",
+                                Value::TaskError(_) => "error",
                             };
                             Value::Str(type_name.to_string())
                         }
@@ -2950,24 +3054,7 @@ impl VirtualMachine {
                                 )),
                             }
                         }
-                        "split" => {
-                            if args.len() != 2 {
-                                return Err(VmError::runtime_error(
-                                    "split() expects 2 arguments".to_string(),
-                                ));
-                            }
-                            match (&args[0], &args[1]) {
-                                (Value::Str(s), Value::Str(sep)) => {
-                                    let parts: Vec<Value> = s.split(sep.as_str())
-                                        .map(|part| Value::Str(part.to_string()))
-                                        .collect();
-                                    Value::from(parts)
-                                }
-                                _ => return Err(VmError::runtime_error(
-                                    "split() expects string and separator".to_string(),
-                                )),
-                            }
-                        }
+                        "split" => BuiltinFunctions::call("split", &args)?,
                         "starts_with" => {
                             if args.len() != 2 {
                                 return Err(VmError::runtime_error(
@@ -3692,42 +3779,8 @@ impl VirtualMachine {
                                 _ => Value::Bool(false),
                             }
                         }
-                        "readFile" => {
-                            if args.len() != 1 {
-                                return Err(VmError::runtime_error(
-                                    "readFile() expects 1 argument (filename)".to_string(),
-                                ));
-                            }
-                            match &args[0] {
-                                Value::Str(filename) => {
-                                    match std::fs::read_to_string(filename) {
-                                        Ok(contents) => Value::Str(contents),
-                                        Err(_) => Value::Null,
-                                    }
-                                }
-                                _ => return Err(VmError::runtime_error(
-                                    "readFile() expects a string filename".to_string(),
-                                )),
-                            }
-                        }
-                        "writeFile" => {
-                            if args.len() != 2 {
-                                return Err(VmError::runtime_error(
-                                    "writeFile() expects 2 arguments (filename, content)".to_string(),
-                                ));
-                            }
-                            match (&args[0], &args[1]) {
-                                (Value::Str(filename), Value::Str(content)) => {
-                                    match std::fs::write(filename, content) {
-                                        Ok(_) => Value::Bool(true),
-                                        Err(_) => Value::Bool(false),
-                                    }
-                                }
-                                _ => return Err(VmError::runtime_error(
-                                    "writeFile() expects string arguments (filename, content)".to_string(),
-                                )),
-                            }
-                        }
+                        // readFile / writeFile are the ordinary builtins: they check the sandbox
+                        // capabilities and raise on failure instead of returning null / false.
                         "interpolate" => {
                             if args.is_empty() {
                                 return Err(VmError::runtime_error(
@@ -4468,6 +4521,8 @@ impl VirtualMachine {
                                 // Property access like Math.PI or Math.E
                                 if let Some(value) = dict.get(method_name) {
                                     self.stack.push(value.clone());
+                                } else if let Some(result) = crate::text_methods::call_as_method(&object, method_name, &args) {
+                                    self.stack.push(result?);
                                 } else {
                                     return Err(VmError::runtime_error(format!(
                                         "Property or method {} not found on object",
@@ -4688,12 +4743,7 @@ impl VirtualMachine {
                                     };
                                     Value::Str(s.replace(old.as_str(), new.as_str()))
                                 }
-                                "split" => {
-                                    if args.len() != 1 {
-                                        return Err(VmError::runtime_error(
-                                            "split() expects 1 argument in method form".to_string(),
-                                        ));
-                                    }
+                                "split" if args.len() == 1 => {
                                     let sep = match &args[0] {
                                         Value::Str(v) => v,
                                         _ => {
@@ -4895,12 +4945,18 @@ impl VirtualMachine {
                                     }
                                     crate::nova::nova_stream_cols(&[Value::Str(s.clone()), args[0].clone()])?
                                 }
-                                _ if args.is_empty() => Value::Null,
                                 _ => {
-                                    return Err(VmError::runtime_error(format!(
-                                        "Cannot call method {} on string",
-                                        method_name
-                                    )));
+                                    // any builtin taking the string first (`s.title()`, `s.count("a")`)
+                                    if let Some(result) = crate::text_methods::call_as_method(&object, method_name, &args) {
+                                        result?
+                                    } else if args.is_empty() {
+                                        Value::Null
+                                    } else {
+                                        return Err(VmError::runtime_error(format!(
+                                            "Cannot call method {} on string",
+                                            method_name
+                                        )));
+                                    }
                                 }
                             };
                             self.stack.push(result);
@@ -5027,7 +5083,10 @@ impl VirtualMachine {
                                 
                                 self.stack.push(acc);
                             } else if method_name == "sort" {
-                                arr.sort_by(|a, b| format!("{}", a).cmp(&format!("{}", b)));
+                                // in place, with the same ordering as `sorted` (numbers numerically)
+                                if let Value::Array(ordered) = BuiltinFunctions::call("sorted", &[object.clone()])? {
+                                    arr.replace_all(ordered.to_vec());
+                                }
                                 self.stack.push(Value::Array(arr.clone()));
                             } else if method_name == "reverse" {
                                 arr.reverse();
@@ -5047,6 +5106,8 @@ impl VirtualMachine {
                                 }
                                 arr.replace_all(v);
                                 self.stack.push(Value::Array(arr.clone()));
+                            } else if let Some(result) = crate::text_methods::call_as_method(&object, method_name, &args) {
+                                self.stack.push(result?);
                             } else {
                                 return Err(VmError::runtime_error(format!(
                                     "Cannot call method {} on array",
@@ -5272,10 +5333,15 @@ impl VirtualMachine {
                                     }
                                 }
                                 _ => {
-                                    return Err(VmError::runtime_error(format!(
-                                        "Cannot call method {} on non-object value: {}",
-                                        method_name, object
-                                    )));
+                                    // builtins taking the value first: `seen.add(x)`, `n.abs()`, ...
+                                    if let Some(result) = crate::text_methods::call_as_method(&object, method_name, &args) {
+                                        result?
+                                    } else {
+                                        return Err(VmError::runtime_error(format!(
+                                            "Cannot call method {} on non-object value: {}",
+                                            method_name, object
+                                        )));
+                                    }
                                 }
                             };
                             self.stack.push(result);
@@ -5466,23 +5532,11 @@ impl VirtualMachine {
                     let fut_clone = std::sync::Arc::clone(&future);
 
                     match func_val {
-                        Value::Function { params, bytecode_start, captured } => {
-                            let prog_arc = self.program_arc_for_spawn(program);
-                            let spawn_caps = crate::security::current_capabilities();
-                            let captured = crate::value::Captures::new(captured.snapshot().into_iter().collect());
-                            std::thread::spawn(move || {
-                                let _spawn_cap_guard =
-                                    CapabilityScopeGuard::install(spawn_caps.clone());
-                                let mut child = VirtualMachine::acquire_spawn_vm();
-                                child.capabilities = spawn_caps;
-                                child.current_program = Some(std::sync::Arc::clone(&prog_arc));
-                                let func = Value::Function { params, bytecode_start, captured };
-                                let result = child
-                                    .call_function_sync(&func, args, &prog_arc)
-                                    .unwrap_or(Value::Null);
-                                *fut_clone.lock().unwrap() = Some(Box::new(result));
-                                VirtualMachine::release_spawn_vm(child);
-                            });
+                        func @ Value::Function { .. } => {
+                            let task = self.task_context(program);
+                            let func = func.detached();
+                            let args: Vec<Value> = args.iter().map(Value::detached).collect();
+                            std::thread::spawn(move || run_spawned_task(task, func, args, fut_clone));
                         }
                         other => {
                             *fut_clone.lock().unwrap() = Some(Box::new(other));
@@ -5502,28 +5556,16 @@ impl VirtualMachine {
                         std::sync::Arc::new(std::sync::Mutex::new(None));
                     let fut_clone = std::sync::Arc::clone(&future);
                     let bytecode_start = *target;
-                    let prog_arc = self.program_arc_for_spawn(program);
-                    let spawn_caps = crate::security::current_capabilities();
-
-                    std::thread::spawn(move || {
-                        let _spawn_cap_guard =
-                            CapabilityScopeGuard::install(spawn_caps.clone());
-                        let mut child = VirtualMachine::acquire_spawn_vm();
-                        child.capabilities = spawn_caps;
-                        child.current_program = Some(std::sync::Arc::clone(&prog_arc));
-                        // Synthesise a Value::Function using argN param names (call_function_sync binds these)
-                        let params: Vec<String> = (0..args.len()).map(|i| format!("arg{i}")).collect();
-                        let func = Value::Function {
-                            params,
-                            bytecode_start,
-                            captured: Default::default(),
-                        };
-                        let result = child
-                            .call_function_sync(&func, args, &prog_arc)
-                            .unwrap_or(Value::Null);
-                        *fut_clone.lock().unwrap() = Some(Box::new(result));
-                        VirtualMachine::release_spawn_vm(child);
-                    });
+                    let task = self.task_context(program);
+                    let args: Vec<Value> = args.iter().map(Value::detached).collect();
+                    // Synthesise a Value::Function using argN param names (call_function_sync binds these)
+                    let params: Vec<String> = (0..args.len()).map(|i| format!("arg{i}")).collect();
+                    let func = Value::Function {
+                        params,
+                        bytecode_start,
+                        captured: Default::default(),
+                    };
+                    std::thread::spawn(move || run_spawned_task(task, func, args, fut_clone));
 
                     self.stack.push(Value::Future(crate::value::FutureHandle(future)));
                 }
@@ -5539,6 +5581,12 @@ impl VirtualMachine {
                                 {
                                     let mut slot = handle.0.lock().unwrap();
                                     if let Some(result) = slot.take() {
+                                        // a failed task re-raises its error in the awaiting thread
+                                        if let Value::TaskError(thrown) = *result {
+                                            let message = format!("{}", thrown);
+                                            self.pending_throw = Some(*thrown);
+                                            return Err(VmError::runtime_error(message));
+                                        }
                                         self.stack.push(*result);
                                         break;
                                     }
@@ -6064,6 +6112,7 @@ impl VirtualMachine {
             Value::Uncertain { value, margin } => *value > *margin,
             Value::Gauss { mean, sigma } => *mean > crate::uncertain::Z95 * sigma.abs(),
             Value::Set(s) => !s.is_empty(),
+            Value::TaskError(_) => true,
         }
     }
 
@@ -6561,6 +6610,27 @@ impl VirtualMachine {
                             let rhs = self.pop_value()?;
                             let lhs = self.pop_value()?;
                             self.stack.push(Value::Bool(self.is_truthy(&lhs) || self.is_truthy(&rhs)));
+                        }
+                        Instruction::AndShort(target) => {
+                            let lhs = self.stack.last().cloned().unwrap_or(Value::Null);
+                            if !matches!(lhs, Value::Trit(_)) && !self.is_truthy(&lhs) {
+                                *self.stack.last_mut().unwrap() = Value::Bool(false);
+                                self.ip = *target;
+                            }
+                        }
+                        Instruction::OrShort(target) => {
+                            let lhs = self.stack.last().cloned().unwrap_or(Value::Null);
+                            if !matches!(lhs, Value::Trit(_)) && self.is_truthy(&lhs) {
+                                *self.stack.last_mut().unwrap() = Value::Bool(true);
+                                self.ip = *target;
+                            }
+                        }
+                        Instruction::CoalesceShort(target) => {
+                            if matches!(self.stack.last(), Some(Value::Null) | None) {
+                                self.stack.pop();
+                            } else {
+                                self.ip = *target;
+                            }
                         }
                         Instruction::Jump(target) => {
                             self.ip = *target;

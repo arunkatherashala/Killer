@@ -1,0 +1,134 @@
+// HTTP-less web handler: a router built from dicts of functions, closures and middleware
+fn make_counter() {
+  count = 0
+  fn inc() {
+    count = count + 1
+    return count
+  }
+  return inc
+}
+
+fn make_route(method, path, handler) {
+  return {"method": method, "path": path, "handler": handler}
+}
+
+class Router {
+  fn init() {
+    this.routes = []
+    this.middleware = []
+  }
+  fn add(method, path, handler) {
+    push(this.routes, make_route(method, path, handler))
+    return this
+  }
+  fn use(mw) {
+    push(this.middleware, mw)
+    return this
+  }
+  fn match_route(method, path) {
+    for r in this.routes {
+      if r["method"] != method {
+        continue
+      }
+      pat = split(r["path"], "/")
+      got = split(path, "/")
+      if len(pat) != len(got) {
+        continue
+      }
+      params = {}
+      good = true
+      for i in range(len(pat)) {
+        if starts_with(pat[i], ":") {
+          params[pat[i][1:len(pat[i])]] = got[i]
+        } else if pat[i] != got[i] {
+          good = false
+          break
+        }
+      }
+      if good {
+        return {"handler": r["handler"], "params": params}
+      }
+    }
+    return null
+  }
+  fn handle(method, path, body) {
+    m = this.match_route(method, path)
+    if m == null {
+      return {"status": 404, "body": "not found: " + path}
+    }
+    req = {"method": method, "path": path, "params": m["params"], "body": body}
+    h = m["handler"]
+    for mw in reverse(this.middleware) {
+      h = mw(h)
+    }
+    try {
+      return h(req)
+    } catch e {
+      return {"status": 500, "body": "error: " + str(e)}
+    }
+  }
+}
+
+store = {"1": "alice", "2": "bob"}
+hits = make_counter()
+log = []
+
+fn logging(next) {
+  return fn(req) {
+    push(log, req["method"] + " " + req["path"])
+    res = next(req)
+    push(log, "-> " + str(res["status"]))
+    return res
+  }
+}
+
+fn counting(next) {
+  return (req) => {
+    n = hits()
+    res = next(req)
+    res["body"] = res["body"] + " [hit " + str(n) + "]"
+    return res
+  }
+}
+
+fn list_users(req) {
+  names = []
+  for id in sorted(keys(store)) {
+    push(names, id + ":" + store[id])
+  }
+  return {"status": 200, "body": join(names, ",")}
+}
+
+fn get_user(req) {
+  id = req["params"]["id"]
+  if !(id in store) {
+    throw "no user " + id
+  }
+  return {"status": 200, "body": store[id]}
+}
+
+fn create_user(req) {
+  id = str(len(store) + 1)
+  store[id] = req["body"]
+  return {"status": 201, "body": "created " + id}
+}
+
+router = new Router()
+router.use(logging).use(counting)
+router.add("GET", "/users", list_users)
+router.add("GET", "/users/:id", get_user)
+router.add("POST", "/users", create_user)
+router.add("GET", "/ping", fn(req) {
+  return {"status": 200, "body": "pong"}
+})
+
+reqs = [["GET", "/users", null], ["GET", "/users/2", null], ["POST", "/users", "carol"], ["GET", "/users/3", null], ["GET", "/users/9", null], ["GET", "/nope", null], ["DELETE", "/users", null], ["GET", "/ping", null]]
+for r in reqs {
+  res = router.handle(r[0], r[1], r[2])
+  println(str(res["status"]) + " " + res["body"])
+}
+println("log entries: " + str(len(log)))
+for line in log {
+  println("  " + line)
+}
+println("hits: " + str(hits()))

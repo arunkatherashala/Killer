@@ -1,0 +1,21 @@
+200 1:alice,2:bob [hit 1]
+200 bob [hit 2]
+201 created 3 [hit 3]
+200 carol [hit 4]
+500 error: no user 9
+404 not found: /nope
+404 not found: /users
+200 pong [hit 6]
+log entries: 11
+  GET /users
+  -> 200
+  GET /users/2
+  -> 200
+  POST /users
+  -> 201
+  GET /users/3
+  -> 200
+  GET /users/9
+  GET /ping
+  -> 200
+hits: 7

@@ -1,0 +1,18 @@
+ok   savings:ann=800
+  processed [ann, withdraw, 200]
+ok   checking:bob=-20
+  processed [bob, withdraw, 120]
+FAIL bob withdraw: InsufficientFunds(needed=100, available=30)
+  processed [bob, withdraw, 100]
+FAIL cy deposit: invalid amount: -5
+  processed [cy, deposit, -5]
+ok   basic:cy=25
+  processed [cy, deposit, 15]
+FAIL zed deposit: no such account: zed
+  processed [zed, deposit, 1]
+ok   savings:ann=840
+  processed [ann, interest, 0]
+ok=4 failed=3
+[{"owner":"ann","kind":"savings","balance":840,"ops":2},{"owner":"bob","kind":"checking","balance":-20,"ops":1},{"owner":"cy","kind":"basic","balance":25,"ops":1}]
+checking -20
+total=845

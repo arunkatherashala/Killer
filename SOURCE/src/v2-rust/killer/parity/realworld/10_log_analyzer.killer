@@ -1,0 +1,111 @@
+// Log analyzer: file I/O, line parsing, higher-order helpers, recursion, error handling
+lines = [
+  "2024-03-01 10:00:01 INFO  server started port=8080",
+  "2024-03-01 10:00:05 WARN  slow request path=/api/users ms=1200",
+  "2024-03-01 10:01:10 ERROR db timeout host=db1 retries=3",
+  "2024-03-01 10:02:00 INFO  request path=/api/items ms=35",
+  "2024-03-01 10:02:30 ERROR db timeout host=db2 retries=1",
+  "2024-03-01 10:03:00 INFO  request path=/api/users ms=48",
+  "garbage line",
+  "2024-03-01 10:04:00 DEBUG cache miss key=user:42"
+]
+writeFile("app_rt.log", join(lines, "\n") + "\n")
+appendFile("app_rt.log", "2024-03-01 10:05:00 INFO  shutdown\n")
+
+fn parse_line(line) {
+  parts = split(line, " ")
+  if len(parts) < 4 {
+    return null
+  }
+  fields = {}
+  for p in parts[4:len(parts)] {
+    if contains(p, "=") {
+      kv = split(p, "=")
+      fields[kv[0]] = kv[1]
+    }
+  }
+  msg_words = [w for w in parts[4:len(parts)] if !contains(w, "=")]
+  return {"date": parts[0], "time": parts[1], "level": parts[2], "msg": join(msg_words, " "), "fields": fields}
+}
+
+fn group_by(items, keyfn) {
+  out = {}
+  for it in items {
+    k = keyfn(it)
+    if !(k in out) {
+      out[k] = []
+    }
+    push(out[k], it)
+  }
+  return out
+}
+
+entries = []
+bad = 0
+for line in split(trim(readFile("app_rt.log")), "\n") {
+  e = parse_line(line)
+  if e == null {
+    bad = bad + 1
+  } else {
+    push(entries, e)
+  }
+}
+println(f"parsed {len(entries)} entries, {bad} unparseable")
+
+levels = group_by(entries, fn(e) {
+  return e["level"]
+})
+for lvl in sorted(keys(levels)) {
+  println(pad_right(lvl, 6, " ") + str(len(levels[lvl])))
+}
+
+slow = [e for e in entries if "ms" in e["fields"] && int(e["fields"]["ms"]) > 100]
+println("slow: " + join([e["fields"]["path"] + "(" + e["fields"]["ms"] + "ms)" for e in slow], ", "))
+
+total_ms = 0
+n_ms = 0
+for e in entries {
+  if "ms" in e["fields"] {
+    total_ms = total_ms + int(e["fields"]["ms"])
+    n_ms = n_ms + 1
+  }
+}
+println("avg ms: " + str(round(total_ms / n_ms * 100) / 100))
+
+errors = filter(entries, fn(e) {
+  return e["level"] == "ERROR"
+})
+println(map(errors, fn(e) {
+  return e["fields"]["host"] + ":" + e["fields"]["retries"]
+}))
+println(reduce(errors, fn(acc, e) {
+  return acc + int(e["fields"]["retries"])
+}, 0))
+
+fn hanoi(n, a, b, c, moves) {
+  if n == 0 {
+    return moves
+  }
+  hanoi(n - 1, a, c, b, moves)
+  push(moves, a + ">" + c)
+  hanoi(n - 1, b, a, c, moves)
+  return moves
+}
+m = hanoi(3, "A", "B", "C", [])
+println(len(m))
+println(join(m, " "))
+
+fn safe_read(path) {
+  try {
+    return readFile(path)
+  } catch e {
+    return "missing:" + path
+  } finally {
+    println("tried " + path)
+  }
+}
+println(safe_read("app_rt.log")[0:10])
+println(safe_read("no_such_file_rt.txt"))
+println(fileExists("app_rt.log"))
+deleteFile("app_rt.log")
+println(fileExists("app_rt.log"))

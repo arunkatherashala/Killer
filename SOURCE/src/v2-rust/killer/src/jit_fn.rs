@@ -588,6 +588,15 @@ fn analyze(instrs: &[Instruction], arities: &HashMap<usize, usize>, key: Key) ->
                         return None;
                     }
                 }
+                Instruction::AndShort(t) | Instruction::OrShort(t) => {
+                    // the lhs bool stays on the stack on both paths (see `And` / `Or`)
+                    if st.stack.last() != Some(&Ty::Bool) {
+                        return None;
+                    }
+                    if !flow(&mut at, &mut work, *t, &st, n) {
+                        return None;
+                    }
+                }
                 Instruction::Ret => {
                     if st.stack.as_slice() != [Ty::Num] {
                         return None;
@@ -1049,6 +1058,12 @@ fn compile_group(
                 Instruction::JumpIfFalse(t) => {
                     asm.b(&[0x58, 0x48, 0x85, 0xC0]); // pop rax; test rax,rax
                     asm.b(&[0x0F, 0x84]); // jz
+                    jump_fixups.push((asm.rel32_placeholder(), *t));
+                }
+                Instruction::AndShort(t) | Instruction::OrShort(t) => {
+                    asm.b(&[0x48, 0x83, 0x3C, 0x24, 0x00]); // cmp qword [rsp],0
+                    // `&&` skips the rest when the lhs is false (jz); `||` when it is true (jnz)
+                    asm.b(&[0x0F, if matches!(&instrs[ip], Instruction::AndShort(_)) { 0x84 } else { 0x85 }]);
                     jump_fixups.push((asm.rel32_placeholder(), *t));
                 }
                 Instruction::Ret => {

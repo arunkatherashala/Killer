@@ -1,0 +1,10 @@
+[55, 110, 165, 220]
+mutex total: 550
+sum of results: 550
+produced: 6
+consumed 6 items, sum 55
+done=600 counter=600
+113
+data:alpha data:beta
+caught: task failed
+[1, 2, 3]

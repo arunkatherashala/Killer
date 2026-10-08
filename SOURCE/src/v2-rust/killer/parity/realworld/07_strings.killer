@@ -1,0 +1,110 @@
+// String manipulation: word frequency, palindromes, caesar cipher, unicode, formatting
+text = "The quick brown fox jumps over the lazy dog. The dog barks; the fox runs away! Quick, quick."
+
+fn clean_words(s) {
+  out = []
+  cur = ""
+  for ch in lower(s) {
+    if (ch >= "a" && ch <= "z") || ch == "'" {
+      cur = cur + ch
+    } else {
+      if len(cur) > 0 {
+        push(out, cur)
+      }
+      cur = ""
+    }
+  }
+  if len(cur) > 0 {
+    push(out, cur)
+  }
+  return out
+}
+
+words = clean_words(text)
+println("word count: " + str(len(words)))
+freq = {}
+for w in words {
+  freq[w] = (freq[w] ?? 0) + 1
+}
+pairs = entries(freq)
+fn by_count_then_word(p) {
+  return (0 - p[1]) * 1000 + 0
+}
+// sort by word first, then stable-sort by descending count
+pairs = sorted(pairs, fn(p) {
+  return p[0]
+})
+pairs = sorted(pairs, fn(p) {
+  return 0 - p[1]
+})
+for i in range(5) {
+  println(pad_right(pairs[i][0], 8, " ") + str(pairs[i][1]))
+}
+println("unique: " + str(len(keys(freq))))
+longest = ""
+for w in words {
+  if len(w) > len(longest) {
+    longest = w
+  }
+}
+println("longest: " + longest)
+
+fn is_palindrome(s) {
+  cleaned = ""
+  for ch in lower(s) {
+    if (ch >= "a" && ch <= "z") || (ch >= "0" && ch <= "9") {
+      cleaned = cleaned + ch
+    }
+  }
+  return cleaned == reverse(cleaned) && len(cleaned) > 0
+}
+for s in ["A man, a plan, a canal: Panama", "hello", "Was it a car or a cat I saw?", "", "No 'x' in Nixon"] {
+  println("'" + s + "' -> " + str(is_palindrome(s)))
+}
+
+fn caesar(s, shift) {
+  out = ""
+  for ch in s {
+    code = ord(ch)
+    if code >= 97 && code <= 122 {
+      out = out + chr((code - 97 + shift + 26) % 26 + 97)
+    } else if code >= 65 && code <= 90 {
+      out = out + chr((code - 65 + shift + 26) % 26 + 65)
+    } else {
+      out = out + ch
+    }
+  }
+  return out
+}
+enc = caesar("Hello, World! xyz", 3)
+println(enc)
+println(caesar(enc, -3))
+
+// unicode
+u = "héllo wörld ñandú"
+println(len(u))
+println(upper(u))
+println(reverse(u))
+println(u[1])
+println(u[0:5])
+println(ord("é"))
+println(chr(955) + chr(8364))
+println(len("日本語テキスト"))
+println(index_of(u, "w"))
+println(replace(u, "ö", "o"))
+parts = split(u, " ")
+println(len(parts))
+println(join([capitalize(p) for p in parts], " "))
+
+// formatting
+name = "Ada"
+age = 36
+println(f"{name} is {age} years old; next year {age + 1}")
+println("tab:\t|" + "quote:\"" + "|")
+println(pad_left(str(42), 6, "*") + "|" + pad_right("ab", 5, ".") + "|")
+println(trim("   padded  ") + "|")
+println(starts_with(text, "The") && ends_with(text, "quick."))
+println(join(split("a,b,,c", ","), "/"))
+println(replace("aaaa", "aa", "b"))
+println(upper(text[0:9]))
+println(lower(text).count("the"))

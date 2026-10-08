@@ -1,0 +1,15 @@
+columns: region|product|units|price
+rows: 7
+== revenue by region ==
+west        499.95
+east        217.48
+north           65
+south         32.5
+== units by product ==
+gadget: 7
+gizmo: 7
+widget: 18
+grand total: 814.93
+big orders: north/widget, south/gadget, north/gadget, east/gizmo, west/gizmo
+best: west gizmo 499.95
+DONE!

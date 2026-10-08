@@ -267,6 +267,9 @@ struct CompilerState {
     /// (first instruction index, line number in the rewritten text) of every statement compiled;
     /// becomes `Program::line_table` once mapped back to the user's files.
     line_marks: Vec<(usize, usize)>,
+    /// Loop / comprehension variables currently in scope. They are stored by name (not in a
+    /// slot), so a call `g(x)` on one must still be compiled as a call through the variable.
+    named_locals: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -308,6 +311,22 @@ struct CompileContext {
     runtime_scope_depth: usize,
     /// The function being compiled contains `yield` (it is a generator).
     in_generator: bool,
+    /// `try ... finally` blocks being compiled in this function, innermost last.
+    finally_stack: Vec<FinallyEntry>,
+    /// Exception-handler frames pushed by the `try` blocks around the code being compiled.
+    try_depth: usize,
+}
+
+/// A `finally` body that must also run when `return` / `break` / `continue` leaves its `try`.
+#[derive(Debug, Clone)]
+struct FinallyEntry {
+    /// The `{ ... }` block of the `finally` clause.
+    body: Vec<(usize, String)>,
+    /// `loop_stack` depth where the `try` sits: a `break` / `continue` leaves it only when the
+    /// loop it targets is at least this deep.
+    loop_depth: usize,
+    /// `try_depth` before the `try` pushed its handler frames.
+    depth_before: usize,
 }
 
 pub fn compile_killer_subset(source: &str) -> Result<Program, VmError> {
@@ -1628,6 +1647,15 @@ fn compile_expr(
                     return Ok(());
                 }
             }
+            if matches!(op, BinaryOp::And | BinaryOp::Or) {
+                let sym = if matches!(op, BinaryOp::And) { "&&" } else { "||" };
+                compile_short_circuit(
+                    sym,
+                    state,
+                    |st, rhs| compile_expr(if rhs { right } else { left }, st, context),
+                )?;
+                return Ok(());
+            }
             compile_expr(left, state, context)?;
             compile_expr(right, state, context)?;
             match op {
@@ -1929,6 +1957,8 @@ fn compile_expr(
                 tail_value: false,
                 runtime_scope_depth: 0,
                 in_generator: false,
+                finally_stack: Vec::new(),
+                try_depth: 0,
             };
             
             // Compile function body
@@ -2595,6 +2625,44 @@ fn skip_braced_block(lines: &[(usize, String)], open: usize) -> usize {
     lines.len()
 }
 
+/// Before `return` / `break` / `continue` leaves a `try ... finally`: pop the handler frames of
+/// the tries being left and run each `finally` body inline, innermost first. Only the `finally`
+/// blocks of tries nested at loop depth `min_loop_depth` or deeper are run (0 = all, for `return`).
+fn emit_finally_unwind(
+    state: &mut CompilerState,
+    context: &mut CompileContext,
+    min_loop_depth: usize,
+) -> Result<(), VmError> {
+    let full_stack = context.finally_stack.clone();
+    let saved_depth = context.try_depth;
+    let mut depth = saved_depth;
+    let mut result = Ok(());
+    for index in (0..full_stack.len()).rev() {
+        let entry = &full_stack[index];
+        if entry.loop_depth < min_loop_depth {
+            break;
+        }
+        for _ in entry.depth_before..depth {
+            state.instructions.push(Instruction::TryEnd);
+        }
+        depth = entry.depth_before;
+        // the body runs outside this `try` (and the ones inside it), so a `return` in the
+        // `finally` body does not run itself again
+        context.finally_stack.truncate(index);
+        context.try_depth = depth;
+        let mut cursor = 0usize;
+        let open_line = entry.body.first().map(|l| l.0).unwrap_or(0);
+        result = expect_open_brace(&entry.body, &mut cursor, open_line, "finally")
+            .and_then(|_| compile_block(&entry.body, &mut cursor, state, context, true, true));
+        if result.is_err() {
+            break;
+        }
+    }
+    context.finally_stack = full_stack;
+    context.try_depth = saved_depth;
+    result
+}
+
 /// `try { } catch e { } finally { }` (either `catch` or `finally` may be omitted).
 ///
 /// Layout, with both parts present (`finally` wraps the whole `try`/`catch` so it also runs when
@@ -2614,7 +2682,8 @@ fn skip_braced_block(lines: &[(usize, String)], open: usize) -> usize {
 /// F: Store __exc ; <finally body> ; Load __exc ; Raise
 /// normal: <finally body>
 /// ```
-/// A `return`, `break` or `continue` that leaves the `try` skips the `finally` body.
+/// A `return`, `break` or `continue` that leaves the `try` runs the `finally` body inline first
+/// (see `emit_finally_unwind`).
 fn compile_try_statement(
     lines: &[(usize, String)],
     cursor: &mut usize,
@@ -2640,14 +2709,28 @@ fn compile_try_statement(
         )));
     }
 
+    let depth_before = context.try_depth;
+    if have_finally {
+        let finally_open = after + 1;
+        let finally_end = skip_braced_block(lines, finally_open);
+        context.finally_stack.push(FinallyEntry {
+            body: lines[finally_open..finally_end].to_vec(),
+            loop_depth: context.loop_stack.len(),
+            depth_before,
+        });
+    }
+
     let outer_idx = state.instructions.len();
     if have_finally {
         state.instructions.push(Instruction::TryBegin { catch_target: usize::MAX, body_end: usize::MAX });
+        context.try_depth += 1;
     }
 
     let inner_idx = state.instructions.len();
     state.instructions.push(Instruction::TryBegin { catch_target: usize::MAX, body_end: usize::MAX });
+    context.try_depth += 1;
     compile_block(lines, cursor, state, context, true, true)?;
+    context.try_depth -= 1;
     let inner_end = state.instructions.len();
     state.instructions.push(Instruction::TryEnd);
 
@@ -2681,6 +2764,9 @@ fn compile_try_statement(
     }
 
     if have_finally {
+        // the `finally` body is compiled outside the `try`: a `return` in it must not run it again
+        context.finally_stack.pop();
+        context.try_depth = depth_before;
         let outer_end = state.instructions.len();
         state.instructions.push(Instruction::TryEnd);
         let jump_normal = state.instructions.len();
@@ -2902,7 +2988,10 @@ fn compile_for_each_line_statement(
     });
 
     // body
-    compile_block(lines, cursor, state, context, true, true)?;
+    state.named_locals.push(var_name.to_string());
+    let body_result = compile_block(lines, cursor, state, context, true, true);
+    state.named_locals.pop();
+    body_result?;
 
     state.instructions.push(Instruction::Jump(loop_start));
     let loop_end = state.instructions.len();
@@ -3030,6 +3119,9 @@ fn compile_simple_statement(
             compile_expr_str(expr, line_no, state, context)?;
         }
         
+        // the returned value stays on the stack while the `finally` bodies of enclosing tries run
+        emit_finally_unwind(state, context, 0)?;
+
         // Before returning, pop all runtime scopes active in this function
         for _ in 0..context.runtime_scope_depth {
             state.instructions.push(Instruction::ExitScope);
@@ -3040,9 +3132,12 @@ fn compile_simple_statement(
     }
 
     if stmt == "break" {
-        let loop_context = context.loop_stack.last_mut().ok_or_else(|| {
-            VmError::parse_error_simple(format!("Line {}: `break` is only valid inside a loop", line_no))
-        })?;
+        if context.loop_stack.is_empty() {
+            return Err(VmError::parse_error_simple(format!("Line {}: `break` is only valid inside a loop", line_no)));
+        }
+        // leaving a `try ... finally` that sits inside this loop runs its `finally` body
+        emit_finally_unwind(state, context, context.loop_stack.len())?;
+        let loop_context = context.loop_stack.last_mut().expect("checked non-empty");
 
         // Pop runtime scopes pushed since the loop started
         for _ in 0..(context.runtime_scope_depth - loop_context.scope_depth_at_start) {
@@ -3056,12 +3151,14 @@ fn compile_simple_statement(
     }
 
     if stmt == "continue" {
-        let loop_context = context.loop_stack.last().ok_or_else(|| {
-            VmError::parse_error_simple(format!(
+        if context.loop_stack.is_empty() {
+            return Err(VmError::parse_error_simple(format!(
                 "Line {}: `continue` is only valid inside a loop",
                 line_no
-            ))
-        })?;
+            )));
+        }
+        emit_finally_unwind(state, context, context.loop_stack.len())?;
+        let loop_context = context.loop_stack.last().expect("checked non-empty");
 
         // Pop runtime scopes pushed since the loop started
         for _ in 0..(context.runtime_scope_depth - loop_context.scope_depth_at_start) {
@@ -3427,6 +3524,51 @@ fn extract_identifiers(expr: &str) -> Vec<String> {
     ids
 }
 
+/// Rewrite the single-quoted string literals of an expression as double-quoted ones.
+fn single_quoted_to_double(expr: &str) -> String {
+    if !expr.contains('\'') {
+        return expr.to_string();
+    }
+    let mut out = String::with_capacity(expr.len() + 2);
+    let mut chars = expr.chars();
+    let mut in_double = false;
+    while let Some(c) = chars.next() {
+        match c {
+            '"' => {
+                in_double = !in_double;
+                out.push(c);
+            }
+            '\\' if in_double => {
+                out.push(c);
+                if let Some(next) = chars.next() {
+                    out.push(next);
+                }
+            }
+            '\'' if !in_double => {
+                out.push('"');
+                while let Some(d) = chars.next() {
+                    match d {
+                        '\'' => break,
+                        '\\' => match chars.next() {
+                            Some('\'') => out.push('\''),
+                            Some(next) => {
+                                out.push('\\');
+                                out.push(next);
+                            }
+                            None => out.push('\\'),
+                        },
+                        '"' => out.push_str("\\\""),
+                        other => out.push(other),
+                    }
+                }
+                out.push('"');
+            }
+            other => out.push(other),
+        }
+    }
+    out
+}
+
 /// Compile a K-string interpolation: the raw content between `K"..."` or `k"..."`.
 /// Segments like "Hello {name}" compile to  ConstStr("Hello ") + Load(name) + Add + ...
 fn compile_kstring(
@@ -3484,8 +3626,9 @@ fn compile_kstring(
     let mut first = true;
     for (is_expr, text) in &segments {
         if *is_expr {
-            // Wrap in str() so numbers/bools convert cleanly
-            let call_expr = format!("str({})", text.trim());
+            // Wrap in str() so numbers/bools convert cleanly. The text sits inside a double-quoted
+            // literal, so strings in it are usually single-quoted: `f"{d['k']}"`.
+            let call_expr = format!("str({})", single_quoted_to_double(text.trim()));
             compile_expr_str(&call_expr, line_no, state, context)?;
         } else {
             state.instructions.push(Instruction::ConstStr(text.clone()));
@@ -3879,6 +4022,7 @@ fn compile_expr_str(
             || context.global_decls.contains(&name)
             || state.global_vars.contains(&name)
             || state.decorated.contains(&name)
+            || state.named_locals.contains(&name)
             || (context.in_function && context.outer_vars.contains(&name));
         if callee_is_variable {
             compile_expr_str(&name, line_no, state, context)?;
@@ -3924,19 +4068,11 @@ fn compile_expr_str(
     }
 
     if let Some((left, op, right)) = split_logical(expr) {
-        compile_expr_str(left, line_no, state, context)?;
-        compile_expr_str(right, line_no, state, context)?;
-        match op {
-            "&&" => state.instructions.push(Instruction::And),
-            "||" => state.instructions.push(Instruction::Or),
-            "??" => state.instructions.push(Instruction::NullCoalesce),
-            _ => {
-                return Err(VmError::parse_error_simple(format!(
-                    "Line {}: unsupported logical operator `{}`",
-                    line_no, op
-                )))
-            }
-        }
+        compile_short_circuit(
+            op,
+            state,
+            |st, rhs| compile_expr_str(if rhs { right } else { left }, line_no, st, context),
+        )?;
         return Ok(());
     }
 
@@ -4238,6 +4374,8 @@ fn shadowed_context(context: &CompileContext, hide: &[String]) -> CompileContext
         tail_value: false,
         runtime_scope_depth: context.runtime_scope_depth,
         in_generator: context.in_generator,
+        finally_stack: Vec::new(),
+        try_depth: 0,
     }
 }
 
@@ -4311,6 +4449,7 @@ fn compile_list_comprehension(
     context: &CompileContext,
 ) -> Result<(), VmError> {
     let uid = state.instructions.len();
+    let named_locals_base = state.named_locals.len();
     let result = format!("__lcR_{}", uid);
     state.instructions.push(Instruction::BuildArray(0));
     state.instructions.push(Instruction::Store(result.clone()));
@@ -4360,6 +4499,7 @@ fn compile_list_comprehension(
                 state.instructions.push(Instruction::StoreLocal(name.clone()));
             }
         }
+        state.named_locals.extend(vars.iter().cloned());
         hidden.extend(vars);
 
         // this clause's filters: a failing filter skips to this level's "next element"
@@ -4393,6 +4533,7 @@ fn compile_list_comprehension(
         let end = state.instructions.len();
         state.instructions[*exit_jump] = Instruction::JumpIfFalse(end);
     }
+    state.named_locals.truncate(named_locals_base);
     state.instructions.push(Instruction::Load(result));
     Ok(())
 }
@@ -4414,6 +4555,35 @@ fn parse_list_comprehension(inner: &str) -> Option<(String, String, String, Opti
     } else {
         Some((expr_part, var_name, after_in.to_string(), None))
     }
+}
+
+/// Compile `left op right` for the logical operators `&&`, `||` and `??` with short-circuit
+/// evaluation: `right` runs only when `left` does not already decide the result.
+fn compile_short_circuit(
+    op: &str,
+    state: &mut CompilerState,
+    mut compile_operand: impl FnMut(&mut CompilerState, bool) -> Result<(), VmError>,
+) -> Result<(), VmError> {
+    compile_operand(state, false)?;
+    let jump = state.instructions.len();
+    state.instructions.push(match op {
+        "&&" => Instruction::AndShort(usize::MAX),
+        "||" => Instruction::OrShort(usize::MAX),
+        _ => Instruction::CoalesceShort(usize::MAX),
+    });
+    compile_operand(state, true)?;
+    match op {
+        "&&" => state.instructions.push(Instruction::And),
+        "||" => state.instructions.push(Instruction::Or),
+        _ => {}
+    }
+    let end = state.instructions.len();
+    state.instructions[jump] = match op {
+        "&&" => Instruction::AndShort(end),
+        "||" => Instruction::OrShort(end),
+        _ => Instruction::CoalesceShort(end),
+    };
+    Ok(())
 }
 
 fn split_logical(expr: &str) -> Option<(&str, &str, &str)> {
@@ -4926,16 +5096,41 @@ fn parse_index_assignment_chain(stmt: &str) -> Option<(String, Vec<String>, &str
 /// outer-to-inner (e.g. `m[1][0]` → base `m`, indices `["1","0"]`). Fails for non-identifier bases.
 fn peel_index_chain(mut expr: &str) -> Option<(String, Vec<String>)> {
     let mut rev: Vec<String> = Vec::new();
+    let mut saw_bracket = false;
     loop {
-        let (recv, idx) = split_trailing_index_expr(expr)?;
-        rev.push(idx.to_string());
-        let recv = recv.trim();
+        let trimmed = expr.trim();
+        if let Some((recv, idx)) = split_trailing_index_expr(trimmed) {
+            saw_bracket = true;
+            rev.push(idx.to_string());
+            expr = recv;
+        } else if let Some((recv, field)) = split_trailing_field(trimmed) {
+            // `a.b[i]`, `this.items[i].n`: a field is an index with a string key
+            rev.push(format!("\"{}\"", field));
+            expr = recv;
+        } else {
+            return None;
+        }
+        let recv = expr.trim();
         if is_valid_name(recv) {
+            // a bare `obj.field = v` is handled by the property-assignment path
+            if !saw_bracket && rev.len() == 1 {
+                return None;
+            }
             rev.reverse();
             return Some((recv.to_string(), rev));
         }
-        expr = recv;
     }
+}
+
+/// Split `recv.field` at its last top-level dot when the tail is a plain identifier.
+fn split_trailing_field(expr: &str) -> Option<(&str, &str)> {
+    let dot = expr.rfind('.')?;
+    let field = expr[dot + 1..].trim();
+    let recv = expr[..dot].trim();
+    if recv.is_empty() || !is_valid_name(field) {
+        return None;
+    }
+    Some((recv, field))
 }
 
 fn compile_chained_index_assign(
@@ -5077,6 +5272,25 @@ fn compile_method_call_str(
 
 /// Parse  `obj.method(args)`  or  `obj.field`  expressions.
 /// Returns (receiver, name, args) — empty args for property access.
+/// True when `s` is exactly one double-quoted string literal (the closing quote is the last char).
+fn is_single_string_literal(s: &str) -> bool {
+    let b = s.as_bytes();
+    if b.len() < 2 || b[0] != b'"' || b[b.len() - 1] != b'"' {
+        return false;
+    }
+    let mut escaped = false;
+    for (i, &c) in b.iter().enumerate().skip(1) {
+        if escaped {
+            escaped = false;
+        } else if c == b'\\' {
+            escaped = true;
+        } else if c == b'"' {
+            return i == b.len() - 1;
+        }
+    }
+    false
+}
+
 fn parse_dot_call_expr(expr: &str) -> Option<(&str, &str, Vec<String>)> {
     let expr = expr.trim();
     // Find the first top-level '.' that separates receiver from method/field
@@ -5084,15 +5298,21 @@ fn parse_dot_call_expr(expr: &str) -> Option<(&str, &str, Vec<String>)> {
     let bytes = expr.as_bytes();
     let mut dot_pos = None;
     let mut depth = 0i32;
-    let mut in_string = false;
+    let mut quote = 0u8;
+    let mut escaped = false;
     for (i, &b) in bytes.iter().enumerate() {
-        if in_string {
-            if b == b'\\' { continue; }
-            if b == b'"' { in_string = false; }
+        if quote != 0 {
+            if escaped {
+                escaped = false;
+            } else if b == b'\\' {
+                escaped = true;
+            } else if b == quote {
+                quote = 0;
+            }
             continue;
         }
         match b {
-            b'"' => in_string = true,
+            b'"' | b'\'' => quote = b,
             b'(' | b'[' | b'{' => depth += 1,
             b')' | b']' | b'}' => depth -= 1,
             // the LAST top-level dot: `a.b(x).c(y).d` is a chain whose receiver is everything
@@ -5109,8 +5329,10 @@ fn parse_dot_call_expr(expr: &str) -> Option<(&str, &str, Vec<String>)> {
     let dot_pos = dot_pos?;
     let receiver = expr[..dot_pos].trim();
     if receiver.is_empty() { return None; }
-    // Don't match strings or numbers as receivers
-    if receiver.starts_with('"') || receiver.parse::<f64>().is_ok() { return None; }
+    // Numbers are not receivers; a string literal is one only when it is a single complete literal
+    // (`"a-b".split("-")`), not the start of something like `"x" + y`.
+    if receiver.parse::<f64>().is_ok() { return None; }
+    if receiver.starts_with('"') && !is_single_string_literal(receiver) { return None; }
     // Don't match file-like patterns: something.csv, something.txt, something.kore
     let rest = &expr[dot_pos + 1..];
     if rest.contains('(') {
@@ -5203,14 +5425,29 @@ fn split_arguments(input: &str) -> Option<Vec<String>> {
     let mut args = Vec::new();
     let mut current = String::new();
     let mut in_string = false;
+    let mut quote = '"';
+    let mut escaped = false;
     let mut paren_depth = 0usize;
     let mut bracket_depth = 0usize;
     let mut brace_depth = 0usize;
 
     for ch in trimmed.chars() {
+        // inside a string literal only the (unescaped) closing quote matters
+        if in_string {
+            current.push(ch);
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == quote {
+                in_string = false;
+            }
+            continue;
+        }
         match ch {
-            '"' => {
-                in_string = !in_string;
+            '"' | '\'' => {
+                in_string = true;
+                quote = ch;
                 current.push(ch);
             }
             '(' if !in_string => {
@@ -5390,6 +5627,8 @@ fn compile_fn_definition(
         tail_value: false,
         runtime_scope_depth: 0,
         in_generator: false,
+        finally_stack: Vec::new(),
+        try_depth: 0,
     };
     for (index, param) in params.into_iter().enumerate() {
         fn_context.params.insert(param, index);
@@ -5593,6 +5832,8 @@ fn compile_class_definition(
                 tail_value: false,
                 runtime_scope_depth: 0,
                 in_generator: false,
+                finally_stack: Vec::new(),
+                try_depth: 0,
             };
             for (index, param) in params.iter().enumerate() {
                 method_context.params.insert(param.clone(), index);
@@ -5655,13 +5896,11 @@ fn compile_binary_operators(
     use crate::exprsplit as xs;
 
     if let Some((left, op, right)) = xs::split_logical_ordered(expr) {
-        compile_expr_str(left, line_no, state, context)?;
-        compile_expr_str(right, line_no, state, context)?;
-        state.instructions.push(match op {
-            "&&" => Instruction::And,
-            "||" => Instruction::Or,
-            _ => Instruction::NullCoalesce,
-        });
+        compile_short_circuit(
+            op,
+            state,
+            |st, rhs| compile_expr_str(if rhs { right } else { left }, line_no, st, context),
+        )?;
         return Ok(true);
     }
 
@@ -6538,6 +6777,9 @@ fn patch_pending_calls(state: &mut CompilerState) -> Result<(), VmError> {
         "pathJoin", "readBytes", "reduce", "renameFile", "set_add", "set_clear", "set_difference",
         "set_from_array", "set_has", "set_intersection", "set_new", "set_remove", "set_size",
         "set_to_array", "set_union", "spawn_thread", "timestamp", "writeBytes",
+        // text helpers (src/text_methods.rs)
+        "capitalize", "title", "swapcase", "center", "zfill", "isdigit", "isalpha", "isalnum", "isspace",
+        "isupper", "islower", "splitlines", "find", "rfind", "count",
     ];
 
     for pending in &state.pending_calls {
@@ -7217,12 +7459,45 @@ fn try_ui_assign_sugar(raw_line: &str) -> Option<String> {
     Some(format!("{indent}{var} = {rhs_call}"))
 }
 
+/// True when a `{` after `before` opens a dictionary literal rather than a block: it follows an
+/// operator or opening bracket (`x = {`, `f({`, `[{`, `a, {`, `k: {`) or `return`.
+fn brace_opens_literal(before: &str) -> bool {
+    let b = before.trim_end();
+    b.ends_with(['=', '(', '[', ',', ':']) && !b.ends_with("==")
+        || b == "return"
+        || b.ends_with(" return")
+}
+
+/// A `{` at byte `open` of `line` that is not closed on that line, in expression position: join the
+/// following source lines until the braces balance. Returns the joined text and the index of the
+/// last source line consumed.
+fn join_multiline_literal(lines: &[&str], line_index: usize, line: &str, open: usize) -> Option<(String, usize)> {
+    let mut text = line.to_string();
+    let mut j = line_index;
+    loop {
+        if consume_balanced_curly_line(&text, open).is_some() {
+            return Some((text, j));
+        }
+        j += 1;
+        let next = lines.get(j)?.trim();
+        if next.is_empty() || next.starts_with('#') || next.starts_with("//") {
+            continue;
+        }
+        text.push(' ');
+        text.push_str(strip_trailing_line_comment(next));
+    }
+}
+
 fn normalize_lines(source: &str) -> Vec<(usize, String)> {
     let mut out = Vec::new();
-    for (line_index, raw) in source.lines().enumerate() {
+    let source_lines: Vec<&str> = source.lines().collect();
+    let mut line_index = 0usize;
+    while line_index < source_lines.len() {
         let line_no = line_index + 1;
-        let trimmed = raw.trim();
-        if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with("//") {
+        let mut text = source_lines[line_index].trim().to_string();
+        let first_line = line_index;
+        line_index += 1;
+        if text.is_empty() || text.starts_with('#') || text.starts_with("//") {
             continue;
         }
 
@@ -7230,8 +7505,8 @@ fn normalize_lines(source: &str) -> Vec<(usize, String)> {
         let mut in_string = false; // inside "..." or K"..."
         let mut in_backtick = false; // inside `...`
         let mut i = 0usize;
-        while i < trimmed.len() {
-            let rest = &trimmed[i..];
+        while i < text.len() {
+            let rest = &text[i..];
             let ch = rest.chars().next().unwrap();
             let clen = ch.len_utf8();
 
@@ -7275,10 +7550,19 @@ fn normalize_lines(source: &str) -> Vec<(usize, String)> {
                         i += clen + 1;
                         continue;
                     }
-                    if let Some(end) = consume_balanced_curly_line(trimmed, i) {
-                        current.push_str(&trimmed[i..end]);
+                    if let Some(end) = consume_balanced_curly_line(&text, i) {
+                        let literal = text[i..end].to_string();
+                        current.push_str(&literal);
                         i = end;
                         continue;
+                    }
+                    // a dictionary literal spread over several lines
+                    if brace_opens_literal(&current) {
+                        if let Some((joined, last)) = join_multiline_literal(&source_lines, first_line, &text, i) {
+                            text = joined;
+                            line_index = last + 1;
+                            continue;
+                        }
                     }
                     if !current.trim().is_empty() {
                         out.push((line_no, current.trim().to_string()));

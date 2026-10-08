@@ -247,11 +247,19 @@ impl PartialEq for ObjectInstance {
 /// dict passed to a function or stored in two variables is the same dict (like arrays, Python and
 /// JS), and reading a dict variable is O(1) instead of a deep copy.
 #[derive(Clone)]
-pub struct SharedDict(Rc<RefCell<crate::fast_hash::FastMap<String, Value>>>);
+pub struct SharedDict(Rc<RefCell<crate::ordered_map::OrderedMap<Value>>>);
 
 impl SharedDict {
+    /// From an unordered map: entries are laid out in sorted key order so the result is
+    /// deterministic. Use [`SharedDict::from_pairs`] when insertion order matters.
     pub fn new(map: HashMap<String, Value>) -> Self {
-        SharedDict(Rc::new(RefCell::new(map.into_iter().collect())))
+        let mut pairs: Vec<(String, Value)> = map.into_iter().collect();
+        pairs.sort_by(|a, b| a.0.cmp(&b.0));
+        SharedDict::from_pairs(pairs)
+    }
+    /// From pairs in order; a repeated key keeps its first position and its last value.
+    pub fn from_pairs(pairs: Vec<(String, Value)>) -> Self {
+        SharedDict(Rc::new(RefCell::new(pairs.into_iter().collect())))
     }
     pub fn empty() -> Self {
         SharedDict(Rc::new(RefCell::new(Default::default())))
@@ -312,17 +320,17 @@ impl SharedDict {
     pub fn to_map(&self) -> HashMap<String, Value> {
         self.0.borrow().iter().map(|(k, v)| (k.clone(), v.clone())).collect()
     }
-    /// New, independent dict with the same entries.
+    /// New, independent dict with the same entries in the same order.
     pub fn copy(&self) -> SharedDict {
-        SharedDict::new(self.to_map())
+        SharedDict::from_pairs(self.iter().collect())
     }
     pub fn extend<I: IntoIterator<Item = (String, Value)>>(&self, iter: I) {
         self.0.borrow_mut().extend(iter);
     }
-    pub fn borrow(&self) -> std::cell::Ref<'_, crate::fast_hash::FastMap<String, Value>> {
+    pub fn borrow(&self) -> std::cell::Ref<'_, crate::ordered_map::OrderedMap<Value>> {
         self.0.borrow()
     }
-    pub fn borrow_mut(&self) -> std::cell::RefMut<'_, crate::fast_hash::FastMap<String, Value>> {
+    pub fn borrow_mut(&self) -> std::cell::RefMut<'_, crate::ordered_map::OrderedMap<Value>> {
         self.0.borrow_mut()
     }
 }
@@ -350,7 +358,63 @@ impl From<HashMap<String, Value>> for SharedDict {
 
 impl FromIterator<(String, Value)> for SharedDict {
     fn from_iter<I: IntoIterator<Item = (String, Value)>>(iter: I) -> Self {
-        SharedDict::new(iter.into_iter().collect())
+        SharedDict::from_pairs(iter.into_iter().collect())
+    }
+}
+
+/// Reference-counted, interior-mutable set. Like arrays and dicts, a set passed around is the same
+/// set, so `seen.add(x)` / `set_add(seen, x)` inside a function updates the caller's set.
+#[derive(Clone)]
+pub struct SharedSet(Rc<RefCell<std::collections::BTreeSet<SetKey>>>);
+
+impl SharedSet {
+    pub fn new(set: std::collections::BTreeSet<SetKey>) -> Self {
+        SharedSet(Rc::new(RefCell::new(set)))
+    }
+    pub fn len(&self) -> usize {
+        self.0.borrow().len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.0.borrow().is_empty()
+    }
+    pub fn contains(&self, key: &SetKey) -> bool {
+        self.0.borrow().contains(key)
+    }
+    pub fn insert(&self, key: SetKey) -> bool {
+        self.0.borrow_mut().insert(key)
+    }
+    pub fn remove(&self, key: &SetKey) -> bool {
+        self.0.borrow_mut().remove(key)
+    }
+    pub fn clear(&self) {
+        self.0.borrow_mut().clear();
+    }
+    /// Snapshot of the members in order.
+    pub fn iter(&self) -> std::vec::IntoIter<SetKey> {
+        self.0.borrow().iter().cloned().collect::<Vec<_>>().into_iter()
+    }
+    /// Plain copy of the members.
+    pub fn to_btree(&self) -> std::collections::BTreeSet<SetKey> {
+        self.0.borrow().clone()
+    }
+    /// New, independent set with the same members.
+    pub fn copy(&self) -> SharedSet {
+        SharedSet::new(self.to_btree())
+    }
+}
+
+impl Debug for SharedSet {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        match self.0.try_borrow() {
+            Ok(s) => write!(f, "{:?}", *s),
+            Err(_) => write!(f, "{{..}}"),
+        }
+    }
+}
+
+impl PartialEq for SharedSet {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.0, &other.0) || *self.0.borrow() == *other.0.borrow()
     }
 }
 
@@ -522,7 +586,10 @@ pub enum Value {
     /// Statistical uncertainty: independent normally distributed error (`gauss(mean, sigma)`)
     Gauss { mean: f64, sigma: f64 },
     /// Unordered unique-value collection (set semantics)
-    Set(Box<std::collections::BTreeSet<SetKey>>),
+    Set(SharedSet),
+    /// Result slot of a spawned task that failed; `await` turns it back into an error in the
+    /// awaiting thread. Never visible to scripts as a value.
+    TaskError(Box<Value>),
     Null,
 }
 
@@ -605,6 +672,7 @@ impl Display for Value {
                 write!(f, "Tryte[{}]", parts.join(""))
             }
             Value::Future(_) => write!(f, "<future>"),
+            Value::TaskError(msg) => write!(f, "<task error: {}>", msg),
             Value::Integer(n) => write!(f, "{}", n),
             Value::Bytes(b) => write!(f, "<bytes[{}]>", b.len()),
             Value::Pointer(p) => write!(f, "0x{:016x}", p),
@@ -620,6 +688,41 @@ impl Display for Value {
 }
 
 impl Value {
+    /// A structurally independent copy that shares no `Rc` with the original. Values handed to
+    /// another thread (spawn arguments, captured variables, task results) must be detached,
+    /// otherwise two threads would update the same non-atomic reference counts.
+    pub fn detached(&self) -> Value {
+        match self {
+            Value::Array(a) => Value::from(a.to_vec().iter().map(Value::detached).collect::<Vec<_>>()),
+            Value::Dict(d) => {
+                let copy = SharedDict::empty();
+                for (k, v) in d.iter() {
+                    copy.insert(k, v.detached());
+                }
+                Value::Dict(copy)
+            }
+            Value::Object(o) => {
+                let inst = o.0.borrow();
+                Value::Object(SharedObject::new(ObjectInstance {
+                    class_name: inst.class_name.clone(),
+                    fields: inst.fields.iter().map(|(k, v)| (k.clone(), v.detached())).collect(),
+                }))
+            }
+            Value::Function { params, bytecode_start, captured } => Value::Function {
+                params: params.clone(),
+                bytecode_start: *bytecode_start,
+                captured: Captures::new(captured.snapshot().into_iter().map(|(k, v)| (k, v.detached())).collect()),
+            },
+            Value::Signal { value, confidence, reason } => Value::Signal {
+                value: Box::new(value.detached()),
+                confidence: *confidence,
+                reason: reason.clone(),
+            },
+            Value::Set(s) => Value::Set(s.copy()),
+            other => other.clone(),
+        }
+    }
+
     /// Human-readable type name for error messages.
     pub fn type_name(&self) -> &'static str {
         match self {
@@ -637,6 +740,7 @@ impl Value {
             Value::Qubit { .. } => "qubit",
             Value::Tryte(_) => "tryte",
             Value::Future(_) => "future",
+            Value::TaskError(_) => "error",
             Value::Integer(_) => "integer",
             Value::Bytes(_) => "bytes",
             Value::Pointer(_) => "pointer",

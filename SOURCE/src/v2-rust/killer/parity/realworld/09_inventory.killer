@@ -1,0 +1,110 @@
+// Inventory / event processing: sets, generators, match, destructuring, lambdas, nested data
+inventory = {
+  "apple": {"qty": 50, "price": 0.5, "tags": ["fruit", "red"]},
+  "banana": {"qty": 0, "price": 0.25, "tags": ["fruit", "yellow"]},
+  "carrot": {"qty": 120, "price": 0.1, "tags": ["vegetable", "orange"]},
+  "durian": {"qty": 3, "price": 15, "tags": ["fruit", "smelly"]}
+}
+
+fn tag_set(inv) {
+  seen = set([])
+  for name in inv {
+    for t in inv[name]["tags"] {
+      set_add(seen, t)
+    }
+  }
+  return sorted(set_to_array(seen))
+}
+println(tag_set(inventory))
+
+fn value_of(item) {
+  return item["qty"] * item["price"]
+}
+
+rows = []
+for name in inventory {
+  push(rows, [name, value_of(inventory[name])])
+}
+rows = sorted(rows, fn(r) {
+  return 0 - r[1]
+})
+for r in rows {
+  println(f"{pad_right(r[0], 8, ' ')}{pad_left(str(r[1]), 7, ' ')}")
+}
+
+fn classify(qty) {
+  match qty {
+    0 => return "out"
+    _ => {
+      if qty < 10 {
+        return "low"
+      }
+      return "ok"
+    }
+  }
+}
+for name in keys(inventory) {
+  println(name + ": " + classify(inventory[name]["qty"]))
+}
+
+fn countdown(n) {
+  while n > 0 {
+    yield n
+    n = n - 1
+  }
+}
+acc = []
+for v in countdown(4) {
+  push(acc, v * v)
+}
+println(acc)
+
+events = [
+  {"type": "sale", "item": "apple", "n": 20},
+  {"type": "restock", "item": "banana", "n": 40},
+  {"type": "sale", "item": "durian", "n": 5},
+  {"type": "sale", "item": "carrot", "n": 20},
+  {"type": "audit", "item": "apple", "n": 0}
+]
+log = []
+for ev in events {
+  item = inventory[ev["item"]]
+  switch ev["type"] {
+    case "sale":
+      if item["qty"] >= ev["n"] {
+        item["qty"] = item["qty"] - ev["n"]
+        push(log, "sold " + str(ev["n"]) + " " + ev["item"])
+      } else {
+        push(log, "cannot sell " + str(ev["n"]) + " " + ev["item"])
+      }
+    case "restock":
+      item["qty"] = item["qty"] + ev["n"]
+      push(log, "restocked " + ev["item"])
+    default:
+      push(log, "audit " + ev["item"] + "=" + str(item["qty"]))
+  }
+}
+for line in log {
+  println(line)
+}
+
+[first, second] = sorted(keys(inventory))
+println(first + "," + second)
+low = [n for n in keys(inventory) if inventory[n]["qty"] < 40]
+println(low)
+total = 0
+for pair in entries(inventory) {
+  total = total + value_of(pair[1])
+}
+println("total value: " + str(round(total * 100) / 100))
+by_tag = {}
+for name in inventory {
+  for t in inventory[name]["tags"] {
+    if !(t in by_tag) {
+      by_tag[t] = []
+    }
+    push(by_tag[t], name)
+  }
+}
+println(by_tag["fruit"])
+println(len(by_tag))

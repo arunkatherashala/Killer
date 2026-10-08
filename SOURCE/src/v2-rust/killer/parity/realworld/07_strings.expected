@@ -1,0 +1,36 @@
+word count: 18
+the     4
+quick   3
+dog     2
+fox     2
+away    1
+unique: 11
+longest: quick
+'A man, a plan, a canal: Panama' -> true
+'hello' -> false
+'Was it a car or a cat I saw?' -> true
+'' -> false
+'No 'x' in Nixon' -> true
+Khoor, Zruog! abc
+Hello, World! xyz
+17
+HÉLLO WÖRLD ÑANDÚ
+údnañ dlröw olléh
+é
+héllo
+233
+λ€
+7
+6
+héllo world ñandú
+3
+Héllo Wörld Ñandú
+Ada is 36 years old; next year 37
+tab:	|quote:"|
+****42|ab...|
+padded|
+true
+a/b//c
+bb
+THE QUICK
+4
