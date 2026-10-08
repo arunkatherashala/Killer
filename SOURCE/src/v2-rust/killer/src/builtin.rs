@@ -1426,6 +1426,7 @@ impl BuiltinFunctions {
             Value::Gauss { .. } => "gauss",
             Value::Set(_) => "set",
             Value::TaskError(_) => "error",
+            Value::Cell(_) => "cell",
         };
         Ok(Value::Str(type_name.to_string()))
     }

@@ -7,6 +7,8 @@ pub enum Instruction {
     ConstNum(f64),
     ConstBool(bool),
     ConstNull,
+    /// Move the named variable into a shared cell (no-op when it already is one).
+    BoxVar(String),
     ConstFunc { params: Vec<String>, bytecode_start: usize, captured_names: Vec<String> },
     EnterScope,
     ExitScope,

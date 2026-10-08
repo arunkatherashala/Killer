@@ -315,6 +315,20 @@ struct CompileContext {
     finally_stack: Vec<FinallyEntry>,
     /// Exception-handler frames pushed by the `try` blocks around the code being compiled.
     try_depth: usize,
+    /// Shared-variable (closure) bookkeeping for this function; see `closure_scan`.
+    closure: ClosureInfo,
+}
+
+/// Which variables of a function live in shared cells and which ones it received from an
+/// enclosing function.
+#[derive(Debug, Default, Clone)]
+struct ClosureInfo {
+    /// Boxed locals: name -> line of their first assignment (0 for parameters).
+    boxed: HashMap<String, usize>,
+    /// Names this function captured from its enclosing function.
+    captured: std::collections::HashSet<String>,
+    /// `state.named_locals` length when this function started: loop variables above it are its own.
+    loop_base: usize,
 }
 
 /// A `finally` body that must also run when `return` / `break` / `continue` leaves its `try`.
@@ -707,7 +721,7 @@ fn try_compile_self_tail_call(
     context: &mut CompileContext,
 ) -> Result<bool, VmError> {
     // a generator's frame is kept alive between resumes, so it can never be recycled by a tail call
-    if context.current_function_name.as_deref() != Some(callee) || context.in_generator {
+    if context.current_function_name.as_deref() != Some(callee) || context.in_generator || !context.closure.boxed.is_empty() {
         return Ok(false);
     }
     let target_ip = {
@@ -831,8 +845,8 @@ fn compile_pattern_assignment(
             // Simple assignment: value is already on stack
             if let Some(idx) = context.params.get(name) {
                 state.instructions.push(Instruction::Store(format!("arg{}", idx)));
-            } else if name.starts_with("__") {
-                // Internal temp variable — keep as named store
+            } else if name.starts_with("__") || context.closure.boxed.contains_key(name) {
+                // Internal temp variable (or a variable shared with closures) — keep as named store
                 state.instructions.push(Instruction::Store(name.clone()));
             } else {
                 // Assign slot on first encounter, reuse on subsequent
@@ -1959,6 +1973,7 @@ fn compile_expr(
                 in_generator: false,
                 finally_stack: Vec::new(),
                 try_depth: 0,
+                closure: Default::default(),
             };
             
             // Compile function body
@@ -2606,7 +2621,7 @@ fn body_has_yield(lines: &[(usize, String)]) -> bool {
     false
 }
 
-fn skip_braced_block(lines: &[(usize, String)], open: usize) -> usize {
+pub(crate) fn skip_braced_block(lines: &[(usize, String)], open: usize) -> usize {
     let mut depth = 0i32;
     let mut j = open;
     while j < lines.len() {
@@ -3344,7 +3359,10 @@ fn compile_let(
     // Inside a function: register in slot_map for consistent Load/StoreSlot usage.
     // Without this, `let` emits named Store but later assignments emit StoreSlot,
     // causing split-brain where while-loop conditions read stale named values.
-    if context.in_function {
+    if context.in_function && context.closure.boxed.contains_key(name) {
+        // a variable shared with closures: a fresh binding every time the `let` runs
+        state.instructions.push(Instruction::StoreLocal(name.to_string()));
+    } else if context.in_function {
         let slot = if let Some(&s) = context.slot_map.get(name) {
             s
         } else {
@@ -4376,6 +4394,7 @@ fn shadowed_context(context: &CompileContext, hide: &[String]) -> CompileContext
         in_generator: context.in_generator,
         finally_stack: Vec::new(),
         try_depth: 0,
+        closure: context.closure.clone(),
     }
 }
 
@@ -5513,7 +5532,7 @@ fn split_arguments(input: &str) -> Option<Vec<String>> {
 }
 
 /// Identifiers mentioned in `lines` (string literals skipped).
-fn identifiers_in_lines(lines: &[(usize, String)]) -> std::collections::HashSet<String> {
+pub(crate) fn identifiers_in_lines(lines: &[(usize, String)]) -> std::collections::HashSet<String> {
     let mut out = std::collections::HashSet::new();
     for (_, line) in lines {
         let mut cleaned = String::with_capacity(line.len());
@@ -5549,6 +5568,35 @@ fn identifiers_in_lines(lines: &[(usize, String)]) -> std::collections::HashSet<
     out
 }
 
+/// Give the shared-cell variables of a function body (see `closure_scan`) named storage: they are
+/// created up front in the function's own scope (so a first assignment inside a block cannot make
+/// them block-local) and read/written by name from then on. Parameters are copied in.
+fn emit_boxed_prologue(
+    body: &[(usize, String)],
+    params: &[String],
+    state: &mut CompilerState,
+    context: &mut CompileContext,
+) {
+    let skip: std::collections::HashSet<String> = body
+        .iter()
+        .filter_map(|(_, l)| l.trim().strip_prefix("global "))
+        .flat_map(|r| r.split(',').map(|n| n.trim().to_string()).collect::<Vec<_>>())
+        .collect();
+    let boxed = crate::closure_scan::boxed_variables(body, params, &context.closure.captured, &skip);
+    let mut names: Vec<&String> = boxed.keys().collect();
+    names.sort();
+    for name in names {
+        if let Some(index) = context.params.remove(name) {
+            state.instructions.push(Instruction::Load(format!("arg{}", index)));
+        } else {
+            state.instructions.push(Instruction::ConstNull);
+        }
+        state.instructions.push(Instruction::StoreLocal(name.clone()));
+        context.outer_vars.insert(name.clone());
+    }
+    context.closure.boxed = boxed;
+}
+
 /// `parent` is the enclosing function's context when this definition is nested in a function: the
 /// variables the body uses from it are captured (by value, at definition time) into a closure.
 fn compile_fn_definition(
@@ -5574,22 +5622,45 @@ fn compile_fn_definition(
 
     // Variables of the enclosing function that this body uses: captured into a closure.
     let mut captured_vars: Vec<(String, Option<u16>, Option<usize>)> = Vec::new(); // (name, slot, param index)
+    // captured names that are shared cells / named variables (no copy is published for them)
+    let mut shared_vars: Vec<String> = Vec::new();
+    let mut named_vars: Vec<String> = Vec::new();
+    let mut uses_self = false;
     if let Some(p) = parent.as_deref() {
+        let body_end = skip_braced_block(lines, *cursor - 1).saturating_sub(1).max(*cursor);
+        let used = identifiers_in_lines(&lines[*cursor..body_end.min(lines.len())]);
+        uses_self = p.in_function && used.contains(&name);
+        let own: std::collections::HashSet<&String> = params.iter().collect();
+        let loops: Vec<String> = state.named_locals[p.closure.loop_base.min(state.named_locals.len())..].to_vec();
+        let mut names: Vec<&String> = Vec::new();
         if p.in_function {
-            let body_end = skip_braced_block(lines, *cursor - 1).saturating_sub(1).max(*cursor);
-            let used = identifiers_in_lines(&lines[*cursor..body_end.min(lines.len())]);
-            let own: std::collections::HashSet<&String> = params.iter().collect();
-            let mut names: Vec<&String> = p.slot_map.keys().chain(p.params.keys()).collect();
-            names.sort();
-            names.dedup();
-            for n in names {
-                if used.contains(n) && !own.contains(n) && *n != name && !p.global_decls.contains(n) {
-                    captured_vars.push((n.clone(), p.slot_map.get(n).copied(), p.params.get(n).copied()));
+            names.extend(p.slot_map.keys());
+            names.extend(p.params.keys());
+            names.extend(p.closure.boxed.keys());
+            names.extend(p.closure.captured.iter());
+        }
+        names.extend(loops.iter());
+        names.sort();
+        names.dedup();
+        for n in names {
+            if !used.contains(n) || own.contains(n) || *n == name || p.global_decls.contains(n) {
+                continue;
+            }
+            if let Some(&first) = p.closure.boxed.get(n) {
+                if first < line_no || loops.contains(n) {
+                    shared_vars.push(n.clone());
                 }
+            } else if p.in_function && (p.slot_map.contains_key(n) || p.params.contains_key(n)) {
+                captured_vars.push((n.clone(), p.slot_map.get(n).copied(), p.params.get(n).copied()));
+            } else if p.closure.captured.contains(n) || loops.contains(n) {
+                named_vars.push(n.clone());
             }
         }
     }
-    let is_closure = !captured_vars.is_empty();
+    let is_closure = !captured_vars.is_empty() || !shared_vars.is_empty() || !named_vars.is_empty();
+    // a closure that calls itself by name gets itself as a captured variable
+    let uses_self = uses_self && is_closure;
+
 
     let skip_jump_index = state.instructions.len();
     state.instructions.push(Instruction::Jump(usize::MAX));
@@ -5621,6 +5692,9 @@ fn compile_fn_definition(
             .iter()
             .cloned()
             .chain(captured_vars.iter().map(|(n, _, _)| n.clone()))
+            .chain(shared_vars.iter().cloned())
+            .chain(named_vars.iter().cloned())
+            .chain(uses_self.then(|| name.clone()))
             .collect(),
         global_decls: Default::default(),
         tail_position: false,
@@ -5629,13 +5703,20 @@ fn compile_fn_definition(
         in_generator: false,
         finally_stack: Vec::new(),
         try_depth: 0,
+        closure: ClosureInfo {
+            boxed: HashMap::new(),
+            captured: captured_vars.iter().map(|(n, _, _)| n.clone()).chain(shared_vars.iter().cloned()).chain(named_vars.iter().cloned()).collect(),
+            loop_base: state.named_locals.len(),
+        },
     };
+    let param_list = params.clone();
     for (index, param) in params.into_iter().enumerate() {
         fn_context.params.insert(param, index);
     }
 
     emit_default_prologue(&defaults, line_no, state, &mut fn_context)?;
     let body_close = skip_braced_block(lines, cursor.saturating_sub(1)).min(lines.len());
+    emit_boxed_prologue(&lines[(*cursor).min(body_close)..body_close.saturating_sub(1).max((*cursor).min(body_close))], &param_list, state, &mut fn_context);
     if body_has_yield(&lines[(*cursor).min(body_close)..body_close]) {
         // a generator: calling it only creates the generator object
         fn_context.in_generator = true;
@@ -5665,10 +5746,21 @@ fn compile_fn_definition(
             }
             state.instructions.push(Instruction::Store(var.clone()));
         }
+        // shared variables: make sure each lives in a cell so this closure and the enclosing
+        // call (and every other closure) see the same variable
+        for var in &shared_vars {
+            state.instructions.push(Instruction::BoxVar(var.clone()));
+        }
         state.instructions.push(Instruction::ConstFunc {
             params: arg_names,
             bytecode_start: fn_start,
-            captured_names: captured_vars.iter().map(|(n, _, _)| n.clone()).collect(),
+            captured_names: captured_vars
+                .iter()
+                .map(|(n, _, _)| n.clone())
+                .chain(shared_vars.iter().cloned())
+                .chain(named_vars.iter().cloned())
+                .chain(uses_self.then(|| format!("@self:{}", name)))
+                .collect(),
         });
         if let Some(p) = parent.as_deref_mut() {
             emit_store_variable(&name, state, p);
@@ -5834,6 +5926,7 @@ fn compile_class_definition(
                 in_generator: false,
                 finally_stack: Vec::new(),
                 try_depth: 0,
+                closure: Default::default(),
             };
             for (index, param) in params.iter().enumerate() {
                 method_context.params.insert(param.clone(), index);
@@ -5841,6 +5934,10 @@ fn compile_class_definition(
 
             emit_default_prologue(&method_defaults, *mline_no, state, &mut method_context)?;
             let body_close = skip_braced_block(lines, cursor.saturating_sub(1)).min(lines.len());
+            {
+                let from = (*cursor).min(body_close);
+                emit_boxed_prologue(&lines[from..body_close.saturating_sub(1).max(from)], &params, state, &mut method_context);
+            }
             if body_has_yield(&lines[(*cursor).min(body_close)..body_close]) {
                 method_context.in_generator = true;
                 state.instructions.push(Instruction::MakeGenerator);

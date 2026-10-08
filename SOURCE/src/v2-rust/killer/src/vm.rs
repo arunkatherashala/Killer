@@ -952,18 +952,38 @@ impl VirtualMachine {
                 Instruction::ConstFunc { params, bytecode_start, captured_names } => {
                     // Capture variables from current scope
                     let mut captured = HashMap::new();
+                    let mut self_name: Option<&str> = None;
                     for var_name in captured_names {
-                        if let Ok(value) = self.load_var(var_name) {
+                        if let Some(own) = var_name.strip_prefix("@self:") {
+                            self_name = Some(own);
+                        } else if let Ok(value) = self.load_var_raw(var_name) {
                             captured.insert(var_name.clone(), value);
                         }
                     }
-                    
+                    let captured = crate::value::Captures::new(captured);
+
                     // Push a function value onto the stack
-                    self.stack.push(Value::Function {
+                    let func = Value::Function {
                         params: params.clone(),
                         bytecode_start: *bytecode_start,
-                        captured: crate::value::Captures::new(captured),
-                    });
+                        captured: captured.clone(),
+                    };
+                    // a closure that calls itself by name captures itself
+                    if let Some(own) = self_name {
+                        captured.set(own, func.clone());
+                    }
+                    self.stack.push(func);
+                }
+                Instruction::BoxVar(name) => {
+                    for scope in self.scopes.iter_mut().rev() {
+                        if let Some(slot) = scope.get_mut(name.as_str()) {
+                            if !matches!(slot, Value::Cell(_)) {
+                                let v = std::mem::replace(slot, Value::Null);
+                                *slot = Value::Cell(std::rc::Rc::new(std::cell::RefCell::new(v)));
+                            }
+                            break;
+                        }
+                    }
                 }
                 Instruction::EnterScope => self.push_scope(),
                 Instruction::ExitScope => self.pop_scope()?,
@@ -2906,6 +2926,7 @@ impl VirtualMachine {
                                 Value::Gauss { .. } => "gauss",
                                 Value::Set(_) => "set",
                                 Value::TaskError(_) => "error",
+                                Value::Cell(_) => "cell",
                             };
                             Value::Str(type_name.to_string())
                         }
@@ -6113,6 +6134,7 @@ impl VirtualMachine {
             Value::Gauss { mean, sigma } => *mean > crate::uncertain::Z95 * sigma.abs(),
             Value::Set(s) => !s.is_empty(),
             Value::TaskError(_) => true,
+            Value::Cell(c) => !matches!(&*c.borrow(), Value::Null | Value::Bool(false)),
         }
     }
 
@@ -6258,7 +6280,11 @@ impl VirtualMachine {
         // This allows inner scopes (functions) to mutate outer variables.
         for scope in self.scopes.iter_mut().rev() {
             if let Some(slot) = scope.get_mut(name) {
-                *slot = value;
+                match slot {
+                    // a shared closure variable: write through the cell
+                    Value::Cell(cell) => *cell.borrow_mut() = value,
+                    _ => *slot = value,
+                }
                 return Ok(());
             }
         }
@@ -6293,6 +6319,20 @@ impl VirtualMachine {
         Ok(())
     }
 
+    /// Like `load_var`, but a shared closure variable is returned as its cell (to be captured),
+    /// not as the value inside it.
+    fn load_var_raw(&self, name: &str) -> Result<Value, VmError> {
+        for scope in self.scopes.iter().rev() {
+            if let Some(value @ Value::Cell(_)) = scope.get(name) {
+                return Ok(value.clone());
+            }
+            if scope.contains_key(name) {
+                break;
+            }
+        }
+        self.load_var(name)
+    }
+
     fn load_var(&self, name: &str) -> Result<Value, VmError> {
         // Week 6: Fast path for cached loop variables
         // Only check if cache is populated (avoids overhead on non-cached variables)
@@ -6312,7 +6352,10 @@ impl VirtualMachine {
 
         for scope in self.scopes.iter().rev() {
             if let Some(value) = scope.get(name) {
-                return Ok(value.clone());
+                return Ok(match value {
+                    Value::Cell(cell) => cell.borrow().clone(),
+                    other => other.clone(),
+                });
             }
         }
         // Suggest similar names from the current scope to help debugging.
