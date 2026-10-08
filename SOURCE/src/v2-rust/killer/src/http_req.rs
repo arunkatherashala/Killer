@@ -94,7 +94,7 @@ pub fn validate_url(url: &str, allow_http: bool) -> Result<(), String> {
             return Ok(());
         }
         return Err(format!(
-            "Security: plain http:// is only allowed for localhost/127.0.0.1/::1 (pass allow_http: true to override).\nGot: {}",
+            "Security: HTTPS is required; plain http:// is only allowed for localhost/127.0.0.1/::1 (pass allow_http: true to override).\nGot: {}",
             shown
         ));
     }
