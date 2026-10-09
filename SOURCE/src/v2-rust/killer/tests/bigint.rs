@@ -89,7 +89,7 @@ fn floor_semantics_for_division_and_modulo() {
 
 #[test]
 fn rsa_toy_with_powmod() {
-    let src = "p = 1000000007\nq = 998244353\nn = p * q\ne = 65537\nmsg = 123456789012345\nc = powmod(msg, e, n)\nprintln(c)\nprintln(powmod(4, 13, 497))\nprintln(powmod(big(2), big(100), big(1000000007)))\n";
+    let src = "p = 1000000007\nq = 998244353\nn = big(p) * q\ne = 65537\nmsg = 123456789012345\nc = powmod(msg, e, n)\nprintln(c)\nprintln(powmod(4, 13, 497))\nprintln(powmod(big(2), big(100), big(1000000007)))\n";
     assert_eq!(run(src), "481649520542750598\n445\n976371285");
 }
 
