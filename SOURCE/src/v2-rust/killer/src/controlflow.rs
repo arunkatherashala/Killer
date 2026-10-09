@@ -597,7 +597,8 @@ fn lower_for(src: &str, m: &[u8], at: usize, counter: &mut Counter) -> Option<(S
     let iterable = header[sep + 4..].trim();
     let body = lower_with(&src[open + 1..close], counter);
     let tmp = format!("__it_{}", counter.next());
-    let mut out = format!("for {tmp} in {iterable} {{\n");
+    // a dict iterates as (key, value) pairs here (`for k, v in d`); anything else is unchanged
+    let mut out = format!("for {tmp} in __iter_pairs({iterable}) {{\n");
     for (k, n) in names.iter().enumerate() {
         out.push_str(&format!("{indent}  {n} = {tmp}[{k}]\n"));
     }
@@ -705,7 +706,7 @@ mod tests {
     #[test]
     fn for_destructuring() {
         let out = lower("for i, x in enumerate(xs) {\n  println(i)\n}\n");
-        assert!(out.contains("for __it_0 in enumerate(xs) {"), "{out}");
+        assert!(out.contains("for __it_0 in __iter_pairs(enumerate(xs)) {"), "{out}");
         assert!(out.contains("i = __it_0[0]"), "{out}");
         assert!(out.contains("x = __it_0[1]"), "{out}");
     }

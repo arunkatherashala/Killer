@@ -307,6 +307,7 @@ fn write(out: &mut String, v: &Value, indent: usize, level: usize, depth: usize)
         Value::Integer(i) => {
             let _ = std::fmt::Write::write_fmt(out, format_args!("{}", i));
         }
+        Value::BigInt(b) => out.push_str(&b.to_string()),
         Value::Str(s) => escape_into(out, s),
         Value::Array(a) => {
             let items = a.borrow();

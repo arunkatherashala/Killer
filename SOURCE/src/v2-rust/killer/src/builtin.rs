@@ -104,6 +104,7 @@ fn is_truthy(v: &Value) -> bool {
         Value::Number(n) => *n != 0.0 && !n.is_nan(),
         Value::Str(s) => !s.is_empty(),
         Value::Array(a) => !a.is_empty(),
+        Value::BigInt(b) => !b.is_zero(),
         _ => true,
     }
 }
@@ -397,6 +398,20 @@ impl BuiltinFunctions {
             // Math functions
             "sqrt" => Self::sqrt(args),
             "pow" => Self::pow(args),
+            // `for k, v in d`: a dict becomes a list of [key, value] pairs, everything else is returned as is
+            "__iter_pairs" => match args.first() {
+                Some(Value::Dict(d)) => Ok(Value::from(
+                    d.iter().map(|(k, v)| Value::from(vec![Value::Str(k), v])).collect::<Vec<_>>(),
+                )),
+                Some(other) => Ok(other.clone()),
+                None => Err(VmError::runtime_error("__iter_pairs() expects 1 argument".to_string())),
+            },
+            "big" | "factorial" | "divmod" | "idiv" | "powmod" | "isqrt" | "bit_length" => {
+                crate::bigint_ops::call(name, args).map_err(VmError::runtime_error)
+            }
+            "gcd" if args.iter().any(|a| matches!(a, Value::BigInt(_))) => {
+                crate::bigint_ops::call(name, args).map_err(VmError::runtime_error)
+            }
             "bit_and" => Self::bit_and(args),
             "bit_or" => Self::bit_or(args),
             "bit_xor" => Self::bit_xor(args),
@@ -425,6 +440,17 @@ impl BuiltinFunctions {
             "isFinite" => Self::is_finite(args),
             
             // File I/O
+            // snake_case aliases of the camelCase file builtins and of the conversions
+            "file_read" => Self::read_file(args),
+            "file_write" => Self::write_file(args),
+            "file_append" => Self::append_file(args),
+            "file_exists" => Self::file_exists(args),
+            "file_delete" => Self::delete_file(args),
+            "parse_int" => Self::parse_int(args),
+            "parse_float" => Self::parse_float(args),
+            "to_int" => Self::int(args),
+            "to_string" => Self::str(args),
+            "type_of" => Self::type_of(args),
             "readFile" => Self::read_file(args),
             "writeFile" => Self::write_file(args),
             "appendFile" => Self::append_file(args),
@@ -1429,6 +1455,8 @@ impl BuiltinFunctions {
             Value::Gauss { .. } => "gauss",
             Value::Set(_) => "set",
             Value::TaskError(_) => "error",
+            Value::Cell(_) => "cell",
+            Value::BigInt(_) => "bigint",
         };
         Ok(Value::Str(type_name.to_string()))
     }
@@ -2002,6 +2030,9 @@ impl BuiltinFunctions {
             (Value::Number(base), Value::Number(exp)) => {
                 Ok(Value::Number(base.powf(*exp)))
             }
+            (a, b) if crate::bigint_ops::involves(a, b) => {
+                crate::bigint_ops::arith(crate::bigint_ops::Op::Pow, a, b).map_err(VmError::runtime_error)
+            }
             _ => Err(VmError::runtime_error(
                 "pow() expects numbers".to_string(),
             )),
@@ -2090,6 +2121,7 @@ impl BuiltinFunctions {
         }
         match &args[0] {
             Value::Number(n) => Ok(Value::Number(n.abs())),
+            Value::BigInt(b) => Ok(crate::bigint_ops::big(b.abs())),
             Value::Uncertain { value, margin } => Ok(crate::uncertain::abs(*value, *margin)),
             Value::Gauss { mean, sigma } => Ok(crate::uncertain::abs_gauss(*mean, *sigma)),
             _ => Err(VmError::runtime_error(
@@ -2257,6 +2289,17 @@ impl BuiltinFunctions {
                         out.sort_by(|a, b| match (a, b) {
                             (Value::Str(x), Value::Str(y)) => x.cmp(y),
                             _ => std::cmp::Ordering::Equal,
+                        });
+                    }
+                    // bigints (optionally mixed with numbers) sort by exact value
+                    Some(Value::BigInt(_)) => {
+                        out.sort_by(|a, b| {
+                            crate::bigint_ops::compare(a, b)
+                                .or_else(|| match (a, b) {
+                                    (Value::Number(x), Value::Number(y)) => x.partial_cmp(y),
+                                    _ => None,
+                                })
+                                .unwrap_or(std::cmp::Ordering::Equal)
                         });
                     }
                     // pairs / rows sort lexicographically, like Python's lists
@@ -3858,6 +3901,8 @@ impl BuiltinFunctions {
                     let value_str = match value {
                         Value::Str(s) => format!("\"{}\"", s.replace("\"", "\\\"")),
                         Value::Number(n) => n.to_string(),
+                        Value::BigInt(b) => b.to_string(),
+                        Value::Array(_) => crate::bigint_ops::json_array(&value),
                         Value::Bool(b) => b.to_string(),
                         Value::Null => "null".to_string(),
                         _ => format!("\"{}\"", value),
@@ -3868,6 +3913,8 @@ impl BuiltinFunctions {
             }
             Value::Str(s) => format!("\"{}\"", s.replace("\"", "\\\"")),
             Value::Number(n) => n.to_string(),
+            Value::BigInt(b) => b.to_string(),
+            Value::Array(_) => crate::bigint_ops::json_array(&args[0]),
             Value::Bool(b) => b.to_string(),
             Value::Null => "null".to_string(),
             _ => format!("null"),

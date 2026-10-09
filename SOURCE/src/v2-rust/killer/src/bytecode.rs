@@ -7,6 +7,13 @@ pub enum Instruction {
     ConstNum(f64),
     ConstBool(bool),
     ConstNull,
+    /// Move the named variable into a shared cell (no-op when it already is one).
+    BoxVar(String),
+    /// Push variable `name`, or when no such variable exists a function value for the wrapper at
+    /// `start` (a builtin used as a value).
+    LoadOrBuiltin { name: String, start: usize, arity: usize },
+    /// Push an arbitrary-precision integer literal (`123n`, `0xFFn`; the text without the `n`).
+    ConstBigInt(String),
     ConstFunc { params: Vec<String>, bytecode_start: usize, captured_names: Vec<String> },
     EnterScope,
     ExitScope,

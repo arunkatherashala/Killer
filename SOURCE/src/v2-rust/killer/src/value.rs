@@ -520,6 +520,10 @@ impl Captures {
     /// Overwrite each captured value in place with `f(name)` when it returns one (no key allocation).
     pub fn refresh_with(&self, mut f: impl FnMut(&str) -> Option<Value>) {
         for (k, slot) in self.0.borrow_mut().iter_mut() {
+            // a shared cell is the variable itself: it is updated in place, never copied back
+            if matches!(slot, Value::Cell(_)) {
+                continue;
+            }
             if let Some(v) = f(k) {
                 *slot = v;
             }
@@ -595,6 +599,12 @@ pub enum Value {
     /// Result slot of a spawned task that failed; `await` turns it back into an error in the
     /// awaiting thread. Never visible to scripts as a value.
     TaskError(Box<Value>),
+    /// A shared variable cell ("boxed" variable): a local that a nested function captures and
+    /// assigns lives in one of these so every closure and the enclosing call see the same value.
+    /// Only ever stored in a scope or in `Captures`; variable loads/stores see through it.
+    Cell(Rc<RefCell<Value>>),
+    /// Arbitrary-precision integer (`123n`, `big(x)`, `factorial(n)`); see `bigint_ops` for the rules.
+    BigInt(Rc<crate::bigint::BigInt>),
     Null,
 }
 
@@ -654,6 +664,8 @@ impl Display for Value {
             Value::Class(class) => write!(f, "<class {}>", class.name),
             Value::Function { params, .. } => write!(f, "<function({})>", params.join(", ")),
             Value::Generator(_) => write!(f, "<generator>"),
+            Value::Cell(c) => write!(f, "{}", c.borrow()),
+            Value::BigInt(b) => write!(f, "{}", b),
             Value::QualityWrapped(quality) => write!(f, "<quality score={:.2}>", quality.get_trim_score()),
             Value::Trit(t) => match t {
                 -1 => write!(f, "T_NEG"),
@@ -724,6 +736,7 @@ impl Value {
                 reason: reason.clone(),
             },
             Value::Set(s) => Value::Set(s.copy()),
+            Value::Cell(c) => Value::Cell(Rc::new(RefCell::new(c.borrow().detached()))),
             other => other.clone(),
         }
     }
@@ -746,6 +759,8 @@ impl Value {
             Value::Tryte(_) => "tryte",
             Value::Future(_) => "future",
             Value::TaskError(_) => "error",
+            Value::Cell(_) => "cell",
+            Value::BigInt(_) => "bigint",
             Value::Integer(_) => "integer",
             Value::Bytes(_) => "bytes",
             Value::Pointer(_) => "pointer",

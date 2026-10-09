@@ -14,7 +14,7 @@ print("--- SECTION 1: Formula Verification (1-12) ---")
 ok = 1
 n = 4
 while n <= 20 {
-    k = n // 2 + 1
+    k = floor(n / 2) + 1
     expected = 4 * n * n + 3 * n
     calc = 8 * n * k - 6 * k - 2 * n + 6
     if calc != expected {
@@ -34,7 +34,7 @@ if ok == 1 {
 ok = 1
 n = 4
 while n <= 20 {
-    k = n // 2 + 1
+    k = floor(n / 2) + 1
     v = n + 2 * n * k
     if v != n * n + 3 * n {
         ok = 0
@@ -53,7 +53,7 @@ if ok == 1 {
 ok = 1
 n = 4
 while n <= 20 {
-    k = n // 2 + 1
+    k = floor(n / 2) + 1
     sum = 0
     i = 1
     while i <= n {
@@ -64,7 +64,7 @@ while n <= 20 {
         }
         i = i + 1
     }
-    formula = k * n - k * (k - 1) // 2
+    formula = k * n - floor(k * (k - 1) / 2)
     if sum != formula {
         ok = 0
     }
@@ -82,8 +82,8 @@ if ok == 1 {
 ok = 1
 n = 4
 while n <= 20 {
-    k = n // 2 + 1
-    an = k * n - k * (k - 1) // 2
+    k = floor(n / 2) + 1
+    an = k * n - floor(k * (k - 1) / 2)
     gb = 2 * an - 2
     if gb != n * n + 2 * n - 2 {
         ok = 0
@@ -102,10 +102,10 @@ if ok == 1 {
 ok = 1
 n = 4
 while n <= 20 {
-    m = n // 2 - 1
+    m = floor(n / 2) - 1
     drange = 2 * m * m + 2
     d_lower = drange - n
-    threshold = (n - 2) * (n - 4) // 2
+    threshold = floor((n - 2) * (n - 4) / 2)
     if d_lower != threshold {
         ok = 0
     }
@@ -124,9 +124,9 @@ ok = 1
 n = 4
 while n <= 20 {
     grid = n * n + 2 * n - 2
-    d = (n - 2) * (n - 4) // 2
+    d = floor((n - 2) * (n - 4) / 2)
     total = grid + d + n
-    target = 3 * n * n // 2 + 2
+    target = floor(3 * n * n / 2) + 2
     if total != target {
         ok = 0
     }
@@ -206,7 +206,7 @@ ok = 1
 n = 6
 while n <= 20 {
     lb = n * n + 2 * n + 2
-    bar = 3 * n * n // 2 + 2
+    bar = floor(3 * n * n / 2) + 2
     if lb >= bar {
         ok = 0
     }
@@ -279,10 +279,10 @@ print("  GHOST 28: Unbalanced -- large D^range + large disc")
 print("  GHOST 29: Tradeoff -- adversary can't optimize both!")
 
 // Ghost 30: D = n^2/2-2n+2 exact fit
-p4 = 16 // 2 - 8 + 2
-p6 = 36 // 2 - 12 + 2
-p8 = 64 // 2 - 16 + 2
-p10 = 100 // 2 - 20 + 2
+p4 = floor(16 / 2) - 8 + 2
+p6 = floor(36 / 2) - 12 + 2
+p8 = floor(64 / 2) - 16 + 2
+p10 = floor(100 / 2) - 20 + 2
 print(K"    D fit: pred(4)={p4}, pred(6)={p6}, pred(8)={p8}, pred(10)={p10}")
 ok = 1
 if p4 != 2 {
@@ -440,9 +440,9 @@ print("  GHOST 87: FRONT6 -- INFO  formal verification")
 print("  GHOST 88: Purpose -- INFO  Lean/Coq proof")
 
 // Ghost 89: D predictions
-pr12 = 144 // 2 - 24 + 2
-pr14 = 196 // 2 - 28 + 2
-pr16 = 256 // 2 - 32 + 2
+pr12 = floor(144 / 2) - 24 + 2
+pr14 = floor(196 / 2) - 28 + 2
+pr16 = floor(256 / 2) - 32 + 2
 print(K"  GHOST 89: D predict -- INFO  D(12)={pr12}, D(14)={pr14}, D(16)={pr16}")
 print("  GHOST 90: Validate -- INFO  needs sampling+D tracking")
 

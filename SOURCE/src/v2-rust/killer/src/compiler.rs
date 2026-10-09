@@ -245,6 +245,8 @@ struct CompilerState {
     function_arities: HashMap<usize, usize>,
     functions: HashMap<String, FunctionMeta>,
     pending_calls: Vec<PendingCall>,
+    /// Bytecode start of the function wrapper made for each builtin used as a value.
+    builtin_wrappers: HashMap<String, usize>,
     pending_spawn_calls: Vec<PendingCall>,  // v2.2: SpawnCallDirect forward refs
     function_counter: usize,
     /// Track top-level variable names so function bodies can reference them
@@ -317,6 +319,20 @@ struct CompileContext {
     finally_stack: Vec<FinallyEntry>,
     /// Exception-handler frames pushed by the `try` blocks around the code being compiled.
     try_depth: usize,
+    /// Shared-variable (closure) bookkeeping for this function; see `closure_scan`.
+    closure: ClosureInfo,
+}
+
+/// Which variables of a function live in shared cells and which ones it received from an
+/// enclosing function.
+#[derive(Debug, Default, Clone)]
+struct ClosureInfo {
+    /// Boxed locals: name -> line of their first assignment (0 for parameters).
+    boxed: HashMap<String, usize>,
+    /// Names this function captured from its enclosing function.
+    captured: std::collections::HashSet<String>,
+    /// `state.named_locals` length when this function started: loop variables above it are its own.
+    loop_base: usize,
 }
 
 /// A `finally` body that must also run when `return` / `break` / `continue` leaves its `try`.
@@ -335,6 +351,13 @@ pub fn compile_killer_subset(source: &str) -> Result<Program, VmError> {
     // Every rewriting pass returns its text plus a per-line map back to its input; composing them
     // (see `sourcemap`) tells us the original file and line of each line the compiler sees.
     let (imported, map) = crate::imports::resolve_mapped(source).map_err(VmError::parse_error_simple)?;
+    // `x // 2` would silently become `x` (`//` starts a comment): make that mistake an error
+    if let Some(line) = crate::hints::silent_floor_division(&imported) {
+        return Err(remap_error(
+            VmError::parse_error_simple(format!("Line {}: {}", line, crate::hints::FLOOR_DIVISION_MESSAGE)),
+            &map,
+        ));
+    }
     // `test "name" { }` blocks become functions (same line count, so `map` is unchanged)
     let imported = crate::testfw::lower(&imported);
     let checked = crate::typecheck::process(&imported).map_err(|e| remap_error(e, &map))?;
@@ -700,7 +723,7 @@ fn try_compile_self_tail_call(
     context: &mut CompileContext,
 ) -> Result<bool, VmError> {
     // a generator's frame is kept alive between resumes, so it can never be recycled by a tail call
-    if context.current_function_name.as_deref() != Some(callee) || context.in_generator {
+    if context.current_function_name.as_deref() != Some(callee) || context.in_generator || !context.closure.boxed.is_empty() {
         return Ok(false);
     }
     let target_ip = {
@@ -824,8 +847,8 @@ fn compile_pattern_assignment(
             // Simple assignment: value is already on stack
             if let Some(idx) = context.params.get(name) {
                 state.instructions.push(Instruction::Store(format!("arg{}", idx)));
-            } else if name.starts_with("__") {
-                // Internal temp variable — keep as named store
+            } else if name.starts_with("__") || context.closure.boxed.contains_key(name) {
+                // Internal temp variable (or a variable shared with closures) — keep as named store
                 state.instructions.push(Instruction::Store(name.clone()));
             } else {
                 // Assign slot on first encounter, reuse on subsequent
@@ -1952,6 +1975,7 @@ fn compile_expr(
                 in_generator: false,
                 finally_stack: Vec::new(),
                 try_depth: 0,
+                closure: Default::default(),
             };
             
             // Compile function body
@@ -2599,7 +2623,7 @@ fn body_has_yield(lines: &[(usize, String)]) -> bool {
     false
 }
 
-fn skip_braced_block(lines: &[(usize, String)], open: usize) -> usize {
+pub(crate) fn skip_braced_block(lines: &[(usize, String)], open: usize) -> usize {
     let mut depth = 0i32;
     let mut j = open;
     while j < lines.len() {
@@ -2974,6 +2998,17 @@ fn compile_for_each_line_statement(
 
     let body_start = state.instructions.len();
 
+    // The loop variable is stored by name each iteration. A variable that already lives in a slot
+    // (or is a parameter) is read through that slot, so copy the new value over it: the loop then
+    // rebinds it whatever it was bound to before, and keeps its last value afterwards.
+    if let Some(&slot) = context.slot_map.get(var_name) {
+        state.instructions.push(Instruction::Load(var_name.to_string()));
+        state.instructions.push(Instruction::StoreSlot(slot));
+    } else if let Some(&index) = context.params.get(var_name) {
+        state.instructions.push(Instruction::Load(var_name.to_string()));
+        state.instructions.push(Instruction::Store(format!("arg{}", index)));
+    }
+
     context.loop_stack.push(LoopContext {
         loop_start,
         break_jumps: Vec::new(),
@@ -3337,7 +3372,10 @@ fn compile_let(
     // Inside a function: register in slot_map for consistent Load/StoreSlot usage.
     // Without this, `let` emits named Store but later assignments emit StoreSlot,
     // causing split-brain where while-loop conditions read stale named values.
-    if context.in_function {
+    if context.in_function && context.closure.boxed.contains_key(name) {
+        // a variable shared with closures: a fresh binding every time the `let` runs
+        state.instructions.push(Instruction::StoreLocal(name.to_string()));
+    } else if context.in_function {
         let slot = if let Some(&s) = context.slot_map.get(name) {
             s
         } else {
@@ -3887,6 +3925,12 @@ fn compile_expr_str(
         return Ok(());
     }
 
+    // `123n` / `0xFFn`: arbitrary-precision integer literal
+    if let Some(text) = crate::bigint_ops::literal_text(expr) {
+        state.instructions.push(Instruction::ConstBigInt(text.to_string()));
+        return Ok(());
+    }
+
     // `new ClassName(args)` — object instantiation
     if let Some(rest) = expr.strip_prefix("new ") {
         let rest = rest.trim();
@@ -4135,6 +4179,14 @@ fn compile_expr_str(
         // PERF: emit slot load for known locals, fallback to named load otherwise
         if let Some(&slot) = context.slot_map.get(expr) {
             state.instructions.push(Instruction::LoadSlot(slot));
+        } else if builtin_value_arity(expr).is_some()
+            && !context.outer_vars.contains(expr)
+            && !state.known_top_level_vars.contains(expr)
+            && !state.functions.contains_key(expr)
+        {
+            // a bare builtin name (`f = print`, `map(xs, str)`): a variable of that name wins at run
+            // time, otherwise the builtin is wrapped in a callable function value
+            emit_builtin_value(expr, state);
         } else {
             state.instructions.push(Instruction::Load(expr.to_string()));
         }
@@ -4369,6 +4421,7 @@ fn shadowed_context(context: &CompileContext, hide: &[String]) -> CompileContext
         in_generator: context.in_generator,
         finally_stack: Vec::new(),
         try_depth: 0,
+        closure: context.closure.clone(),
     }
 }
 
@@ -5525,7 +5578,7 @@ fn split_arguments(input: &str) -> Option<Vec<String>> {
 }
 
 /// Identifiers mentioned in `lines` (string literals skipped).
-fn identifiers_in_lines(lines: &[(usize, String)]) -> std::collections::HashSet<String> {
+pub(crate) fn identifiers_in_lines(lines: &[(usize, String)]) -> std::collections::HashSet<String> {
     let mut out = std::collections::HashSet::new();
     for (_, line) in lines {
         let mut cleaned = String::with_capacity(line.len());
@@ -5561,6 +5614,35 @@ fn identifiers_in_lines(lines: &[(usize, String)]) -> std::collections::HashSet<
     out
 }
 
+/// Give the shared-cell variables of a function body (see `closure_scan`) named storage: they are
+/// created up front in the function's own scope (so a first assignment inside a block cannot make
+/// them block-local) and read/written by name from then on. Parameters are copied in.
+fn emit_boxed_prologue(
+    body: &[(usize, String)],
+    params: &[String],
+    state: &mut CompilerState,
+    context: &mut CompileContext,
+) {
+    let skip: std::collections::HashSet<String> = body
+        .iter()
+        .filter_map(|(_, l)| l.trim().strip_prefix("global "))
+        .flat_map(|r| r.split(',').map(|n| n.trim().to_string()).collect::<Vec<_>>())
+        .collect();
+    let boxed = crate::closure_scan::boxed_variables(body, params, &context.closure.captured, &skip);
+    let mut names: Vec<&String> = boxed.keys().collect();
+    names.sort();
+    for name in names {
+        if let Some(index) = context.params.remove(name) {
+            state.instructions.push(Instruction::Load(format!("arg{}", index)));
+        } else {
+            state.instructions.push(Instruction::ConstNull);
+        }
+        state.instructions.push(Instruction::StoreLocal(name.clone()));
+        context.outer_vars.insert(name.clone());
+    }
+    context.closure.boxed = boxed;
+}
+
 /// `parent` is the enclosing function's context when this definition is nested in a function: the
 /// variables the body uses from it are captured (by value, at definition time) into a closure.
 fn compile_fn_definition(
@@ -5586,22 +5668,45 @@ fn compile_fn_definition(
 
     // Variables of the enclosing function that this body uses: captured into a closure.
     let mut captured_vars: Vec<(String, Option<u16>, Option<usize>)> = Vec::new(); // (name, slot, param index)
+    // captured names that are shared cells / named variables (no copy is published for them)
+    let mut shared_vars: Vec<String> = Vec::new();
+    let mut named_vars: Vec<String> = Vec::new();
+    let mut uses_self = false;
     if let Some(p) = parent.as_deref() {
+        let body_end = skip_braced_block(lines, *cursor - 1).saturating_sub(1).max(*cursor);
+        let used = identifiers_in_lines(&lines[*cursor..body_end.min(lines.len())]);
+        uses_self = p.in_function && used.contains(&name);
+        let own: std::collections::HashSet<&String> = params.iter().collect();
+        let loops: Vec<String> = state.named_locals[p.closure.loop_base.min(state.named_locals.len())..].to_vec();
+        let mut names: Vec<&String> = Vec::new();
         if p.in_function {
-            let body_end = skip_braced_block(lines, *cursor - 1).saturating_sub(1).max(*cursor);
-            let used = identifiers_in_lines(&lines[*cursor..body_end.min(lines.len())]);
-            let own: std::collections::HashSet<&String> = params.iter().collect();
-            let mut names: Vec<&String> = p.slot_map.keys().chain(p.params.keys()).collect();
-            names.sort();
-            names.dedup();
-            for n in names {
-                if used.contains(n) && !own.contains(n) && *n != name && !p.global_decls.contains(n) {
-                    captured_vars.push((n.clone(), p.slot_map.get(n).copied(), p.params.get(n).copied()));
+            names.extend(p.slot_map.keys());
+            names.extend(p.params.keys());
+            names.extend(p.closure.boxed.keys());
+            names.extend(p.closure.captured.iter());
+        }
+        names.extend(loops.iter());
+        names.sort();
+        names.dedup();
+        for n in names {
+            if !used.contains(n) || own.contains(n) || *n == name || p.global_decls.contains(n) {
+                continue;
+            }
+            if let Some(&first) = p.closure.boxed.get(n) {
+                if first < line_no || loops.contains(n) {
+                    shared_vars.push(n.clone());
                 }
+            } else if p.in_function && (p.slot_map.contains_key(n) || p.params.contains_key(n)) {
+                captured_vars.push((n.clone(), p.slot_map.get(n).copied(), p.params.get(n).copied()));
+            } else if p.closure.captured.contains(n) || loops.contains(n) {
+                named_vars.push(n.clone());
             }
         }
     }
-    let is_closure = !captured_vars.is_empty();
+    let is_closure = !captured_vars.is_empty() || !shared_vars.is_empty() || !named_vars.is_empty();
+    // a closure that calls itself by name gets itself as a captured variable
+    let uses_self = uses_self && is_closure;
+
 
     let skip_jump_index = state.instructions.len();
     state.instructions.push(Instruction::Jump(usize::MAX));
@@ -5633,6 +5738,9 @@ fn compile_fn_definition(
             .iter()
             .cloned()
             .chain(captured_vars.iter().map(|(n, _, _)| n.clone()))
+            .chain(shared_vars.iter().cloned())
+            .chain(named_vars.iter().cloned())
+            .chain(uses_self.then(|| name.clone()))
             .collect(),
         global_decls: Default::default(),
         tail_position: false,
@@ -5641,13 +5749,20 @@ fn compile_fn_definition(
         in_generator: false,
         finally_stack: Vec::new(),
         try_depth: 0,
+        closure: ClosureInfo {
+            boxed: HashMap::new(),
+            captured: captured_vars.iter().map(|(n, _, _)| n.clone()).chain(shared_vars.iter().cloned()).chain(named_vars.iter().cloned()).collect(),
+            loop_base: state.named_locals.len(),
+        },
     };
+    let param_list = params.clone();
     for (index, param) in params.into_iter().enumerate() {
         fn_context.params.insert(param, index);
     }
 
     emit_default_prologue(&defaults, line_no, state, &mut fn_context)?;
     let body_close = skip_braced_block(lines, cursor.saturating_sub(1)).min(lines.len());
+    emit_boxed_prologue(&lines[(*cursor).min(body_close)..body_close.saturating_sub(1).max((*cursor).min(body_close))], &param_list, state, &mut fn_context);
     if body_has_yield(&lines[(*cursor).min(body_close)..body_close]) {
         // a generator: calling it only creates the generator object
         fn_context.in_generator = true;
@@ -5677,10 +5792,21 @@ fn compile_fn_definition(
             }
             state.instructions.push(Instruction::Store(var.clone()));
         }
+        // shared variables: make sure each lives in a cell so this closure and the enclosing
+        // call (and every other closure) see the same variable
+        for var in &shared_vars {
+            state.instructions.push(Instruction::BoxVar(var.clone()));
+        }
         state.instructions.push(Instruction::ConstFunc {
             params: arg_names,
             bytecode_start: fn_start,
-            captured_names: captured_vars.iter().map(|(n, _, _)| n.clone()).collect(),
+            captured_names: captured_vars
+                .iter()
+                .map(|(n, _, _)| n.clone())
+                .chain(shared_vars.iter().cloned())
+                .chain(named_vars.iter().cloned())
+                .chain(uses_self.then(|| format!("@self:{}", name)))
+                .collect(),
         });
         if let Some(p) = parent.as_deref_mut() {
             emit_store_variable(&name, state, p);
@@ -5846,6 +5972,7 @@ fn compile_class_definition(
                 in_generator: false,
                 finally_stack: Vec::new(),
                 try_depth: 0,
+                closure: Default::default(),
             };
             for (index, param) in params.iter().enumerate() {
                 method_context.params.insert(param.clone(), index);
@@ -5853,6 +5980,10 @@ fn compile_class_definition(
 
             emit_default_prologue(&method_defaults, *mline_no, state, &mut method_context)?;
             let body_close = skip_braced_block(lines, cursor.saturating_sub(1)).min(lines.len());
+            {
+                let from = (*cursor).min(body_close);
+                emit_boxed_prologue(&lines[from..body_close.saturating_sub(1).max(from)], &params, state, &mut method_context);
+            }
             if body_has_yield(&lines[(*cursor).min(body_close)..body_close]) {
                 method_context.in_generator = true;
                 state.instructions.push(Instruction::MakeGenerator);
@@ -6555,6 +6686,7 @@ fn patch_pending_calls(state: &mut CompilerState) -> Result<(), VmError> {
         "ord", "chr", "pad_left", "pad_right", "repeat", "strip", "lstrip", "rstrip", "startsWith", "endsWith",
         "base64_encode", "base64_decode", "hmac_sha256", "float", "bool", "log", "log2", "log10", "exp", "cbrt",
         "trunc", "sign", "atan2", "hypot", "asin", "acos", "atan", "sinh", "cosh", "tanh", "degrees", "radians",
+        "__iter_pairs", "big", "factorial", "divmod", "idiv", "powmod", "isqrt", "bit_length", // arbitrary-precision integers
         "gcd", "lcm", "mean", "median", "variance", "stdev", "pvariance", "pstdev", "env", "args", "exit",
         "sleep", "assert", "set", "delete", "insert", "gc_stats", "jit_stats", "instanceof", "dict_from_pairs",
         "mutex_new", "mutex_get", "mutex_set", "mutex_add", "mutex_free",
@@ -6735,18 +6867,7 @@ fn patch_pending_calls(state: &mut CompilerState) -> Result<(), VmError> {
         "doc_parse", "doc_check",
         "ui_core_version", "ui_headless_tick", "ui_headless_snapshot_json", "ui_health", "ui_help", "ui_native_window",
         // ── Android Modules ──
-        "mic_init", "mic_start", "mic_stop", "mic_status", "mic_save",
-        "mic_encode_m4a", "mic_set_quality", "mic_get_level",
-        "call_detect_start", "call_detect_stop", "call_detect_status",
-        "phone_contacts", "phone_call_log", "phone_info",
-        "phone_sms_send", "phone_sms_read", "phone_battery",
-        "phone_network", "phone_volume_set", "phone_vibrate",
-        "service_start_foreground", "service_stop_foreground", "service_is_running",
-        "service_notification", "service_notification_update",
-        "service_auto_start_enable", "service_auto_start_disable",
-        "service_wake_lock", "service_wake_unlock",
-        "service_request_permissions", "service_check_permissions",
-        "service_schedule_task", "service_cancel_task",
+        "mic_status", "service_is_running",
         "secure_encrypt", "secure_decrypt", "secure_hash", "secure_hash_file",
         "secure_random_bytes", "secure_pin_set", "secure_pin_verify", "secure_pin_is_set",
         "secure_lock", "secure_is_locked", "secure_unlock",
@@ -6799,7 +6920,12 @@ fn patch_pending_calls(state: &mut CompilerState) -> Result<(), VmError> {
         // that name (they are common words)
         let generator_builtin = matches!(pending.function_name.as_str(), "next" | "has_next")
             && !state.functions.contains_key(&pending.function_name);
-        if generator_builtin || pending.function_name == "__dl" || BUILTINS.contains(&pending.function_name.as_str()) || crate::net_ai::is_builtin(&pending.function_name) {
+        // the bigint builtins use common names: a function of the same name in the script wins
+        let user_override = matches!(
+            pending.function_name.as_str(),
+            "big" | "factorial" | "divmod" | "idiv" | "powmod" | "isqrt" | "bit_length"
+        ) && state.functions.contains_key(&pending.function_name);
+        if (generator_builtin || pending.function_name == "__dl" || BUILTINS.contains(&pending.function_name.as_str()) || crate::net_ai::is_builtin(&pending.function_name)) && !user_override {
             // -- Nova Galaxy: emit native opcodes instead of CallBuiltin ------
             let native_instr: Option<Instruction> = match pending.function_name.as_str() {
                 // Phase A: Trit native ALU opcodes
@@ -7473,6 +7599,69 @@ fn try_ui_assign_sugar(raw_line: &str) -> Option<String> {
 
 /// True when a `{` after `before` opens a dictionary literal rather than a block: it follows an
 /// operator or opening bracket (`x = {`, `f({`, `[{`, `a, {`, `k: {`) or `return`.
+/// How many arguments the function value wrapping builtin `name` takes, or `None` when the name is
+/// not a builtin that can be used as a value.
+fn builtin_value_arity(name: &str) -> Option<usize> {
+    const BINARY: &[&str] = &[
+        "pow", "push", "contains", "index_of", "join", "split", "concat", "gcd", "lcm", "divmod", "idiv", "atan2",
+        "hypot", "min", "max", "starts_with", "ends_with", "repeat", "get", "powmod_2",
+    ];
+    const EXTRA: &[&str] = &[
+        "print", "println", "float", "bool", "to_string", "to_int", "to_float", "parse_int", "parse_float", "chr",
+        "ord", "sign", "trunc", "log", "exp", "factorial", "big", "isqrt", "len", "str", "int", "type", "abs",
+    ];
+    if BINARY.contains(&name) {
+        return Some(2);
+    }
+    if EXTRA.contains(&name) || crate::builtin::BUILTIN_ID_TABLE.iter().any(|(n, _)| *n == name) {
+        return Some(1);
+    }
+    None
+}
+
+/// Push the value of builtin `name`: a script variable of that name if there is one at run time,
+/// else a function value wrapping the builtin (the wrapper is emitted once per program).
+fn emit_builtin_value(name: &str, state: &mut CompilerState) {
+    let arity = builtin_value_arity(name).unwrap_or(1);
+    let start = match state.builtin_wrappers.get(name) {
+        Some(&start) => start,
+        None => {
+            let skip = state.instructions.len();
+            state.instructions.push(Instruction::Jump(usize::MAX));
+            let start = state.instructions.len();
+            state.function_arities.insert(start, arity);
+            for i in 0..arity {
+                state.instructions.push(Instruction::Load(format!("arg{}", i)));
+            }
+            state.instructions.push(Instruction::CallBuiltin(name.to_string(), arity));
+            state.instructions.push(Instruction::Ret);
+            let after = state.instructions.len();
+            state.instructions[skip] = Instruction::Jump(after);
+            state.builtin_wrappers.insert(name.to_string(), start);
+            start
+        }
+    };
+    state.instructions.push(Instruction::LoadOrBuiltin { name: name.to_string(), start, arity });
+}
+
+/// True when the text before a `{` is a control-statement header (`if x`, `for a in b`, `else`,
+/// `while c`, `try`, `catch e`, ...) so the braces hold a block, even when it all fits on one line.
+fn brace_opens_control_block(before: &str) -> bool {
+    let b = before.trim();
+    if brace_opens_literal(b) || b.ends_with(" in") || b.ends_with(" of") {
+        return false;
+    }
+    let word: String = b.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
+    let rest = &b[word.len()..];
+    match word.as_str() {
+        "if" | "elif" | "while" | "for" => rest.starts_with(|c: char| c.is_whitespace() || c == '('),
+        "else" => rest.trim().is_empty() || rest.trim_start().starts_with("if"),
+        "try" | "finally" | "do" => rest.trim().is_empty(),
+        "catch" => true,
+        _ => false,
+    }
+}
+
 fn brace_opens_literal(before: &str) -> bool {
     let b = before.trim_end();
     b.ends_with(['=', '(', '[', ',', ':']) && !b.ends_with("==")
@@ -7562,7 +7751,9 @@ fn normalize_lines(source: &str) -> Vec<(usize, String)> {
                         i += clen + 1;
                         continue;
                     }
-                    if let Some(end) = consume_balanced_curly_line(&text, i) {
+                    // `if c { stmt }`, `for x in xs { stmt }`: a one-line block, not a dict literal
+                    let one_line_block = brace_opens_control_block(&current);
+                    if let (false, Some(end)) = (one_line_block, consume_balanced_curly_line(&text, i)) {
                         let literal = text[i..end].to_string();
                         current.push_str(&literal);
                         i = end;

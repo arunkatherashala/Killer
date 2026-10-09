@@ -365,6 +365,9 @@ pub mod pkg_registry;          // file / HTTP package registries
 pub mod pkg_cli;               // killer_pkg subcommands (new, add, install, publish, ...)
 pub mod pkg_resolve;           // dependency resolution with conflict diagnostics
 pub mod imports;               // compile-time `import "file.killer"` inclusion
+pub mod bigint;                // arbitrary-precision integers (Value::BigInt)
+pub mod bigint_ops;            // BigInt operators and builtins
+pub mod closure_scan;          // which closure-captured locals must be shared cells
 pub mod lambda;                // lifts anonymous functions (fn(x){..}, x => ..) into named ones
 pub mod sugar;               // surface syntax sugar rewritten to core Killer before compiling
 pub mod uncertain;             // interval arithmetic and three-valued comparison for `believe` values

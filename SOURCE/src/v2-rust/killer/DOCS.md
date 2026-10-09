@@ -1172,3 +1172,21 @@ Killer accepts both `//` and `--` as line comment prefixes.
 let a = [1, 2, 3]
 let b = [...a, 4, 5]    -- [1, 2, 3, 4, 5]
 ```
+
+## Arbitrary-precision integers (`123n`)
+
+`Number` is an `f64` and stays one: nothing is promoted silently. Write `123n` / `0xFFn`, or call
+`big(x)`, `factorial(n)` to get a `bigint`.
+
+| Expression | Result |
+|---|---|
+| `big + big`, `-`, `*`, `**` (non-negative exponent) | exact bigint (`10n ** 10 ** 10` is an error: result too large) |
+| `big (op) 2` with an integral Number | the Number is promoted: exact bigint |
+| `big (op) 2.5` | the bigint becomes a float: Number result |
+| `big / big` | exact bigint when divisible, otherwise a float quotient |
+| `%`, `idiv(a, b)`, `divmod(a, b)` | floor semantics (remainder has the sign of the divisor) |
+| `<`, `==`, ... with a Number | exact comparison |
+| `powmod(b, e, m)`, `gcd`, `isqrt`, `bit_length`, `abs` | bigint helpers |
+
+`//` is a comment marker, so integer division is `floor(a / b)` for Numbers and `idiv(a, b)` for bigints.
+`x // 2` is a compile error with that hint.
