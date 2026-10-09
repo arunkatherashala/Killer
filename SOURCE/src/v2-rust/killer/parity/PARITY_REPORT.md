@@ -154,3 +154,72 @@ mutexes, `async_spawn` with function values.
 - Reading all 273,000 lines line by line was not attempted; the subsystem verdicts for AI, Ghost,
   Kore, UI and platform code come from structured sampling and test inspection, not from running every
   path. The language, builtin and README results are measured.
+
+## 8. Robustness, thread safety and capabilities (audit W6)
+
+**Contract.** Whatever a script contains, the compiler and VM must not panic, hang or overflow the
+native stack; they report a clear Killer error instead. `tests/robustness.rs` enforces this with a
+deterministic fuzz harness (seeded xorshift, no crates): thousands of mutated variants of the real
+`.killer` files in `examples/`, `parity/realworld/` and `tests/`, token soup, and hostile shapes
+(deep nesting, 100k-element literals, huge operator chains, `"x" * 1e9`, `range(1e12)`, cyclic
+values, runaway recursion through callbacks, operators, `toString` and generators). The default run
+takes seconds; `KILLER_FUZZ_ITERS=200000 KILLER_FUZZ_SEED=7 cargo test --test robustness fuzz_long -- --ignored`
+runs a long one.
+
+| Limit | Value | Error |
+|-------|-------|-------|
+| Killer call depth (heap frames) | 100,000 | `stack overflow: recursion too deep` (catchable with `try/catch`) |
+| Rust-level re-entry (callbacks, `__add__`, `toString`, generators) | 400 nested levels | same error |
+| String built by `+` / `*` | 256 MB | `string is too large (limit 256 MB)` |
+| List built by `+` / `*` | 16M elements | `list is too large` |
+| `range()` materialised | 32M elements | `range is too large ... use a while loop` |
+| `json_stringify` output | 64 MB | `output is too large` |
+| Source nesting (`(`, `[`, `{`, blocks, lambdas) | 200 levels | `nesting is too deep` |
+| Operators in one expression | 1,000 | `expression is too long` |
+| `print` / `str` of a nested or self-referencing value | 64 levels, 2M containers | printed as `[...]` |
+
+Depth 10,000 recursion keeps working. The checks are single integer comparisons on paths that
+already allocate or push a frame, so the interpreter hot loop is unchanged.
+
+**Thread-safety design.** `Value` contains `Rc<RefCell<..>>` (arrays, dicts, objects, sets,
+closure captures), and `unsafe impl Send/Sync for Value` exists only so values can be *moved* into
+a task. The rule that makes it sound: **no `Rc` is ever shared between OS threads.** Everything
+that crosses a thread boundary is deep-copied with `Value::detached()`:
+
+- arguments and the function value (with its captured variables) of `async_spawn` / `spawn` /
+  `SpawnCall` / `SpawnCallDirect`; a snapshot of the global variables given to the task;
+- the value handed to `spawn_thread` / `async_spawn(value)` / `spawn(value)` / `async_resolve`;
+- channel messages (`chan_send`) and future results (`await`, `async_all`, `async_race`,
+  `async_timeout` copy again when they read a slot that other threads can also read).
+
+`detached()` keeps sharing and cycles *inside* the copy (an array that contains itself copies to an
+array that contains its copy) and cuts nesting beyond 20,000 levels with `null`, so it terminates on
+any value. Consequence, documented behaviour: a task works on **copies**; mutating an array, dict,
+object or set inside a task is invisible to the parent, and the parent's later mutations are
+invisible to the task. Use `mutex_*` cells (store plain data as text) or channels to communicate.
+Pooled spawn VMs are fully reset between tasks, and task threads get a 128 MB (reserved, not
+committed) stack. A task that cannot get a thread resolves its future with an error.
+`tests/thread_safety.rs` covers arguments of every kind, globals, closures, channels, results,
+cyclic values, 200-task stress runs and nested spawning.
+
+**Capability audit.** Every builtin that touches files, the network, processes, native code or
+language models must call the matching `security::require_*`. `tests/capabilities.rs` calls every
+dispatcher name in `src/builtin.rs` under a restricted capability set against a scratch directory,
+a local listener and marker-writing commands, and fails if anything observable happens.
+Gaps found and fixed: `mmap_*`, `call_native`, `page_map` (now `require_ffi`), `env_get`,
+`env_set`, `process_exit` (now `require_process_spawn`), `disk_read_block` / `disk_write_block`
+(now file read / write; offset arithmetic no longer overflows), `fileCopy` / `renameFile` (also
+need file read). `io_port_*` executed real ring-0 `in`/`out` instructions and `interrupts_*`/`wfi`
+executed `cli`/`sti`/`hlt`, which fault the whole process in user mode: they are now an error and
+simulated no-ops. Temp files for `@python` / `@c` / `@java` / `@rust` blocks used predictable names
+in the shared temp directory (symlink / clobbering race): they now use `create_new` files and
+private per-run directories with unpredictable names.
+
+**Remaining risks.** Block scoping is real: a variable first assigned inside an `if` or loop body
+is not visible after the block (Python and JavaScript `var` programmers are surprised by
+`Undefined variable`); declare it before the block. Killer functions cannot assign to a global
+without `global`, and assigning inside a function creates a local. `volatile_*` read through
+unaligned pointers (fine on x86-64). Dropping a value nested hundreds of thousands of levels deep
+recurses natively in Rust's `Drop`; the nesting limit keeps source literals far below that, but a
+program can still build such a value in a loop. Embedders must run the VM on a large stack (as
+`killer_super` does with 512 MB); the 400-level native re-entry limit assumes that.
