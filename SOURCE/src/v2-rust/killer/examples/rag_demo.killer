@@ -1,0 +1,89 @@
+# Offline RAG service in plain Killer.
+#
+#   killer_super examples/rag_demo.killer --run
+#   curl -X POST http://127.0.0.1:8080/ask -d '{"question": "How do I reset my password?"}'
+#
+# It chunks a small corpus, embeds every chunk with the deterministic offline mock_embed, keeps
+# the vectors in a vec store, and serves POST /ask: embed the question, retrieve the top-k
+# chunks, build a grounded prompt, and answer. The LLM call is stubbed (the answer is the best
+# chunk) unless OPENAI_API_KEY is set, in which case the prompt goes to the chat completions API.
+#
+# Environment: RAG_PORT (default 8080), RAG_MAX_REQUESTS (stop after N requests; default: run
+# until killed), RAG_TOP_K (default 2).
+
+DIM = 256
+
+docs = [
+  {"id": "accounts", "text": "To reset your password open the Settings page, choose Security and press the Reset password button. A reset link is then sent to your registered email address. The link expires after one hour."},
+  {"id": "billing", "text": "Invoices are generated on the first day of every month. You can download past invoices as PDF files from the Billing page. Payments are accepted by credit card and bank transfer."},
+  {"id": "shipping", "text": "Orders ship within two business days. Standard delivery takes five to seven days, express delivery takes two days. Tracking numbers are emailed as soon as the parcel leaves the warehouse."},
+  {"id": "privacy", "text": "We store personal data only as long as your account is active. You may request deletion of all your data at any time by contacting support. Backups are purged after thirty days."}
+]
+
+store = vec_new(DIM)
+for d in docs {
+  chunks = chunk_text(d["text"], 120, 30)
+  i = 0
+  for c in chunks {
+    vec_add(store, d["id"] + "#" + str(i), mock_embed(c, DIM), {"source": d["id"], "text": c})
+    i = i + 1
+  }
+}
+
+fn ask_llm(prompt, key) {
+  reply = http_request({
+    "method": "POST",
+    "url": "https://api.openai.com/v1/chat/completions",
+    "headers": {"Authorization": "Bearer " + key, "Content-Type": "application/json"},
+    "body": {"model": "gpt-4o-mini", "messages": [{"role": "user", "content": prompt}]},
+    "timeout": 60,
+    "retries": 2
+  })
+  data = json_parse(reply["body"])
+  return data["choices"][0]["message"]["content"]
+}
+
+fn answer(question, k) {
+  hits = vec_search(store, mock_embed(question, DIM), k)
+  prompt = build_rag_prompt(question, hits)
+  key = env_get("OPENAI_API_KEY")
+  text = ""
+  if key == null or key == "" {
+    text = "(stub, no OPENAI_API_KEY) " + hits[0]["meta"]["text"]
+  } else {
+    text = ask_llm(prompt, key)
+  }
+  sources = []
+  for h in hits {
+    push(sources, {"id": h["id"], "score": round(h["score"] * 10000) / 10000, "text": h["meta"]["text"]})
+  }
+  return {"answer": text, "sources": sources, "prompt_tokens": count_tokens(prompt)}
+}
+
+fn handle(req) {
+  if req["method"] == "GET" and req["path"] == "/health" {
+    return {"status": "ok", "chunks": vec_len(store)}
+  }
+  if req["method"] == "POST" and req["path"] == "/ask" {
+    body = json_parse(req["body"])
+    if body["question"] == null {
+      return {"status": 400, "body": {"error": "missing question"}}
+    }
+    return answer(body["question"], 2)
+  }
+  return {"status": 404, "body": {"error": "not found"}}
+}
+
+port = env_get("RAG_PORT")
+if port == null {
+  port = 8080
+} else {
+  port = int(port)
+}
+opts = {}
+mx = env_get("RAG_MAX_REQUESTS")
+if mx != null {
+  opts["max_requests"] = int(mx)
+}
+log_info("rag service ready", {"chunks": vec_len(store), "port": port})
+serve(port, handle, opts)

@@ -2,199 +2,89 @@
 // NOVA GALAXY ENGINE v1 — HTTP Client Builtins
 // Native HTTP from Killer code — zero external crates, curl subprocess
 //
-// Builtins:
-//   http_get(url)                    → String  (response body)
-//   http_get_timeout(url, secs)      → String  (with custom timeout)
-//   http_post(url, body)             → String  (application/x-www-form-urlencoded)
-//   http_post_json(url, json)        → String  (application/json)
-//   http_head(url)                   → String  (response headers only)
-//   http_status(url)                 → Number  (HTTP status code: 200, 404, etc.)
-//   http_download(url, path)         → String  ("ok" or error message)
+// Builtins (every verb also accepts a headers dict and a timeout number after its
+// required arguments, in either order):
+//   http_get(url [, headers] [, secs])        → String  (response body)
+//   http_get_timeout(url, secs)               → String
+//   http_post(url, body [, content_type] [, headers] [, secs])
+//   http_post_json(url, json_or_value [, headers] [, secs])
+//   http_put / http_patch (url, body ...), http_delete(url ...)
+//   http_head(url ...)                        → String  (response headers only)
+//   http_status(url ...)                      → Number
+//   http_download(url, path ...)              → String
+//   http_request({method, url, headers, body, timeout, retries, insecure, allow_http})
+//                                             → {status, headers, body}
 //
-// Security policy:
-//   • HTTPS-only (http:// is blocked — prevents plaintext data leaks)
-//   • No redirect following to internal IPs (SSRF prevention)
-//   • Timeouts enforced (default: 30s, head/status: 10s)
-//   • User-Agent identifies as KillerLang (transparent to servers)
-//
-// Zero external crates — pure std::process::Command (spawns curl)
+// Security policy (see http_req.rs, where the logic and its unit tests live):
+//   • HTTPS-only, except http:// to localhost/127.0.0.1/::1 (or `allow_http: true`)
+//   • TLS verification ON (only `insecure: true` in http_request adds curl -k)
+//   • URL, headers and body go to curl on stdin (-K -), never on the command line
+//   • Timeouts enforced (default 30s, head/status 10s); retries with exponential backoff
 // ===============================================================================
 
-use std::process::Command;
-use crate::value::Value;
 use crate::error::VmError;
+use crate::http_req::{exec, headers_from, ReqSpec};
+use crate::value::Value;
 
-// --- Security Validator -------------------------------------------------------
+/// Pull an optional headers dict and timeout out of the trailing arguments.
+fn extras(args: &[Value], from: usize, default_timeout: f64) -> (Vec<(String, String)>, f64) {
+    let mut headers = Vec::new();
+    let mut timeout = default_timeout;
+    for a in args.iter().skip(from) {
+        match a {
+            Value::Dict(d) => headers = headers_from(d),
+            Value::Number(n) => timeout = *n,
+            Value::Integer(n) => timeout = *n as f64,
+            _ => {}
+        }
+    }
+    (headers, timeout)
+}
 
-/// Enforce HTTPS-only policy and basic URL sanity.
-/// Blocks HTTP (plaintext), file://, ftp://, and other dangerous schemes.
-fn validate_https_url(url: &str) -> Result<(), String> {
-    let trimmed = url.trim();
-    if trimmed.starts_with("https://") {
-        Ok(())
-    } else if trimmed.starts_with("http://") {
-        Err(format!(
-            "Security: http_get/http_post only allow HTTPS (prevents data leaks).\n\
-             Change your URL to start with https://\n\
-             Got: {}",
-            &trimmed[..trimmed.len().min(80)]
-        ))
-    } else {
-        Err(format!(
-            "Invalid URL — must start with https://\n\
-             Got: {}",
-            &trimmed[..trimmed.len().min(80)]
-        ))
+fn spec(method: &str, url: &str, headers: Vec<(String, String)>, body: Option<String>, timeout: f64) -> ReqSpec {
+    let mut s = ReqSpec::new(method, url);
+    s.headers = headers;
+    s.body = body;
+    s.timeout_s = timeout;
+    s
+}
+
+fn body_text(r: &crate::http_req::Resp) -> String {
+    r.body.trim_end().to_string()
+}
+
+fn err_str(e: String) -> Value {
+    Value::Str(format!("HTTP Error: {}", e))
+}
+
+fn url_arg(args: &[Value], usage: &str) -> Result<String, Value> {
+    match args.first() {
+        Some(Value::Str(s)) => Ok(s.clone()),
+        _ => Err(Value::Str(format!("Error: {}", usage))),
     }
 }
 
-// --- curl helpers -------------------------------------------------------------
-
-fn curl_bin() -> &'static str {
-    if cfg!(target_os = "windows") { "curl.exe" } else { "curl" }
-}
-
-/// GET a URL, return body as String.
-fn do_get(url: &str, timeout_s: u64) -> Result<String, String> {
-    validate_https_url(url)?;
-    let ts = timeout_s.to_string();
-    let out = Command::new(curl_bin())
-        .args([
-            "-s", "-k", "--ssl-no-revoke", "--fail-with-body",
-            "--max-time", &ts,
-            "-H", "Accept: text/html,application/json,text/plain,*/*",
-            "-H", "User-Agent: KillerLang/2.1 Nova-Galaxy-Engine",
-            url,
-        ])
-        .output()
-        .map_err(|e| format!("curl not found: {}. Install curl from https://curl.se", e))?;
-
-    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
-    let stderr = String::from_utf8_lossy(&out.stderr).to_string();
-    if stdout.is_empty() && !stderr.is_empty() {
-        return Err(format!("HTTP request failed: {}", stderr.trim()));
-    }
-    Ok(stdout.trim_end().to_string())
-}
-
-/// POST to a URL with explicit content-type.
-fn do_post(url: &str, body: &str, ct: &str, timeout_s: u64) -> Result<String, String> {
-    validate_https_url(url)?;
-    let ts = timeout_s.to_string();
-    let ct_header = format!("Content-Type: {}", ct);
-    let out = Command::new(curl_bin())
-        .args([
-            "-s", "-k", "--ssl-no-revoke", "--fail-with-body",
-            "--max-time", &ts,
-            "-X", "POST",
-            "-H", &ct_header,
-            "-H", "User-Agent: KillerLang/2.1 Nova-Galaxy-Engine",
-            "-d", body,
-            url,
-        ])
-        .output()
-        .map_err(|e| format!("curl not found: {}", e))?;
-
-    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
-    let stderr = String::from_utf8_lossy(&out.stderr).to_string();
-    if stdout.is_empty() && !stderr.is_empty() {
-        return Err(format!("HTTP POST failed: {}", stderr.trim()));
-    }
-    Ok(stdout.trim_end().to_string())
-}
-
-/// Return only response headers (HEAD request).
-fn do_head(url: &str, timeout_s: u64) -> Result<String, String> {
-    validate_https_url(url)?;
-    let ts = timeout_s.to_string();
-    let out = Command::new(curl_bin())
-        .args([
-            "-s", "-k", "--ssl-no-revoke",
-            "-I", "--max-time", &ts,
-            "-H", "User-Agent: KillerLang/2.1 Nova-Galaxy-Engine",
-            url,
-        ])
-        .output()
-        .map_err(|e| format!("curl not found: {}", e))?;
-    Ok(String::from_utf8_lossy(&out.stdout).trim_end().to_string())
-}
-
-/// Return HTTP status code (e.g. 200, 404, 500).
-fn do_status(url: &str, timeout_s: u64) -> Result<u16, String> {
-    validate_https_url(url)?;
-    let ts = timeout_s.to_string();
-    // Write body to null device; append status code to stdout via -w
-    let null_dev = if cfg!(target_os = "windows") { "NUL" } else { "/dev/null" };
-    let out = Command::new(curl_bin())
-        .args([
-            "-s", "-k", "--ssl-no-revoke",
-            "-o", null_dev,
-            "-w", "%{http_code}",
-            "--max-time", &ts,
-            url,
-        ])
-        .output()
-        .map_err(|e| format!("curl not found: {}", e))?;
-    let code_str = String::from_utf8_lossy(&out.stdout).to_string();
-    code_str.trim().parse::<u16>()
-        .map_err(|_| format!("Could not parse HTTP status code: '{}'", code_str.trim()))
-}
-
-/// Download URL to a local file path.
-fn do_download(url: &str, dest_path: &str, timeout_s: u64) -> Result<String, String> {
-    validate_https_url(url)?;
-    // Validate dest_path is not a system path (basic safety check)
-    let lp = dest_path.to_lowercase();
-    if lp.contains("system32") || lp.contains("/etc/") || lp.contains("/bin/") {
-        return Err(format!("Download destination blocked: {}", dest_path));
-    }
-    let ts = timeout_s.to_string();
-    let out = Command::new(curl_bin())
-        .args([
-            "-s", "-k", "--ssl-no-revoke",
-            "--max-time", &ts,
-            "-o", dest_path,
-            "-H", "User-Agent: KillerLang/2.1 Nova-Galaxy-Engine",
-            url,
-        ])
-        .output()
-        .map_err(|e| format!("curl not found: {}", e))?;
-
-    if out.status.success() {
-        Ok(format!("Downloaded to: {}", dest_path))
-    } else {
-        let stderr = String::from_utf8_lossy(&out.stderr).to_string();
-        Err(format!("Download failed: {}", stderr.trim()))
+fn ensure_content_type(h: &mut Vec<(String, String)>, ct: &str) {
+    if !h.iter().any(|(k, _)| k.eq_ignore_ascii_case("content-type")) {
+        h.push(("Content-Type".to_string(), ct.to_string()));
     }
 }
 
-// --- Builtin dispatch functions -----------------------------------------------
-
-/// http_get(url) → String
+/// http_get(url [, headers] [, secs]) → String
 pub fn builtin_http_get(args: &[Value]) -> Result<Value, VmError> {
     crate::security::require_network()?;
-    let url = match args.first() {
-        Some(Value::Str(s)) => s.clone(),
-        _ => return Ok(Value::Str("Error: http_get requires a URL string. Usage: http_get(\"https://...\")".to_string())),
-    };
-    let timeout = match args.get(1) {
-        Some(Value::Number(n)) => *n as u64,
-        _ => 30,
-    };
-    match do_get(&url, timeout) {
-        Ok(body) => Ok(Value::Str(body)),
-        Err(e)   => Ok(Value::Str(format!("HTTP Error: {}", e))),
-    }
+    let url = match url_arg(args, "http_get requires a URL string. Usage: http_get(\"https://...\")") { Ok(u) => u, Err(v) => return Ok(v) };
+    let (h, t) = extras(args, 1, 30.0);
+    Ok(match exec(&spec("GET", &url, h, None, t)) {
+        Ok(r) => Value::Str(body_text(&r)),
+        Err(e) => err_str(e),
+    })
 }
 
-/// http_post(url, body) → String
-/// http_post(url, body, content_type) → String  (optional 3rd arg)
+/// http_post(url, body [, content_type] [, headers] [, secs]) → String
 pub fn builtin_http_post(args: &[Value]) -> Result<Value, VmError> {
     crate::security::require_network()?;
-    let url = match args.first() {
-        Some(Value::Str(s)) => s.clone(),
-        _ => return Ok(Value::Str("Error: http_post(url, body) requires a URL string".to_string())),
-    };
+    let url = match url_arg(args, "http_post(url, body) requires a URL string") { Ok(u) => u, Err(v) => return Ok(v) };
     let body = match args.get(1) {
         Some(Value::Str(s)) => s.clone(),
         _ => String::new(),
@@ -203,191 +93,136 @@ pub fn builtin_http_post(args: &[Value]) -> Result<Value, VmError> {
         Some(Value::Str(s)) => s.clone(),
         _ => "application/x-www-form-urlencoded".to_string(),
     };
-    let timeout = match args.get(3) {
-        Some(Value::Number(n)) => *n as u64,
-        _ => 30,
-    };
-    match do_post(&url, &body, &ct, timeout) {
-        Ok(body) => Ok(Value::Str(body)),
-        Err(e)   => Ok(Value::Str(format!("HTTP Error: {}", e))),
-    }
+    let (mut h, t) = extras(args, 2, 30.0);
+    ensure_content_type(&mut h, &ct);
+    Ok(match exec(&spec("POST", &url, h, Some(body), t)) {
+        Ok(r) => Value::Str(body_text(&r)),
+        Err(e) => err_str(e),
+    })
 }
 
-/// http_post_json(url, json_string) → String
+/// http_post_json(url, json_string_or_value [, headers] [, secs]) → String
 pub fn builtin_http_post_json(args: &[Value]) -> Result<Value, VmError> {
     crate::security::require_network()?;
-    let url = match args.first() {
-        Some(Value::Str(s)) => s.clone(),
-        _ => return Ok(Value::Str("Error: http_post_json(url, json) requires a URL string".to_string())),
-    };
+    let url = match url_arg(args, "http_post_json(url, json) requires a URL string") { Ok(u) => u, Err(v) => return Ok(v) };
     let json = match args.get(1) {
         Some(Value::Str(s)) => s.clone(),
+        Some(v @ (Value::Dict(_) | Value::Array(_))) => crate::json_lang::stringify(v, 0).map_err(VmError::runtime_error)?,
         _ => return Ok(Value::Str("Error: http_post_json(url, json) requires a JSON body string".to_string())),
     };
-    let timeout = match args.get(2) {
-        Some(Value::Number(n)) => *n as u64,
-        _ => 30,
-    };
-    match do_post(&url, &json, "application/json", timeout) {
-        Ok(resp) => Ok(Value::Str(resp)),
-        Err(e)   => Ok(Value::Str(format!("HTTP Error: {}", e))),
-    }
+    let (mut h, t) = extras(args, 2, 30.0);
+    ensure_content_type(&mut h, "application/json");
+    Ok(match exec(&spec("POST", &url, h, Some(json), t)) {
+        Ok(r) => Value::Str(body_text(&r)),
+        Err(e) => err_str(e),
+    })
 }
 
-/// http_head(url) → String  (returns response headers)
+/// http_head(url [, headers] [, secs]) → String  (returns response headers)
 pub fn builtin_http_head(args: &[Value]) -> Result<Value, VmError> {
     crate::security::require_network()?;
-    let url = match args.first() {
-        Some(Value::Str(s)) => s.clone(),
-        _ => return Ok(Value::Str("Error: http_head requires a URL string".to_string())),
-    };
-    let timeout = match args.get(1) {
-        Some(Value::Number(n)) => *n as u64,
-        _ => 10,
-    };
-    match do_head(&url, timeout) {
-        Ok(h)  => Ok(Value::Str(h)),
-        Err(e) => Ok(Value::Str(format!("HTTP Error: {}", e))),
-    }
+    let url = match url_arg(args, "http_head requires a URL string") { Ok(u) => u, Err(v) => return Ok(v) };
+    let (h, t) = extras(args, 1, 10.0);
+    let mut s = spec("HEAD", &url, h, None, t);
+    s.head = true;
+    Ok(match exec(&s) {
+        Ok(r) => Value::Str(r.raw_head.trim_end().to_string()),
+        Err(e) => err_str(e),
+    })
 }
 
-/// http_status(url) → Number  (e.g. 200, 404, 500)
+/// http_status(url [, headers] [, secs]) → Number  (e.g. 200, 404, 500)
 pub fn builtin_http_status(args: &[Value]) -> Result<Value, VmError> {
     crate::security::require_network()?;
-    let url = match args.first() {
-        Some(Value::Str(s)) => s.clone(),
-        _ => return Ok(Value::Str("Error: http_status requires a URL string".to_string())),
-    };
-    let timeout = match args.get(1) {
-        Some(Value::Number(n)) => *n as u64,
-        _ => 10,
-    };
-    match do_status(&url, timeout) {
-        Ok(code) => Ok(Value::Number(code as f64)),
-        Err(e)   => Ok(Value::Str(format!("HTTP Error: {}", e))),
-    }
+    let url = match url_arg(args, "http_status requires a URL string") { Ok(u) => u, Err(v) => return Ok(v) };
+    let (h, t) = extras(args, 1, 10.0);
+    Ok(match exec(&spec("GET", &url, h, None, t)) {
+        Ok(r) => Value::Number(r.status as f64),
+        Err(e) => err_str(e),
+    })
 }
 
-/// http_download(url, dest_path) → String  ("Downloaded to: ..." or error)
+/// http_download(url, dest_path [, headers] [, secs]) → String  ("Downloaded to: ..." or error)
 pub fn builtin_http_download(args: &[Value]) -> Result<Value, VmError> {
     crate::security::require_network()?;
     crate::security::require_file_write()?;
-    let url = match args.first() {
-        Some(Value::Str(s)) => s.clone(),
-        _ => return Ok(Value::Str("Error: http_download(url, path) requires a URL string".to_string())),
-    };
+    let url = match url_arg(args, "http_download(url, path) requires a URL string") { Ok(u) => u, Err(v) => return Ok(v) };
     let path = match args.get(1) {
         Some(Value::Str(s)) => s.clone(),
         _ => return Ok(Value::Str("Error: http_download(url, path) requires a destination path".to_string())),
     };
-    let timeout = match args.get(2) {
-        Some(Value::Number(n)) => *n as u64,
-        _ => 120,
-    };
-    match do_download(&url, &path, timeout) {
-        Ok(msg)  => Ok(Value::Str(msg)),
-        Err(e)   => Ok(Value::Str(format!("HTTP Error: {}", e))),
+    let lp = path.to_lowercase();
+    if lp.contains("system32") || lp.contains("/etc/") || lp.contains("/bin/") {
+        return Ok(err_str(format!("Download destination blocked: {}", path)));
     }
+    let (h, t) = extras(args, 2, 120.0);
+    let mut s = spec("GET", &url, h, None, t);
+    s.output = Some(path.clone());
+    Ok(match exec(&s) {
+        Ok(_) => Value::Str(format!("Downloaded to: {}", path)),
+        Err(e) => err_str(e),
+    })
 }
 
-// ── New HTTP verbs ─────────────────────────────────────────────────────────
+pub use crate::http_req::builtin_http_request;
 
-fn do_method(method: &str, url: &str, body: Option<&str>, content_type: &str, timeout_s: u64) -> Result<String, String> {
-    validate_https_url(url)?;
-    let ts = timeout_s.to_string();
-    let mut cmd = Command::new(curl_bin());
-    cmd.args(["-s", "-k", "--ssl-no-revoke", "--fail-with-body",
-              "-X", method,
-              "--max-time", &ts,
-              "-H", &format!("Content-Type: {content_type}"),
-              "-H", "User-Agent: KillerLang/2.1 Nova-Galaxy-Engine"]);
-    if let Some(b) = body {
-        cmd.args(["--data-raw", b]);
-    }
-    cmd.arg(url);
-    let out = cmd.output().map_err(|e| format!("curl not found: {e}"))?;
-    Ok(String::from_utf8_lossy(&out.stdout).trim_end().to_string())
-}
-
-/// http_put(url, body) → String
-pub fn builtin_http_put(args: &[Value]) -> Result<Value, VmError> {
+fn with_body(who: &str, method: &str, args: &[Value]) -> Result<Value, VmError> {
     crate::security::require_network()?;
     let (url, body) = match args {
-        [Value::Str(u), Value::Str(b)] => (u.clone(), b.clone()),
-        _ => return Err(VmError::runtime_error("http_put(url, body) expects two strings".to_string())),
+        [Value::Str(u), Value::Str(b), ..] => (u.clone(), b.clone()),
+        [Value::Str(u), v @ (Value::Dict(_) | Value::Array(_)), ..] => {
+            (u.clone(), crate::json_lang::stringify(v, 0).map_err(VmError::runtime_error)?)
+        }
+        _ => return Err(VmError::runtime_error(format!("{}(url, body) expects a string url and body", who))),
     };
-    let timeout = match args.get(2) { Some(Value::Number(n)) => *n as u64, _ => 30 };
-    match do_method("PUT", &url, Some(&body), "application/json", timeout) {
-        Ok(r) => Ok(Value::Str(r)),
-        Err(e) => Ok(Value::Str(format!("HTTP Error: {e}"))),
-    }
+    let (mut h, t) = extras(args, 2, 30.0);
+    ensure_content_type(&mut h, "application/json");
+    Ok(match exec(&spec(method, &url, h, Some(body), t)) {
+        Ok(r) => Value::Str(body_text(&r)),
+        Err(e) => err_str(e),
+    })
 }
 
-/// http_delete(url) → String
+/// http_put(url, body [, headers] [, secs]) → String
+pub fn builtin_http_put(args: &[Value]) -> Result<Value, VmError> { with_body("http_put", "PUT", args) }
+
+/// http_patch(url, body [, headers] [, secs]) → String
+pub fn builtin_http_patch(args: &[Value]) -> Result<Value, VmError> { with_body("http_patch", "PATCH", args) }
+
+/// http_delete(url [, headers] [, secs]) → String
 pub fn builtin_http_delete(args: &[Value]) -> Result<Value, VmError> {
     crate::security::require_network()?;
     let url = match args.first() {
         Some(Value::Str(s)) => s.clone(),
         _ => return Err(VmError::runtime_error("http_delete(url) expects a URL string".to_string())),
     };
-    let timeout = match args.get(1) { Some(Value::Number(n)) => *n as u64, _ => 30 };
-    match do_method("DELETE", &url, None, "application/json", timeout) {
-        Ok(r) => Ok(Value::Str(r)),
-        Err(e) => Ok(Value::Str(format!("HTTP Error: {e}"))),
-    }
+    let (h, t) = extras(args, 1, 30.0);
+    Ok(match exec(&spec("DELETE", &url, h, None, t)) {
+        Ok(r) => Value::Str(body_text(&r)),
+        Err(e) => err_str(e),
+    })
 }
 
-/// http_patch(url, body) → String
-pub fn builtin_http_patch(args: &[Value]) -> Result<Value, VmError> {
-    crate::security::require_network()?;
-    let (url, body) = match args {
-        [Value::Str(u), Value::Str(b)] => (u.clone(), b.clone()),
-        _ => return Err(VmError::runtime_error("http_patch(url, body) expects two strings".to_string())),
-    };
-    let timeout = match args.get(2) { Some(Value::Number(n)) => *n as u64, _ => 30 };
-    match do_method("PATCH", &url, Some(&body), "application/json", timeout) {
-        Ok(r) => Ok(Value::Str(r)),
-        Err(e) => Ok(Value::Str(format!("HTTP Error: {e}"))),
-    }
-}
-
-/// http_get_json(url) → Dict  (parses JSON response into a Killer dict/array)
+/// http_get_json(url [, headers] [, secs]) → Dict  (parses JSON response into a Killer dict/array)
 pub fn builtin_http_get_json(args: &[Value]) -> Result<Value, VmError> {
     crate::security::require_network()?;
     let url = match args.first() {
         Some(Value::Str(s)) => s.clone(),
         _ => return Err(VmError::runtime_error("http_get_json(url) expects a URL string".to_string())),
     };
-    let timeout = match args.get(1) { Some(Value::Number(n)) => *n as u64, _ => 30 };
-    match do_get(&url, timeout) {
-        Ok(body) => Ok(parse_json_to_value(&body)),
-        Err(e)   => Err(VmError::runtime_error(format!("http_get_json({url}): {e}"))),
+    let (h, t) = extras(args, 1, 30.0);
+    match exec(&spec("GET", &url, h, None, t)) {
+        Ok(r) => Ok(crate::json_lang::parse(&r.body).unwrap_or_else(|_| parse_json_to_value(&body_text(&r)))),
+        Err(e) => Err(VmError::runtime_error(format!("http_get_json({url}): {e}"))),
     }
 }
 
-/// http_with_headers(url, headers_dict) → String  (GET with custom headers)
+/// http_with_headers(url, headers_dict [, secs]) → String  (GET with custom headers)
 pub fn builtin_http_with_headers(args: &[Value]) -> Result<Value, VmError> {
-    crate::security::require_network()?;
-    let url = match args.first() {
-        Some(Value::Str(s)) => s.clone(),
-        _ => return Err(VmError::runtime_error("http_with_headers(url, dict) expects a URL".to_string())),
-    };
-    validate_https_url(&url).map_err(|e| VmError::runtime_error(e))?;
-    let timeout = 30u64;
-    let mut cmd = Command::new(curl_bin());
-    cmd.args(["-s", "-k", "--ssl-no-revoke", "--max-time", &timeout.to_string(),
-              "-H", "User-Agent: KillerLang/2.1"]);
-    if let Some(Value::Dict(headers)) = args.get(1) {
-        for (k, v) in headers.iter() {
-            cmd.arg("-H");
-            cmd.arg(format!("{k}: {v}"));
-        }
+    if !matches!(args.first(), Some(Value::Str(_))) {
+        return Err(VmError::runtime_error("http_with_headers(url, dict) expects a URL".to_string()));
     }
-    cmd.arg(&url);
-    match cmd.output() {
-        Ok(out) => Ok(Value::Str(String::from_utf8_lossy(&out.stdout).trim_end().to_string())),
-        Err(e)  => Err(VmError::runtime_error(format!("http_with_headers: {e}"))),
-    }
+    builtin_http_get(args)
 }
 
 // ── Minimal JSON → Value parser ────────────────────────────────────────────

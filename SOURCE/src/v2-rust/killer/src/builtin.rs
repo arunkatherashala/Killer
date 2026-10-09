@@ -1250,6 +1250,9 @@ impl BuiltinFunctions {
                 if let Some(result) = crate::lang_builtins::call(name, args) {
                     return result;
                 }
+                if let Some(result) = crate::net_ai::call(name, args) {
+                    return result;
+                }
                 if let Some(result) = crate::text_methods::call(name, args) {
                     return result;
                 }
@@ -4937,6 +4940,9 @@ impl BuiltinFunctions {
     /// Generate an embedding vector. provider: "openai" | "ollama"
     fn llm_embed(args: &[Value]) -> Result<Value, VmError> {
         crate::security::require_llm()?;
+        if let Some(r) = crate::embed_builtins::llm_embed_opts(args) {
+            return r;
+        }
         if args.len() != 4 {
             return Err(VmError::runtime_error(
                 "llm_embed expects 4 arguments: llm_embed(provider, model, api_key, text)".to_string(),
