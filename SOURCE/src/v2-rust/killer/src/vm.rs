@@ -96,6 +96,30 @@ fn index_str(s: &str, idx: f64) -> Value {
     ch.map(Value::Str).unwrap_or(Value::Null)
 }
 
+/// The decimal text of a whole number (what `n.to_string()` gives) written into `buf`, so number
+/// keys of dicts need no `String`. `None` for fractions, huge values and negative zero.
+fn int_key(n: f64, buf: &mut [u8; 24]) -> Option<&str> {
+    if n.fract() != 0.0 || n.abs() >= 1e15 || (n == 0.0 && n.is_sign_negative()) {
+        return None;
+    }
+    let neg = n < 0.0;
+    let mut v = n.abs() as u64;
+    let mut i = buf.len();
+    loop {
+        i -= 1;
+        buf[i] = b'0' + (v % 10) as u8;
+        v /= 10;
+        if v == 0 {
+            break;
+        }
+    }
+    if neg {
+        i -= 1;
+        buf[i] = b'-';
+    }
+    std::str::from_utf8(&buf[i..]).ok()
+}
+
 /// `object[index]` for arrays, strings (by character), dicts and objects.
 fn index_value(object: &Value, index: &Value) -> Result<Value, VmError> {
     match (object, index) {
@@ -105,11 +129,16 @@ fn index_value(object: &Value, index: &Value) -> Result<Value, VmError> {
         }
         (Value::Str(s), Value::Number(idx)) => Ok(index_str(s, *idx)),
         (Value::Dict(dict), Value::Str(key)) => Ok(dict.get(key).unwrap_or(Value::Null)),
+        (Value::Dict(dict), Value::Number(n)) => {
+            let mut buf = [0u8; 24];
+            Ok(match int_key(*n, &mut buf) {
+                Some(key) => dict.get(key),
+                None => dict.get(&n.to_string()),
+            }
+            .unwrap_or(Value::Null))
+        }
         (Value::Dict(dict), idx) => {
-            let key = match idx {
-                Value::Number(n) => n.to_string(),
-                _ => format!("{idx}"),
-            };
+            let key = format!("{idx}");
             Ok(dict.get(&key).unwrap_or(Value::Null))
         }
         (Value::Object(obj), Value::Str(key)) => Ok(obj.get_field(key).unwrap_or(Value::Null)),
@@ -298,6 +327,8 @@ pub struct VirtualMachine {
     init_cache: crate::fast_hash::FastMap<String, Option<usize>>,
     /// Inline cache for `CallMethodDynamic`, keyed by instruction index: (class, method start, arity).
     method_ic: crate::fast_hash::FastMap<usize, (String, usize, usize)>,
+    /// Emptied scope tables kept for reuse by `push_scope` (one is created per call).
+    scope_pool: Vec<crate::fast_hash::FastMap<String, Value>>,
     /// GC: allocation counter — triggers gc_collect every GC_INTERVAL array allocs.
     gc_alloc_epoch: u64,
     /// When true, `run()` preserves scopes and classes across calls (REPL mode).
@@ -317,6 +348,7 @@ impl Default for VirtualMachine {
         VirtualMachine {
             stack: Vec::new(),
             scopes: Vec::new(),
+            scope_pool: Vec::new(),
             call_stack: Vec::new(),
             ip: 0,
             locals_stack: vec![Vec::new()],  // start with one frame for top-level code
@@ -424,6 +456,7 @@ impl VirtualMachine {
         VirtualMachine {
             stack: Vec::with_capacity(32),
             scopes: Vec::with_capacity(4),
+            scope_pool: Vec::new(),
             call_stack: Vec::new(),
             ip: 0,
             locals_stack: vec![Vec::with_capacity(8)],
@@ -890,7 +923,25 @@ impl VirtualMachine {
             let instr_idx = self.ip;
             let instruction = &program.instructions[self.ip];
             match instruction {
-                Instruction::ConstStr(value) => self.stack.push(Value::Str(value.clone())),
+                Instruction::ConstStr(value) => {
+                    // `d["key"]` / `obj["key"]`: look the literal up in place instead of cloning
+                    // it onto the stack first (the IndexRead that follows is skipped).
+                    if matches!(program.instructions.get(self.ip + 1), Some(Instruction::IndexRead)) {
+                        let found = match self.stack.last() {
+                            Some(Value::Dict(d)) => Some(d.get(value).unwrap_or(Value::Null)),
+                            Some(Value::Object(o)) => Some(o.get_field(value).unwrap_or(Value::Null)),
+                            _ => None,
+                        };
+                        if let Some(v) = found {
+                            if let Some(top) = self.stack.last_mut() {
+                                *top = v;
+                            }
+                            self.ip += 2;
+                            continue;
+                        }
+                    }
+                    self.stack.push(Value::Str(value.clone()))
+                }
                 // Fused K-string: K"prefix{slot}" — 1 alloc instead of 3
                 Instruction::PrefixStrSlot { slot, pre } => {
                     let frame = self.locals_stack.last()
@@ -1016,6 +1067,8 @@ impl VirtualMachine {
                             let as_list = match self.locals_stack.last().and_then(|f| f.get(iter_i)) {
                                 Some(Value::Dict(d)) => Some(d.keys().into_iter().map(Value::Str).collect::<Vec<_>>()),
                                 Some(Value::Set(s)) => Some(s.iter().map(|k| k.to_value()).collect::<Vec<_>>()),
+                                // `for ch in text`: split into characters once (not an O(n) scan per step)
+                                Some(Value::Str(t)) => Some(t.chars().map(|c| Value::Str(c.to_string())).collect::<Vec<_>>()),
                                 _ => None,
                             };
                             if let Some(items) = as_list {
@@ -2608,11 +2661,14 @@ impl VirtualMachine {
                             if write_back { self.store_var(name, Value::Dict(dict))?; }
                         }
                         (Value::Dict(dict), idx) => {
-                            let key = match idx {
-                                Value::Number(n) => n.to_string(),
-                                _ => format!("{idx}"),
-                            };
-                            dict.insert(key, value);
+                            let mut buf = [0u8; 24];
+                            match idx {
+                                Value::Number(n) => match int_key(*n, &mut buf) {
+                                    Some(key) => dict.set(key, value),
+                                    None => { dict.insert(n.to_string(), value); }
+                                },
+                                _ => { dict.insert(format!("{idx}"), value); }
+                            }
                             if write_back { self.store_var(name, Value::Dict(dict))?; }
                         }
                         (Value::Object(obj), Value::Str(key)) => {
@@ -2668,11 +2724,14 @@ impl VirtualMachine {
                             frame[si] = Value::Dict(dict);
                         }
                         (Value::Dict(mut dict), idx) => {
-                            let key = match idx {
-                                Value::Number(n) => n.to_string(),
-                                _ => format!("{idx}"),
-                            };
-                            dict.insert(key, value);
+                            let mut buf = [0u8; 24];
+                            match idx {
+                                Value::Number(n) => match int_key(*n, &mut buf) {
+                                    Some(key) => dict.set(key, value),
+                                    None => { dict.insert(n.to_string(), value); }
+                                },
+                                _ => { dict.insert(format!("{idx}"), value); }
+                            }
                             let frame = self.locals_stack.last_mut().ok_or_else(|| {
                                 VmError::runtime_error("No locals frame".to_string())
                             })?;
@@ -3995,7 +4054,7 @@ impl VirtualMachine {
                         }
                     };
 
-                    let instance = ObjectInstance { class_name: class_name.clone(), fields: HashMap::new() };
+                    let instance = ObjectInstance { class_name: class_name.clone(), fields: Default::default() };
                     let object = Value::Object(crate::value::SharedObject::new(instance));
                     match found {
                         Some(start) => {
@@ -4042,7 +4101,7 @@ impl VirtualMachine {
                     
                     let mut instance = ObjectInstance {
                         class_name: class_name.clone(),
-                        fields: HashMap::new(),
+                        fields: Default::default(),
                     };
 
                     // Check if init has bytecode (from subset compiler) — prefer bytecode path
@@ -6213,7 +6272,8 @@ impl VirtualMachine {
     }
 
     fn push_scope(&mut self) {
-        self.scopes.push(Default::default());
+        let scope = self.scope_pool.pop().unwrap_or_default();
+        self.scopes.push(scope);
     }
 
     /// Store a variable directly into the current (topmost) scope without
@@ -6259,7 +6319,13 @@ impl VirtualMachine {
                 "Cannot exit root scope".to_string(),
             ));
         }
-        self.scopes.pop();
+        if let Some(mut scope) = self.scopes.pop() {
+            // recycle the table (keeps its capacity) for the next call
+            if self.scope_pool.len() < 64 {
+                scope.clear();
+                self.scope_pool.push(scope);
+            }
+        }
         Ok(())
     }
 

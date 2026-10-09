@@ -119,6 +119,17 @@ impl<'a> Parser<'a> {
 
     fn string(&mut self) -> Result<String, String> {
         self.pos += 1; // opening quote
+        // fast path: no escapes -> one copy of the text between the quotes
+        let run = self.bytes[self.pos..]
+            .iter()
+            .position(|&b| b == b'"' || b == b'\\' || b < 0x20);
+        if let Some(n) = run {
+            if self.bytes[self.pos + n] == b'"' {
+                let s = self.src[self.pos..self.pos + n].to_string();
+                self.pos += n + 1;
+                return Ok(s);
+            }
+        }
         let mut out = String::new();
         loop {
             let Some(&b) = self.bytes.get(self.pos) else {
@@ -170,9 +181,13 @@ impl<'a> Parser<'a> {
                 }
                 0..=0x1f => return self.fail("control character in string"),
                 _ => {
-                    let ch = self.src[self.pos..].chars().next().unwrap();
-                    out.push(ch);
-                    self.pos += ch.len_utf8();
+                    // copy the whole run of plain characters at once
+                    let n = self.bytes[self.pos..]
+                        .iter()
+                        .position(|&b| b == b'"' || b == b'\\' || b < 0x20)
+                        .unwrap_or(self.bytes.len() - self.pos);
+                    out.push_str(&self.src[self.pos..self.pos + n]);
+                    self.pos += n;
                 }
             }
         }
@@ -247,6 +262,11 @@ pub fn parse(text: &str) -> Result<Value, String> {
 
 fn escape_into(out: &mut String, s: &str) {
     out.push('"');
+    if !s.bytes().any(|b| b == b'"' || b == b'\\' || b < 0x20) {
+        out.push_str(s);
+        out.push('"');
+        return;
+    }
     for c in s.chars() {
         match c {
             '"' => out.push_str("\\\""),
@@ -279,15 +299,17 @@ fn write(out: &mut String, v: &Value, indent: usize, level: usize, depth: usize)
         Value::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
         Value::Number(n) => {
             if n.is_finite() {
-                out.push_str(&n.to_string());
+                let _ = std::fmt::Write::write_fmt(out, format_args!("{}", n));
             } else {
                 out.push_str("null");
             }
         }
-        Value::Integer(i) => out.push_str(&i.to_string()),
+        Value::Integer(i) => {
+            let _ = std::fmt::Write::write_fmt(out, format_args!("{}", i));
+        }
         Value::Str(s) => escape_into(out, s),
         Value::Array(a) => {
-            let items = a.to_vec();
+            let items = a.borrow();
             if items.is_empty() {
                 out.push_str("[]");
                 return Ok(());
@@ -305,13 +327,13 @@ fn write(out: &mut String, v: &Value, indent: usize, level: usize, depth: usize)
         }
         Value::Dict(d) => {
             // insertion order, like Python's json.dumps
-            let entries: Vec<(String, Value)> = d.iter().collect();
-            write_entries(out, &entries, indent, level, depth)?;
+            let m = d.borrow();
+            write_entries(out, m.iter().map(|(k, v)| (k.as_str(), v)), m.len(), indent, level, depth)?;
         }
         Value::Object(o) => {
             let mut entries: Vec<(String, Value)> = o.fields().into_iter().collect();
             entries.sort_by(|a, b| a.0.cmp(&b.0));
-            write_entries(out, &entries, indent, level, depth)?;
+            write_entries(out, entries.iter().map(|(k, v)| (k.as_str(), v)), entries.len(), indent, level, depth)?;
         }
         Value::Set(s) => {
             let items: Vec<Value> = s.iter().map(|k| k.to_value()).collect();
@@ -323,13 +345,13 @@ fn write(out: &mut String, v: &Value, indent: usize, level: usize, depth: usize)
     Ok(())
 }
 
-fn write_entries(out: &mut String, entries: &[(String, Value)], indent: usize, level: usize, depth: usize) -> Result<(), String> {
-    if entries.is_empty() {
+fn write_entries<'a>(out: &mut String, entries: impl Iterator<Item = (&'a str, &'a Value)>, count: usize, indent: usize, level: usize, depth: usize) -> Result<(), String> {
+    if count == 0 {
         out.push_str("{}");
         return Ok(());
     }
     out.push('{');
-    for (i, (k, val)) in entries.iter().enumerate() {
+    for (i, (k, val)) in entries.enumerate() {
         if i > 0 {
             out.push(',');
         }

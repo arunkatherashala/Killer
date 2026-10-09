@@ -136,6 +136,11 @@ impl SharedArray {
         self.iter_cloned()
     }
 
+    /// Borrow the elements in place (no copy); do not mutate the array while the guard lives.
+    pub fn borrow(&self) -> std::cell::Ref<'_, Vec<Value>> {
+        self.0.borrow()
+    }
+
     pub fn to_vec(&self) -> Vec<Value> {
         self.0.borrow().clone()
     }
@@ -221,7 +226,7 @@ pub struct ClassDef {
 #[derive(Debug, Clone)]
 pub struct ObjectInstance {
     pub class_name: String,
-    pub fields: HashMap<String, Value>,
+    pub fields: crate::fast_hash::FastMap<String, Value>,
 }
 
 impl PartialEq for Method {
@@ -443,7 +448,7 @@ impl SharedObject {
         self.0.borrow_mut().fields.insert(name, value);
     }
     /// Copy of the fields map.
-    pub fn fields(&self) -> HashMap<String, Value> {
+    pub fn fields(&self) -> crate::fast_hash::FastMap<String, Value> {
         self.0.borrow().fields.clone()
     }
     /// Independent copy of the whole instance.
