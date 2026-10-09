@@ -418,6 +418,7 @@ pub fn builtin_secure_hash(args: &[Value]) -> Result<Value, VmError> {
 
 /// secure_hash_file(path) → SHA-256 hex string of file contents
 pub fn builtin_secure_hash_file(args: &[Value]) -> Result<Value, VmError> {
+    crate::security::require_file_read()?;
     if args.is_empty() {
         return Err(VmError::runtime_error("secure_hash_file: requires path"));
     }
@@ -620,6 +621,8 @@ pub fn builtin_evidence_hash(args: &[Value]) -> Result<Value, VmError> {
 
 /// secure_wipe_recordings() → number (count of files wiped)
 pub fn builtin_secure_wipe_recordings(args: &[Value]) -> Result<Value, VmError> {
+    crate::security::require_file_read()?;
+    crate::security::require_file_write()?;
     let _ = args;
     let base_path = crate::android_service::builtin_storage_path(&[])?;
     let path_str = match &base_path {

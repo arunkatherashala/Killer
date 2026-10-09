@@ -30,7 +30,11 @@ fn string<'a>(v: &'a Value, who: &str) -> Result<&'a str, VmError> {
 
 fn width_arg(v: &Value, who: &str) -> Result<usize, VmError> {
     match v {
-        Value::Number(n) if n.is_finite() => Ok(n.max(0.0) as usize),
+        Value::Number(n) if n.is_finite() => {
+            let width = n.max(0.0) as usize;
+            crate::vm::check_string_size(width)?;
+            Ok(width)
+        }
         other => err(format!("{}() width must be a number, got {}", who, other.type_name())),
     }
 }

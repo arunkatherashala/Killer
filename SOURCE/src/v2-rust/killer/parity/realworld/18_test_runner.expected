@@ -1,0 +1,16 @@
+slugify basic............... ok
+slugify collapses runs...... ok
+slugify empty............... ok
+parse_kv trims.............. ok
+parse_kv rejects junk....... ok
+clamp bounds................ ok
+stack lifo.................. ok
+stack underflow raises...... ok
+deliberate failure.......... FAIL
+    this one is wrong on purpose: expected 10 but got 3
+deliberate crash............ ERROR
+    kaboom
+wrong message............... FAIL
+    message: error 'bad pair: x' does not mention 'zzz'
+assert_true................. ok
+12 tests: 9 passed, 2 failed, 1 errors

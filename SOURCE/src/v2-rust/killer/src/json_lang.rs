@@ -9,6 +9,14 @@ use crate::value::{SharedDict, Value};
 use std::collections::HashMap;
 
 const MAX_DEPTH: usize = 512;
+const MAX_OUTPUT_BYTES: usize = 1 << 26;
+/// Most values one `json_stringify` call may visit (a value that shares the same sub-list many
+/// times can describe a tree of 2^40 nodes in a few bytes).
+const MAX_NODES: usize = 8_000_000;
+
+thread_local! {
+    static NODES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
 
 struct Parser<'a> {
     src: &'a str,
@@ -294,6 +302,16 @@ fn write(out: &mut String, v: &Value, indent: usize, level: usize, depth: usize)
     if depth > MAX_DEPTH {
         return Err("json_stringify(): value is nested too deeply (or contains itself)".to_string());
     }
+    if out.len() > MAX_OUTPUT_BYTES {
+        return Err("json_stringify(): output is too large (limit 64 MB)".to_string());
+    }
+    let visited = NODES.with(|n| {
+        n.set(n.get() + 1);
+        n.get()
+    });
+    if visited > MAX_NODES {
+        return Err("json_stringify(): output is too large (more than 8 million values)".to_string());
+    }
     match v {
         Value::Null => out.push_str("null"),
         Value::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
@@ -371,6 +389,7 @@ fn write_entries<'a>(out: &mut String, entries: impl Iterator<Item = (&'a str, &
 
 /// Serialize `v`; `indent` of 0 gives compact output.
 pub fn stringify(v: &Value, indent: usize) -> Result<String, String> {
+    NODES.with(|n| n.set(0));
     let mut out = String::new();
     write(&mut out, v, indent, 0, 0)?;
     Ok(out)

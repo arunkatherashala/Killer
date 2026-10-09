@@ -127,9 +127,12 @@ fn copy_array_dict() {
 }
 
 #[test]
-fn reversed_alias() {
+fn reversed_returns_a_copy_while_reverse_works_in_place() {
     let a = arr(vec![n(1.0), n(2.0), n(3.0)]);
+    let r2 = BuiltinFunctions::call("reversed", &[a.clone()]).unwrap();
+    assert_eq!(r2, arr(vec![n(3.0), n(2.0), n(1.0)]));
+    assert_eq!(a, arr(vec![n(1.0), n(2.0), n(3.0)]), "reversed() must not change its argument");
     let r1 = BuiltinFunctions::call("reverse", &[a.clone()]).unwrap();
-    let r2 = BuiltinFunctions::call("reversed", &[a]).unwrap();
-    assert_eq!(r1, r2);
+    assert_eq!(r1, arr(vec![n(3.0), n(2.0), n(1.0)]));
+    assert_eq!(a, r1, "reverse() works in place");
 }

@@ -1,0 +1,15 @@
+[c, b, a]
+1
+[a, c, b]
+null
+[d, a, c]
+evicted: [b]
+[e, c, d]
+evicted: [b, a]
+42
+hits=4 misses=1 rate=80%
+size 3
+longest chain under 31: n=27 length=112
+computed 170 chains, cache holds 50
+hits=27 misses=170 rate=13.7%
+null 2 [x]

@@ -1,0 +1,44 @@
+-- wrapped at 30
+|The quick brown fox jumps over|
+|the lazy dog while the five   |
+|boxing wizards jump quickly   |
+|and a mad boxer shoots down   |
+|the zebra                     |
+-- justified at 30
+|The quick brown fox jumps over|
+|the  lazy  dog  while the five|
+|boxing  wizards  jump  quickly|
+|and  a  mad  boxer shoots down|
+|the zebra                     |
+-- centered at 30
+|The quick brown fox jumps over|
+| the lazy dog while the five  |
+| boxing wizards jump quickly  |
+| and a mad boxer shoots down  |
+|          the zebra           |
+-- hanging indent
+* The quick brown fox
+  jumps over the lazy dog
+  while the five boxing
+  wizards jump quickly and
+  a mad boxer shoots down
+  the zebra
+-- report
+Item                    |  Qty |    Price |    Total
+------------------------+------+----------+---------
+Widget                  |    4 |      3.5 |       14
+Gadget with a long name |   10 |    12.25 |    122.5
+Gizmo                   |    1 |      100 |      100
+Thing                   |   12 |      0.5 |        6
+====================================================
+Grand total                               |    242.5
+-- truncation
+short
+exactly ten
+this one ...
+-- word frequency
+the  ### 3
+and  ## 2
+bat  # 1
+cat  # 1
+hat  # 1

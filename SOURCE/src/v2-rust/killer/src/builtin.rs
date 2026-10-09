@@ -2,6 +2,9 @@
 use crate::value::Value;
 use crate::error::VmError;
 
+/// Largest list `range()` will materialise (32M elements).
+pub const MAX_RANGE_LEN: usize = 1 << 25;
+
 // ── FFI for mmap / VirtualAlloc ──────────────────────────────────────────────
 #[cfg(target_os = "windows")]
 extern "system" {
@@ -236,7 +239,7 @@ impl BuiltinFunctions {
             }
             50 => Self::dict_get(args),
             51 => Self::dict_setdefault(args),
-            52 => Self::reverse(args),
+            52 => Self::reversed(args),
             53 => Self::bit_and(args),
             54 => Self::bit_or(args),
             55 => Self::bit_xor(args),
@@ -372,7 +375,7 @@ impl BuiltinFunctions {
             "push" => Self::push(args),
             "pop" => Self::pop(args),
             "reverse" => Self::reverse(args),
-            "reversed" => Self::reverse(args),
+            "reversed" => Self::reversed(args),
             "copy" => Self::value_copy(args),
             "join" => Self::join(args),
             "slice" => Self::slice(args),
@@ -686,6 +689,7 @@ impl BuiltinFunctions {
             "guardian_status"     => Self::builtin_guardian_status(args),
             // KORE  real implementation using kore.rs
             "kore_write" => {
+                crate::security::require_file_write()?;
                 if args.len() < 3 {
                     return Err(VmError::runtime_error("kore_write() expects 3 arguments (path, schema, data)".to_string()));
                 }
@@ -695,6 +699,7 @@ impl BuiltinFunctions {
                 Ok(Value::Str(crate::kore::kore_write_simple(&path, &schema, &data)))
             }
             "kore_read" => {
+                crate::security::require_file_read()?;
                 if args.is_empty() {
                     return Err(VmError::runtime_error("kore_read() expects 1 argument (path)".to_string()));
                 }
@@ -702,6 +707,7 @@ impl BuiltinFunctions {
                 Ok(Value::Str(crate::kore::kore_read_simple(&path)))
             }
             "kore_read_col" => {
+                crate::security::require_file_read()?;
                 if args.len() < 2 {
                     return Err(VmError::runtime_error("kore_read_col() expects 2 arguments (path, col_name)".to_string()));
                 }
@@ -710,6 +716,7 @@ impl BuiltinFunctions {
                 Ok(Value::Str(crate::kore::kore_read_col_simple(&path, &col)))
             }
             "kore_info" => {
+                crate::security::require_file_read()?;
                 if args.is_empty() {
                     return Err(VmError::runtime_error("kore_info() expects 1 argument (path)".to_string()));
                 }
@@ -1407,19 +1414,30 @@ impl BuiltinFunctions {
             ));
         }
 
-        let mut result = Vec::new();
-        if step > 0 {
-            let mut i = start;
-            while i < end {
-                result.push(Value::Number(i as f64));
-                i += step;
-            }
+        Self::range_values(start, end, step)
+    }
+
+    /// Materialise `start..end` by `step`, refusing absurd sizes (`range(1e12)`) with a clear error.
+    pub(crate) fn range_values(start: i64, end: i64, step: i64) -> Result<Value, VmError> {
+        let (s, e, st) = (start as i128, end as i128, step as i128);
+        let len = if st > 0 {
+            if e > s { (e - s + st - 1) / st } else { 0 }
+        } else if s > e {
+            (s - e + (-st) - 1) / (-st)
         } else {
-            let mut i = start;
-            while i > end {
-                result.push(Value::Number(i as f64));
-                i += step;
-            }
+            0
+        };
+        if len > MAX_RANGE_LEN as i128 {
+            return Err(VmError::runtime_error(format!(
+                "range is too large ({} elements, limit {}); use a while loop for huge counts",
+                len, MAX_RANGE_LEN
+            )));
+        }
+        let mut result = Vec::with_capacity(len as usize);
+        let mut i = s;
+        for _ in 0..len {
+            result.push(Value::Number(i as f64));
+            i += st;
         }
         Ok(Value::from(result))
     }
@@ -1790,6 +1808,7 @@ impl BuiltinFunctions {
         match (&args[0], &args[1]) {
             (Value::Str(s), Value::Number(count)) => {
                 let times = (*count as usize).max(0);
+                crate::vm::check_string_size(s.len().saturating_mul(times))?;
                 Ok(Value::Str(s.repeat(times)))
             }
             _ => Err(VmError::runtime_error(
@@ -1835,6 +1854,22 @@ impl BuiltinFunctions {
             _ => Err(VmError::runtime_error(
                 "pop() expects an array".to_string(),
             )),
+        }
+    }
+
+    /// `reversed(x)`: a new reversed array (or string); the argument is left untouched.
+    fn reversed(args: &[Value]) -> Result<Value, VmError> {
+        if args.len() != 1 {
+            return Err(VmError::runtime_error("reversed() expects 1 argument".to_string()));
+        }
+        match &args[0] {
+            Value::Array(arr) => {
+                let mut items = arr.to_vec();
+                items.reverse();
+                Ok(Value::from(items))
+            }
+            Value::Str(s) => Ok(Value::Str(s.chars().rev().collect())),
+            _ => Err(VmError::runtime_error("reversed() expects an array or string".to_string())),
         }
     }
 
@@ -2873,6 +2908,7 @@ impl BuiltinFunctions {
     }
 
     fn file_copy(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_read()?;
         crate::security::require_file_write()?;
         match args {
             [Value::Str(src), Value::Str(dst)] => {
@@ -2883,6 +2919,7 @@ impl BuiltinFunctions {
     }
 
     fn rename_file(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_read()?;
         crate::security::require_file_write()?;
         match args {
             [Value::Str(src), Value::Str(dst)] => {
@@ -3213,7 +3250,8 @@ impl BuiltinFunctions {
                 "spawn_thread() expects 1 argument (value/closure)".to_string(),
             ));
         }
-        let val = args[0].clone();
+        // the new thread owns an independent copy (no Rc is ever shared between threads)
+        let val = args[0].detached();
         let slot: std::sync::Arc<std::sync::Mutex<Option<Box<Value>>>> =
             std::sync::Arc::new(std::sync::Mutex::new(None));
         let slot_clone = std::sync::Arc::clone(&slot);
@@ -3241,7 +3279,8 @@ impl BuiltinFunctions {
                 "async_spawn() expects 1 argument (value or closure)".to_string(),
             ));
         }
-        let val = args[0].clone();
+        // the new thread owns an independent copy (no Rc is ever shared between threads)
+        let val = args[0].detached();
         let slot: std::sync::Arc<std::sync::Mutex<Option<Box<Value>>>> =
             std::sync::Arc::new(std::sync::Mutex::new(None));
         let slot_clone = std::sync::Arc::clone(&slot);
@@ -3290,7 +3329,7 @@ impl BuiltinFunctions {
     }
 
     fn builtin_spawn(args: &[Value]) -> Result<Value, VmError> {
-        let val = args.first().cloned().unwrap_or(Value::Null);
+        let val = args.first().map(Value::detached).unwrap_or(Value::Null);
         let slot: std::sync::Arc<std::sync::Mutex<Option<Box<Value>>>> =
             std::sync::Arc::new(std::sync::Mutex::new(None));
         let slot_clone = std::sync::Arc::clone(&slot);
@@ -3336,7 +3375,7 @@ impl BuiltinFunctions {
                         let guard = handle.0.lock()
                             .map_err(|e| VmError::runtime_error(format!("Future lock: {}", e)))?;
                         if let Some(v) = guard.as_ref() {
-                            return Ok(*v.clone());
+                            return Ok(v.detached());
                         }
                     }
                     if std::time::Instant::now() >= deadline {
@@ -3365,7 +3404,7 @@ impl BuiltinFunctions {
                         let guard = handle.0.lock()
                             .map_err(|e| VmError::runtime_error(format!("Future lock: {}", e)))?;
                         if let Some(v) = guard.as_ref() {
-                            results.push(*v.clone());
+                            results.push(v.detached());
                             break;
                         }
                         drop(guard);
@@ -3396,7 +3435,7 @@ impl BuiltinFunctions {
                         let guard = handle.0.lock()
                             .map_err(|e| VmError::runtime_error(format!("{}", e)))?;
                         if let Some(v) = guard.as_ref() {
-                            return Ok(*v.clone());
+                            return Ok(v.detached());
                         }
                     }
                     other => return Ok(other),
@@ -3411,7 +3450,7 @@ impl BuiltinFunctions {
 
     /// async_resolve(value) → wrap a value in an already-resolved future handle
     fn builtin_async_resolve(args: &[Value]) -> Result<Value, VmError> {
-        let val = args.first().cloned().unwrap_or(Value::Null);
+        let val = args.first().map(Value::detached).unwrap_or(Value::Null);
         let handle = crate::value::FutureHandle(
             std::sync::Arc::new(std::sync::Mutex::new(Some(Box::new(val)))),
         );
@@ -3763,6 +3802,7 @@ impl BuiltinFunctions {
 
     #[allow(dead_code)]
     fn http_get(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_network()?;
         use crate::http::http_get_request;
         
         if args.len() != 1 {
@@ -3794,6 +3834,7 @@ impl BuiltinFunctions {
 
     #[allow(dead_code)]
     fn http_post(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_network()?;
         use crate::http::http_post_request;
         
         if args.len() != 2 {
@@ -11139,7 +11180,7 @@ The fact that you shared this means something. What's underneath it  what are 
         if args.len() != 2 { return Err(VmError::runtime_error("mem_read_u16() expects 2 arguments (buf, offset)".to_string())); }
         let buf = match &args[0] { Value::Bytes(b) => b, _ => return Err(VmError::runtime_error("mem_read_u16: first arg must be bytes".to_string())) };
         let off = match &args[1] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("mem_read_u16: offset must be numeric".to_string())) };
-        if off + 2 > buf.len() { return Err(VmError::runtime_error("mem_read_u16: out of bounds".to_string())); }
+        if off.saturating_add(2) > buf.len() { return Err(VmError::runtime_error("mem_read_u16: out of bounds".to_string())); }
         let val = u16::from_le_bytes([buf[off], buf[off+1]]);
         Ok(Value::Integer(val as i64))
     }
@@ -11148,7 +11189,7 @@ The fact that you shared this means something. What's underneath it  what are 
         if args.len() != 2 { return Err(VmError::runtime_error("mem_read_u32() expects 2 arguments (buf, offset)".to_string())); }
         let buf = match &args[0] { Value::Bytes(b) => b, _ => return Err(VmError::runtime_error("mem_read_u32: first arg must be bytes".to_string())) };
         let off = match &args[1] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("mem_read_u32: offset must be numeric".to_string())) };
-        if off + 4 > buf.len() { return Err(VmError::runtime_error("mem_read_u32: out of bounds".to_string())); }
+        if off.saturating_add(4) > buf.len() { return Err(VmError::runtime_error("mem_read_u32: out of bounds".to_string())); }
         let val = u32::from_le_bytes([buf[off], buf[off+1], buf[off+2], buf[off+3]]);
         Ok(Value::Integer(val as i64))
     }
@@ -11157,7 +11198,7 @@ The fact that you shared this means something. What's underneath it  what are 
         if args.len() != 2 { return Err(VmError::runtime_error("mem_read_u64() expects 2 arguments (buf, offset)".to_string())); }
         let buf = match &args[0] { Value::Bytes(b) => b, _ => return Err(VmError::runtime_error("mem_read_u64: first arg must be bytes".to_string())) };
         let off = match &args[1] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("mem_read_u64: offset must be numeric".to_string())) };
-        if off + 8 > buf.len() { return Err(VmError::runtime_error("mem_read_u64: out of bounds".to_string())); }
+        if off.saturating_add(8) > buf.len() { return Err(VmError::runtime_error("mem_read_u64: out of bounds".to_string())); }
         let val = u64::from_le_bytes([buf[off], buf[off+1], buf[off+2], buf[off+3], buf[off+4], buf[off+5], buf[off+6], buf[off+7]]);
         Ok(Value::Integer(val as i64))
     }
@@ -11177,7 +11218,7 @@ The fact that you shared this means something. What's underneath it  what are 
         let mut buf = match &args[0] { Value::Bytes(b) => b.clone(), _ => return Err(VmError::runtime_error("mem_write_u16: first arg must be bytes".to_string())) };
         let off = match &args[1] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("mem_write_u16: offset must be numeric".to_string())) };
         let val = match &args[2] { Value::Number(n) => *n as u16, Value::Integer(n) => *n as u16, _ => return Err(VmError::runtime_error("mem_write_u16: value must be numeric".to_string())) };
-        if off + 2 > buf.len() { return Err(VmError::runtime_error("mem_write_u16: out of bounds".to_string())); }
+        if off.saturating_add(2) > buf.len() { return Err(VmError::runtime_error("mem_write_u16: out of bounds".to_string())); }
         let bytes = val.to_le_bytes();
         buf[off] = bytes[0]; buf[off+1] = bytes[1];
         Ok(Value::Bytes(buf))
@@ -11188,7 +11229,7 @@ The fact that you shared this means something. What's underneath it  what are 
         let mut buf = match &args[0] { Value::Bytes(b) => b.clone(), _ => return Err(VmError::runtime_error("mem_write_u32: first arg must be bytes".to_string())) };
         let off = match &args[1] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("mem_write_u32: offset must be numeric".to_string())) };
         let val = match &args[2] { Value::Number(n) => *n as u32, Value::Integer(n) => *n as u32, _ => return Err(VmError::runtime_error("mem_write_u32: value must be numeric".to_string())) };
-        if off + 4 > buf.len() { return Err(VmError::runtime_error("mem_write_u32: out of bounds".to_string())); }
+        if off.saturating_add(4) > buf.len() { return Err(VmError::runtime_error("mem_write_u32: out of bounds".to_string())); }
         let bytes = val.to_le_bytes();
         buf[off..off+4].copy_from_slice(&bytes);
         Ok(Value::Bytes(buf))
@@ -11199,7 +11240,7 @@ The fact that you shared this means something. What's underneath it  what are 
         let mut buf = match &args[0] { Value::Bytes(b) => b.clone(), _ => return Err(VmError::runtime_error("mem_write_u64: first arg must be bytes".to_string())) };
         let off = match &args[1] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("mem_write_u64: offset must be numeric".to_string())) };
         let val = match &args[2] { Value::Number(n) => *n as u64, Value::Integer(n) => *n as u64, _ => return Err(VmError::runtime_error("mem_write_u64: value must be numeric".to_string())) };
-        if off + 8 > buf.len() { return Err(VmError::runtime_error("mem_write_u64: out of bounds".to_string())); }
+        if off.saturating_add(8) > buf.len() { return Err(VmError::runtime_error("mem_write_u64: out of bounds".to_string())); }
         let bytes = val.to_le_bytes();
         buf[off..off+8].copy_from_slice(&bytes);
         Ok(Value::Bytes(buf))
@@ -11221,7 +11262,7 @@ The fact that you shared this means something. What's underneath it  what are 
         if args.len() != 2 { return Err(VmError::runtime_error("volatile_read_u16(buf, offset)".to_string())); }
         let buf = match &args[0] { Value::Bytes(b) => b, _ => return Err(VmError::runtime_error("volatile_read_u16: first arg must be bytes".to_string())) };
         let off = match &args[1] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("volatile_read_u16: offset must be numeric".to_string())) };
-        if off + 2 > buf.len() { return Err(VmError::runtime_error("volatile_read_u16: out of bounds".to_string())); }
+        if off.saturating_add(2) > buf.len() { return Err(VmError::runtime_error("volatile_read_u16: out of bounds".to_string())); }
         let val = unsafe { std::ptr::read_volatile((buf.as_ptr().add(off)) as *const u16) };
         Ok(Value::Integer(val as i64))
     }
@@ -11230,7 +11271,7 @@ The fact that you shared this means something. What's underneath it  what are 
         if args.len() != 2 { return Err(VmError::runtime_error("volatile_read_u32(buf, offset)".to_string())); }
         let buf = match &args[0] { Value::Bytes(b) => b, _ => return Err(VmError::runtime_error("volatile_read_u32: first arg must be bytes".to_string())) };
         let off = match &args[1] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("volatile_read_u32: offset must be numeric".to_string())) };
-        if off + 4 > buf.len() { return Err(VmError::runtime_error("volatile_read_u32: out of bounds".to_string())); }
+        if off.saturating_add(4) > buf.len() { return Err(VmError::runtime_error("volatile_read_u32: out of bounds".to_string())); }
         let val = unsafe { std::ptr::read_volatile((buf.as_ptr().add(off)) as *const u32) };
         Ok(Value::Integer(val as i64))
     }
@@ -11239,7 +11280,7 @@ The fact that you shared this means something. What's underneath it  what are 
         if args.len() != 2 { return Err(VmError::runtime_error("volatile_read_u64(buf, offset)".to_string())); }
         let buf = match &args[0] { Value::Bytes(b) => b, _ => return Err(VmError::runtime_error("volatile_read_u64: first arg must be bytes".to_string())) };
         let off = match &args[1] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("volatile_read_u64: offset must be numeric".to_string())) };
-        if off + 8 > buf.len() { return Err(VmError::runtime_error("volatile_read_u64: out of bounds".to_string())); }
+        if off.saturating_add(8) > buf.len() { return Err(VmError::runtime_error("volatile_read_u64: out of bounds".to_string())); }
         let val = unsafe { std::ptr::read_volatile((buf.as_ptr().add(off)) as *const u64) };
         Ok(Value::Integer(val as i64))
     }
@@ -11259,7 +11300,7 @@ The fact that you shared this means something. What's underneath it  what are 
         let mut buf = match &args[0] { Value::Bytes(b) => b.clone(), _ => return Err(VmError::runtime_error("volatile_write_u16: first arg must be bytes".to_string())) };
         let off = match &args[1] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("volatile_write_u16: offset must be numeric".to_string())) };
         let val = match &args[2] { Value::Number(n) => *n as u16, Value::Integer(n) => *n as u16, _ => return Err(VmError::runtime_error("volatile_write_u16: value must be numeric".to_string())) };
-        if off + 2 > buf.len() { return Err(VmError::runtime_error("volatile_write_u16: out of bounds".to_string())); }
+        if off.saturating_add(2) > buf.len() { return Err(VmError::runtime_error("volatile_write_u16: out of bounds".to_string())); }
         unsafe { std::ptr::write_volatile((buf.as_mut_ptr().add(off)) as *mut u16, val); }
         Ok(Value::Bytes(buf))
     }
@@ -11269,7 +11310,7 @@ The fact that you shared this means something. What's underneath it  what are 
         let mut buf = match &args[0] { Value::Bytes(b) => b.clone(), _ => return Err(VmError::runtime_error("volatile_write_u32: first arg must be bytes".to_string())) };
         let off = match &args[1] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("volatile_write_u32: offset must be numeric".to_string())) };
         let val = match &args[2] { Value::Number(n) => *n as u32, Value::Integer(n) => *n as u32, _ => return Err(VmError::runtime_error("volatile_write_u32: value must be numeric".to_string())) };
-        if off + 4 > buf.len() { return Err(VmError::runtime_error("volatile_write_u32: out of bounds".to_string())); }
+        if off.saturating_add(4) > buf.len() { return Err(VmError::runtime_error("volatile_write_u32: out of bounds".to_string())); }
         unsafe { std::ptr::write_volatile((buf.as_mut_ptr().add(off)) as *mut u32, val); }
         Ok(Value::Bytes(buf))
     }
@@ -11279,14 +11320,14 @@ The fact that you shared this means something. What's underneath it  what are 
         let mut buf = match &args[0] { Value::Bytes(b) => b.clone(), _ => return Err(VmError::runtime_error("volatile_write_u64: first arg must be bytes".to_string())) };
         let off = match &args[1] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("volatile_write_u64: offset must be numeric".to_string())) };
         let val = match &args[2] { Value::Number(n) => *n as u64, Value::Integer(n) => *n as u64, _ => return Err(VmError::runtime_error("volatile_write_u64: value must be numeric".to_string())) };
-        if off + 8 > buf.len() { return Err(VmError::runtime_error("volatile_write_u64: out of bounds".to_string())); }
+        if off.saturating_add(8) > buf.len() { return Err(VmError::runtime_error("volatile_write_u64: out of bounds".to_string())); }
         unsafe { std::ptr::write_volatile((buf.as_mut_ptr().add(off)) as *mut u64, val); }
         Ok(Value::Bytes(buf))
     }
 
     // ── I/O port read/write (x86  simulated via Bytes MMIO region) ─────────
 
-    #[cfg(target_arch = "x86_64")]
+    #[cfg(any())] // ring-0 only: executing it in user mode faults and kills the process
     fn io_port_in_u8(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 1 { return Err(VmError::runtime_error("io_port_in_u8(port)".to_string())); }
         let port = match &args[0] { Value::Number(n) => *n as u16, Value::Integer(n) => *n as u16, _ => return Err(VmError::runtime_error("io_port_in_u8: port must be numeric".to_string())) };
@@ -11294,13 +11335,13 @@ The fact that you shared this means something. What's underneath it  what are 
         unsafe { std::arch::asm!("in al, dx", out("al") val, in("dx") port, options(nostack, nomem)); }
         Ok(Value::Integer(val as i64))
     }
-    #[cfg(not(target_arch = "x86_64"))]
+    #[cfg(all())]
     fn io_port_in_u8(args: &[Value]) -> Result<Value, VmError> {
         let _ = args;
-        Err(VmError::runtime_error("io_port_in_u8: only available on x86_64".to_string()))
+        Err(VmError::runtime_error("io_port_in_u8: privileged instruction, not available to user-mode scripts".to_string()))
     }
 
-    #[cfg(target_arch = "x86_64")]
+    #[cfg(any())] // ring-0 only: executing it in user mode faults and kills the process
     fn io_port_in_u16(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 1 { return Err(VmError::runtime_error("io_port_in_u16(port)".to_string())); }
         let port = match &args[0] { Value::Number(n) => *n as u16, Value::Integer(n) => *n as u16, _ => return Err(VmError::runtime_error("io_port_in_u16: port must be numeric".to_string())) };
@@ -11308,13 +11349,13 @@ The fact that you shared this means something. What's underneath it  what are 
         unsafe { std::arch::asm!("in ax, dx", out("ax") val, in("dx") port, options(nostack, nomem)); }
         Ok(Value::Integer(val as i64))
     }
-    #[cfg(not(target_arch = "x86_64"))]
+    #[cfg(all())]
     fn io_port_in_u16(args: &[Value]) -> Result<Value, VmError> {
         let _ = args;
-        Err(VmError::runtime_error("io_port_in_u16: only available on x86_64".to_string()))
+        Err(VmError::runtime_error("io_port_in_u16: privileged instruction, not available to user-mode scripts".to_string()))
     }
 
-    #[cfg(target_arch = "x86_64")]
+    #[cfg(any())] // ring-0 only: executing it in user mode faults and kills the process
     fn io_port_out_u8(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 2 { return Err(VmError::runtime_error("io_port_out_u8(port, value)".to_string())); }
         let port = match &args[0] { Value::Number(n) => *n as u16, Value::Integer(n) => *n as u16, _ => return Err(VmError::runtime_error("io_port_out_u8: port must be numeric".to_string())) };
@@ -11322,13 +11363,13 @@ The fact that you shared this means something. What's underneath it  what are 
         unsafe { std::arch::asm!("out dx, al", in("dx") port, in("al") val, options(nostack, nomem)); }
         Ok(Value::Null)
     }
-    #[cfg(not(target_arch = "x86_64"))]
+    #[cfg(all())]
     fn io_port_out_u8(args: &[Value]) -> Result<Value, VmError> {
         let _ = args;
-        Err(VmError::runtime_error("io_port_out_u8: only available on x86_64".to_string()))
+        Err(VmError::runtime_error("io_port_out_u8: privileged instruction, not available to user-mode scripts".to_string()))
     }
 
-    #[cfg(target_arch = "x86_64")]
+    #[cfg(any())] // ring-0 only: executing it in user mode faults and kills the process
     fn io_port_out_u16(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 2 { return Err(VmError::runtime_error("io_port_out_u16(port, value)".to_string())); }
         let port = match &args[0] { Value::Number(n) => *n as u16, Value::Integer(n) => *n as u16, _ => return Err(VmError::runtime_error("io_port_out_u16: port must be numeric".to_string())) };
@@ -11336,10 +11377,10 @@ The fact that you shared this means something. What's underneath it  what are 
         unsafe { std::arch::asm!("out dx, ax", in("dx") port, in("ax") val, options(nostack, nomem)); }
         Ok(Value::Null)
     }
-    #[cfg(not(target_arch = "x86_64"))]
+    #[cfg(all())]
     fn io_port_out_u16(args: &[Value]) -> Result<Value, VmError> {
         let _ = args;
-        Err(VmError::runtime_error("io_port_out_u16: only available on x86_64".to_string()))
+        Err(VmError::runtime_error("io_port_out_u16: privileged instruction, not available to user-mode scripts".to_string()))
     }
 
     // ── SHA-256 (pure Rust, zero deps) ───────────────────────────────────────
@@ -11370,6 +11411,7 @@ The fact that you shared this means something. What's underneath it  what are 
 
     #[cfg(target_os = "windows")]
     fn mmap_alloc(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_ffi()?;
         if args.len() != 1 { return Err(VmError::runtime_error("mmap_alloc(size)".to_string())); }
         let size = match &args[0] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("mmap_alloc: size must be numeric".to_string())) };
         if size > 1_073_741_824 { return Err(VmError::runtime_error("mmap_alloc: max 1GB".to_string())); }
@@ -11382,6 +11424,7 @@ The fact that you shared this means something. What's underneath it  what are 
     }
     #[cfg(not(target_os = "windows"))]
     fn mmap_alloc(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_ffi()?;
         if args.len() != 1 { return Err(VmError::runtime_error("mmap_alloc(size)".to_string())); }
         let size = match &args[0] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("mmap_alloc: size must be numeric".to_string())) };
         if size > 1_073_741_824 { return Err(VmError::runtime_error("mmap_alloc: max 1GB".to_string())); }
@@ -11394,6 +11437,7 @@ The fact that you shared this means something. What's underneath it  what are 
 
     #[cfg(target_os = "windows")]
     fn mmap_free(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_ffi()?;
         if args.len() != 1 { return Err(VmError::runtime_error("mmap_free(ptr)".to_string())); }
         let ptr = match &args[0] { Value::Pointer(p) => *p, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("mmap_free: argument must be pointer".to_string())) };
         let ok = unsafe { winapi_virtual_free(ptr as *mut u8, 0, 0x8000 /* MEM_RELEASE */) };
@@ -11402,6 +11446,7 @@ The fact that you shared this means something. What's underneath it  what are 
     }
     #[cfg(not(target_os = "windows"))]
     fn mmap_free(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_ffi()?;
         if args.len() != 2 { return Err(VmError::runtime_error("mmap_free(ptr, size)".to_string())); }
         let ptr = match &args[0] { Value::Pointer(p) => *p, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("mmap_free: argument must be pointer".to_string())) };
         let size = match &args[1] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("mmap_free: size must be numeric".to_string())) };
@@ -11410,6 +11455,7 @@ The fact that you shared this means something. What's underneath it  what are 
     }
 
     fn mmap_write(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_ffi()?;
         if args.len() != 3 { return Err(VmError::runtime_error("mmap_write(ptr, offset, bytes)".to_string())); }
         let base = match &args[0] { Value::Pointer(p) => *p, _ => return Err(VmError::runtime_error("mmap_write: first arg must be pointer".to_string())) };
         let off = match &args[1] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("mmap_write: offset must be numeric".to_string())) };
@@ -11422,6 +11468,7 @@ The fact that you shared this means something. What's underneath it  what are 
     }
 
     fn mmap_read(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_ffi()?;
         if args.len() != 3 { return Err(VmError::runtime_error("mmap_read(ptr, offset, len)".to_string())); }
         let base = match &args[0] { Value::Pointer(p) => *p, _ => return Err(VmError::runtime_error("mmap_read: first arg must be pointer".to_string())) };
         let off = match &args[1] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("mmap_read: offset must be numeric".to_string())) };
@@ -11437,6 +11484,7 @@ The fact that you shared this means something. What's underneath it  what are 
 
     #[cfg(target_os = "windows")]
     fn mmap_exec(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_ffi()?;
         if args.len() != 2 { return Err(VmError::runtime_error("mmap_exec(ptr, size)  make memory executable".to_string())); }
         let ptr = match &args[0] { Value::Pointer(p) => *p, _ => return Err(VmError::runtime_error("mmap_exec: first arg must be pointer".to_string())) };
         let size = match &args[1] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("mmap_exec: size must be numeric".to_string())) };
@@ -11448,6 +11496,7 @@ The fact that you shared this means something. What's underneath it  what are 
     }
     #[cfg(not(target_os = "windows"))]
     fn mmap_exec(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_ffi()?;
         if args.len() != 2 { return Err(VmError::runtime_error("mmap_exec(ptr, size)  make memory executable".to_string())); }
         let ptr = match &args[0] { Value::Pointer(p) => *p, _ => return Err(VmError::runtime_error("mmap_exec: first arg must be pointer".to_string())) };
         let size = match &args[1] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("mmap_exec: size must be numeric".to_string())) };
@@ -11497,6 +11546,7 @@ The fact that you shared this means something. What's underneath it  what are 
     }
 
     fn env_get(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_process_spawn()?;
         if args.len() != 1 { return Err(VmError::runtime_error("env_get(name)".to_string())); }
         let name = match &args[0] { Value::Str(s) => s, _ => return Err(VmError::runtime_error("env_get: name must be string".to_string())) };
         match std::env::var(name) {
@@ -11506,6 +11556,7 @@ The fact that you shared this means something. What's underneath it  what are 
     }
 
     fn env_set(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_process_spawn()?;
         if args.len() != 2 { return Err(VmError::runtime_error("env_set(name, value)".to_string())); }
         let name = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(VmError::runtime_error("env_set: name must be string".to_string())) };
         let val = match &args[1] { Value::Str(s) => s.clone(), _ => format!("{}", args[1]) };
@@ -11514,6 +11565,7 @@ The fact that you shared this means something. What's underneath it  what are 
     }
 
     fn process_exit(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_process_spawn()?;
         let code = if args.is_empty() { 0 } else {
             match &args[0] { Value::Number(n) => *n as i32, Value::Integer(n) => *n as i32, _ => 1 }
         };
@@ -11560,9 +11612,8 @@ The fact that you shared this means something. What's underneath it  what are 
         if args.len() != 2 { return Err(VmError::runtime_error("atomic_load(buf, offset)".to_string())); }
         let buf = match &args[0] { Value::Bytes(b) => b, _ => return Err(VmError::runtime_error("atomic_load: first arg must be bytes".to_string())) };
         let off = match &args[1] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("atomic_load: offset must be numeric".to_string())) };
-        if off + 8 > buf.len() { return Err(VmError::runtime_error("atomic_load: out of bounds".to_string())); }
-        let ptr = buf[off..off+8].as_ptr() as *const std::sync::atomic::AtomicU64;
-        let val = unsafe { (*ptr).load(std::sync::atomic::Ordering::SeqCst) };
+        if off.saturating_add(8) > buf.len() { return Err(VmError::runtime_error("atomic_load: out of bounds".to_string())); }
+        let val = u64::from_le_bytes(buf[off..off + 8].try_into().unwrap());
         Ok(Value::Integer(val as i64))
     }
 
@@ -11571,9 +11622,8 @@ The fact that you shared this means something. What's underneath it  what are 
         let mut buf = match &args[0] { Value::Bytes(b) => b.clone(), _ => return Err(VmError::runtime_error("atomic_store: first arg must be bytes".to_string())) };
         let off = match &args[1] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("atomic_store: offset must be numeric".to_string())) };
         let val = match &args[2] { Value::Number(n) => *n as u64, Value::Integer(n) => *n as u64, _ => return Err(VmError::runtime_error("atomic_store: value must be numeric".to_string())) };
-        if off + 8 > buf.len() { return Err(VmError::runtime_error("atomic_store: out of bounds".to_string())); }
-        let ptr = buf[off..off+8].as_mut_ptr() as *mut std::sync::atomic::AtomicU64;
-        unsafe { (*ptr).store(val, std::sync::atomic::Ordering::SeqCst); }
+        if off.saturating_add(8) > buf.len() { return Err(VmError::runtime_error("atomic_store: out of bounds".to_string())); }
+        buf[off..off + 8].copy_from_slice(&val.to_le_bytes());
         Ok(Value::Bytes(buf))
     }
 
@@ -11583,9 +11633,14 @@ The fact that you shared this means something. What's underneath it  what are 
         let off = match &args[1] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("atomic_cas: offset must be numeric".to_string())) };
         let expected = match &args[2] { Value::Number(n) => *n as u64, Value::Integer(n) => *n as u64, _ => return Err(VmError::runtime_error("atomic_cas: expected must be numeric".to_string())) };
         let desired = match &args[3] { Value::Number(n) => *n as u64, Value::Integer(n) => *n as u64, _ => return Err(VmError::runtime_error("atomic_cas: desired must be numeric".to_string())) };
-        if off + 8 > buf.len() { return Err(VmError::runtime_error("atomic_cas: out of bounds".to_string())); }
-        let ptr = buf[off..off+8].as_mut_ptr() as *mut std::sync::atomic::AtomicU64;
-        let result = unsafe { (*ptr).compare_exchange(expected, desired, std::sync::atomic::Ordering::SeqCst, std::sync::atomic::Ordering::SeqCst) };
+        if off.saturating_add(8) > buf.len() { return Err(VmError::runtime_error("atomic_cas: out of bounds".to_string())); }
+        let current = u64::from_le_bytes(buf[off..off + 8].try_into().unwrap());
+        let result = if current == expected {
+            buf[off..off + 8].copy_from_slice(&desired.to_le_bytes());
+            Ok(current)
+        } else {
+            Err(current)
+        };
         match result {
             Ok(v) => {
                 let mut dict = std::collections::HashMap::new();
@@ -11609,9 +11664,9 @@ The fact that you shared this means something. What's underneath it  what are 
         let mut buf = match &args[0] { Value::Bytes(b) => b.clone(), _ => return Err(VmError::runtime_error("atomic_add: first arg must be bytes".to_string())) };
         let off = match &args[1] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("atomic_add: offset must be numeric".to_string())) };
         let val = match &args[2] { Value::Number(n) => *n as u64, Value::Integer(n) => *n as u64, _ => return Err(VmError::runtime_error("atomic_add: value must be numeric".to_string())) };
-        if off + 8 > buf.len() { return Err(VmError::runtime_error("atomic_add: out of bounds".to_string())); }
-        let ptr = buf[off..off+8].as_mut_ptr() as *mut std::sync::atomic::AtomicU64;
-        let old = unsafe { (*ptr).fetch_add(val, std::sync::atomic::Ordering::SeqCst) };
+        if off.saturating_add(8) > buf.len() { return Err(VmError::runtime_error("atomic_add: out of bounds".to_string())); }
+        let old = u64::from_le_bytes(buf[off..off + 8].try_into().unwrap());
+        buf[off..off + 8].copy_from_slice(&old.wrapping_add(val).to_le_bytes());
         let mut dict = std::collections::HashMap::new();
         dict.insert("old".to_string(), Value::Integer(old as i64));
         dict.insert("buf".to_string(), Value::Bytes(buf));
@@ -11622,21 +11677,15 @@ The fact that you shared this means something. What's underneath it  what are 
 
     fn interrupts_disable(_args: &[Value]) -> Result<Value, VmError> {
         // In user-space, we simulate this. In a real kernel, this would be `cli`.
-        #[cfg(target_arch = "x86_64")]
-        unsafe { std::arch::asm!("cli", options(nostack, nomem)); }
         Ok(Value::Null)
     }
 
     fn interrupts_enable(_args: &[Value]) -> Result<Value, VmError> {
-        #[cfg(target_arch = "x86_64")]
-        unsafe { std::arch::asm!("sti", options(nostack, nomem)); }
         Ok(Value::Null)
     }
 
     fn wfi(_args: &[Value]) -> Result<Value, VmError> {
         // Wait For Interrupt  x86: hlt, ARM: wfi
-        #[cfg(target_arch = "x86_64")]
-        unsafe { std::arch::asm!("hlt", options(nostack, nomem)); }
         Ok(Value::Null)
     }
 
@@ -11648,6 +11697,7 @@ The fact that you shared this means something. What's underneath it  what are 
     // ── Disk raw block I/O (uses file-backed simulation) ─────────────────────
 
     fn disk_read_block(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_read()?;
         if args.len() != 3 { return Err(VmError::runtime_error("disk_read_block(path, block_num, block_size)".to_string())); }
         let path = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(VmError::runtime_error("disk_read_block: path must be string".to_string())) };
         let block_num = match &args[1] { Value::Number(n) => *n as u64, Value::Integer(n) => *n as u64, _ => return Err(VmError::runtime_error("disk_read_block: block_num must be numeric".to_string())) };
@@ -11655,7 +11705,7 @@ The fact that you shared this means something. What's underneath it  what are 
         if block_size > 1_048_576 { return Err(VmError::runtime_error("disk_read_block: max block size 1MB".to_string())); }
         use std::io::{Read, Seek, SeekFrom};
         let mut f = std::fs::File::open(&path).map_err(|e| VmError::runtime_error(format!("disk_read_block: {}", e)))?;
-        f.seek(SeekFrom::Start(block_num * block_size as u64)).map_err(|e| VmError::runtime_error(format!("disk_read_block: seek error: {}", e)))?;
+        f.seek(SeekFrom::Start(block_num.saturating_mul(block_size as u64))).map_err(|e| VmError::runtime_error(format!("disk_read_block: seek error: {}", e)))?;
         let mut buf = vec![0u8; block_size];
         let n = f.read(&mut buf).map_err(|e| VmError::runtime_error(format!("disk_read_block: read error: {}", e)))?;
         buf.truncate(n);
@@ -11663,13 +11713,14 @@ The fact that you shared this means something. What's underneath it  what are 
     }
 
     fn disk_write_block(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_write()?;
         if args.len() != 3 { return Err(VmError::runtime_error("disk_write_block(path, block_num, data)".to_string())); }
         let path = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(VmError::runtime_error("disk_write_block: path must be string".to_string())) };
         let block_num = match &args[1] { Value::Number(n) => *n as u64, Value::Integer(n) => *n as u64, _ => return Err(VmError::runtime_error("disk_write_block: block_num must be numeric".to_string())) };
         let data = match &args[2] { Value::Bytes(b) => b, _ => return Err(VmError::runtime_error("disk_write_block: data must be bytes".to_string())) };
         use std::io::{Write, Seek, SeekFrom};
         let mut f = std::fs::OpenOptions::new().write(true).create(true).open(&path).map_err(|e| VmError::runtime_error(format!("disk_write_block: {}", e)))?;
-        f.seek(SeekFrom::Start(block_num * data.len() as u64)).map_err(|e| VmError::runtime_error(format!("disk_write_block: seek error: {}", e)))?;
+        f.seek(SeekFrom::Start(block_num.saturating_mul(data.len() as u64))).map_err(|e| VmError::runtime_error(format!("disk_write_block: seek error: {}", e)))?;
         f.write_all(data).map_err(|e| VmError::runtime_error(format!("disk_write_block: write error: {}", e)))?;
         Ok(Value::Integer(data.len() as i64))
     }
@@ -11690,6 +11741,7 @@ The fact that you shared this means something. What's underneath it  what are 
     }
 
     fn page_map(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_ffi()?;
         if args.len() != 3 { return Err(VmError::runtime_error("page_map(page_table, virtual_page, physical_page)".to_string())); }
         let mut pt = match &args[0] { Value::Bytes(b) => b.clone(), _ => return Err(VmError::runtime_error("page_map: page_table must be bytes".to_string())) };
         let virt = match &args[1] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("page_map: virtual_page must be numeric".to_string())) };
@@ -11839,6 +11891,7 @@ The fact that you shared this means something. What's underneath it  what are 
 
     /// call_native(code)  simulate executing native x86 code, returns EAX value as Number
     fn call_native(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_ffi()?;
         if args.len() != 1 {
             return Err(VmError::runtime_error("call_native(code) expects 1 argument".to_string()));
         }
@@ -11900,6 +11953,7 @@ The fact that you shared this means something. What's underneath it  what are 
     }
 
     fn builtin_kore_query(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_read()?;
         if args.is_empty() {
             return Err(VmError::runtime_error("kore_query() expects 1 argument (sql)".to_string()));
         }
@@ -11911,6 +11965,7 @@ The fact that you shared this means something. What's underneath it  what are 
     }
 
     fn builtin_kore_query_table(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_read()?;
         if args.is_empty() {
             return Err(VmError::runtime_error("kore_query_table() expects 1 argument (sql)".to_string()));
         }
@@ -11922,6 +11977,7 @@ The fact that you shared this means something. What's underneath it  what are 
     }
 
     fn builtin_kore_query_csv(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_read()?;
         if args.is_empty() {
             return Err(VmError::runtime_error("kore_query_csv() expects 1 argument (sql)".to_string()));
         }
@@ -11933,6 +11989,7 @@ The fact that you shared this means something. What's underneath it  what are 
     }
 
     fn builtin_kore_txn_begin(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_read()?;
         if args.is_empty() {
             return Err(VmError::runtime_error("kore_txn_begin() expects 1 argument (path)".to_string()));
         }
@@ -11942,6 +11999,8 @@ The fact that you shared this means something. What's underneath it  what are 
     }
 
     fn builtin_kore_txn_commit(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_read()?;
+        crate::security::require_file_write()?;
         if args.len() < 2 {
             return Err(VmError::runtime_error("kore_txn_commit() expects 2 arguments (id, message)".to_string()));
         }
@@ -11957,6 +12016,7 @@ The fact that you shared this means something. What's underneath it  what are 
     }
 
     fn builtin_kore_txn_abort(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_write()?;
         if args.is_empty() {
             return Err(VmError::runtime_error("kore_txn_abort() expects 1 argument (id)".to_string()));
         }
@@ -11969,6 +12029,7 @@ The fact that you shared this means something. What's underneath it  what are 
     }
 
     fn builtin_kore_versions(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_read()?;
         if args.is_empty() {
             return Err(VmError::runtime_error("kore_versions() expects 1 argument (path)".to_string()));
         }
@@ -11980,6 +12041,8 @@ The fact that you shared this means something. What's underneath it  what are 
     }
 
     fn builtin_kore_checkout(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_read()?;
+        crate::security::require_file_write()?;
         if args.len() < 2 {
             return Err(VmError::runtime_error("kore_checkout() expects 2 arguments (path, version)".to_string()));
         }
@@ -11995,6 +12058,7 @@ The fact that you shared this means something. What's underneath it  what are 
     }
 
     fn builtin_kore_as_of(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_read()?;
         if args.len() < 2 {
             return Err(VmError::runtime_error("kore_as_of() expects 2 arguments (path, timestamp_ms)".to_string()));
         }
@@ -12010,6 +12074,7 @@ The fact that you shared this means something. What's underneath it  what are 
     }
 
     fn builtin_kore_diff(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_read()?;
         if args.len() < 3 {
             return Err(VmError::runtime_error("kore_diff() expects 3 arguments (path, v1, v2)".to_string()));
         }
@@ -12035,6 +12100,8 @@ The fact that you shared this means something. What's underneath it  what are 
     }
 
     fn builtin_kore2_from_csv(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_read()?;
+        crate::security::require_file_write()?;
         if args.len() < 2 {
             return Err(VmError::runtime_error("kore2_from_csv() expects 2 arguments (csv_path, kore_path)".to_string()));
         }
@@ -12047,6 +12114,8 @@ The fact that you shared this means something. What's underneath it  what are 
     }
 
     fn builtin_kore2_to_csv(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_read()?;
+        crate::security::require_file_write()?;
         if args.len() < 2 {
             return Err(VmError::runtime_error("kore2_to_csv() expects 2 arguments (kore_path, csv_path)".to_string()));
         }
@@ -12059,6 +12128,7 @@ The fact that you shared this means something. What's underneath it  what are 
     }
 
     fn builtin_kore2_filter(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_read()?;
         if args.len() < 4 {
             return Err(VmError::runtime_error(
                 "kore2_filter() expects 4 arguments (path, col, op, val)".to_string()
@@ -12082,6 +12152,7 @@ The fact that you shared this means something. What's underneath it  what are 
     }
 
     fn builtin_kore2_stats(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_read()?;
         if args.len() < 2 {
             return Err(VmError::runtime_error("kore2_stats() expects 2 arguments (path, col)".to_string()));
         }
@@ -12104,6 +12175,7 @@ The fact that you shared this means something. What's underneath it  what are 
     }
 
     fn builtin_kore2_read_row(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_read()?;
         if args.len() < 2 {
             return Err(VmError::runtime_error("kore2_read_row() expects 2 arguments (path, idx)".to_string()));
         }
@@ -12125,6 +12197,7 @@ The fact that you shared this means something. What's underneath it  what are 
     }
 
     fn builtin_kore2_read_range(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_read()?;
         if args.len() < 3 {
             return Err(VmError::runtime_error("kore2_read_range() expects 3 arguments (path, start, end)".to_string()));
         }
@@ -12144,6 +12217,7 @@ The fact that you shared this means something. What's underneath it  what are 
     }
 
     fn builtin_kore2_info(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_read()?;
         if args.is_empty() {
             return Err(VmError::runtime_error("kore2_info() expects 1 argument (path)".to_string()));
         }
@@ -12154,6 +12228,7 @@ The fact that you shared this means something. What's underneath it  what are 
     }
 
     fn builtin_kore2_read(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_read()?;
         if args.is_empty() {
             return Err(VmError::runtime_error("kore2_read() expects 1 argument (path)".to_string()));
         }
@@ -12164,6 +12239,7 @@ The fact that you shared this means something. What's underneath it  what are 
     }
 
     fn builtin_kore2_read_col(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_read()?;
         if args.len() < 2 {
             return Err(VmError::runtime_error("kore2_read_col() expects 2 arguments (path, col)".to_string()));
         }
@@ -12206,6 +12282,7 @@ The fact that you shared this means something. What's underneath it  what are 
 
     /// `kore_ctx_csv(id, table_name, csv_path)` → Str ("ok" or error)
     fn builtin_kore_ctx_csv(args: &[Value]) -> Result<Value, VmError> {
+        crate::security::require_file_read()?;
         if args.len() < 3 {
             return Err(VmError::runtime_error("kore_ctx_csv() expects 3 arguments (id, table, path)".to_string()));
         }

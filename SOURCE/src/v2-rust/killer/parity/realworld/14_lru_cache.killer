@@ -1,0 +1,120 @@
+// LRU cache class with hit/miss statistics, eviction callbacks and a memoised function
+class LRUCache {
+  fn init(capacity) {
+    this.capacity = capacity
+    this.data = {}
+    this.order = []
+    this.hits = 0
+    this.misses = 0
+    this.evicted = []
+  }
+  fn touch(key) {
+    kept = []
+    for k in this.order {
+      if k != key {
+        push(kept, k)
+      }
+    }
+    push(kept, key)
+    this.order = kept
+  }
+  fn get(key) {
+    if key in this.data {
+      this.hits = this.hits + 1
+      this.touch(key)
+      return this.data[key]
+    }
+    this.misses = this.misses + 1
+    return null
+  }
+  fn put(key, value) {
+    if key in this.data {
+      this.data[key] = value
+      this.touch(key)
+      return null
+    }
+    if len(this.order) >= this.capacity {
+      oldest = this.order[0]
+      this.order = slice(this.order, 1, len(this.order))
+      delete(this.data, oldest)
+      push(this.evicted, oldest)
+    }
+    this.data[key] = value
+    push(this.order, key)
+    return null
+  }
+  fn size() {
+    return len(this.order)
+  }
+  fn keys_by_recency() {
+    return reversed(this.order)
+  }
+  fn stats() {
+    total = this.hits + this.misses
+    rate = 0
+    if total > 0 {
+      rate = round(this.hits * 1000 / total) / 10
+    }
+    return f"hits={this.hits} misses={this.misses} rate={rate}%"
+  }
+}
+
+c = new LRUCache(3)
+c.put("a", 1)
+c.put("b", 2)
+c.put("c", 3)
+println(c.keys_by_recency())
+println(c.get("a"))
+println(c.keys_by_recency())
+c.put("d", 4)
+println(c.get("b"))
+println(c.keys_by_recency())
+println("evicted: " + str(c.evicted))
+c.put("c", 33)
+c.put("e", 5)
+println(c.keys_by_recency())
+println("evicted: " + str(c.evicted))
+println(c.get("c") + c.get("d") + c.get("e"))
+println(c.stats())
+println("size " + str(c.size()))
+
+// memoised computation through the cache: collatz chain lengths
+memo = new LRUCache(50)
+stats = {"calls": 0}
+fn collatz(n) {
+  if n == 1 {
+    return 1
+  }
+  cached = memo.get(n)
+  if cached != null {
+    return cached
+  }
+  stats["calls"] = stats["calls"] + 1
+  r = 0
+  if n % 2 == 0 {
+    r = 1 + collatz(n / 2)
+  } else {
+    r = 1 + collatz(3 * n + 1)
+  }
+  memo.put(n, r)
+  return r
+}
+
+best = 0
+best_n = 0
+for n in range(1, 31) {
+  l = collatz(n)
+  if l > best {
+    best = l
+    best_n = n
+  }
+}
+println("longest chain under 31: n=" + str(best_n) + " length=" + str(best))
+println("computed " + str(stats["calls"]) + " chains, cache holds " + str(memo.size()))
+println(memo.stats())
+
+// a cache of size 1 degenerates to "remember the last key"
+one = new LRUCache(1)
+one.put("x", 1)
+one.put("y", 2)
+println(str(one.get("x")) + " " + str(one.get("y")) + " " + str(one.evicted))

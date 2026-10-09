@@ -191,6 +191,7 @@ fn get_import_cache() -> std::sync::MutexGuard<'static, Option<HashMap<String, S
 
 // import(name) → load and return module source code
 pub fn builtin_import(args: &[Value]) -> Result<Value, VmError> {
+    crate::security::require_file_read()?;
     if args.is_empty() {
         return Err(VmError::runtime_error("import(name) — module name required\nExamples: import(\"./utils\"), import(\"killer-http\"), import(\"std:math\")"));
     }
@@ -222,6 +223,7 @@ pub fn builtin_import(args: &[Value]) -> Result<Value, VmError> {
 
 // import_list() → list available modules
 pub fn builtin_import_list(args: &[Value]) -> Result<Value, VmError> {
+    crate::security::require_file_read()?;
     let _ = args;
     let mut modules = Vec::new();
 
@@ -291,6 +293,7 @@ fn file_mtime(path: &str) -> Option<u64> {
 
 // watch(file, interval_ms?) → watch file for changes
 pub fn builtin_watch(args: &[Value]) -> Result<Value, VmError> {
+    crate::security::require_file_read()?;
     if args.is_empty() {
         return Err(VmError::runtime_error("watch(file, interval_ms?) — file path required"));
     }
@@ -329,6 +332,7 @@ pub fn builtin_watch(args: &[Value]) -> Result<Value, VmError> {
 
 // watch_dir(dir, interval_ms?) → watch directory for any .killer file changes
 pub fn builtin_watch_dir(args: &[Value]) -> Result<Value, VmError> {
+    crate::security::require_file_read()?;
     if args.is_empty() {
         return Err(VmError::runtime_error("watch_dir(dir, interval_ms?)"));
     }
@@ -624,6 +628,7 @@ pub fn builtin_bench_all(args: &[Value]) -> Result<Value, VmError> {
 
 // bench_save(file?) → save baseline to file
 pub fn builtin_bench_save(args: &[Value]) -> Result<Value, VmError> {
+    crate::security::require_file_write()?;
     let file = if args.is_empty() { "bench_baseline.txt".to_string() } else { val_str(&args[0]) };
     let mut lines = Vec::new();
     lines.push(format!("# Killer Performance Baseline — {}", chrono_now()));
@@ -638,6 +643,7 @@ pub fn builtin_bench_save(args: &[Value]) -> Result<Value, VmError> {
 
 // bench_compare(file?) → compare current perf against saved baseline
 pub fn builtin_bench_compare(args: &[Value]) -> Result<Value, VmError> {
+    crate::security::require_file_read()?;
     let file = if args.is_empty() { "bench_baseline.txt".to_string() } else { val_str(&args[0]) };
     let content = std::fs::read_to_string(&file)
         .map_err(|e| VmError::runtime_error(format!("No baseline file '{}': {}. Run bench_save() first.", file, e)))?;

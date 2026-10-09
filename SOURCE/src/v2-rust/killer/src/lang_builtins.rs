@@ -294,6 +294,7 @@ pub fn call(name: &str, args: &[Value]) -> Option<Result<Value, VmError>> {
             let a = arity(name, args, 2, 3)?;
             let s = string(&a[0], name)?;
             let width = int(&a[1], name)?.max(0) as usize;
+            crate::vm::check_string_size(width)?;
             let fill = match a.get(2) {
                 Some(Value::Str(f)) if f.chars().count() == 1 => f.chars().next().unwrap(),
                 None => ' ',
@@ -541,6 +542,10 @@ pub fn call(name: &str, args: &[Value]) -> Option<Result<Value, VmError>> {
             let a = arity("delete", args, 2, 2)?;
             match (&a[0], &a[1]) {
                 (Value::Dict(d), Value::Str(k)) => Ok(d.remove(k).unwrap_or(Value::Null)),
+                // number and bool keys are stored under their printed form (`d[5] = x` -> "5")
+                (Value::Dict(d), k @ (Value::Number(_) | Value::Integer(_) | Value::Bool(_))) => {
+                    Ok(d.remove(&format!("{}", k)).unwrap_or(Value::Null))
+                }
                 (Value::Array(arr), idx) => {
                     let i = int(idx, "delete")?;
                     let len = arr.len() as i64;

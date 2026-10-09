@@ -226,6 +226,31 @@ fn repeat_sequence(lhs: &Value, rhs: &Value) -> Option<Result<Value, String>> {
 /// Return address used for calls made from Rust (see `call_value_nested`).
 const NESTED_RETURN: usize = usize::MAX;
 
+/// Largest string a script may build (matches the `*` repeat limit).
+pub(crate) const MAX_STRING_BYTES: usize = 1 << 28;
+/// Largest list a script may build by concatenation (matches the `*` repeat limit).
+pub(crate) const MAX_ARRAY_LEN: usize = 1 << 24;
+
+/// Refuse to build a string of more than [`MAX_STRING_BYTES`] bytes (`"x" * n`, `repeat`, padding).
+#[inline]
+pub(crate) fn check_string_size(bytes: usize) -> Result<(), VmError> {
+    if bytes > MAX_STRING_BYTES {
+        Err(string_too_large())
+    } else {
+        Ok(())
+    }
+}
+
+#[cold]
+fn string_too_large() -> VmError {
+    VmError::runtime_error("string is too large (limit 256 MB)".to_string())
+}
+
+/// Maximum Killer call depth (heap-allocated frames) before `stack overflow: recursion too deep`.
+const MAX_CALL_DEPTH: usize = 100_000;
+/// Maximum nesting of Rust-level interpreter re-entries (callbacks, operator methods, generators).
+const MAX_NATIVE_DEPTH: u32 = 400;
+
 /// Builtins that take a function: `map`, `filter`, `reduce`, `sorted`.
 fn is_callback_builtin(id: u16) -> bool {
     matches!(id, 10 | 42 | 43 | 44 | 45)
@@ -295,6 +320,8 @@ pub struct VirtualMachine {
     loop_pattern_detector: crate::loop_pattern_detection::LoopPatternDetector,  // Loop optimization hints (5-10%)
     
     // SECURITY: Recursion depth limiting (March 2026)
+    /// Nesting depth of Rust-level re-entries into the interpreter (callbacks, operator methods, generators).
+    native_depth: u32,
     recursion_guard: RecursionGuard,  // Prevents stack overflow from infinite recursion
 
     /// Optional per-`run` instruction / wall-clock budget (hosts: call [`set_execution_budget`](VirtualMachine::set_execution_budget)).
@@ -375,6 +402,7 @@ impl Default for VirtualMachine {
             value_buffer_pool: crate::allocation_pool::ValueBufferPool::default(),
             scope_var_cache: crate::allocation_pool::ScopeVariableCache::new(),
             loop_pattern_detector: crate::loop_pattern_detection::LoopPatternDetector::new(),
+            native_depth: 0,
             recursion_guard: RecursionGuard::new(crate::security::MAX_RECURSION_DEPTH),
             execution_budget: None,
             exec_step_counter: 0,
@@ -403,6 +431,31 @@ struct TaskContext {
     globals: Vec<(String, Value)>,
     classes: HashMap<String, ClassInfo>,
     method_names: crate::fast_hash::FastSet<String>,
+}
+
+/// Stack for spawned task threads: the interpreter re-enters itself natively for callbacks, operator
+/// methods and generators (bounded by `MAX_NATIVE_DEPTH`), which needs far more than the 2 MB default.
+/// Only address space is reserved; pages are committed as they are touched.
+const SPAWN_STACK_BYTES: usize = 128 * 1024 * 1024;
+
+/// Start `run_spawned_task` on a new OS thread. When the thread cannot be created the future is
+/// resolved with an error instead of panicking the caller.
+fn spawn_task_thread(
+    task: TaskContext,
+    func: Value,
+    args: Vec<Value>,
+    slot: std::sync::Arc<std::sync::Mutex<Option<Box<Value>>>>,
+) {
+    let failed_slot = std::sync::Arc::clone(&slot);
+    let spawned = std::thread::Builder::new()
+        .name("killer-task".to_string())
+        .stack_size(SPAWN_STACK_BYTES)
+        .spawn(move || run_spawned_task(task, func, args, slot));
+    if spawned.is_err() {
+        *failed_slot.lock().unwrap() = Some(Box::new(Value::TaskError(Box::new(Value::Str(
+            "could not start a thread for this task".to_string(),
+        )))));
+    }
 }
 
 /// Body of a spawned OS thread: run `func(args)` on a pooled VM and publish either its (detached)
@@ -483,6 +536,7 @@ impl VirtualMachine {
             value_buffer_pool: crate::allocation_pool::ValueBufferPool::default(),
             scope_var_cache: crate::allocation_pool::ScopeVariableCache::new(),
             loop_pattern_detector: crate::loop_pattern_detection::LoopPatternDetector::new(),
+            native_depth: 0,
             recursion_guard: RecursionGuard::new(crate::security::MAX_RECURSION_DEPTH),
             execution_budget: None,
             exec_step_counter: 0,
@@ -517,6 +571,14 @@ impl VirtualMachine {
         self.current_program = None;
         self.yielded_values.clear();
         self.collecting_yields = false;
+        // nothing of the finished task may leak into the next one (or keep its values alive)
+        self.handlers.clear();
+        self.pending_throw = None;
+        self.closure_frames.clear();
+        self.gen_ctx.clear();
+        self.gen_yielded = None;
+        self.generator_manager = GeneratorManager::default();
+        self.native_depth = 0;
     }
 
     // ========== REPL / Diagnostics ========================================
@@ -634,6 +696,30 @@ impl VirtualMachine {
     /// When set, [`run`](Self::run) enforces [`ExecutionBudget`] (steps every opcode; wall clock on backward branches).
     pub fn set_execution_budget(&mut self, budget: Option<ExecutionBudget>) {
         self.execution_budget = budget;
+    }
+
+    /// Cheap guard for Killer-level calls: the call stack lives on the heap, so only memory is at risk.
+    #[inline(always)]
+    fn check_call_depth(&self) -> Result<(), VmError> {
+        if self.call_stack.len() >= MAX_CALL_DEPTH {
+            return Err(Self::stack_overflow_error());
+        }
+        Ok(())
+    }
+
+    #[cold]
+    fn stack_overflow_error() -> VmError {
+        VmError::runtime_error("stack overflow: recursion too deep".to_string())
+    }
+
+    /// Guard for re-entering the interpreter from Rust (each level uses native stack).
+    #[inline]
+    fn enter_native(&mut self) -> Result<(), VmError> {
+        if self.native_depth >= MAX_NATIVE_DEPTH || self.call_stack.len() >= MAX_CALL_DEPTH {
+            return Err(Self::stack_overflow_error());
+        }
+        self.native_depth += 1;
+        Ok(())
     }
 
     fn enforce_step_budget(&mut self) -> Result<(), VmError> {
@@ -1155,6 +1241,9 @@ impl VirtualMachine {
                     if intact {
                         if let (Some(frame), Some(Value::Str(r))) = (self.locals_stack.last_mut(), self.stack.last()) {
                             if let Some(Value::Str(l)) = frame.get_mut(idx) {
+                                if l.len() + r.len() > MAX_STRING_BYTES {
+                                    return Err(string_too_large());
+                                }
                                 l.push_str(r);
                                 self.stack.pop();
                                 self.ip += 3;
@@ -1403,18 +1492,30 @@ impl VirtualMachine {
                                 self.stack.push(Value::Number(l + r));
                             }
                             (Value::Str(l), Value::Str(r)) => {
+                                if l.len() + r.len() > MAX_STRING_BYTES {
+                                    return Err(string_too_large());
+                                }
                                 self.stack.push(Value::Str(format!("{}{}", l, r)));
                             }
                             (Value::Str(l), r) => {
                                 let r = self.display_value(r, program)?;
+                                if l.len() + r.len() > MAX_STRING_BYTES {
+                                    return Err(string_too_large());
+                                }
                                 self.stack.push(Value::Str(format!("{}{}", l, r)));
                             }
                             (l, Value::Str(r)) => {
                                 let l = self.display_value(l, program)?;
+                                if l.len() + r.len() > MAX_STRING_BYTES {
+                                    return Err(string_too_large());
+                                }
                                 self.stack.push(Value::Str(format!("{}{}", l, r)));
                             }
                             // `[1, 2] + [3]` builds a new list (neither operand changes)
                             (Value::Array(l), Value::Array(r)) => {
+                                if l.len() + r.len() > MAX_ARRAY_LEN {
+                                    return Err(VmError::runtime_error("list is too large".to_string()));
+                                }
                                 let mut joined = l.to_vec();
                                 joined.extend(r.to_vec());
                                 self.stack.push(Value::from(joined));
@@ -2581,6 +2682,7 @@ impl VirtualMachine {
                         return Err(VmError::runtime_error("Stack underflow".to_string()));
                     }
 
+                    self.check_call_depth()?;
                     self.call_stack.push(self.ip + 1);
                     self.push_scope();
                     self.locals_stack.push(Vec::new());  // new locals frame for this call
@@ -2625,6 +2727,7 @@ impl VirtualMachine {
                             // Validate bytecode address
                             self.ensure_jump_target(program, bytecode_start)?;
 
+                            self.check_call_depth()?;
                             self.call_stack.push(self.ip + 1);
                             self.push_scope();
                             self.locals_stack.push(Vec::new());  // new locals frame
@@ -3038,21 +3141,7 @@ impl VirtualMachine {
                                 ));
                             }
                             
-                            let mut result = Vec::new();
-                            if step > 0 {
-                                let mut i = start;
-                                while i < end {
-                                    result.push(Value::Number(i as f64));
-                                    i += step;
-                                }
-                            } else {
-                                let mut i = start;
-                                while i > end {
-                                    result.push(Value::Number(i as f64));
-                                    i += step;
-                                }
-                            }
-                            Value::from(result)
+                            BuiltinFunctions::range_values(start, end, step)?
                         }
                         "type" => {
                             if args.len() != 1 {
@@ -3546,6 +3635,7 @@ impl VirtualMachine {
                             match (&args[0], &args[1]) {
                                 (Value::Str(s), Value::Number(count)) => {
                                     let times = (*count as usize).max(0);
+                                    check_string_size(s.len().saturating_mul(times))?;
                                     Value::Str(s.repeat(times))
                                 }
                                 _ => return Err(VmError::runtime_error(
@@ -4167,6 +4257,7 @@ impl VirtualMachine {
                     match found {
                         Some(start) => {
                             let arity = program.function_arities.get(&start).copied().unwrap_or(*arg_count);
+                            self.check_call_depth()?;
                             self.call_stack.push(self.ip + 1);
                             self.push_scope();
                             self.locals_stack.push(Vec::new());
@@ -4223,6 +4314,7 @@ impl VirtualMachine {
                         // Bytecode-based constructor: call init via method_bytecode
                         // init returns "this" (the modified instance) — see compiler
                         let bytecode_start = program.method_bytecode[&init_key];
+                        self.check_call_depth()?;
                         self.call_stack.push(self.ip + 1);
                         self.push_scope();
                         self.locals_stack.push(Vec::new());
@@ -4288,6 +4380,7 @@ impl VirtualMachine {
                         };
                         if let Some((start, arity)) = hit {
                             let object = self.stack.remove(obj_at);
+                            self.check_call_depth()?;
                             self.call_stack.push(self.ip + 1);
                             self.push_scope();
                             self.locals_stack.push(Vec::new());
@@ -4315,6 +4408,7 @@ impl VirtualMachine {
                             #[allow(unused_assignments)]
                             let mut method_bytecode_start: Option<usize> = None;
                             let mut visited = std::collections::HashSet::new();
+                            let mut field_call: Option<Value> = None;
 
                             // OPTIMIZATION: Check call-site cache before walking inheritance chain
                             if let Some((cached_start, _param_names)) = self.call_site_cache.lookup_method(
@@ -4358,7 +4452,20 @@ impl VirtualMachine {
                                     }
                                 }
 
-                                // No parent or method not found anywhere.
+                                // No parent or method not found anywhere. A field that holds a function is
+                                // callable like a method (`this.callback(x)`); a bare `obj.field` read is
+                                // marked by the `GetField` the compiler emits just before it.
+                                let property_read = matches!(
+                                    self.ip.checked_sub(1).and_then(|i| program.instructions.get(i)),
+                                    Some(Instruction::GetField(n)) if n == method_name
+                                );
+                                if !property_read {
+                                    if let Some(f @ Value::Function { .. }) = obj_inst.get_field(method_name) {
+                                        field_call = Some(f);
+                                        method_bytecode_start = None;
+                                        break;
+                                    }
+                                }
                                 // Fall back to field/property access for zero-arg calls: obj.field
                                 if args.is_empty() {
                                     if let Some(value) = obj_inst.get_field(method_name) {
@@ -4377,10 +4484,30 @@ impl VirtualMachine {
                             }
                             } // end of if method_bytecode_start.is_none()
 
+                            if let Some(Value::Function { params, bytecode_start, captured }) = field_call {
+                                self.ensure_jump_target(program, bytecode_start)?;
+                                self.check_call_depth()?;
+                                self.call_stack.push(self.ip + 1);
+                                self.push_scope();
+                                self.locals_stack.push(Vec::new());
+                                captured.each(|var_name, var_value| self.store_local(var_name, var_value.clone()));
+                                if !captured.is_empty() {
+                                    self.closure_frames.push((self.call_stack.len(), captured.clone()));
+                                }
+                                let n_args = args.len();
+                                for a in args {
+                                    self.stack.push(a);
+                                }
+                                self.bind_call_args(n_args, params.len(), self.uses_args);
+                                self.ip = bytecode_start;
+                                continue;
+                            }
+
                             if let Some(method_bytecode_start) = method_bytecode_start {
                                 let arity = program.function_arities.get(&method_bytecode_start).copied().unwrap_or(0);
                                 self.method_ic.insert(self.ip, (obj_inst.class_name(), method_bytecode_start, arity));
                                 // Save current state and prepare for method call
+                                self.check_call_depth()?;
                                 self.call_stack.push(self.ip + 1);
                                 self.push_scope();
                                 self.locals_stack.push(Vec::new());  // new locals frame for method
@@ -4716,6 +4843,7 @@ impl VirtualMachine {
                             // Static method dispatch on class object, e.g. Dog.getSpecies()
                             let method_key = (class_def.name.clone(), method_name.clone());
                             if let Some(bytecode_start) = program.method_bytecode.get(&method_key).copied() {
+                                self.check_call_depth()?;
                                 self.call_stack.push(self.ip + 1);
                                 self.push_scope();
                                 self.locals_stack.push(Vec::new());  // new locals frame for static method
@@ -4796,6 +4924,7 @@ impl VirtualMachine {
                                         Value::Number(n) => (*n as usize).max(0),
                                         _ => return Err(VmError::runtime_error("repeat() expects numeric argument".to_string())),
                                     };
+                                    check_string_size(s.len().saturating_mul(times))?;
                                     Value::Str(s.repeat(times))
                                 }
                                 "padStart" => {
@@ -4806,6 +4935,7 @@ impl VirtualMachine {
                                         Value::Number(n) => *n as usize,
                                         _ => return Err(VmError::runtime_error("padStart() length must be number".to_string())),
                                     };
+                                    check_string_size(target_len)?;
                                     let pad = match &args[1] {
                                         Value::Str(v) => v,
                                         _ => return Err(VmError::runtime_error("padStart() fill must be string".to_string())),
@@ -4830,6 +4960,7 @@ impl VirtualMachine {
                                         Value::Number(n) => *n as usize,
                                         _ => return Err(VmError::runtime_error("padEnd() length must be number".to_string())),
                                     };
+                                    check_string_size(target_len)?;
                                     let pad = match &args[1] {
                                         Value::Str(v) => v,
                                         _ => return Err(VmError::runtime_error("padEnd() fill must be string".to_string())),
@@ -5540,6 +5671,7 @@ impl VirtualMachine {
                     let this = self.pop_value()?;
                     match self.find_method_in_class(class, method_name, program) {
                         Some((start, _)) => {
+                            self.check_call_depth()?;
                             self.call_stack.push(self.ip + 1);
                             self.push_scope();
                             self.locals_stack.push(Vec::new());
@@ -5716,10 +5848,11 @@ impl VirtualMachine {
                             let task = self.task_context(program);
                             let func = func.detached();
                             let args: Vec<Value> = args.iter().map(Value::detached).collect();
-                            std::thread::spawn(move || run_spawned_task(task, func, args, fut_clone));
+                            spawn_task_thread(task, func, args, fut_clone);
                         }
                         other => {
-                            *fut_clone.lock().unwrap() = Some(Box::new(other));
+                            // a plain value resolves immediately, as an independent copy
+                            *fut_clone.lock().unwrap() = Some(Box::new(other.detached()));
                         }
                     }
                     self.stack.push(Value::Future(crate::value::FutureHandle(future)));
@@ -5745,7 +5878,7 @@ impl VirtualMachine {
                         bytecode_start,
                         captured: Default::default(),
                     };
-                    std::thread::spawn(move || run_spawned_task(task, func, args, fut_clone));
+                    spawn_task_thread(task, func, args, fut_clone);
 
                     self.stack.push(Value::Future(crate::value::FutureHandle(future)));
                 }
@@ -6013,6 +6146,13 @@ impl VirtualMachine {
     }
 
     fn gen_resume(&mut self, id: &str, program: &Program) -> Result<Option<Value>, VmError> {
+        self.enter_native()?;
+        let r = self.gen_resume_inner(id, program);
+        self.native_depth -= 1;
+        r
+    }
+
+    fn gen_resume_inner(&mut self, id: &str, program: &Program) -> Result<Option<Value>, VmError> {
         use crate::generator::Taken;
         let frame = match self.generator_manager.take_frame(id) {
             Taken::Frame(f) => f,
@@ -6087,6 +6227,13 @@ impl VirtualMachine {
     /// Call a Killer function value from Rust and return its result, running the *full*
     /// interpreter (loops, slots, classes, nested calls) rather than a reduced subset.
     pub(crate) fn call_value_nested(&mut self, func: &Value, args: Vec<Value>, program: &Program) -> Result<Value, VmError> {
+        self.enter_native()?;
+        let r = self.call_value_nested_inner(func, args, program);
+        self.native_depth -= 1;
+        r
+    }
+
+    fn call_value_nested_inner(&mut self, func: &Value, args: Vec<Value>, program: &Program) -> Result<Value, VmError> {
         let (params, start, captured) = match func {
             Value::Function { params, bytecode_start, captured } => (params, *bytecode_start, captured),
             Value::Str(name) => return BuiltinFunctions::call(name, &args),
@@ -6605,6 +6752,19 @@ impl VirtualMachine {
         args: Vec<Value>,
         program: &Program,
     ) -> Result<Value, VmError> {
+        self.enter_native()?;
+        let r = self.call_method_nested_inner(this, start, args, program);
+        self.native_depth -= 1;
+        r
+    }
+
+    fn call_method_nested_inner(
+        &mut self,
+        this: Value,
+        start: usize,
+        args: Vec<Value>,
+        program: &Program,
+    ) -> Result<Value, VmError> {
         let saved_ip = self.ip;
         let (base_stack, base_calls, base_scopes, base_locals) =
             (self.stack.len(), self.call_stack.len(), self.scopes.len(), self.locals_stack.len());
@@ -6712,6 +6872,13 @@ impl VirtualMachine {
     /// Used by map/filter/reduce for callbacks. This is a limited executor that handles
     /// function bytecode directly without involving the main run loop.
     fn call_function_sync(&mut self, func: &Value, args: Vec<Value>, program: &Program) ->Result<Value, VmError> {
+        self.enter_native()?;
+        let r = self.call_function_sync_inner(func, args, program);
+        self.native_depth -= 1;
+        r
+    }
+
+    fn call_function_sync_inner(&mut self, func: &Value, args: Vec<Value>, program: &Program) ->Result<Value, VmError> {
         match func {
             Value::Function { params, bytecode_start, captured } => {
                 // Save current state

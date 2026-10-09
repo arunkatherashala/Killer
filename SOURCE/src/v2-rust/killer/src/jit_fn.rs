@@ -69,6 +69,10 @@ pub struct FnJit {
     // [0] = bail flag, [1] = recursion depth, [2] = remaining loop iterations.
     state: Box<[i64; 3]>,
     pub native_calls: u64,
+    /// Calls to skip before trying native code again after a native run bailed out (recursion
+    /// deeper than `MAX_DEPTH`, loop budget). Without it every level of a deep recursion re-ran
+    /// `MAX_DEPTH` native frames before falling back, which made depth-10,000 recursion quadratic.
+    cooldown: u32,
 }
 
 impl FnJit {
@@ -83,10 +87,12 @@ impl FnJit {
             pages: Vec::new(),
             state: Box::new([0; 3]),
             native_calls: 0,
+            cooldown: 0,
         }
     }
 
     pub fn reset(&mut self) {
+        self.cooldown = 0;
         self.counts.clear();
         self.failed.clear();
         self.loopy.clear();
@@ -114,6 +120,10 @@ impl FnJit {
         #[cfg(target_arch = "x86_64")]
         {
             if args.len() > MAX_ARGS {
+                return None;
+            }
+            if self.cooldown > 0 {
+                self.cooldown -= 1;
                 return None;
             }
             let mut mask = 0u8;
@@ -208,6 +218,7 @@ impl FnJit {
             if self.state[0] != 0 {
                 self.state[0] = 0;
                 self.state[1] = 0;
+                self.cooldown = MAX_DEPTH as u32;
                 return None;
             }
             if writes {

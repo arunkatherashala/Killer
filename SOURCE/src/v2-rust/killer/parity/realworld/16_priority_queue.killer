@@ -1,0 +1,176 @@
+// Binary min-heap priority queue: heap sort, top-k, task scheduler and Dijkstra shortest paths
+class MinHeap {
+  fn init() {
+    this.items = []
+  }
+  fn size() {
+    return len(this.items)
+  }
+  fn empty() {
+    return len(this.items) == 0
+  }
+  fn less(a, b) {
+    if a[0] != b[0] {
+      return a[0] < b[0]
+    }
+    return a[1] < b[1]
+  }
+  fn push(prio, value) {
+    push(this.items, [prio, value])
+    i = len(this.items) - 1
+    while i > 0 {
+      parent = floor((i - 1) / 2)
+      if this.less(this.items[i], this.items[parent]) {
+        tmp = this.items[i]
+        this.items[i] = this.items[parent]
+        this.items[parent] = tmp
+        i = parent
+      } else {
+        break
+      }
+    }
+  }
+  fn peek() {
+    return this.items[0]
+  }
+  fn pop() {
+    top = this.items[0]
+    last = pop(this.items)
+    n = len(this.items)
+    if n > 0 {
+      this.items[0] = last
+      i = 0
+      while true {
+        l = 2 * i + 1
+        r = 2 * i + 2
+        smallest = i
+        if l < n && this.less(this.items[l], this.items[smallest]) {
+          smallest = l
+        }
+        if r < n && this.less(this.items[r], this.items[smallest]) {
+          smallest = r
+        }
+        if smallest == i {
+          break
+        }
+        tmp = this.items[i]
+        this.items[i] = this.items[smallest]
+        this.items[smallest] = tmp
+        i = smallest
+      }
+    }
+    return top
+  }
+}
+
+fn heap_sort(xs) {
+  h = new MinHeap()
+  for x in xs {
+    h.push(x, 0)
+  }
+  out = []
+  while !h.empty() {
+    push(out, h.pop()[0])
+  }
+  return out
+}
+
+println(heap_sort([9, 4, 7, 1, 8, 2, 2, 6, 0, 5, 3]))
+
+// top-3 largest of a stream using a bounded min-heap
+fn top_k(xs, k) {
+  h = new MinHeap()
+  for x in xs {
+    h.push(x, 0)
+    if h.size() > k {
+      h.pop()
+    }
+  }
+  out = []
+  while !h.empty() {
+    push(out, h.pop()[0])
+  }
+  return reversed(out)
+}
+println(top_k([15, 3, 99, 42, 7, 77, 8, 64, 21], 3))
+
+// scheduler: lower number runs first, ties by name
+sched = new MinHeap()
+sched.push(2, "write report")
+sched.push(1, "fix outage")
+sched.push(3, "refactor")
+sched.push(1, "deploy hotfix")
+sched.push(2, "review PR")
+order = []
+while !sched.empty() {
+  t = sched.pop()
+  push(order, str(t[0]) + ":" + t[1])
+}
+println(order)
+
+// Dijkstra on a small weighted graph
+graph = {
+  "A": {"B": 7, "C": 9, "F": 14},
+  "B": {"A": 7, "C": 10, "D": 15},
+  "C": {"A": 9, "B": 10, "D": 11, "F": 2},
+  "D": {"B": 15, "C": 11, "E": 6},
+  "E": {"D": 6, "F": 9},
+  "F": {"A": 14, "C": 2, "E": 9}
+}
+
+fn dijkstra(g, source) {
+  dist = {}
+  prev = {}
+  for node in keys(g) {
+    dist[node] = 1000000
+  }
+  dist[source] = 0
+  h = new MinHeap()
+  h.push(0, source)
+  while !h.empty() {
+    cur = h.pop()
+    d = cur[0]
+    u = cur[1]
+    if d > dist[u] {
+      continue
+    }
+    for v in keys(g[u]) {
+      nd = d + g[u][v]
+      if nd < dist[v] {
+        dist[v] = nd
+        prev[v] = u
+        h.push(nd, v)
+      }
+    }
+  }
+  return [dist, prev]
+}
+
+res = dijkstra(graph, "A")
+for node in sorted(keys(graph)) {
+  path = [node]
+  cur = node
+  while cur in res[1] {
+    cur = res[1][cur]
+    path = concat([cur], path)
+  }
+  println(node + " " + pad_left(str(res[0][node]), 3, " ") + "  " + join(path, "->"))
+}
+
+// merge k sorted lists with the heap
+lists = [[1, 4, 9], [2, 3, 10], [5, 6, 7, 8]]
+h = new MinHeap()
+for i in range(len(lists)) {
+  h.push(lists[i][0], i * 100)
+}
+merged = []
+while !h.empty() {
+  top = h.pop()
+  list_idx = floor(top[1] / 100)
+  pos = top[1] % 100
+  push(merged, top[0])
+  if pos + 1 < len(lists[list_idx]) {
+    h.push(lists[list_idx][pos + 1], list_idx * 100 + pos + 1)
+  }
+}
+println(merged)

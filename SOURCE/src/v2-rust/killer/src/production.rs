@@ -549,6 +549,8 @@ fn json_to_val(s: &str) -> Value {
 }
 
 pub fn builtin_db_open(args: &[Value]) -> Result<Value, VmError> {
+    crate::security::require_file_read()?;
+    crate::security::require_file_write()?;
     if args.is_empty() { return Err(VmError::runtime_error("db_open(path) requires 1 arg")); }
     let path = val_str(&args[0]);
     if path.contains("..") { return Err(VmError::runtime_error("db_open: path cannot contain '..'")); }
@@ -560,6 +562,7 @@ pub fn builtin_db_open(args: &[Value]) -> Result<Value, VmError> {
 }
 
 pub fn builtin_db_get(args: &[Value]) -> Result<Value, VmError> {
+    crate::security::require_file_read()?;
     if args.len() < 2 { return Err(VmError::runtime_error("db_get(db, key) requires 2 args")); }
     let db_name = val_str(&args[0]);
     let key = val_str(&args[1]);
@@ -571,6 +574,8 @@ pub fn builtin_db_get(args: &[Value]) -> Result<Value, VmError> {
 }
 
 pub fn builtin_db_set(args: &[Value]) -> Result<Value, VmError> {
+    crate::security::require_file_read()?;
+    crate::security::require_file_write()?;
     if args.len() < 3 { return Err(VmError::runtime_error("db_set(db, key, value) requires 3 args")); }
     let db_name = val_str(&args[0]);
     let key = val_str(&args[1]);
@@ -583,6 +588,8 @@ pub fn builtin_db_set(args: &[Value]) -> Result<Value, VmError> {
 }
 
 pub fn builtin_db_delete(args: &[Value]) -> Result<Value, VmError> {
+    crate::security::require_file_read()?;
+    crate::security::require_file_write()?;
     if args.len() < 2 { return Err(VmError::runtime_error("db_delete(db, key) requires 2 args")); }
     let db_name = val_str(&args[0]);
     let key = val_str(&args[1]);
@@ -598,6 +605,7 @@ pub fn builtin_db_delete(args: &[Value]) -> Result<Value, VmError> {
 }
 
 pub fn builtin_db_keys(args: &[Value]) -> Result<Value, VmError> {
+    crate::security::require_file_read()?;
     if args.is_empty() { return Err(VmError::runtime_error("db_keys(db) requires 1 arg")); }
     let db_name = val_str(&args[0]);
     let dbs = db_global().lock().unwrap();
@@ -611,6 +619,7 @@ pub fn builtin_db_keys(args: &[Value]) -> Result<Value, VmError> {
 }
 
 pub fn builtin_db_keys_prefix(args: &[Value]) -> Result<Value, VmError> {
+    crate::security::require_file_read()?;
     if args.len() < 2 { return Err(VmError::runtime_error("db_keys_prefix(db, prefix) requires 2 args")); }
     let db_name = val_str(&args[0]);
     let prefix = val_str(&args[1]);
@@ -628,6 +637,7 @@ pub fn builtin_db_keys_prefix(args: &[Value]) -> Result<Value, VmError> {
 }
 
 pub fn builtin_db_count(args: &[Value]) -> Result<Value, VmError> {
+    crate::security::require_file_read()?;
     if args.is_empty() { return Err(VmError::runtime_error("db_count(db) requires 1 arg")); }
     let db_name = val_str(&args[0]);
     let dbs = db_global().lock().unwrap();
@@ -638,6 +648,8 @@ pub fn builtin_db_count(args: &[Value]) -> Result<Value, VmError> {
 }
 
 pub fn builtin_db_close(args: &[Value]) -> Result<Value, VmError> {
+    crate::security::require_file_read()?;
+    crate::security::require_file_write()?;
     if args.is_empty() { return Err(VmError::runtime_error("db_close(db) requires 1 arg")); }
     let db_name = val_str(&args[0]);
     let mut dbs = db_global().lock().unwrap();
@@ -646,6 +658,8 @@ pub fn builtin_db_close(args: &[Value]) -> Result<Value, VmError> {
 }
 
 pub fn builtin_db_drop(args: &[Value]) -> Result<Value, VmError> {
+    crate::security::require_file_read()?;
+    crate::security::require_file_write()?;
     if args.is_empty() { return Err(VmError::runtime_error("db_drop(path) requires 1 arg")); }
     let path = val_str(&args[0]);
     if path.contains("..") { return Err(VmError::runtime_error("db_drop: path cannot contain '..'")); }
@@ -664,6 +678,8 @@ pub fn builtin_fmt(args: &[Value]) -> Result<Value, VmError> {
 }
 
 pub fn builtin_fmt_file(args: &[Value]) -> Result<Value, VmError> {
+    crate::security::require_file_read()?;
+    crate::security::require_file_write()?;
     if args.is_empty() { return Err(VmError::runtime_error("fmt_file(path) requires 1 arg")); }
     let path = val_str(&args[0]);
     if path.contains("..") { return Err(VmError::runtime_error("fmt_file: path cannot contain '..'")); }
@@ -708,6 +724,7 @@ pub fn builtin_lint_code(args: &[Value]) -> Result<Value, VmError> {
 }
 
 pub fn builtin_lint_file(args: &[Value]) -> Result<Value, VmError> {
+    crate::security::require_file_read()?;
     if args.is_empty() { return Err(VmError::runtime_error("lint_file(path) requires 1 arg")); }
     let path = val_str(&args[0]);
     if path.contains("..") { return Err(VmError::runtime_error("lint_file: path cannot contain '..'")); }

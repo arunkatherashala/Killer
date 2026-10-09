@@ -211,8 +211,8 @@ fn download_image_as_data_uri(url: &str) -> Result<String, String> {
     // Write to OS temp dir to avoid cluttering the working directory
     let ts = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs()).unwrap_or(0);
-    let tmp = std::env::temp_dir().join(format!("kala_img_{}.bin", ts));
+        .map(|d| d.as_nanos()).unwrap_or(0);
+    let tmp = std::env::temp_dir().join(format!("kala_img_{}_{}.bin", std::process::id(), ts));
     let tmp_str = tmp.to_string_lossy().to_string();
 
     // curl -sLk: silent + follow redirects + insecure (bypass SSL cert errors on Windows)

@@ -96,6 +96,46 @@ fn log_analyzer() {
     program("10_log_analyzer");
 }
 
+#[test]
+fn matrix_and_numeric_code() {
+    program("11_matrix");
+}
+
+#[test]
+fn small_language_interpreter() {
+    program("12_minilang");
+}
+
+#[test]
+fn text_wrapping_and_reports() {
+    program("13_textwrap");
+}
+
+#[test]
+fn lru_cache() {
+    program("14_lru_cache");
+}
+
+#[test]
+fn event_system() {
+    program("15_event_system");
+}
+
+#[test]
+fn priority_queue() {
+    program("16_priority_queue");
+}
+
+#[test]
+fn date_arithmetic() {
+    program("17_dates");
+}
+
+#[test]
+fn test_runner() {
+    program("18_test_runner");
+}
+
 // ---------------------------------------------------------------- regressions
 
 #[test]
@@ -255,4 +295,90 @@ fn a_blocked_receiver_does_not_stop_other_threads_from_sending() {
     // recv used to wait while holding the channel registry lock, so send could not get in
     let src = "ch = chan_new()\nfn consume(c) {\n  return chan_recv(c)\n}\nh = async_spawn(consume, ch)\nsleep_ms(300)\nchan_send(ch, 42)\nprintln(async_await(h))\n";
     assert_eq!(run(src), "42");
+}
+
+#[test]
+fn reversed_returns_a_new_list_and_leaves_its_argument_alone() {
+    // `reversed(xs)` used to reverse `xs` in place (like `reverse`)
+    let src = "xs = [1, 2, 3]
+ys = reversed(xs)
+println(xs)
+println(ys)
+reverse(xs)
+println(xs)
+println(reversed(\"abc\"))
+class K {
+  fn init() {
+    this.items = [1, 2]
+  }
+  fn newest_first() {
+    return reversed(this.items)
+  }
+}
+k = new K()
+println(k.newest_first())
+println(k.newest_first())
+println(k.items)
+";
+    assert_eq!(run(src), "[1, 2, 3]
+[3, 2, 1]
+[3, 2, 1]
+cba
+[2, 1]
+[2, 1]
+[1, 2]");
+}
+
+#[test]
+fn a_function_stored_in_a_field_can_be_called_like_a_method() {
+    // `this.setup(ctx)` failed with "Method setup not found in class ..." (and with no arguments it
+    // returned the function instead of calling it)
+    let src = "class Hooks {
+  fn init() {
+    this.setup = null
+    this.on_done = fn() {
+      return \"done\"
+    }
+  }
+  fn run(x) {
+    if this.setup != null {
+      this.setup(x)
+    }
+    return this.on_done()
+  }
+}
+h = new Hooks()
+seen = []
+h.setup = fn(v) {
+  push(seen, v)
+}
+println(h.run(7))
+println(seen)
+f = h.on_done
+println(f())
+println(h.on_done())
+";
+    assert_eq!(run(src), "done
+[7]
+done
+done");
+}
+
+#[test]
+fn delete_accepts_number_keys() {
+    // `delete(d, 5)` failed although `d[5] = x`, `5 in d` and `contains(d, 5)` all work
+    let src = "d = {}
+d[5] = \"five\"
+d[6] = \"six\"
+d[\"k\"] = 1
+println(delete(d, 5))
+println(5 in d)
+println(len(d))
+delete(d, \"k\")
+println(d)
+";
+    assert_eq!(run(src), "five
+false
+2
+{6: six}");
 }

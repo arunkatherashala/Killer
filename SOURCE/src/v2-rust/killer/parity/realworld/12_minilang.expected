@@ -1,0 +1,20 @@
+== factorial
+3628800
+== fizz
+3 5 3 3 5 3 -15
+== gcd
+21
+== primes
+2 3 5 7 11 13 17 19 23 29
+== div zero
+error: division by zero
+== undefined
+error: undefined variable y
+== syntax
+error: expected ( but got ;
+== missing brace
+error: unexpected end of input
+== runaway
+error: loop limit exceeded
+== bad char
+error: bad character $

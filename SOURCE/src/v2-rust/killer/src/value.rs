@@ -146,6 +146,9 @@ impl SharedArray {
     }
 
     pub fn fmt_bracketed(&self, f: &mut Formatter<'_>) -> FmtResult {
+        let Some(_guard) = DisplayGuard::enter() else {
+            return write!(f, "[...]");
+        };
         write!(f, "[")?;
         for (i, v) in self.0.borrow().iter().enumerate() {
             if i > 0 {
@@ -635,6 +638,38 @@ impl SetKey {
     }
 }
 
+thread_local! {
+    /// (nesting depth, remaining container budget) of the `Display` call in progress on this thread.
+    static DISPLAY_STATE: std::cell::Cell<(u32, u32)> = const { std::cell::Cell::new((0, 0)) };
+}
+
+/// Keeps `Display` of self-referencing or enormously shared structures finite: containers nested
+/// deeper than 64 levels, or more than 2 million containers in one print, are shown as `...`.
+struct DisplayGuard;
+
+impl DisplayGuard {
+    fn enter() -> Option<DisplayGuard> {
+        DISPLAY_STATE.with(|c| {
+            let (depth, budget) = c.get();
+            let budget = if depth == 0 { 2_000_000 } else { budget };
+            if depth >= 64 || budget == 0 {
+                return None;
+            }
+            c.set((depth + 1, budget - 1));
+            Some(DisplayGuard)
+        })
+    }
+}
+
+impl Drop for DisplayGuard {
+    fn drop(&mut self) {
+        DISPLAY_STATE.with(|c| {
+            let (depth, budget) = c.get();
+            c.set((depth.saturating_sub(1), budget));
+        });
+    }
+}
+
 impl Display for Value {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
@@ -649,6 +684,9 @@ impl Display for Value {
             Value::Str(s) => write!(f, "{s}"),
             Value::Array(arr) => arr.fmt_bracketed(f),
             Value::Dict(dict) => {
+                let Some(_guard) = DisplayGuard::enter() else {
+                    return write!(f, "{{...}}");
+                };
                 write!(f, "{{")?;
                 let mut first = true;
                 for (k, v) in dict.iter() {
@@ -696,6 +734,9 @@ impl Display for Value {
             Value::Uncertain { value, margin } => write!(f, "{} ± {}", value, margin),
             Value::Gauss { mean, sigma } => write!(f, "{} ± {}σ", mean, sigma),
             Value::Set(s) => {
+                let Some(_guard) = DisplayGuard::enter() else {
+                    return write!(f, "{{...}}");
+                };
                 let items: Vec<String> = s.iter().map(|k| format!("{}", k.to_value())).collect();
                 write!(f, "{{{}}}", items.join(", "))
             }
@@ -709,32 +750,82 @@ impl Value {
     /// another thread (spawn arguments, captured variables, task results) must be detached,
     /// otherwise two threads would update the same non-atomic reference counts.
     pub fn detached(&self) -> Value {
+        let mut memo: HashMap<usize, Value> = HashMap::new();
+        self.detached_in(&mut memo, 0)
+    }
+
+    /// Deep copy that preserves sharing and cycles *inside* the copy (an array that contains
+    /// itself copies to an array that contains its copy), so it terminates on any structure.
+    /// Nesting beyond `MAX_DETACH_DEPTH` is cut off with `null` rather than overflowing the stack.
+    fn detached_in(&self, memo: &mut HashMap<usize, Value>, depth: usize) -> Value {
+        const MAX_DETACH_DEPTH: usize = 20_000;
+        if depth > MAX_DETACH_DEPTH {
+            return Value::Null;
+        }
         match self {
-            Value::Array(a) => Value::from(a.to_vec().iter().map(Value::detached).collect::<Vec<_>>()),
+            Value::Array(a) => {
+                let key = Rc::as_ptr(&a.0) as *const u8 as usize;
+                if let Some(done) = memo.get(&key) {
+                    return done.clone();
+                }
+                let copy = SharedArray::new(Vec::new());
+                memo.insert(key, Value::Array(copy.clone()));
+                let items: Vec<Value> = a.to_vec().iter().map(|v| v.detached_in(memo, depth + 1)).collect();
+                copy.replace_all(items);
+                Value::Array(copy)
+            }
             Value::Dict(d) => {
+                let key = d.rc_ptr();
+                if let Some(done) = memo.get(&key) {
+                    return done.clone();
+                }
                 let copy = SharedDict::empty();
+                memo.insert(key, Value::Dict(copy.clone()));
                 for (k, v) in d.iter() {
-                    copy.insert(k, v.detached());
+                    copy.insert(k, v.detached_in(memo, depth + 1));
                 }
                 Value::Dict(copy)
             }
             Value::Object(o) => {
-                let inst = o.0.borrow();
-                Value::Object(SharedObject::new(ObjectInstance {
-                    class_name: inst.class_name.clone(),
-                    fields: inst.fields.iter().map(|(k, v)| (k.clone(), v.detached())).collect(),
-                }))
+                let key = Rc::as_ptr(&o.0) as *const u8 as usize;
+                if let Some(done) = memo.get(&key) {
+                    return done.clone();
+                }
+                let class_name = o.0.borrow().class_name.clone();
+                let copy = SharedObject::new(ObjectInstance { class_name, fields: Default::default() });
+                memo.insert(key, Value::Object(copy.clone()));
+                let fields: Vec<(String, Value)> =
+                    o.0.borrow().fields.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+                let fields: crate::fast_hash::FastMap<String, Value> =
+                    fields.into_iter().map(|(k, v)| (k, v.detached_in(memo, depth + 1))).collect();
+                copy.0.borrow_mut().fields = fields;
+                Value::Object(copy)
             }
-            Value::Function { params, bytecode_start, captured } => Value::Function {
-                params: params.clone(),
-                bytecode_start: *bytecode_start,
-                captured: Captures::new(captured.snapshot().into_iter().map(|(k, v)| (k, v.detached())).collect()),
-            },
+            Value::Function { params, bytecode_start, captured } => {
+                let key = Rc::as_ptr(&captured.0) as *const u8 as usize;
+                let copy = if let Some(Value::Function { captured: done, .. }) = memo.get(&key) {
+                    done.clone()
+                } else {
+                    let copy = Captures::new(HashMap::new());
+                    memo.insert(
+                        key,
+                        Value::Function { params: Vec::new(), bytecode_start: 0, captured: copy.clone() },
+                    );
+                    let vars: Vec<(String, Value)> =
+                        captured.snapshot().into_iter().map(|(k, v)| (k, v.detached_in(memo, depth + 1))).collect();
+                    for (k, v) in vars {
+                        copy.set(&k, v);
+                    }
+                    copy
+                };
+                Value::Function { params: params.clone(), bytecode_start: *bytecode_start, captured: copy }
+            }
             Value::Signal { value, confidence, reason } => Value::Signal {
-                value: Box::new(value.detached()),
+                value: Box::new(value.detached_in(memo, depth + 1)),
                 confidence: *confidence,
                 reason: reason.clone(),
             },
+            Value::TaskError(inner) => Value::TaskError(Box::new(inner.detached_in(memo, depth + 1))),
             Value::Set(s) => Value::Set(s.copy()),
             Value::Cell(c) => Value::Cell(Rc::new(RefCell::new(c.borrow().detached()))),
             other => other.clone(),

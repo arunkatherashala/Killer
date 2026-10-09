@@ -1,0 +1,131 @@
+// Text wrapping, justification and report formatting
+fn wrap(text, width) {
+  words = split(text, " ")
+  lines = []
+  cur = ""
+  for w in words {
+    if w == "" {
+      continue
+    }
+    if cur == "" {
+      cur = w
+    } else if len(cur) + 1 + len(w) <= width {
+      cur = cur + " " + w
+    } else {
+      push(lines, cur)
+      cur = w
+    }
+  }
+  if cur != "" {
+    push(lines, cur)
+  }
+  return lines
+}
+
+fn justify(line, width) {
+  words = split(line, " ")
+  if len(words) == 1 {
+    return pad_right(line, width, " ")
+  }
+  letters = 0
+  for w in words {
+    letters = letters + len(w)
+  }
+  gaps = len(words) - 1
+  spaces = width - letters
+  base = floor(spaces / gaps)
+  extra = spaces % gaps
+  out = ""
+  for i in range(len(words)) {
+    out = out + words[i]
+    if i < gaps {
+      n = base
+      if i < extra {
+        n = n + 1
+      }
+      out = out + repeat(" ", n)
+    }
+  }
+  return out
+}
+
+fn center(s, width) {
+  total = width - len(s)
+  left = floor(total / 2)
+  return repeat(" ", left) + s + repeat(" ", total - left)
+}
+
+text = "The quick brown fox jumps over the lazy dog while the five boxing wizards jump quickly and a mad boxer shoots down the zebra"
+println("-- wrapped at 30")
+lines = wrap(text, 30)
+for l in lines {
+  println("|" + pad_right(l, 30, " ") + "|")
+}
+println("-- justified at 30")
+for i in range(len(lines)) {
+  if i < len(lines) - 1 {
+    println("|" + justify(lines[i], 30) + "|")
+  } else {
+    println("|" + pad_right(lines[i], 30, " ") + "|")
+  }
+}
+println("-- centered at 30")
+for l in lines {
+  println("|" + center(l, 30) + "|")
+}
+
+println("-- hanging indent")
+first = true
+for l in wrap(text, 24) {
+  if first {
+    println("* " + l)
+    first = false
+  } else {
+    println("  " + l)
+  }
+}
+
+rows = [
+  ["Widget", 4, 3.5],
+  ["Gadget with a long name", 10, 12.25],
+  ["Gizmo", 1, 100],
+  ["Thing", 12, 0.5]
+]
+println("-- report")
+w0 = 0
+for r in rows {
+  if len(r[0]) > w0 {
+    w0 = len(r[0])
+  }
+}
+println(pad_right("Item", w0, " ") + " | " + pad_left("Qty", 4, " ") + " | " + pad_left("Price", 8, " ") + " | " + pad_left("Total", 8, " "))
+println(repeat("-", w0) + "-+-" + repeat("-", 4) + "-+-" + repeat("-", 8) + "-+-" + repeat("-", 8))
+grand = 0
+for r in rows {
+  total = r[1] * r[2]
+  grand = grand + total
+  println(pad_right(r[0], w0, " ") + " | " + pad_left(str(r[1]), 4, " ") + " | " + pad_left(str(r[2]), 8, " ") + " | " + pad_left(str(total), 8, " "))
+}
+println(repeat("=", w0 + 3 + 4 + 3 + 8 + 3 + 8))
+println(pad_right("Grand total", w0 + 3 + 4 + 3 + 8, " ") + " | " + pad_left(str(grand), 8, " "))
+
+println("-- truncation")
+for s in ["short", "exactly ten", "this one is far too long"] {
+  if len(s) > 12 {
+    println(substring(s, 0, 9) + "...")
+  } else {
+    println(s)
+  }
+}
+println("-- word frequency")
+counts = {}
+for w in split(lower("the cat and the hat and the bat"), " ") {
+  counts[w] = (counts[w] ?? 0) + 1
+}
+pairs = []
+for k in keys(counts) {
+  push(pairs, [0 - counts[k], k])
+}
+for p in sorted(pairs) {
+  println(pad_right(p[1], 5, " ") + repeat("#", 0 - p[0]) + " " + str(0 - p[0]))
+}

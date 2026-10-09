@@ -179,6 +179,7 @@ impl ObjectManager {
                         "repeat() expects numeric argument".to_string(),
                     )),
                 };
+                crate::vm::check_string_size(s.len().saturating_mul(times))?;
                 Ok(Value::Str(s.repeat(times)))
             }
             "charAt" => {
