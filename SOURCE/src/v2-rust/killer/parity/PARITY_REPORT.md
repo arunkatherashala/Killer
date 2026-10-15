@@ -9,13 +9,20 @@ real binary or analysing the real source; nothing is estimated. All of it is rep
 | Language parity (166 probe programs) | `python parity/run_parity.py --md` | `LANGUAGE_PARITY.md` |
 | Every source file: compiled, tested, stubbed? | `python parity/inventory.py` | `FILE_INVENTORY.csv` |
 | README function table vs reality | `python parity/claims.py` | printed |
+| All Rust tests (lib, binaries, integration) | `cargo test --tests` | 3,253 passed, 0 failed, 9 ignored |
+| Documentation examples and links | `python docs/check_examples.py`, `python docs/check_links.py` | printed |
+| Benchmarks vs CPython | `python bench/run.py` | `bench/RESULTS.md` (the only source of performance claims) |
+
+Last refreshed at the merge of the seven workstreams (`5486e55` plus the documentation commits):
+parity **166/166**, **3,253** tests passed in 118 test binaries (`cargo test --tests`, debug build,
+9 `#[ignore]`d long-running tests not included).
 
 ## 1. What is genuinely strong (verified)
 
 These are real, compiled, and tested, and several go beyond what mainstream languages offer:
 
 - **A complete from-scratch toolchain with zero crates**: lexer, parser, compiler, bytecode VM,
-  garbage collector, security capabilities, standard library of **583 callable builtins**.
+  garbage collector, security capabilities, standard library of **711 registered builtin names** (`docs/STDLIB_INDEX.md`; every one is callable).
 - **A native x86-64 JIT** for numeric code (functions, loops, arrays, `range`, math builtins) that
   beats CPython by about 1.3x to 6.8x on the benchmarks in the README, with safe fallback to the
   interpreter. Code: `src/jit_fn.rs`, `src/jit_x86.rs`.
@@ -26,7 +33,7 @@ These are real, compiled, and tested, and several go beyond what mainstream lang
 - **Real subsystems**: the Ghost VM (signed, resumable, fuel-bounded capsules, 63 tests), the Kore
   columnar format (own LZ77/Huffman/range coder), and a local **quantized GGUF transformer
   inference engine** written in plain Rust (`src/inference/`).
-- **about 1,960 tests inside compiled code** plus 50 integration test files, all passing (2,886 in total).
+- **2,083 tests inside compiled code** plus 65 integration test files, all passing (3,253 in total, 9 ignored).
 
 ## 2. Language parity: Killer vs what programmers expect
 
@@ -71,8 +78,8 @@ first-class values (variables, arguments, return values, callbacks, lambdas, clo
   part-way (for example after `break`) keeps its suspended frame until the program ends.
 - `finally` runs on every exit of its `try`: normal end, caught or uncaught error, `return`, `break`, `continue`; a
   `return`/`throw` inside `finally` overrides the pending one.
-- Error line numbers can be shifted when a program uses lambdas, `match`/`switch`, `do-while`,
-  C-style `for` or `import`, because those are rewritten to core statements before compiling.
+- Rewriting passes (lambdas, `match`/`switch`, `do-while`, C-style `for`, `import`, test blocks) carry a
+  line map, so errors report the original file and line (`tests/error_lines.rs`).
 
 ## 3. Promised but not wired: builtin parity
 
@@ -82,11 +89,11 @@ first-class values (variables, arguments, return values, callbacks, lambdas, clo
   **63 have now been registered** (the genuine standard-library ones). The other 145 were left out on
   purpose: generic English words that could hijack user functions (`no`, `next`, `debug`, `days`),
   Android/phone/mic simulations, model-provider aliases, and the unverified Kore/UI sets.
-- **55 names are accepted by the compiler but fail at runtime** with "unknown function"
-  (`REGISTERED_BUT_DEAD.txt`): the snake_case file API (`file_read`, `file_write`, `file_exists`,
-  `file_append`, `file_delete`), `sleep`, `parse_int`, `parse_float`, `to_int`, `to_float`,
-  `to_string`, `type_of`, `substr`, `time_now`, `format`, plus the `mic_*`, `phone_*`, `service_*`
-  stubs. Several are one-line aliases to functions that already exist.
+- **55 names were accepted by the compiler but failed at runtime** ("unknown function"): the
+  snake_case file API, `sleep`, `parse_int`, `parse_float`, `to_int`, `to_float`, `to_string`,
+  `type_of`, `substr`, `time_now`, `format`, plus `mic_*`, `phone_*`, `service_*` stubs. **Now zero**:
+  the useful ones were implemented (`format` with `{}`/`{N}`/`{:.N}`, `substr`, `time_now`, the aliases),
+  the unreachable device names were dropped from the registry, and `REGISTERED_BUT_DEAD.txt` is empty.
 - **The README's own function table: 18 of 70 functions did not exist; 14 have since been added**
   (`log`, `gcd`, `lcm`, `env`, `exit`, `args`, `sleep`, `base64_*`, `hmac_sha256`, `gc_stats`,
   `jit_stats`, `mutex_new`, `startsWith`). The other 4 (`aes_encrypt`, `vector_store`,
@@ -94,13 +101,13 @@ first-class values (variables, arguments, return values, callbacks, lambdas, clo
 
 ## 4. File parity: what is actually compiled
 
-555 Rust files, 273,183 lines (`FILE_INVENTORY.csv`):
+592 Rust files, 291,400 lines (`FILE_INVENTORY.csv`, regenerated with `python parity/inventory.py`):
 
 | Status | Files | Lines | Inline tests |
 |--------|------:|------:|-------------:|
-| Compiled into the crate | 317 | 172,943 | 1,906 |
-| Binaries (`src/bin`) | 45 | 11,328 | 0 |
-| **Never compiled** | **193** | **88,912** | **1,894 (never run)** |
+| Compiled into the crate | 351 | 191,883 | 2,083 |
+| Binaries (`src/bin`) | 49 | 11,228 | 0 |
+| **Never compiled** | **192** | **88,289** | **1,874 (never run)** |
 
 - The never-compiled files are the `phase_37` to `phase_49` modules (office formats, templates,
   reporting, collaboration, GPU, WASM v2, enterprise security, generics), older duplicates of compiled
@@ -108,13 +115,14 @@ first-class values (variables, arguments, return values, callbacks, lambdas, clo
   A sample read found them coherent but mostly **in-memory simulations** (for example the GPU module
   hardcodes a device name; the "AES-256" module says "simulation"; the DOCX writer notes that real
   DOCX would be zipped). They are not skeletons, but they do not provide the capability their names
-  suggest, and their 1,894 tests do not run.
-- 43 compiled files of 200+ lines have no inline tests (53,640 lines), including `nova.rs` (4,455
+  suggest, and their 1,874 tests do not run.
+- 46 compiled files of 200+ lines have no inline tests (57,981 lines), including `nova.rs` (4,455
   lines) and `kore.rs` (1,181 lines). The core files `vm.rs`, `compiler.rs` and `builtin.rs` (24,000
   lines) also have no inline tests; they are covered only by the integration tests in `tests/`.
   (`killer_ui/` is well tested: 63 of its 69 compiled files have tests.)
-- Of the 45 binaries, about 10 are real tools (`killer_super`, REPL, playground, MCP server, package
-  registry, Ghost VM and hive). About 35 are benchmarks, demos or experiments.
+- Of the 49 binaries, about 14 are real tools (`killer_super`, the `killer` driver, `killer_lsp`,
+  `killer_dap`, `killer_pkg`, REPL, playground, MCP server, package registry, Ghost VM and hive). The
+  rest are benchmarks, demos or experiments.
 - The root contains ~4,257 Markdown files (many inside copies/build output) and dozens of loose
   experiment artifacts; two `ghost_*_output.txt` files only contain "exe is not recognized".
 
@@ -138,14 +146,28 @@ string indexing/slicing/unicode length, slicing, sets, tuples, comprehensions (l
 `match`, `switch`, do-while, C-style `for`, destructuring `for`, lazy generators, JSON, file imports,
 mutexes, `async_spawn` with function values.
 
+**Done since the first audit:** `finally` on early `return`/`break`/`continue`, line-number mapping
+through the rewriting passes, closures that share captured variables, the 55 dead registry names, big
+integers, one-line blocks, `for k, v in dict`, builtins as values, the `//` compile error, the package
+manager, the tooling suite, HTTP server, vector store and RAG helpers, resource limits.
+
 **Still open:**
-1. `finally` on early `return`/`break`.
-2. Line-number mapping through the rewriting passes (lambda, control flow, import).
-3. Closures that share captured variables between siblings.
-4. The 55 dead registry names (`REGISTERED_BUT_DEAD.txt`) and the 4 README functions that do not
-   exist (`aes_encrypt`, `vector_store`, `vector_search`, `khlm_route`; removed from the README table).
-5. Decide the fate of the 193 never-compiled files: wire in, archive, or delete.
-6. A real end-to-end test for GGUF inference, and a real Parquet comparison for Kore.
+1. **Block scoping.** A variable first assigned inside an `if`/loop body is not visible after the block
+   (`Undefined variable`); another change is fixing this (in progress, not yet merged here).
+2. `len(s)` and `s[i]` are O(n) on very long strings (ASCII scan per call; non-ASCII uses `chars().nth`).
+3. The Killer HTTP server has no TLS and serves one request at a time.
+4. The debugger (`killer_dap`) shows one stack frame (innermost scope plus globals).
+5. Closures created before the enclosing function first assigns a captured variable keep the old
+   copy semantics (the sharing decision is textual, see `closure_scan.rs`).
+6. Number `%` keeps C semantics (`-7 % 3 == -1`) while BigInt uses floor semantics (`-7n % 3n == 2`);
+   `bool(0n)` is `true` although `if 0n` is falsy; floats of 2^63 or more print saturated.
+7. `count_tokens` is an approximation (about 10-20 percent off GPT-style tokenizers); the real tokenizer
+   needs a GGUF model.
+8. 192 source files (88,289 lines) are never compiled: wire in, archive, or delete.
+9. HTTPS needs `curl` on the machine (the client shells out to it); there is no built-in TLS.
+10. A real end-to-end test for GGUF inference, and a real Parquet comparison for Kore.
+11. Builtins owned by the net/AI modules (`vec_*`, `serve`, `llm_embed_batch`, ...) can be called but not
+    passed as first-class values (only names in the compiler's `BUILTINS` table qualify).
 
 ## 7. Method and limits
 
@@ -221,7 +243,7 @@ simulated no-ops. Temp files for `@python` / `@c` / `@java` / `@rust` blocks use
 in the shared temp directory (symlink / clobbering race): they now use `create_new` files and
 private per-run directories with unpredictable names.
 
-**Remaining risks.** Block scoping is real: a variable first assigned inside an `if` or loop body
+**Remaining risks.** Block scoping is real (fix in progress): a variable first assigned inside an `if` or loop body
 is not visible after the block (Python and JavaScript `var` programmers are surprised by
 `Undefined variable`); declare it before the block. Killer functions cannot assign to a global
 without `global`, and assigning inside a function creates a local. `volatile_*` read through
