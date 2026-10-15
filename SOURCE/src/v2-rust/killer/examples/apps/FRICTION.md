@@ -78,3 +78,10 @@ entry). Entries are numbered in the order I hit them.
     generator mirrored in Python gave different streams for negative seeds. NOT changed (the JIT,
     constant folding and fused slot instructions all implement the C remainder, and the choice is a
     language decision); the dungeon app takes `abs(seed)`. Listed in the report as a rough edge.
+18. **A `return` inside `try` left its handler registered**, so a later error in a *different*
+    function at the same or deeper call depth was routed into the stale `catch` block and its
+    value came back as the result of an unrelated call. Found when the todo service answered an
+    unwritable data file with `{"ok":false,"response":{...}}` (the catch of `parse_body`, which
+    had returned long before) instead of an error. Root cause: `Instruction::Ret` never discarded
+    the handlers of the returning frame, and the handler staleness test only looks at call depth.
+    Fix: `Ret` pops every handler with `call_len >= depth`.

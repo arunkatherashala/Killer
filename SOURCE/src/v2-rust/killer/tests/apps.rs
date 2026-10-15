@@ -547,3 +547,43 @@ fn dungeon_exit_codes() {
     let empty = t.write("empty.txt", "");
     assert_eq!(code(&["play", empty.to_str().unwrap()]), Some(0));
 }
+
+#[test]
+fn a_return_inside_try_does_not_leave_a_handler_that_catches_later_errors() {
+    let src = r#"fn ident(x) {
+  return x
+}
+fn parse(s) {
+  try {
+    return {"ok": true, "doc": ident(s)}
+  } catch e {
+    return {"ok": false, "caught": "STALE " + str(e)}
+  }
+}
+class S {
+  fn save() {
+    throw "disk full"
+  }
+  fn create() {
+    this.save()
+    return 1
+  }
+}
+r = parse(1)
+println(r["ok"])
+s = new S()
+try {
+  r2 = s.create()
+  println("wrong:", r2)
+} catch e {
+  println("caught by the right handler:", e)
+}
+r3 = parse(2)
+println(r3["ok"])
+"#;
+    assert_eq!(run_src(src), "true\ncaught by the right handler: disk full\ntrue");
+    // and without any try around the failing call the error is reported, not swallowed
+    let src2 = "fn p(s) {\n  try {\n    return s\n  } catch e {\n    return 0\n  }\n}\nfn deep() {\n  throw \"real error\"\n}\nfn mid() {\n  deep()\n  return 1\n}\np(1)\nx = mid()\nprintln(\"unreachable\", x)\n";
+    let out = run_src(src2);
+    assert!(out.contains("real error") && !out.contains("unreachable"), "{out}");
+}

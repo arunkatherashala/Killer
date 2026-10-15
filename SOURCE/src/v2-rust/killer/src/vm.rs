@@ -2832,6 +2832,12 @@ impl VirtualMachine {
                     }
                 }
                 Instruction::Ret => {
+                    // `try { return x }`: the returning frame's handlers die with it (otherwise a
+                    // later error in a *different* frame at the same depth lands in this catch)
+                    let depth = self.call_stack.len();
+                    while self.handlers.last().map_or(false, |h| h.call_len >= depth) {
+                        self.handlers.pop();
+                    }
                     if self.closure_frames.last().map_or(false, |(d, _)| *d == self.call_stack.len()) {
                         let (_, caps) = self.closure_frames.pop().expect("checked");
                         caps.refresh_with(|name| self.load_var(name).ok());
