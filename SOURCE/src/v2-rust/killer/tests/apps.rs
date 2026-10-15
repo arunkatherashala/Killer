@@ -203,3 +203,64 @@ println("freed")
 "#;
     assert_eq!(run_src(src), "same true\nfreed");
 }
+
+// ---------------------------------------------------------------------------------------------
+// app 5: kx, an expression language with exact integers
+// ---------------------------------------------------------------------------------------------
+
+fn run_app_main(app: &str, args: &[&str]) -> Output {
+    let dir = app_dir(app);
+    let mut a = vec!["run", "src/main.killer"];
+    a.extend_from_slice(args);
+    killer(&dir, &a)
+}
+
+fn python() -> Option<String> {
+    for name in ["python", "python3"] {
+        if let Ok(o) = Command::new(name).arg("--version").output() {
+            if o.status.success() {
+                return Some(name.to_string());
+            }
+        }
+    }
+    None
+}
+
+#[test]
+fn kx_unit_tests_pass() {
+    let (ok, text) = app_tests("kx");
+    assert!(ok, "{text}");
+    assert!(text.contains("0 failed"), "{text}");
+}
+
+#[test]
+fn kx_numbers_match_the_python_mirror() {
+    let out = run_app_main("kx", &["programs/numbers.kx"]);
+    let got = norm(&out.stdout);
+    let expected = norm(&std::fs::read(app_dir("kx").join("programs/numbers.expected")).unwrap());
+    assert_eq!(got, expected, "{}", norm(&out.stderr));
+    if let Some(py) = python() {
+        let live = Command::new(py).arg("-I").arg(app_dir("kx").join("tests/mirror.py")).output().unwrap();
+        assert_eq!(got, norm(&live.stdout));
+    }
+}
+
+#[test]
+fn kx_closures_program_and_error_exit_codes() {
+    let out = run_app_main("kx", &["programs/closures.kx"]);
+    let expected = norm(&std::fs::read(app_dir("kx").join("programs/closures.expected")).unwrap());
+    assert_eq!(norm(&out.stdout), expected);
+    let out = run_app_main("kx", &["programs/errors.kx"]);
+    assert_eq!(out.status.code(), Some(1));
+    assert!(norm(&out.stderr).contains("SyntaxError at 1:16: unexpected ')'"), "{}", norm(&out.stderr));
+    assert!(norm(&out.stderr).contains("               ^"), "caret line: {}", norm(&out.stderr));
+    let out = run_app_main("kx", &["programs/runtime_error.kx"]);
+    assert_eq!(out.status.code(), Some(1));
+    assert!(norm(&out.stderr).contains("RuntimeError at 3:3: undefined variable 'undefined_name'"));
+    let out = run_app_main("kx", &["no_such_file.kx"]);
+    assert_eq!(out.status.code(), Some(2));
+    let out = run_app_main("kx", &[]);
+    assert_eq!(out.status.code(), Some(2));
+    let out = run_app_main("kx", &["-e", "2 ^ 100"]);
+    assert_eq!(norm(&out.stdout).trim(), "=> 1267650600228229401496703205376");
+}

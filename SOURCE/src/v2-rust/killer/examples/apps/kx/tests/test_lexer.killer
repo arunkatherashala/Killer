@@ -33,9 +33,7 @@ test "positions are 1-based line and column" {
 }
 
 test "strings with escapes and unicode" {
-  t = tokenize("\"h\u00e9\"")[0]
-  assert_eq(t["t"], "str")
-  s = tokenize("\"a\nb\t\\\"q\\\"\"")[0]
+  s = tokenize("\"a\\nb\\t\\\"q\\\"\"")[0]
   assert_eq(s["v"], "a\nb\t\"q\"")
   u = tokenize("\"héllo wörld ✓\"")[0]
   assert_eq(len(u["v"]), 13)

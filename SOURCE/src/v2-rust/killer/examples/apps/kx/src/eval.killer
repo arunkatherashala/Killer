@@ -1,7 +1,7 @@
 # kx evaluator: environments, closures, exact integer arithmetic (big integers).
 import "parser.killer"
 
-MAX_DEPTH = 120
+MAX_DEPTH = 400
 
 class Env {
   fn init(parent) {
