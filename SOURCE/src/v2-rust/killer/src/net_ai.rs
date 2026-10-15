@@ -11,6 +11,7 @@ pub fn is_builtin(name: &str) -> bool {
         || name == "http_request"
         || name == "csv_columns"
         || crate::iter_builtins::NAMES.contains(&name)
+        || crate::fs_builtins::NAMES.contains(&name)
         || crate::vec_builtins::NAMES.contains(&name)
         || crate::rag_builtins::NAMES.contains(&name)
         || crate::embed_builtins::NAMES.contains(&name)
@@ -20,6 +21,9 @@ pub fn is_builtin(name: &str) -> bool {
 
 pub fn call(name: &str, args: &[Value]) -> Option<Result<Value, VmError>> {
     if let Some(r) = crate::iter_builtins::call(name, args) {
+        return Some(r);
+    }
+    if let Some(r) = crate::fs_builtins::call(name, args) {
         return Some(r);
     }
     if name == "csv_columns" {

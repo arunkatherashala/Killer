@@ -91,3 +91,6 @@ entry). Entries are numbered in the order I hit them.
     the callee took the early-return path. Also `return_code = 7` (any statement starting with the
     letters `return`) was parsed as a return. Fix: a bare return pushes null; the keyword must be
     followed by a non-identifier character.
+20. **No way to tell a folder from a file.** Ingesting a folder of documents needs to recurse into
+    sub-folders, but `fileExists` is true for both and `listDir` returns bare names. Fix: new
+    builtins `isDir(path)` and `isFile(path)` (`src/fs_builtins.rs`, file-read capability).

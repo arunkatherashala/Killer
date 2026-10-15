@@ -733,3 +733,14 @@ fn todo_date_validation_agrees_with_python_datetime() {
     let text = norm(&out.stdout);
     assert!(text.trim_end().ends_with("mismatches 0"), "{text}{}", norm(&out.stderr));
 }
+
+#[test]
+fn isdir_and_isfile_tell_folders_from_files() {
+    let t = Tmp::new("isdir");
+    t.write("sub/a.txt", "x");
+    let src = format!(
+        "d = \"{}\"\nprintln(isDir(d), isFile(d), isDir(d + \"/sub\"), isFile(d + \"/sub/a.txt\"), isDir(d + \"/sub/a.txt\"), isDir(d + \"/nope\"), isFile(d + \"/nope\"))\n",
+        t.0.to_str().unwrap().replace('\\', "/")
+    );
+    assert_eq!(run_src(&src), "true false true true false false false");
+}
