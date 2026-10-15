@@ -580,3 +580,24 @@ fn comparison_chain_with_unterminated_string_does_not_hang() {
     // a real chain still works
     assert!(killer_native::compiler::compile_killer_subset("a = 1\nb = 2\nc = 3\nprintln(a < b < c)\nprintln(a == b == c)\n").is_ok());
 }
+
+/// Fuzz seed 1 case 11928: unbounded recursion that reads a global at every level got quadratically
+/// slower (name lookup walks the scope chain) and outlived its wall-clock budget, which was only
+/// checked on loop back-edges. The budget must now stop it.
+#[test]
+fn wall_budget_stops_deep_recursion_that_reads_globals() {
+    let src = "g = 5\nfn rec(n) {\n  x = g\n  return 1 + rec(n + 1)\n}\nprintln(rec(0))\n";
+    let (tx, rx) = std::sync::mpsc::channel();
+    let owned = src.to_string();
+    std::thread::Builder::new().stack_size(512 * 1024 * 1024).spawn(move || {
+        let caps = CapabilitySet { allow_native_jit: true, ..CapabilitySet::restricted() };
+        let _g = CapabilityScopeGuard::install(caps);
+        let p = compile_killer_subset(&owned).unwrap();
+        let mut vm = VirtualMachine::new();
+        vm.set_execution_budget(Some(ExecutionBudget { max_instruction_steps: 0, max_wall_ms: 1_000, max_heap_bytes: 0 }));
+        let _ = tx.send(vm.run(&p).map_err(|e| e.to_string()));
+    }).unwrap();
+    let r = rx.recv_timeout(Duration::from_secs(60)).expect("budgeted recursion did not stop");
+    let msg = r.expect_err("must hit a limit");
+    assert!(msg.contains("time limit") || msg.contains("recursion too deep"), "{msg}");
+}

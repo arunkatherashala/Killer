@@ -704,6 +704,11 @@ impl VirtualMachine {
         if self.call_stack.len() >= MAX_CALL_DEPTH {
             return Err(Self::stack_overflow_error());
         }
+        // Deep recursion is where instructions get slow (every name lookup walks the scope chain), so
+        // the wall-clock budget is also checked every 64 levels, not only on loop back-edges.
+        if self.call_stack.len() & 63 == 0 && self.execution_budget.is_some() {
+            self.enforce_wall_budget_on_back_edge()?;
+        }
         Ok(())
     }
 
