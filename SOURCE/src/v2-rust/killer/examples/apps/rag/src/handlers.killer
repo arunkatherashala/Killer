@@ -1,0 +1,33 @@
+# HTTP handler for the rag service: POST /ask, GET /health, GET /stats.
+import "answer.killer"
+
+fn make_handler(store) {
+  return fn(req) {
+    if req["method"] == "GET" and req["path"] == "/health" {
+      return {"status": "ok", "chunks": vec_len(store)}
+    }
+    if req["method"] == "GET" and req["path"] == "/stats" {
+      return {"chunks": vec_len(store), "dim": DIM, "chunk_size": CHUNK_SIZE, "chunk_overlap": CHUNK_OVERLAP}
+    }
+    if req["method"] == "POST" and req["path"] == "/ask" {
+      body = null
+      try {
+        body = json_parse(req["body"])
+      } catch e {
+        return {"status": 400, "body": {"error": "invalid JSON: " + str(e)}}
+      }
+      if type(body) != "dict" or type(body["question"]) != "string" or len(trim(body["question"])) == 0 {
+        return {"status": 422, "body": {"error": "question must be a non-empty string"}}
+      }
+      k = body["k"] ?? 3
+      if type(k) != "number" or k != floor(k) or k < 1 or k > 10 {
+        return {"status": 422, "body": {"error": "k must be a whole number from 1 to 10"}}
+      }
+      if len(body["question"]) > 2000 {
+        return {"status": 413, "body": {"error": "question is too long (2000 characters at most)"}}
+      }
+      return answer(store, body["question"], k)
+    }
+    return {"status": 404, "body": {"error": "not found: " + req["method"] + " " + req["path"]}}
+  }
+}

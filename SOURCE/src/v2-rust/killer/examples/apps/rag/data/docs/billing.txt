@@ -1,0 +1,7 @@
+Billing and invoices
+
+Invoices are generated on the first day of every month and cover the previous month of usage. You can download past invoices as PDF files from the Billing page. Payments are accepted by credit card and by bank transfer; bank transfers can take up to three business days to be credited.
+
+A failed payment is retried automatically after three days and again after seven days. If the second retry fails the account is downgraded to the free plan. Refunds for annual plans are available within thirty days of purchase and are paid back to the original payment method.
+
+To change the billing address or the company name on future invoices, edit the Billing profile. Invoices that were already issued cannot be edited, but a corrected copy can be requested from support.

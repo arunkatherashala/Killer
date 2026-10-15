@@ -1,0 +1,236 @@
+import "../src/answer.killer"
+import "../src/handlers.killer"
+
+DOCS = "data/docs"
+TMP = "build/test_tmp"
+
+fn ensure_dir(p) {
+  if not isDir(p) {
+    mkdir(p)
+  }
+}
+
+# an empty scratch folder (earlier runs may have left files behind)
+fn fresh_dir(p) {
+  ensure_dir("build")
+  ensure_dir(TMP)
+  ensure_dir(p)
+  for name in listDir(p) {
+    deleteFile(p + "/" + name)
+  }
+}
+
+fn built_corpus() {
+  return ingest_folder(DOCS)
+}
+
+# question -> the file that must be the best answer
+QUESTIONS = [
+  ["How do I reset my password?", "password-reset.txt"],
+  ["the reset link expired", "password-reset.txt"],
+  ["when is my invoice generated", "billing.txt"],
+  ["can I pay by bank transfer", "billing.txt"],
+  ["how long does express delivery take", "shipping.txt"],
+  ["my parcel arrived damaged", "shipping.txt"],
+  ["can I delete my data", "privacy.txt"],
+  ["export my data as JSON", "privacy.txt"],
+  ["what is the rate limit per minute", "api-limits.txt"],
+  ["status 429 Retry-After", "api-limits.txt"],
+  ["app shows blank screen after login", "troubleshooting.txt"],
+  ["two devices edited the same document offline", "troubleshooting.txt"],
+  ["München office hours", "unicode-notes.txt"],
+  ["São Paulo support hours", "unicode-notes.txt"],
+  ["the old refund window", "archive/old-policy.txt"]
+]
+
+test "find_documents recurses, sorts and keeps only .txt files" {
+  docs = find_documents(DOCS)
+  assert_eq(docs[0], "api-limits.txt")
+  assert_true("archive/old-policy.txt" in docs)
+  assert_true("empty.txt" in docs)
+  assert_false("notes.md" in docs)
+  assert_eq(docs, sorted(docs))
+  assert_eq(len(docs), 9)
+}
+
+test "ingest counts files and chunks and reports skipped files" {
+  b = built_corpus()
+  assert_eq(b["files"], 8)
+  assert_eq(b["skipped"], ["empty.txt (empty)"])
+  assert_eq(b["chunks"], vec_len(b["store"]))
+  assert_eq(len(b["ids"]), b["chunks"])
+  assert_true("password-reset.txt#0" in b["ids"])
+  assert_eq(len(keys(b["hashes"])), 9)
+  assert_eq(b["hashes"]["empty.txt"], sha256(""))
+}
+
+test "ingesting a missing folder fails with a clear message" {
+  msg = ""
+  try {
+    ingest_folder("data/nope")
+  } catch e {
+    msg = str(e)
+  }
+  assert_eq(msg, "not a folder: data/nope")
+}
+
+test "stop words and stemming" {
+  assert_eq(embed_text("How do I reset my password?"), "reset password")
+  assert_eq(keys(keywords("Invoices were deleted, invoice")), ["invoic", "delet"])
+  assert_eq(stem("delete"), stem("deleted"))
+  assert_eq(stem("policies"), "policy")
+  assert_eq(stem("class"), "class")
+  assert_eq(stem("is"), "is")
+}
+
+test "top-1 ranking over the question set" {
+  store = built_corpus()["store"]
+  wrong = []
+  for qa in QUESTIONS {
+    got = retrieve(store, qa[0], 1)
+    if len(got) == 0 or got[0]["source"] != qa[1] {
+      push(wrong, qa[0])
+    }
+  }
+  assert_eq(wrong, [])
+}
+
+test "results are sorted best first, bounded by k, and carry their sources" {
+  store = built_corpus()["store"]
+  r = retrieve(store, "delivery of my order", 3)
+  assert_true(len(r) >= 1 and len(r) <= 3)
+  for i in range(len(r) - 1) {
+    assert_true(r[i]["score"] >= r[i + 1]["score"])
+  }
+  assert_eq(r[0]["source"], "shipping.txt")
+  assert_eq(retrieve(store, "delivery of my order", 1)[0]["id"], r[0]["id"])
+}
+
+test "questions about nothing find nothing" {
+  store = built_corpus()["store"]
+  assert_eq(retrieve(store, "quantum chromodynamics lattice", 3), [])
+  assert_eq(retrieve(store, "", 3), [])
+  assert_eq(retrieve(store, "the of and", 3), [])
+  a = answer(store, "quantum chromodynamics lattice", 3)
+  assert_eq(a["sources"], [])
+  assert_contains(a["answer"], "I do not know")
+}
+
+test "answer builds the grounded prompt from the retrieved passages" {
+  store = built_corpus()["store"]
+  a = answer(store, "How do I reset my password?", 2)
+  assert_contains(a["answer"], "Reset password button")
+  assert_eq(a["sources"][0]["source"], "password-reset.txt")
+  assert_true(a["prompt_tokens"] > 30)
+  assert_true(len(a["sources"]) <= 2)
+}
+
+test "persistence: saved and reloaded index ranks identically" {
+  ensure_dir("build")
+  ensure_dir(TMP)
+  path = TMP + "/idx"
+  b = built_corpus()
+  save_index(b, path)
+  assert_true(fileExists(path + ".kvec"))
+  loaded = load_index(path)
+  assert_eq(vec_len(loaded["store"]), b["chunks"])
+  assert_eq(loaded["manifest"]["files"], 8)
+  for qa in QUESTIONS {
+    fresh = retrieve(b["store"], qa[0], 3)
+    again = retrieve(loaded["store"], qa[0], 3)
+    assert_eq(json_stringify(fresh), json_stringify(again))
+  }
+}
+
+test "loading rejects missing, damaged and incompatible indexes" {
+  ensure_dir("build")
+  ensure_dir(TMP)
+  msg = ""
+  try {
+    load_index(TMP + "/does_not_exist")
+  } catch e {
+    msg = str(e)
+  }
+  assert_contains(msg, "no index at")
+  path = TMP + "/bad"
+  save_index(built_corpus(), path)
+  m = json_parse(readFile(path + ".json"))
+  m["chunks"] = m["chunks"] + 1
+  writeFile(path + ".json", json_stringify(m))
+  try {
+    load_index(path)
+  } catch e2 {
+    msg = str(e2)
+  }
+  assert_contains(msg, "index is damaged")
+  m["chunks"] = m["chunks"] - 1
+  m["dim"] = 64
+  writeFile(path + ".json", json_stringify(m))
+  try {
+    load_index(path)
+  } catch e3 {
+    msg = str(e3)
+  }
+  assert_contains(msg, "different parameters")
+  writeFile(path + ".kvec", "garbage")
+  m["dim"] = DIM
+  writeFile(path + ".json", json_stringify(m))
+  caught = false
+  try {
+    load_index(path)
+  } catch e4 {
+    caught = true
+  }
+  assert_true(caught)
+}
+
+test "stale_files notices edited, added and removed documents" {
+  ensure_dir("build")
+  ensure_dir(TMP)
+  work = TMP + "/docs"
+  fresh_dir(work)
+  writeFile(work + "/a.txt", "alpha document about apples and oranges")
+  writeFile(work + "/b.txt", "beta document about bicycles and brakes")
+  b = ingest_folder(work)
+  m = {"hashes": b["hashes"]}
+  assert_eq(stale_files(work, m), [])
+  writeFile(work + "/a.txt", "alpha document about apples and bananas")
+  writeFile(work + "/c.txt", "gamma")
+  deleteFile(work + "/b.txt")
+  assert_eq(stale_files(work, m), ["a.txt", "b.txt", "c.txt"])
+}
+
+test "unicode and very long documents are chunked without losing text" {
+  ensure_dir("build")
+  ensure_dir(TMP)
+  work = TMP + "/long"
+  fresh_dir(work)
+  words = []
+  for i in range(3000) {
+    push(words, "wörd" + str(i % 50) + "é")
+  }
+  writeFile(work + "/long.txt", join(words, " "))
+  b = ingest_folder(work)
+  assert_true(b["chunks"] > 100)
+  r = retrieve(b["store"], "wörd7é", 3)
+  assert_true(len(r) >= 1)
+  assert_contains(r[0]["text"], "wörd7é")
+}
+
+test "HTTP handler validates input and answers questions" {
+  store = built_corpus()["store"]
+  h = make_handler(store)
+  ok = h({"method": "POST", "path": "/ask", "body": "{\"question\": \"how long does express delivery take\", \"k\": 2}", "headers": {}, "query": {}, "params": {}})
+  assert_eq(ok["sources"][0]["source"], "shipping.txt")
+  assert_true(len(ok["sources"]) <= 2)
+  bad = h({"method": "POST", "path": "/ask", "body": "{oops", "headers": {}, "query": {}, "params": {}})
+  assert_eq(bad["status"], 400)
+  for body in ["{}", "{\"question\": 5}", "{\"question\": \"   \"}", "[1]", "{\"question\": \"x\", \"k\": 0}", "{\"question\": \"x\", \"k\": 2.5}", "{\"question\": \"x\", \"k\": 11}", "{\"question\": \"x\", \"k\": \"3\"}"] {
+    r = h({"method": "POST", "path": "/ask", "body": body, "headers": {}, "query": {}, "params": {}})
+    assert_eq(r["status"], 422, body)
+  }
+  big = h({"method": "POST", "path": "/ask", "body": json_stringify({"question": repeat("a ", 1500)}), "headers": {}, "query": {}, "params": {}})
+  assert_eq(big["status"], 413)
+  assert_eq(h({"method": "GET", "path": "/health", "body": "", "headers": {}, "query": {}, "params": {}})["status"], "ok")
+  assert_eq(h({"method": "GET", "path": "/ask", "body": "", "headers": {}, "query": {}, "params": {}})["status"], 404)
+}
