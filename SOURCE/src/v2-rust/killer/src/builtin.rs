@@ -4092,13 +4092,14 @@ impl BuiltinFunctions {
             ));
         }
         
+        // a string is JSON text to re-indent; any other value (dict, list, number, ...) is
+        // encoded first, so `json_pretty(report)` works like `json_stringify` with indentation
         let json_str = match &args[0] {
             Value::Str(s) => s.clone(),
-            _ => {
-                return Err(VmError::runtime_error(
-                    "json_pretty(): first argument must be a JSON string".to_string(),
-                ))
-            }
+            other => match crate::json_lang::builtin_stringify(std::slice::from_ref(other))? {
+                Value::Str(s) => s,
+                _ => return Err(VmError::runtime_error("json_pretty(): could not encode the value".to_string())),
+            },
         };
 
         let indent = if args.len() > 1 {

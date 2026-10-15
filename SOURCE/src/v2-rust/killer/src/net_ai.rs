@@ -9,6 +9,7 @@ use crate::value::Value;
 pub fn is_builtin(name: &str) -> bool {
     crate::http_serve::NAMES.contains(&name)
         || name == "http_request"
+        || name == "csv_columns"
         || crate::vec_builtins::NAMES.contains(&name)
         || crate::rag_builtins::NAMES.contains(&name)
         || crate::embed_builtins::NAMES.contains(&name)
@@ -17,6 +18,9 @@ pub fn is_builtin(name: &str) -> bool {
 }
 
 pub fn call(name: &str, args: &[Value]) -> Option<Result<Value, VmError>> {
+    if name == "csv_columns" {
+        return Some(crate::csv_builtins::csv_columns(args));
+    }
     if name == "http_request" {
         return Some(crate::http_req::builtin_http_request(args));
     }

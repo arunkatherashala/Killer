@@ -121,6 +121,21 @@ pub fn parse_csv(args: &[Value]) -> Result<Value, VmError> {
     Ok(Value::from(rows))
 }
 
+/// `csv_columns(text[, delimiter])`: the header row as a list of names (works for a file that
+/// has a header but no data rows, where `parse_csv` returns an empty list).
+pub fn csv_columns(args: &[Value]) -> Result<Value, VmError> {
+    if args.is_empty() || args.len() > 2 {
+        return err("csv_columns() expects 1-2 arguments (csv_string, [delimiter])");
+    }
+    let text = match &args[0] {
+        Value::Str(s) => s,
+        _ => return err("csv_columns(): first argument must be a CSV string"),
+    };
+    let delim = delimiter_arg(args, "csv_columns")?;
+    let recs = records(text, delim).map_err(|e| VmError::runtime_error(format!("csv_columns(): {}", e)))?;
+    Ok(Value::from(recs.into_iter().next().unwrap_or_default().into_iter().map(Value::Str).collect::<Vec<_>>()))
+}
+
 fn cell(v: &Value) -> String {
     match v {
         Value::Null => String::new(),
