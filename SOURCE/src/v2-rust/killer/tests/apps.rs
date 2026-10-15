@@ -399,6 +399,6 @@ println(csv_columns(""))
 "#;
     assert_eq!(
         run_src(src),
-        "b\na\nc\n[1, 2, 3, 1180591620717411303424]\n[b, c, a]\n{\n  \"a\": [\n    1,\n    2\n  ],\n  \"b\": {\n    \"c\": null\n  }\n}\n{\n  \"x\": 1\n}\n[id, name]\n[]"
+        "a\nb\nc\n[1, 2, 3, 1180591620717411303424]\n[b, c, a]\n{\n  \"a\": [\n    1,\n    2\n  ],\n  \"b\": {\n    \"c\": null\n  }\n}\n{\n  \"x\": 1\n}\n[id, name]\n[]"
     );
 }
