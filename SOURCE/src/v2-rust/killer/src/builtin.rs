@@ -101,15 +101,7 @@ pub(crate) fn sha256_digest(data: &[u8]) -> [u8; 32] {
 }
 
 fn is_truthy(v: &Value) -> bool {
-    match v {
-        Value::Null => false,
-        Value::Bool(b) => *b,
-        Value::Number(n) => *n != 0.0 && !n.is_nan(),
-        Value::Str(s) => !s.is_empty(),
-        Value::Array(a) => !a.is_empty(),
-        Value::BigInt(b) => !b.is_zero(),
-        _ => true,
-    }
+    v.truthy()
 }
 
 pub const BUILTIN_ID_TABLE: &[(&str, u16)] = &[
@@ -2326,12 +2318,7 @@ impl BuiltinFunctions {
                 "sorted() expects 1 or 2 arguments: sorted(array[, reverse])".to_string(),
             ));
         }
-        let reverse = args.len() == 2
-            && match &args[1] {
-                Value::Bool(b) => *b,
-                Value::Number(n) => *n != 0.0 && !n.is_nan(),
-                _ => false,
-            };
+        let reverse = args.len() == 2 && args[1].truthy();
         match &args[0] {
             Value::Array(arr) => {
                 if arr.is_empty() {
@@ -2467,13 +2454,7 @@ impl BuiltinFunctions {
     }
 
     fn value_truthy(v: &Value) -> bool {
-        match v {
-            Value::Bool(b) => *b,
-            Value::Number(n) => *n != 0.0 && !n.is_nan(),
-            Value::Str(s) => !s.is_empty(),
-            Value::Null => false,
-            _ => true,
-        }
+        v.truthy()
     }
 
     /// `all(array)`  true if every element is truthy (empty → true).
@@ -2786,13 +2767,7 @@ impl BuiltinFunctions {
                 "Boolean() expects 1 argument".to_string(),
             ));
         }
-        Ok(Value::Bool(match &args[0] {
-            Value::Bool(b) => *b,
-            Value::Number(n) => *n != 0.0 && !n.is_nan(),
-            Value::Str(s) => !s.is_empty(),
-            Value::Null => false,
-            _ => true,
-        }))
+        Ok(Value::Bool(args[0].truthy()))
     }
 
     // ===== Type Checks =====

@@ -748,6 +748,38 @@ impl Display for Value {
 }
 
 impl Value {
+    /// THE truthiness rule of the language (if/while/not/&&/||/ternary/bool()/filter/all/any).
+    /// Every other truthiness site delegates here.
+    pub fn truthy(&self) -> bool {
+        match self {
+            Value::Bool(v) => *v,
+            Value::Null => false,
+            Value::Number(v) => *v != 0.0,
+            Value::Str(v) => !v.is_empty(),
+            Value::Array(a) => !a.is_empty(),
+            Value::Dict(d) => !d.is_empty(),
+            Value::Object(_) => true,  // Objects are always truthy
+            Value::Class(_) => true,   // Classes are always truthy
+            Value::Function { .. } => true,  // Functions are always truthy
+            Value::Generator(_) => true,  // Generators are always truthy
+            Value::QualityWrapped(_) => true,  // Quality objects are always truthy
+            Value::Trit(t) => *t > 0,  // T_POS is truthy
+            Value::Signal { value, .. } => value.truthy(),  // Delegate to inner value
+            Value::Qubit { alpha, .. } => alpha * alpha >= 0.5,  // P(|0⟩) >= 50%
+            Value::Tryte(ts) => ts.iter().any(|&t| t > 0),  // truthy if any T_POS
+            Value::Future(_) => true,  // a future handle is truthy
+            Value::Integer(n) => *n != 0,
+            Value::Bytes(b) => !b.is_empty(),
+            Value::Pointer(p) => *p != 0,
+            Value::Uncertain { value, margin } => *value > *margin,
+            Value::Gauss { mean, sigma } => *mean > crate::uncertain::Z95 * sigma.abs(),
+            Value::Set(s) => !s.is_empty(),
+            Value::TaskError(_) => true,
+            Value::Cell(c) => !matches!(&*c.borrow(), Value::Null | Value::Bool(false)),
+            Value::BigInt(b) => !b.is_zero(),
+        }
+    }
+
     /// A structurally independent copy that shares no `Rc` with the original. Values handed to
     /// another thread (spawn arguments, captured variables, task results) must be detached,
     /// otherwise two threads would update the same non-atomic reference counts.

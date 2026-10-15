@@ -43,18 +43,7 @@ fn numbers(v: &Value, who: &str) -> Result<Vec<f64>, VmError> {
 
 /// Truthiness shared with the language: null, false, 0, "", [] and {} are false.
 pub fn truthy(v: &Value) -> bool {
-    match v {
-        Value::Null => false,
-        Value::Bool(b) => *b,
-        Value::Number(n) => *n != 0.0 && !n.is_nan(),
-        Value::Integer(i) => *i != 0,
-        Value::Str(s) => !s.is_empty(),
-        Value::Array(a) => !a.is_empty(),
-        Value::Dict(d) => !d.is_empty(),
-        Value::Set(s) => !s.is_empty(),
-        Value::Trit(t) => *t > 0,
-        _ => true,
-    }
+    v.truthy()
 }
 
 /// Number of characters (not bytes). ASCII strings take the O(1) path.

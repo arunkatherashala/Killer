@@ -115,15 +115,7 @@ impl TypeModule {
     
     /// Check if value is truthy (loose truthiness check)
     pub fn is_truthy(value: &Value) -> bool {
-        match value {
-            Value::Null => false,
-            Value::Bool(b) => *b,
-            Value::Number(n) => *n != 0.0 && !n.is_nan(),
-            Value::Str(s) => !s.is_empty(),
-            Value::Array(arr) => !arr.is_empty(),
-            Value::Dict(dict) => !dict.is_empty(),
-            _ => true,
-        }
+        value.truthy()
     }
     
     // ==================== Type Conversion ====================

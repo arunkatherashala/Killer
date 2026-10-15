@@ -4149,13 +4149,7 @@ impl VirtualMachine {
                                     "Boolean() expects 1 argument".to_string(),
                                 ));
                             }
-                            Value::Bool(match &args[0] {
-                                Value::Bool(b) => *b,
-                                Value::Number(n) => *n != 0.0 && !n.is_nan(),
-                                Value::Str(s) => !s.is_empty(),
-                                Value::Null => false,
-                                _ => true,
-                            })
+                            Value::Bool(args[0].truthy())
                         }
                         "isNaN" => {
                             if args.len() != 1 {
@@ -6645,33 +6639,7 @@ impl VirtualMachine {
     }
 
     fn is_truthy(&self, value: &Value) -> bool {
-        match value {
-            Value::Bool(v) => *v,
-            Value::Null => false,
-            Value::Number(v) => *v != 0.0,
-            Value::Str(v) => !v.is_empty(),
-            Value::Array(a) => !a.is_empty(),
-            Value::Dict(d) => !d.is_empty(),
-            Value::Object(_) => true,  // Objects are always truthy
-            Value::Class(_) => true,   // Classes are always truthy
-            Value::Function { .. } => true,  // Functions are always truthy
-            Value::Generator(_) => true,  // Generators are always truthy
-            Value::QualityWrapped(_) => true,  // Quality objects are always truthy
-            Value::Trit(t) => *t > 0,  // T_POS is truthy
-            Value::Signal { value, .. } => self.is_truthy(value),  // Delegate to inner value
-            Value::Qubit { alpha, .. } => alpha * alpha >= 0.5,  // P(|0⟩) >= 50%
-            Value::Tryte(ts) => ts.iter().any(|&t| t > 0),  // truthy if any T_POS
-            Value::Future(_) => true,  // a future handle is truthy
-            Value::Integer(n) => *n != 0,
-            Value::Bytes(b) => !b.is_empty(),
-            Value::Pointer(p) => *p != 0,
-            Value::Uncertain { value, margin } => *value > *margin,
-            Value::Gauss { mean, sigma } => *mean > crate::uncertain::Z95 * sigma.abs(),
-            Value::Set(s) => !s.is_empty(),
-            Value::TaskError(_) => true,
-            Value::Cell(c) => !matches!(&*c.borrow(), Value::Null | Value::Bool(false)),
-            Value::BigInt(b) => !b.is_zero(),
-        }
+        value.truthy()
     }
 
     fn ensure_jump_target(&self, program: &Program, target: usize) -> Result<(), VmError> {

@@ -229,6 +229,8 @@ Mixed arithmetic rules:
 - `a / b` is an exact bigint when `b` divides `a`, otherwise a float.
 - `%`, `idiv` and `divmod` use **floor** semantics (like Python): `-7n % 3n` is `2`. Plain Number `%`
   keeps C semantics: `-7 % 3` is `-1`.
+- Truthiness is one rule everywhere (`if`, `while`, `not`, `&&`, `||`, ternary, `bool()`, `filter`, `all`,
+  `any`): `0n` is falsy like `0`, as are `null`, `false`, `""`, `[]` and `{}`.
 - A bigint equals and orders exactly against a number (`2n ** 64 == 18446744073709551616n`).
 - `**` refuses absurd result sizes with an error; division by zero is a catchable error.
 
@@ -1485,8 +1487,7 @@ Observed, not hypothetical:
 - **Block scoping**: a variable first assigned inside an `if`, `while` or `for` body is not visible after
   the block (`Undefined variable`). Assign it before the block. A fix is in progress.
 - **Plain integers saturate**: `2 ** 63` and `9223372036854775807 + 1` give `9223372036854775807`, and a
-  float of 2^63 or more prints saturated too; use `n` literals / `big()` for exact values. `int(5n)` is not
-  supported, and `bool(0n)` returns `true` (an `if` on a zero bigint is falsy; compare with `== 0` instead).
+  float of 2^63 or more prints saturated too; use `n` literals / `big()` for exact values.
 - **Number `%` keeps C semantics** (`-7 % 3` is `-1`) while bigints use floor semantics (`-7n % 3n` is `2`).
 - **Closures created before the enclosing function first assigns a captured variable** keep the old copy
   semantics instead of sharing it.
