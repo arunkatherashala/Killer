@@ -5,7 +5,9 @@ identical output). Windows 11, CPython 3.12, Killer release build (LTO). The mac
 other builds during measurement, so absolute seconds are inflated and noisy: read the ratios, and
 treat differences under about 15% as noise.
 
-Ratio = Killer time / Python time (above 1 means Killer is slower).
+Ratio = Killer time / Python time (above 1 means Killer is slower). The ratio table below was measured
+before "Round 2"; Round 2 (further down) only has CPU-time before/after numbers, because the machine was
+too loaded for wall-clock ratios. No new ratio table has been measured since, so none is quoted elsewhere.
 
 | Benchmark | Before (ratio) | After (ratio) | What it does |
 |-----------|---------------:|--------------:|--------------|
@@ -39,7 +41,7 @@ Numeric JIT is unaffected: `fib(32)` 0.109 s -> 0.094 s, 5M-iteration top-level 
 String building by repeated concatenation, large `sorted`/list operations (level), word counting.
 
 ## Where Killer is still slower (largest first)
-1. **List comprehensions (about 6x).** Comprehensions compile to an inline loop whose temporaries are
+1. **List comprehensions (about 6x when measured; partly addressed in Round 2: -19% CPU).** Before Round 2 comprehensions compiled to an inline loop whose temporaries are
    named variables (`Load`/`Store` by name through the scope chain), not frame slots, about 17
    instructions per element. The fix is in the compiler (allocate slots for the temporaries, or emit a
    dedicated iteration instruction); `compile_list_comprehension` only has `&CompileContext`.
@@ -47,7 +49,7 @@ String building by repeated concatenation, large `sorted`/list operations (level
    byte scan to confirm an ASCII prefix and `len(s)` scans the whole string (`is_ascii`) each time,
    so very long strings are still O(n) per index/len. A cached ASCII flag or a rope/byte-string
    representation would fix it. Non-ASCII strings use the O(n) `chars().nth` path.
-3. **Objects and methods (about 4x).** Each call still creates a scope `HashMap` with `String`
+3. **Objects and methods (about 4x when measured; partly addressed in Round 2: -18% CPU).** Before Round 2 each call created a scope `HashMap` with `String`
    keys (`this`, `arg0`) and a locals `Vec`; field writes `this.x = v` push a `ConstStr` clone.
    Next steps: pool scope maps, use `Cow<'static, str>` keys for synthetic names, and give
    `ObjectInstance.fields` the FNV hasher (it uses SipHash).
@@ -94,7 +96,10 @@ used in thousands of places; a cache keyed by pointer/length would be unsound wh
 and another with the same length lands at the same address), dict reads that clone string values,
 JSON, and try/catch.
 
-## Bug found while writing the benchmarks (not fixed here)
+## Bug found while writing the benchmarks (since fixed)
+Status: both items below were re-checked on the current tree and work (`5 in d` with a numeric key,
+`if !(k in d) { ... }`). The original report follows.
+
 `k in some_dict` with a numeric `k` raises `contains() expects string, array, dict or set`
 (string keys work), and `if !(x in d) { ... }` is a parse error ("condition must be followed by `{`").
 `nested_data` therefore uses string keys and `if k in groups { ... } else { ... }`.
