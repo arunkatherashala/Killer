@@ -4,6 +4,7 @@
 //! killer run <file>             run a program
 //! killer fmt [--check] <files>  format source files
 //! killer lint <files>           lint source files
+//! killer profile <file>         run under the profiler (report, --html flame graph)
 //! killer test [filter]          run tests
 //! killer repl                   interactive prompt
 //! killer lsp                    language server over stdio
@@ -21,6 +22,7 @@ type Handler = fn(&[String]) -> i32;
 const COMMANDS: &[(&str, &str, Handler)] = &[
     ("run", "run a program: killer run <file.killer>", cli_tools::cmd_run),
     ("fmt", "format files: killer fmt [--check] <files or dirs>", cli_tools::cmd_fmt),
+    ("profile", "profile a program: killer profile <file.killer> [--html out.html] [--top N] [--lines N]", killer_native::profile_cli::cmd_profile),
     ("lint", "lint files: killer lint [--deny-warnings] <files or dirs>", cli_tools::cmd_lint),
     ("test", "run tests: killer test [--junit FILE] [filter] [paths]", testfw::cmd_test),
     ("repl", "interactive prompt", cli_tools::cmd_repl),

@@ -340,6 +340,8 @@ pub mod time_machine;
 pub mod exprsplit;             // top-level operator splitting for the expression parser
 pub mod net_ai;                // network + AI building blocks: serve/route, http_request, vec_*, chunking, logging
 pub mod llm_stream;            // streaming LLM output (llm_stream / llm_stream_cb)
+pub mod profile_cli;            // `killer profile` / `killer_super --profile`
+pub mod vm_profile;             // VM profiler: call counts, self/inclusive time, line hits, flame graph
 pub mod http_sse;              // SSE replies for serve handlers
 pub mod http_serve;            // real HTTP server with Killer handlers
 pub mod vec_builtins;          // dense vector store: vec_new/add/search/save, cosine, dot, top_k

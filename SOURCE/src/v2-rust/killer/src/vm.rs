@@ -298,6 +298,9 @@ pub struct VirtualMachine {
     /// Calls in progress to closures with captured variables: (call depth, captures to write back).
     closure_frames: Vec<(usize, crate::value::Captures)>,
     generator_manager: GeneratorManager,  // Manages generator state
+    /// Profiling on/off: the only cost when off is one branch per instruction (see `vm_profile`).
+    pub(crate) profiling: bool,
+    pub(crate) profiler: Option<Box<crate::vm_profile::Profiler>>,
     /// Generators currently being resumed, innermost last.
     gen_ctx: Vec<GenCtx>,
     /// Set by `Yield` for the `gen_resume` that is waiting for it: (value, saved frame).
@@ -386,6 +389,8 @@ impl Default for VirtualMachine {
             pending_throw: None,
             closure_frames: Vec::new(),
             generator_manager: GeneratorManager::default(),
+            profiling: false,
+            profiler: None,
             gen_ctx: Vec::new(),
             gen_yielded: None,
             yielded_values: Vec::new(),
@@ -520,6 +525,8 @@ impl VirtualMachine {
             pending_throw: None,
             closure_frames: Vec::new(),
             generator_manager: GeneratorManager::default(),
+            profiling: false,
+            profiler: None,
             gen_ctx: Vec::new(),
             gen_yielded: None,
             yielded_values: Vec::new(),
@@ -989,6 +996,11 @@ impl VirtualMachine {
         let mut gc_poll: u32 = 0;
         while self.ip < program.instructions.len() {
             self.enforce_step_budget()?;
+            if self.profiling {
+                if let Some(p) = self.profiler.as_mut() {
+                    p.step(self.ip, self.call_stack.len());
+                }
+            }
 
             // GC: check if the global alloc counter crossed a new interval boundary
             // (polled every 256 instructions; the interval is 50,000 allocations).
@@ -2184,7 +2196,7 @@ impl VirtualMachine {
                         if header_is_jit_eligible {
                             // on_loop_back returns Copy (JitLoopFn, HotPatternKind) — borrow ends here
                             let jit_info = self.jit_engine.on_loop_back(dest, &program.instructions);
-                            let jit_info = if crate::security::current_capabilities().allow_native_jit {
+                            let jit_info = if crate::security::current_capabilities().allow_native_jit && !self.profiling {
                                 jit_info
                             } else {
                                 None
@@ -2658,6 +2670,7 @@ impl VirtualMachine {
                     if *arg_count <= 8 && self.stack.len() >= *arg_count
                         && self.execution_budget.is_none()
                         && crate::security::current_capabilities().allow_native_jit
+                        && !self.profiling
                     {
                         let base = self.stack.len() - *arg_count;
                         if let Some(r) = self.fn_jit.try_call(
@@ -3059,6 +3072,12 @@ impl VirtualMachine {
                         d.insert("hot_threshold".to_string(), Value::Number(threshold as f64));
                         d.insert("active".to_string(), Value::Bool(compiled > 0));
                         self.stack.push(Value::Dict(crate::value::SharedDict::new(d)));
+                        self.ip += 1;
+                        continue;
+                    }
+                    if let Some(r) = crate::vm_profile::vm_call(self, name, &args, program) {
+                        let v = r?;
+                        self.stack.push(v);
                         self.ip += 1;
                         continue;
                     }
@@ -6154,6 +6173,10 @@ impl VirtualMachine {
     /// Register a Rust-driven generator (see `generator::NativeSource`) and return its handle.
     pub(crate) fn register_native_gen(&mut self, src: Box<dyn crate::generator::NativeSource>) -> Value {
         Value::Generator(self.generator_manager.create_native(src))
+    }
+
+    pub(crate) fn call_stack_depth(&self) -> usize {
+        self.call_stack.len()
     }
 
     pub(crate) fn close_generator(&mut self, id: &str) {

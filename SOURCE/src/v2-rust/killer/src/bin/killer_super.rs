@@ -64,6 +64,9 @@ struct CliArgs {
     stats: bool,
     run: bool,
     no_optimize: bool,
+    /// `--profile`: run under the VM profiler and print a report; `--profile-html FILE` adds a flame graph
+    profile: bool,
+    profile_html: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -288,7 +291,18 @@ fn real_main() {
         if cli_args.verbose {
             eprintln!("Running via Killer VM...");
         }
-        match killer_native::run_killer_source(&source) {
+        let result = if cli_args.profile {
+            let opts = killer_native::profile_cli::ProfileOpts {
+                html: cli_args.profile_html.clone(),
+                file: Some(cli_args.input_file.display().to_string()),
+                title: format!("Killer profile: {}", cli_args.input_file.display()),
+                ..Default::default()
+            };
+            killer_native::profile_cli::run_profiled(&source, &opts)
+        } else {
+            killer_native::run_killer_source(&source)
+        };
+        match result {
             Ok(()) => process::exit(0),
             Err(e) => {
                 eprintln!("ERROR: {}", e);
@@ -2342,6 +2356,8 @@ fn parse_args(args: &[String]) -> Result<CliArgs, String> {
         stats: false,
         run: false,
         no_optimize: false,
+        profile: false,
+        profile_html: None,
     };
 
     let mut input_set = false;
@@ -2439,6 +2455,19 @@ fn parse_args(args: &[String]) -> Result<CliArgs, String> {
             }
             "--run" => {
                 cli_args.run = true;
+            }
+            "--profile" => {
+                cli_args.profile = true;
+                cli_args.run = true;
+            }
+            "--profile-html" => {
+                if i + 1 >= args.len() {
+                    return Err("--profile-html requires a file argument".to_string());
+                }
+                i += 1;
+                cli_args.profile = true;
+                cli_args.run = true;
+                cli_args.profile_html = Some(args[i].clone());
             }
             "--no-optimize" => {
                 cli_args.no_optimize = true;

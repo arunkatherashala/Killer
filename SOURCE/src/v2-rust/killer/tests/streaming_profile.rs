@@ -306,3 +306,150 @@ println(r[1])
     assert!(out.contains("boom"), "{}", out);
     assert!(out.ends_with("alive"), "{}", out);
 }
+
+// ---------------------------------------------------------------- profiler
+
+/// Run a script and return stdout+stderr with the given extra arguments for killer_super.
+fn run_super(src: &str, extra: &[&str]) -> String {
+    let path = std::env::temp_dir().join(format!("killer_sp_{}_{}.killer", std::process::id(), NEXT.fetch_add(1, Ordering::SeqCst)));
+    std::fs::write(&path, src).unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_killer_super")).arg(&path).args(extra).output().unwrap();
+    let _ = std::fs::remove_file(&path);
+    format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr)).replace("\r\n", "\n")
+}
+
+const PROFILED: &str = r#"
+fn heavy(n) {
+  sleep_ms(25)
+  return n
+}
+fn light(n) {
+  return n + 1
+}
+fn driver() {
+  for i in range(3) {
+    heavy(i)
+  }
+  for i in range(5) {
+    light(i)
+  }
+}
+"#;
+
+fn calls_of(rows_var: &str, name: &str) -> String {
+    format!("for r in {rows_var} {{\n  if r[\"name\"] == \"{name}\" {{\n    println(\"{name}\", r[\"calls\"])\n  }}\n}}\n")
+}
+
+#[test]
+fn profile_builtins_count_calls_and_order_by_self_time() {
+    let src = format!(
+        "{}profile_start()\ndriver()\nprofile_stop()\nrows = profile_report(\"functions\")\nprintln(rows[0][\"name\"], rows[0][\"calls\"])\n{}{}{}",
+        PROFILED,
+        calls_of("rows", "light"),
+        calls_of("rows", "driver"),
+        "println(rows[0][\"self_ms\"] >= 60, rows[0][\"total_ms\"] >= rows[0][\"self_ms\"])\n"
+    );
+    assert_eq!(run(&src), "heavy 3\nlight 5\ndriver 1\ntrue true");
+}
+
+#[test]
+fn recursive_function_call_counts_are_exact() {
+    let src = "fn fib(n) {\n  if n < 2 {\n    return n\n  }\n  return fib(n - 1) + fib(n - 2)\n}\nprofile_start()\nprintln(fib(10))\nprofile_stop()\nrows = profile_report(\"functions\")\nfor r in rows {\n  if r[\"name\"] == \"fib\" {\n    println(r[\"calls\"], r[\"total_ms\"] <= rows[0][\"total_ms\"] + 1000)\n  }\n}\n";
+    assert_eq!(run(src), "55\n177 true");
+}
+
+#[test]
+fn errors_unwinding_frames_do_not_corrupt_the_profile() {
+    let src = r#"
+fn bad() {
+  throw "x"
+}
+fn wrap() {
+  try {
+    bad()
+  } catch e {
+    return 1
+  }
+}
+fn after() {
+  return 2
+}
+profile_start()
+for i in range(3) {
+  wrap()
+}
+after()
+profile_stop()
+rows = profile_report("functions")
+for r in rows {
+  println(r["name"], r["calls"])
+}
+"#;
+    let out = run(src);
+    let mut lines: Vec<&str> = out.lines().collect();
+    lines.sort();
+    assert_eq!(lines, vec!["<main> 1", "after 1", "bad 3", "wrap 3"]);
+}
+
+#[test]
+fn line_hits_count_statement_executions() {
+    let src = "profile_start()\ntotal = 0\nfor i in range(4) {\n  total = total + i\n}\nprofile_stop()\nfor r in profile_report(\"lines\") {\n  if r[\"line\"] == 4 {\n    println(\"body\", r[\"hits\"])\n  }\n  if r[\"line\"] == 2 {\n    println(\"init\", r[\"hits\"])\n  }\n}\n";
+    let out = run(src);
+    assert!(out.contains("body 4"), "{}", out);
+    assert!(out.contains("init 1"), "{}", out);
+}
+
+#[test]
+fn profile_report_text_and_html_formats_and_errors() {
+    let src = format!(
+        "{}profile_start()\ndriver()\nt = profile_report()\nh = profile_report(\"html\")\nprofile_stop()\nprintln(contains(t, \"self ms\"), contains(t, \"heavy\"), contains(t, \"hot lines\"))\nprintln(contains(h, \"<!DOCTYPE html>\"), contains(h, \"heavy\"), contains(h, \"https://\"))\ntry {{\n  profile_report(\"nope\")\n}} catch e {{\n  println(e)\n}}\n",
+        PROFILED
+    );
+    let out = run(&src);
+    assert!(out.starts_with("true true true\ntrue true false\n"), "{}", out);
+    assert!(out.contains("unknown format"), "{}", out);
+    let none = run("try {\n  profile_report()\n} catch e {\n  println(e)\n}\n");
+    assert!(none.contains("call profile_start() first"), "{}", none);
+}
+
+#[test]
+fn killer_profile_command_prints_a_table_sorted_by_self_time_and_writes_html() {
+    let dir = std::env::temp_dir();
+    let id = NEXT.fetch_add(1, Ordering::SeqCst);
+    let script = dir.join(format!("killer_prof_{}_{}.killer", std::process::id(), id));
+    let html = dir.join(format!("killer_prof_{}_{}.html", std::process::id(), id));
+    std::fs::write(&script, format!("{}driver()\nprintln(\"done\")\n", PROFILED)).unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_killer")).arg("profile").arg(&script).arg("--html").arg(&html).output().unwrap();
+    let text = String::from_utf8_lossy(&out.stdout).replace("\r\n", "\n");
+    assert!(out.status.success(), "{}{}", text, String::from_utf8_lossy(&out.stderr));
+    assert!(text.starts_with("done\n"), "{}", text);
+    let heavy = text.find("\nheavy").expect(&text);
+    let light = text.find("\nlight").expect(&text);
+    let driver = text.find("\ndriver").expect(&text);
+    assert!(heavy < light && heavy < driver, "{}", text);
+    let heavy_row = text.lines().find(|l| l.starts_with("heavy")).unwrap();
+    assert!(heavy_row.split_whitespace().nth(1) == Some("3"), "{}", heavy_row);
+    let light_row = text.lines().find(|l| l.starts_with("light")).unwrap();
+    assert!(light_row.split_whitespace().nth(1) == Some("5"), "{}", light_row);
+    assert!(text.contains("hot lines"));
+    let page = std::fs::read_to_string(&html).unwrap();
+    let _ = std::fs::remove_file(&script);
+    let _ = std::fs::remove_file(&html);
+    assert!(page.starts_with("<!DOCTYPE html>"));
+    assert!(page.contains("heavy") && page.contains("<script>") && page.contains("<style>"));
+    assert!(!page.contains("http://") && !page.contains("https://") && !page.contains("src="), "must be self-contained");
+    // help lists the command
+    let help = Command::new(env!("CARGO_BIN_EXE_killer")).arg("--help").output().unwrap();
+    assert!(String::from_utf8_lossy(&help.stdout).contains("profile"));
+}
+
+#[test]
+fn killer_super_profile_flag_and_normal_runs_are_unaffected() {
+    let src = format!("{}driver()\nprintln(\"ok\")\n", PROFILED);
+    let out = run_super(&src, &["--profile"]);
+    assert!(out.starts_with("ok\n"), "{}", out);
+    assert!(out.contains("heavy"), "{}", out);
+    // without the flag there is no report
+    let plain = run_super(&src, &["--run"]);
+    assert_eq!(plain.trim(), "ok");
+}
