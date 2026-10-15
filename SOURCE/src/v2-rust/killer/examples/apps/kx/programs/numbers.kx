@@ -1,0 +1,22 @@
+# exact integer arithmetic, mirrored by tests/mirror.py
+let fact(n) = if n <= 1 then 1 else n * fact(n - 1)
+let fib(n) = {
+  let go(a, b, i) = if i == 0 then a else go(b, a + b, i - 1)
+  go(0, 1, n)
+}
+print(fact(50))
+print(fact(100))
+print(fib(100))
+print(2 ^ 200)
+print(gcd(fact(20), 2 ^ 70))
+print(powmod(7, 1000, 1000000007))
+print(isqrt(10 ^ 40 + 12345))
+print(-7 / 2)
+print(-7 % 3)
+print(7 / -2)
+print(7 % -2)
+print(digits(fact(100)))
+print(2 ^ 3 ^ 2)
+print(-2 ^ 2)
+print((1 + 2) * 3 - 4 / 2)
+print(10 ^ 30 + 1 - 10 ^ 30)

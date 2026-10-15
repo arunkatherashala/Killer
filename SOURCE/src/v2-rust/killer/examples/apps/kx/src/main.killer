@@ -1,0 +1,42 @@
+# kx command line:
+#   killer run src/main.killer program.kx        run a file
+#   killer run src/main.killer -e "1 + 2"        run an expression
+# Exit codes: 0 ok, 1 kx syntax/runtime error, 2 usage error.
+import "eval.killer"
+
+fn main() {
+  argv = args()
+  if len(argv) == 0 {
+    eprintln("usage: main.killer <file.kx> | -e <source>")
+    exit(2)
+  }
+  src = ""
+  show_value = false
+  if argv[0] == "-e" {
+    show_value = true
+    if len(argv) < 2 {
+      eprintln("kx: -e needs a source argument")
+      exit(2)
+    }
+    src = argv[1]
+  } else {
+    if not fileExists(argv[0]) {
+      eprintln("kx: cannot read " + argv[0])
+      exit(2)
+    }
+    src = readFile(argv[0])
+  }
+  res = kx_run(src)
+  for line in res["out"] {
+    println(line)
+  }
+  if not res["ok"] {
+    eprintln(res["error"])
+    exit(1)
+  }
+  if show_value and res["value"] != null {
+    println("=> " + res["shown"])
+  }
+}
+
+main()

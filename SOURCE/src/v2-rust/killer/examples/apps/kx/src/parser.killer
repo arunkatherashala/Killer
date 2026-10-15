@@ -1,0 +1,317 @@
+# kx Pratt parser: tokens -> AST (dicts with k = node kind, line and col).
+import "lexer.killer"
+
+# binding powers: [left, right]. Right > left means left associative; right < left right associative.
+INFIX = {
+  "||": [10, 11],
+  "&&": [20, 21],
+  "==": [30, 31],
+  "!=": [30, 31],
+  "<": [40, 41],
+  "<=": [40, 41],
+  ">": [40, 41],
+  ">=": [40, 41],
+  "+": [50, 51],
+  "-": [50, 51],
+  "*": [60, 61],
+  "/": [60, 61],
+  "%": [60, 61],
+  "^": [71, 70]
+}
+PREFIX_BP = 65
+POSTFIX_BP = 80
+
+fn node(k, tok) {
+  return {"k": k, "line": tok["line"], "col": tok["col"]}
+}
+
+class Parser {
+  fn init(tokens) {
+    this.toks = tokens
+    this.pos = 0
+  }
+
+  fn peek() {
+    return this.toks[this.pos]
+  }
+
+  fn advance() {
+    t = this.toks[this.pos]
+    if t["t"] != "eof" {
+      this.pos = this.pos + 1
+    }
+    return t
+  }
+
+  fn is_op(v) {
+    t = this.peek()
+    return t["t"] == "op" and t["v"] == v
+  }
+
+  fn describe(t) {
+    if t["t"] == "eof" {
+      return "end of input"
+    }
+    if t["t"] == "nl" {
+      return "end of line"
+    }
+    if t["t"] == "str" {
+      return "string"
+    }
+    return "'" + str(t["v"]) + "'"
+  }
+
+  fn fail(msg, t) {
+    throw kx_error("SyntaxError", msg, t["line"], t["col"])
+  }
+
+  fn expect_op(v) {
+    t = this.peek()
+    if t["t"] == "op" and t["v"] == v {
+      return this.advance()
+    }
+    this.fail("expected '" + v + "' but found " + this.describe(t), t)
+  }
+
+  fn expect_kw(v) {
+    t = this.peek()
+    if t["t"] == "kw" and t["v"] == v {
+      return this.advance()
+    }
+    this.fail("expected '" + v + "' but found " + this.describe(t), t)
+  }
+
+  fn expect_id() {
+    t = this.peek()
+    if t["t"] == "id" {
+      return this.advance()
+    }
+    this.fail("expected a name but found " + this.describe(t), t)
+  }
+
+  fn skip_seps() {
+    t = this.peek()
+    while t["t"] == "nl" or (t["t"] == "op" and t["v"] == ";") {
+      this.advance()
+      t = this.peek()
+    }
+  }
+
+  # statements up to a terminator ("eof" or "}")
+  fn parse_body(until) {
+    stmts = []
+    this.skip_seps()
+    t = this.peek()
+    while not (t["t"] == "eof" or (until == "}" and t["t"] == "op" and t["v"] == "}")) {
+      push(stmts, this.parse_stmt())
+      t = this.peek()
+      if t["t"] == "nl" or (t["t"] == "op" and t["v"] == ";") {
+        this.skip_seps()
+      } else if not (t["t"] == "eof" or (t["t"] == "op" and t["v"] == "}")) {
+        this.fail("unexpected " + this.describe(t) + " after expression", t)
+      }
+      t = this.peek()
+    }
+    if until == "eof" and t["t"] != "eof" {
+      this.fail("unexpected " + this.describe(t), t)
+    }
+    return stmts
+  }
+
+  fn parse_program() {
+    return this.parse_body("eof")
+  }
+
+  fn parse_stmt() {
+    t = this.peek()
+    if t["t"] == "kw" and t["v"] == "let" {
+      this.advance()
+      name = this.expect_id()
+      n = node("let", t)
+      n["name"] = name["v"]
+      if this.is_op("(") {
+        # let f(a, b) = expr    is sugar for    let f = fn(a, b) => expr
+        lam = node("fn", name)
+        lam["params"] = this.parse_params()
+        this.expect_op("=")
+        lam["body"] = this.parse_expr(0)
+        lam["name"] = name["v"]
+        n["value"] = lam
+        return n
+      }
+      this.expect_op("=")
+      n["value"] = this.parse_expr(0)
+      return n
+    }
+    if t["t"] == "kw" and t["v"] == "set" {
+      this.advance()
+      name = this.expect_id()
+      this.expect_op("=")
+      n = node("set", t)
+      n["name"] = name["v"]
+      n["value"] = this.parse_expr(0)
+      return n
+    }
+    return this.parse_expr(0)
+  }
+
+  fn parse_params() {
+    this.expect_op("(")
+    params = []
+    if this.is_op(")") {
+      this.advance()
+      return params
+    }
+    done = false
+    while not done {
+      p = this.expect_id()
+      if p["v"] in params {
+        this.fail("duplicate parameter '" + p["v"] + "'", p)
+      }
+      push(params, p["v"])
+      if this.is_op(",") {
+        this.advance()
+      } else {
+        done = true
+      }
+    }
+    this.expect_op(")")
+    return params
+  }
+
+  fn parse_list_until(close) {
+    items = []
+    if not this.is_op(close) {
+      more = true
+      while more {
+        push(items, this.parse_expr(0))
+        if this.is_op(",") {
+          this.advance()
+        } else {
+          more = false
+        }
+      }
+    }
+    this.expect_op(close)
+    return items
+  }
+
+  fn parse_expr(min_bp) {
+    left = this.parse_prefix()
+    done = false
+    while not done {
+      t = this.peek()
+      if t["t"] != "op" {
+        done = true
+      } else if t["v"] == "(" {
+        this.advance()
+        call = node("call", t)
+        call["fn"] = left
+        call["args"] = this.parse_list_until(")")
+        left = call
+      } else if t["v"] == "[" {
+        this.advance()
+        idx = node("index", t)
+        idx["target"] = left
+        idx["index"] = this.parse_expr(0)
+        this.expect_op("]")
+        left = idx
+      } else if INFIX[t["v"]] != null {
+        bp = INFIX[t["v"]]
+        if bp[0] < min_bp {
+          done = true
+        } else {
+          this.advance()
+          b = node("bin", t)
+          b["op"] = t["v"]
+          b["l"] = left
+          b["r"] = this.parse_expr(bp[1])
+          left = b
+        }
+      } else {
+        done = true
+      }
+    }
+    return left
+  }
+
+  fn parse_prefix() {
+    t = this.advance()
+    if t["t"] == "num" {
+      n = node("num", t)
+      n["v"] = t["v"]
+      return n
+    }
+    if t["t"] == "str" {
+      n = node("str", t)
+      n["v"] = t["v"]
+      return n
+    }
+    if t["t"] == "id" {
+      n = node("var", t)
+      n["name"] = t["v"]
+      return n
+    }
+    if t["t"] == "kw" {
+      if t["v"] == "true" or t["v"] == "false" {
+        n = node("bool", t)
+        n["v"] = t["v"] == "true"
+        return n
+      }
+      if t["v"] == "nil" {
+        return node("nil", t)
+      }
+      if t["v"] == "if" {
+        n = node("if", t)
+        n["cond"] = this.parse_expr(0)
+        this.expect_kw("then")
+        n["then"] = this.parse_expr(0)
+        this.expect_kw("else")
+        n["else"] = this.parse_expr(0)
+        return n
+      }
+      if t["v"] == "fn" {
+        n = node("fn", t)
+        n["name"] = null
+        if this.peek()["t"] == "id" {
+          n["name"] = this.advance()["v"]
+        }
+        n["params"] = this.parse_params()
+        this.expect_op("=>")
+        n["body"] = this.parse_expr(0)
+        return n
+      }
+      this.fail("unexpected keyword '" + t["v"] + "'", t)
+    }
+    if t["t"] == "op" {
+      if t["v"] == "-" or t["v"] == "!" {
+        n = node("un", t)
+        n["op"] = t["v"]
+        n["e"] = this.parse_expr(PREFIX_BP)
+        return n
+      }
+      if t["v"] == "(" {
+        e = this.parse_expr(0)
+        this.expect_op(")")
+        return e
+      }
+      if t["v"] == "[" {
+        n = node("list", t)
+        n["items"] = this.parse_list_until("]")
+        return n
+      }
+      if t["v"] == "{" {
+        n = node("block", t)
+        n["body"] = this.parse_body("}")
+        this.expect_op("}")
+        return n
+      }
+    }
+    this.fail("unexpected " + this.describe(t), t)
+  }
+}
+
+fn parse(src) {
+  p = new Parser(tokenize(src))
+  return p.parse_program()
+}

@@ -1,0 +1,466 @@
+# kx evaluator: environments, closures, exact integer arithmetic (big integers).
+import "parser.killer"
+
+MAX_DEPTH = 120
+
+class Env {
+  fn init(parent) {
+    this.vars = {}
+    this.parent = parent
+  }
+
+  fn find(name) {
+    e = this
+    while e != null {
+      if name in e.vars {
+        return e
+      }
+      e = e.parent
+    }
+    return null
+  }
+
+  fn define(name, value) {
+    this.vars[name] = value
+  }
+}
+
+fn kx_type(v) {
+  t = type(v)
+  if t == "bigint" or t == "number" {
+    return "int"
+  }
+  if t == "string" {
+    return "string"
+  }
+  if t == "bool" {
+    return "bool"
+  }
+  if t == "null" {
+    return "nil"
+  }
+  if t == "array" {
+    return "list"
+  }
+  return "function"
+}
+
+# text of a value; strings are quoted when nested (repr = true)
+fn show(v, repr) {
+  t = kx_type(v)
+  if t == "int" {
+    return str(v)
+  }
+  if t == "string" {
+    if repr {
+      return "\"" + v + "\""
+    }
+    return v
+  }
+  if t == "bool" {
+    return v ? "true" : "false"
+  }
+  if t == "nil" {
+    return "nil"
+  }
+  if t == "list" {
+    parts = []
+    for item in v {
+      push(parts, show(item, true))
+    }
+    return "[" + join(parts, ", ") + "]"
+  }
+  if v["builtin"] != null {
+    return "<builtin " + v["builtin"] + ">"
+  }
+  if v["name"] != null {
+    return "<fn " + v["name"] + ">"
+  }
+  return "<fn>"
+}
+
+fn truthy(v) {
+  if v == null or v == false {
+    return false
+  }
+  return true
+}
+
+BUILTINS = {
+  "print": 1, "len": 1, "str": 1, "abs": 1, "min": 2, "max": 2, "gcd": 2, "isqrt": 1,
+  "powmod": 3, "append": 2, "head": 1, "tail": 1, "range": 2, "type": 1, "digits": 1
+}
+
+class Interp {
+  fn init() {
+    this.globals = new Env(null)
+    this.out = []
+    this.depth = 0
+    this.steps = 0
+    for name in keys(BUILTINS) {
+      this.globals.define(name, {"builtin": name, "arity": BUILTINS[name]})
+    }
+  }
+
+  fn err(msg, n) {
+    throw kx_error("RuntimeError", msg, n["line"], n["col"])
+  }
+
+  fn run(stmts) {
+    result = null
+    for st in stmts {
+      result = this.eval(st, this.globals)
+    }
+    return result
+  }
+
+  fn need_int(v, what, n) {
+    if kx_type(v) != "int" {
+      this.err(what + " needs an int, got " + kx_type(v) + " " + show(v, true), n)
+    }
+    return v
+  }
+
+  fn eval(n, env) {
+    this.steps = this.steps + 1
+    k = n["k"]
+    if k == "num" or k == "str" or k == "bool" {
+      return n["v"]
+    }
+    if k == "nil" {
+      return null
+    }
+    if k == "var" {
+      e = env.find(n["name"])
+      if e == null {
+        this.err("undefined variable '" + n["name"] + "'", n)
+      }
+      return e.vars[n["name"]]
+    }
+    if k == "let" {
+      v = this.eval(n["value"], env)
+      env.define(n["name"], v)
+      return v
+    }
+    if k == "set" {
+      e = env.find(n["name"])
+      if e == null {
+        this.err("cannot set undefined variable '" + n["name"] + "'", n)
+      }
+      v = this.eval(n["value"], env)
+      e.vars[n["name"]] = v
+      return v
+    }
+    if k == "block" {
+      inner = new Env(env)
+      result = null
+      for st in n["body"] {
+        result = this.eval(st, inner)
+      }
+      return result
+    }
+    if k == "if" {
+      if truthy(this.eval(n["cond"], env)) {
+        return this.eval(n["then"], env)
+      }
+      return this.eval(n["else"], env)
+    }
+    if k == "fn" {
+      return {"params": n["params"], "body": n["body"], "env": env, "name": n["name"]}
+    }
+    if k == "list" {
+      items = []
+      for it in n["items"] {
+        push(items, this.eval(it, env))
+      }
+      return items
+    }
+    if k == "index" {
+      target = this.eval(n["target"], env)
+      idx = this.need_int(this.eval(n["index"], env), "index", n)
+      tt = kx_type(target)
+      if tt != "list" and tt != "string" {
+        this.err("cannot index a " + tt, n)
+      }
+      if idx < 0 or idx >= len(target) {
+        this.err("index " + str(idx) + " out of range (length " + str(len(target)) + ")", n)
+      }
+      return target[int(idx)]
+    }
+    if k == "un" {
+      v = this.eval(n["e"], env)
+      if n["op"] == "-" {
+        return 0n - this.need_int(v, "unary '-'", n)
+      }
+      return not truthy(v)
+    }
+    if k == "bin" {
+      return this.eval_bin(n, env)
+    }
+    if k == "call" {
+      f = this.eval(n["fn"], env)
+      args_vals = []
+      for a in n["args"] {
+        push(args_vals, this.eval(a, env))
+      }
+      return this.apply(f, args_vals, n)
+    }
+    this.err("unknown node " + str(k), n)
+  }
+
+  fn eval_bin(n, env) {
+    op = n["op"]
+    if op == "&&" {
+      l = this.eval(n["l"], env)
+      if not truthy(l) {
+        return l
+      }
+      return this.eval(n["r"], env)
+    }
+    if op == "||" {
+      l = this.eval(n["l"], env)
+      if truthy(l) {
+        return l
+      }
+      return this.eval(n["r"], env)
+    }
+    l = this.eval(n["l"], env)
+    r = this.eval(n["r"], env)
+    if op == "==" {
+      return this.equal(l, r)
+    }
+    if op == "!=" {
+      return not this.equal(l, r)
+    }
+    lt = kx_type(l)
+    rt = kx_type(r)
+    if op == "+" and lt == "string" and rt == "string" {
+      return l + r
+    }
+    if op == "+" and lt == "list" and rt == "list" {
+      return l + r
+    }
+    if lt == "string" and rt == "string" and (op == "<" or op == "<=" or op == ">" or op == ">=") {
+      if op == "<" {
+        return l < r
+      }
+      if op == "<=" {
+        return l <= r
+      }
+      if op == ">" {
+        return l > r
+      }
+      return l >= r
+    }
+    if lt != "int" or rt != "int" {
+      this.err("operator '" + op + "' cannot be applied to " + lt + " and " + rt, n)
+    }
+    if op == "+" {
+      return l + r
+    }
+    if op == "-" {
+      return l - r
+    }
+    if op == "*" {
+      return l * r
+    }
+    if op == "/" or op == "%" {
+      if r == 0 {
+        this.err("division by zero", n)
+      }
+      if op == "/" {
+        return idiv(l, r)
+      }
+      return l % r
+    }
+    if op == "^" {
+      if r < 0 {
+        this.err("negative exponent " + str(r), n)
+      }
+      if r > 100000 {
+        this.err("exponent too large", n)
+      }
+      return big(l) ** big(r)
+    }
+    if op == "<" {
+      return l < r
+    }
+    if op == "<=" {
+      return l <= r
+    }
+    if op == ">" {
+      return l > r
+    }
+    return l >= r
+  }
+
+  fn equal(l, r) {
+    lt = kx_type(l)
+    if lt != kx_type(r) {
+      return false
+    }
+    if lt == "list" {
+      if len(l) != len(r) {
+        return false
+      }
+      for i in range(len(l)) {
+        if not this.equal(l[i], r[i]) {
+          return false
+        }
+      }
+      return true
+    }
+    if lt == "function" {
+      return false
+    }
+    return l == r
+  }
+
+  fn apply(f, argv, n) {
+    if kx_type(f) != "function" {
+      this.err("cannot call a " + kx_type(f), n)
+    }
+    if f["builtin"] != null {
+      return this.call_builtin(f, argv, n)
+    }
+    if len(argv) != len(f["params"]) {
+      nm = f["name"] ?? "<fn>"
+      this.err(nm + " expects " + str(len(f["params"])) + " argument(s) but got " + str(len(argv)), n)
+    }
+    if this.depth >= MAX_DEPTH {
+      this.err("stack overflow (more than " + str(MAX_DEPTH) + " nested calls)", n)
+    }
+    local = new Env(f["env"])
+    for i in range(len(argv)) {
+      local.define(f["params"][i], argv[i])
+    }
+    this.depth = this.depth + 1
+    result = null
+    try {
+      result = this.eval(f["body"], local)
+    } finally {
+      this.depth = this.depth - 1
+    }
+    return result
+  }
+
+  fn call_builtin(f, argv, n) {
+    name = f["builtin"]
+    want = f["arity"]
+    if len(argv) != want {
+      this.err(name + " expects " + str(want) + " argument(s) but got " + str(len(argv)), n)
+    }
+    if name == "print" {
+      line = show(argv[0], false)
+      push(this.out, line)
+      return argv[0]
+    }
+    if name == "len" {
+      t = kx_type(argv[0])
+      if t != "list" and t != "string" {
+        this.err("len needs a list or string, got " + t, n)
+      }
+      return big(len(argv[0]))
+    }
+    if name == "str" {
+      return show(argv[0], false)
+    }
+    if name == "type" {
+      return kx_type(argv[0])
+    }
+    if name == "abs" {
+      return abs(this.need_int(argv[0], "abs", n))
+    }
+    if name == "min" or name == "max" {
+      a = this.need_int(argv[0], name, n)
+      b = this.need_int(argv[1], name, n)
+      if name == "min" {
+        return a < b ? a : b
+      }
+      return a > b ? a : b
+    }
+    if name == "gcd" {
+      return gcd(big(this.need_int(argv[0], "gcd", n)), big(this.need_int(argv[1], "gcd", n)))
+    }
+    if name == "isqrt" {
+      a = this.need_int(argv[0], "isqrt", n)
+      if a < 0 {
+        this.err("isqrt of a negative number", n)
+      }
+      return isqrt(big(a))
+    }
+    if name == "powmod" {
+      m = this.need_int(argv[2], "powmod", n)
+      if m <= 0 {
+        this.err("powmod modulus must be positive", n)
+      }
+      return powmod(big(this.need_int(argv[0], "powmod", n)), big(this.need_int(argv[1], "powmod", n)), big(m))
+    }
+    if name == "digits" {
+      return big(len(str(abs(this.need_int(argv[0], "digits", n)))))
+    }
+    if name == "append" {
+      if kx_type(argv[0]) != "list" {
+        this.err("append needs a list", n)
+      }
+      return argv[0] + [argv[1]]
+    }
+    if name == "head" or name == "tail" {
+      if kx_type(argv[0]) != "list" or len(argv[0]) == 0 {
+        this.err(name + " needs a non-empty list", n)
+      }
+      if name == "head" {
+        return argv[0][0]
+      }
+      return argv[0][1:len(argv[0])]
+    }
+    if name == "range" {
+      lo = this.need_int(argv[0], "range", n)
+      hi = this.need_int(argv[1], "range", n)
+      if hi - lo > 100000 {
+        this.err("range too large", n)
+      }
+      out = []
+      i = lo
+      while i < hi {
+        push(out, i)
+        i = i + 1
+      }
+      return out
+    }
+    this.err("unknown builtin " + name, n)
+  }
+}
+
+# One line of source with a caret under the error column.
+fn caret_report(src, e) {
+  lines = split(src, "\n")
+  text = ""
+  if e["line"] >= 1 and e["line"] <= len(lines) {
+    text = lines[e["line"] - 1]
+  }
+  pad = repeat(" ", max(e["col"] - 1, 0))
+  return f"{e['kind']} at {e['line']}:{e['col']}: {e['msg']}\n  {text}\n  {pad}^"
+}
+
+# Run source text. Returns {ok, value, out, error, steps}; never throws for kx errors.
+fn kx_run(src) {
+  it = new Interp()
+  res = {"ok": true, "value": null, "out": it.out, "error": null, "steps": 0}
+  try {
+    stmts = parse(src)
+    v = it.run(stmts)
+    res["value"] = v
+    res["shown"] = show(v, true)
+  } catch e {
+    if type(e) == "dict" and e["kind"] != null {
+      res["ok"] = false
+      res["error"] = caret_report(src, e)
+      res["err"] = e
+    } else {
+      throw e
+    }
+  }
+  res["steps"] = it.steps
+  return res
+}
