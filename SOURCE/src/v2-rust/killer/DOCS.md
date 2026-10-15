@@ -4,6 +4,12 @@ Killer is a dynamically-typed, bytecode-compiled scripting language with a focus
 data engineering and AI workloads. It compiles to an internal bytecode that runs on
 a register-and-stack virtual machine written in Rust.
 
+> **Status: beta.** This file is the older, broad reference (it also covers the Kore data engine and
+> experimental features). The verified, example-checked language documentation is
+> [docs/LANGUAGE.md](docs/LANGUAGE.md) and [docs/TUTORIAL.md](docs/TUTORIAL.md); the builtin list is
+> [docs/STDLIB_INDEX.md](docs/STDLIB_INDEX.md). Where this file disagrees with them, they win. Newer
+> features are summarised in Appendix E at the end.
+
 ---
 
 ## Section 1: Quick Start
@@ -1190,3 +1196,22 @@ let b = [...a, 4, 5]    -- [1, 2, 3, 4, 5]
 
 `//` is a comment marker, so integer division is `floor(a / b)` for Numbers and `idiv(a, b)` for bigints.
 `x // 2` is a compile error with that hint.
+
+## Appendix E: Newer features (see docs/LANGUAGE.md for details and checked examples)
+
+- **Closures** share the variables they capture; loop variables are captured per iteration; `for x in ...`
+  rebinds an existing variable; `finally` runs on every exit (return, break, continue, errors).
+- **Syntax**: one-line blocks (`if c { stmt }`), `for k, v in dict`, builtins as values (`f = print`),
+  and a compile error for `x // 2` (use `floor(a / b)`).
+- **Builtins**: `format`, `substr`, `time_now`, `to_float` and the snake_case aliases work.
+- **Network**: `serve`, `route`, `serve_once`, `server_stop`, `free_port`, `http_request` (TLS on by default,
+  secrets on curl's stdin, `http://` only for loopback).
+- **AI building blocks**: `vec_*` store, `cosine`/`dot`/`norm`/`top_k`, `chunk_text`, `chunk_by_sentence`,
+  `count_tokens` (approximation), `build_rag_prompt`, `mock_embed`, `llm_embed_batch`, `log_*`, `load_env`.
+- **Concurrency**: tasks started with `async_spawn`/`spawn` work on deep copies of their data; `mutex_*` cells and
+  channels are the way to communicate.
+- **Packages and tooling**: `killer.toml`/`killer.lock`, `killer_pkg`, compile-time `import name`; the `killer`
+  driver (`run`, `fmt`, `lint`, `test`, `repl`, `lsp`), `test "name" { }` blocks with `assert_eq` and
+  `assert_throws`, the language server, the VS Code extension and the `killer_dap` debugger.
+- **Limits**: 100,000 call frames, 256 MB strings, nesting depth 200; see the limits table in
+  docs/LANGUAGE.md.
