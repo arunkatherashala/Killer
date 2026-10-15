@@ -479,3 +479,71 @@ println(list([1, 2]))
 "#;
     assert_eq!(run_src(src), "[0, 2, 4, 6]\n12\n[0, 2, 4]\n8\n0-2-4\n[h, é, y]\n[a, b]\n[2, 4]\ntrue\n[1, 3, 5]\n[1, 2]");
 }
+
+// ---------------------------------------------------------------------------------------------
+// app 4: dungeon (text adventure engine)
+// ---------------------------------------------------------------------------------------------
+
+#[test]
+fn dungeon_unit_tests_pass() {
+    let (ok, text) = app_tests("dungeon");
+    assert!(ok, "{text}");
+    assert!(text.contains("0 failed"), "{text}");
+}
+
+#[test]
+fn dungeon_walkthrough_transcript_is_stable() {
+    let out = run_app_main("dungeon", &["play", "data/walkthrough.txt", "--seed", "1"]);
+    let expected = norm(&std::fs::read(app_dir("dungeon").join("data/walkthrough.expected")).unwrap());
+    assert_eq!(norm(&out.stdout), expected, "{}", norm(&out.stderr));
+    assert_eq!(out.status.code(), Some(0));
+}
+
+#[test]
+fn dungeon_fights_match_the_python_mirror_for_many_seeds() {
+    let Some(py) = python() else { return };
+    for seed in ["1", "7", "42", "12345", "-5", "0", "2147483647", "99999999999"] {
+        let k = run_app_main("dungeon", &["fights", seed]);
+        let p = Command::new(&py).arg("-I").arg(app_dir("dungeon").join("tests/mirror.py")).arg(seed).output().unwrap();
+        assert_eq!(norm(&k.stdout), norm(&p.stdout), "seed {seed}");
+    }
+}
+
+#[test]
+fn dungeon_save_and_resume_continue_exactly_like_an_uninterrupted_game() {
+    let t = Tmp::new("save");
+    let save = t.0.join("mid.json");
+    let full = norm(&run_app_main("dungeon", &["play", "data/walkthrough.txt", "--seed", "1"]).stdout);
+    let first = run_app_main("dungeon", &["play", "data/part1.txt", "--seed", "1", "--save", save.to_str().unwrap()]);
+    assert!(first.status.success(), "{}", norm(&first.stderr));
+    let text = std::fs::read_to_string(&save).unwrap();
+    assert!(text.contains("\"state\": \"combat\"") && text.contains("\"version\": 1"), "{text}");
+    let second = run_app_main("dungeon", &["resume", save.to_str().unwrap(), "data/part2.txt"]);
+    let second = norm(&second.stdout);
+    // the fight lines after the save point are identical in both runs
+    for line in second.lines().filter(|l| l.starts_with("Round ") || l.starts_with("You take the crown")) {
+        assert!(full.contains(line), "resumed line not in the full run: {line}");
+    }
+    assert!(second.ends_with("state: won, turns: 30, hp: 4, kills: 3\n"), "{second}");
+}
+
+#[test]
+fn dungeon_exit_codes() {
+    let t = Tmp::new("dexit");
+    let code = |args: &[&str]| run_app_main("dungeon", args).status.code();
+    assert_eq!(code(&[]), Some(2));
+    assert_eq!(code(&["bogus"]), Some(2));
+    assert_eq!(code(&["play"]), Some(2));
+    assert_eq!(code(&["play", "no_such_script.txt"]), Some(1));
+    assert_eq!(code(&["resume", "no_such_save.json", "data/part2.txt"]), Some(1));
+    let corrupt = t.write("corrupt.json", "{\"version\": 1, bad");
+    let out = run_app_main("dungeon", &["resume", corrupt.to_str().unwrap(), "data/part2.txt"]);
+    assert_eq!(out.status.code(), Some(1));
+    assert!(norm(&out.stderr).contains("invalid JSON"), "{}", norm(&out.stderr));
+    // a hero with 1 hp resumes a fight with the dragon: dying exits with code 3
+    let out = run_app_main("dungeon", &["resume", "data/dying_save.json", "data/one_attack.txt"]);
+    assert_eq!(out.status.code(), Some(3));
+    assert!(norm(&out.stdout).contains("You die."), "{}", norm(&out.stdout));
+    let empty = t.write("empty.txt", "");
+    assert_eq!(code(&["play", empty.to_str().unwrap()]), Some(0));
+}

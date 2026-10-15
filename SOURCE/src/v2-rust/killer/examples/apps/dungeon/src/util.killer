@@ -1,0 +1,93 @@
+# Small shared pieces: grid vectors with operator overloading and a deterministic random source.
+
+class Vec2 {
+  fn init(x, y) {
+    this.x = x
+    this.y = y
+  }
+
+  fn __add__(o) {
+    return new Vec2(this.x + o.x, this.y + o.y)
+  }
+
+  fn __sub__(o) {
+    return new Vec2(this.x - o.x, this.y - o.y)
+  }
+
+  fn __mul__(k) {
+    return new Vec2(this.x * k, this.y * k)
+  }
+
+  fn __rmul__(k) {
+    return new Vec2(this.x * k, this.y * k)
+  }
+
+  fn __neg__() {
+    return new Vec2(0 - this.x, 0 - this.y)
+  }
+
+  fn __eq__(o) {
+    return this.x == o.x and this.y == o.y
+  }
+
+  fn __lt__(o) {
+    if this.y != o.y {
+      return this.y < o.y
+    }
+    return this.x < o.x
+  }
+
+  fn key() {
+    return str(this.x) + "," + str(this.y)
+  }
+
+  fn toString() {
+    return "(" + str(this.x) + ", " + str(this.y) + ")"
+  }
+
+  fn to_dict() {
+    return {"x": this.x, "y": this.y}
+  }
+
+  static fn from_dict(d) {
+    return new Vec2(d["x"], d["y"])
+  }
+}
+
+DIRECTIONS = {
+  "north": new Vec2(0, 1),
+  "south": new Vec2(0, -1),
+  "east": new Vec2(1, 0),
+  "west": new Vec2(-1, 0)
+}
+
+# Park-Miller "minstd" generator: exact in double arithmetic (the product stays below 2^53).
+class Rng {
+  fn init(seed) {
+    # abs() keeps the result portable: `%` of a negative number differs between languages
+    this.state = abs(seed) % 2147483647
+    if this.state == 0 {
+      this.state = 1
+    }
+  }
+
+  fn next() {
+    this.state = this.state * 48271 % 2147483647
+    return this.state
+  }
+
+  # integer in 0 .. n-1
+  fn below(n) {
+    return this.next() % n
+  }
+
+  fn to_dict() {
+    return {"state": this.state}
+  }
+}
+
+fn rng_from_dict(d) {
+  r = new Rng(1)
+  r.state = d["state"]
+  return r
+}

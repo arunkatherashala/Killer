@@ -1,0 +1,26 @@
+# a winning run (seed 1)
+look
+take torch
+go north
+attack
+attack
+look
+go east
+take sword
+go west
+go west
+take key
+take potion
+go north
+attack
+attack
+attack
+take shield
+take potion
+use potion
+go east
+look
+use potion
+attack
+attack
+attack

@@ -1,0 +1,253 @@
+import "../src/engine.killer"
+
+fn new_game(seed) {
+  return new Game(load_world("data/world.json"), seed)
+}
+
+fn run_cmds(g, cmds) {
+  out = []
+  for c in cmds {
+    parts = split(c, " ")
+    arg = len(parts) > 1 ? parts[1] : ""
+    out = out + g.command(parts[0], arg)
+  }
+  return out
+}
+
+test "Vec2 operators" {
+  a = new Vec2(1, 2)
+  b = new Vec2(3, -1)
+  assert_eq((a + b).key(), "4,1")
+  assert_eq((a - b).key(), "-2,3")
+  assert_eq((a * 3).key(), "3,6")
+  assert_eq((3 * a).key(), "3,6")
+  assert_eq((-a).key(), "-1,-2")
+  assert_true(a == new Vec2(1, 2))
+  assert_true(a != b)
+  assert_true(b < a)
+  assert_true(a > b)
+  assert_true(a >= new Vec2(1, 2))
+  assert_true(a <= new Vec2(1, 2))
+  assert_eq(str(a), "(1, 2)")
+  assert_eq(Vec2.from_dict(a.to_dict()).key(), "1,2")
+}
+
+test "Rng is deterministic and in range" {
+  r1 = new Rng(42)
+  r2 = new Rng(42)
+  seq1 = []
+  seq2 = []
+  for i in range(20) {
+    push(seq1, r1.below(100))
+    push(seq2, r2.below(100))
+  }
+  assert_eq(seq1, seq2)
+  for v in seq1 {
+    assert_true(v >= 0 and v < 100)
+  }
+  assert_eq(new Rng(0).state, 1)
+  assert_eq(new Rng(-9).state, 9)
+  assert_ne(new Rng(1).below(1000000), new Rng(2).below(1000000))
+}
+
+test "inheritance and overriding" {
+  hero = new Player("h")
+  hero.weapon_bonus = 2
+  assert_eq(hero.attack_power(1), 6)
+  assert_eq(hero.kind(), "player")
+  assert_true(hero instanceof Entity)
+  g = new Goblin()
+  assert_eq([g.name, g.hp, g.attack_power(1), g.kind()], ["goblin", 12, 3, "goblin"])
+  t = new Troll()
+  assert_eq(t.attack_power(1), 4)
+  t.hurt(15)
+  assert_eq(t.attack_power(1), 6)
+  d = new Dragon()
+  assert_eq([d.attack_power(1), d.attack_power(2), d.attack_power(3), d.attack_power(6)], [5, 5, 11, 11])
+  assert_true(d instanceof Monster)
+  assert_eq(d.hurt(100), 0)
+  assert_false(d.alive())
+}
+
+test "heal never exceeds max hp and hurt never goes below zero" {
+  p = new Player("h")
+  p.hurt(10)
+  assert_eq(p.heal(100), 30)
+  assert_eq(p.hurt(1000), 0)
+}
+
+test "fight_rounds is a generator that stops when somebody dies" {
+  hero = new Player("h")
+  hero.weapon_bonus = 3
+  rounds = list(fight_rounds(hero, new Goblin(), new Rng(1), 0, 1))
+  assert_true(len(rounds) >= 1)
+  assert_eq(rounds[0]["round"], 1)
+  last = rounds[len(rounds) - 1]
+  assert_true(last["m_hp"] == 0 or last["p_hp"] == 0)
+  for i in range(len(rounds) - 1) {
+    assert_true(rounds[i]["m_hp"] > 0 and rounds[i]["p_hp"] > 0)
+  }
+}
+
+test "fight_rounds can start at a later round" {
+  hero = new Player("h")
+  steps = list(fight_rounds(hero, new Dragon(), new Rng(3), 0, 3))
+  assert_eq(steps[0]["round"], 3)
+  assert_eq(steps[1]["round"], 4)
+}
+
+test "turn_order cycles forever" {
+  seen = []
+  for e in turn_order(["a", "b", "c"]) {
+    push(seen, e)
+    if len(seen) == 7 {
+      break
+    }
+  }
+  assert_eq(seen, ["a", "b", "c", "a", "b", "c", "a"])
+  assert_eq(len(list(turn_order([]))), 0)
+}
+
+test "script_commands skips comments and blanks and normalises case" {
+  cmds = list(script_commands(["# c", "", "  GO North ", "take sword", "   ", "look"]))
+  assert_eq(cmds, [["go", "north"], ["take", "sword"], ["look", ""]])
+  assert_eq(list(script_commands(["GO    north", "use  red   potion"])), [["go", "north"], ["use", "red potion"]])
+}
+
+test "take without an argument asks what" {
+  assert_eq(new_game(1).command("take", ""), ["Take what?"])
+}
+
+test "exploring: describe, exits, locked door" {
+  g = new_game(1)
+  assert_contains(g.command("look", "")[0], "Cellar")
+  assert_eq(g.command("go", "west"), ["You cannot go west."])
+  assert_eq(g.command("go", "up"), ["Go where? (north, south, east, west)"])
+  g.command("go", "north")
+  assert_eq(g.state, "explore")
+  assert_contains(g.command("go", "east")[0], "blocks your way")
+}
+
+test "locked door needs the key" {
+  g = new_game(1)
+  g.player.pos = new Vec2(0, 1)
+  g.rooms["0,1"]["monster"] = null
+  assert_eq(g.command("go", "north"), ["The door is locked. You need the key."])
+  push(g.player.inventory, "key")
+  assert_contains(g.command("go", "north")[0], "Dragon Lair")
+}
+
+test "take and drop change the weapon bonus" {
+  g = new_game(1)
+  g.player.pos = new Vec2(1, 1)
+  assert_eq(g.command("take", "sword"), ["Taken: a gleaming sword."])
+  assert_eq(g.player.weapon_bonus, 3)
+  assert_eq(g.command("take", "sword"), ["There is no sword here."])
+  g.command("drop", "sword")
+  assert_eq(g.player.weapon_bonus, 0)
+  assert_eq(g.room()["items"], ["sword"])
+  assert_eq(g.command("drop", "sword"), ["You do not have sword."])
+}
+
+test "potion heals once" {
+  g = new_game(1)
+  g.player.hurt(20)
+  push(g.player.inventory, "potion")
+  assert_eq(g.command("use", "potion"), ["You drink the potion: hp 10 -> 22."])
+  assert_eq(g.command("use", "potion"), ["You do not have potion."])
+}
+
+test "combat state machine" {
+  g = new_game(1)
+  g.player.pos = new Vec2(0, 1)
+  out = g.command("attack", "")
+  assert_eq(g.state, "combat")
+  assert_eq(out[0], "You attack the goblin!")
+  assert_contains(g.command("go", "south")[0], "fighting")
+  guard = 0
+  while g.state == "combat" and guard < 20 {
+    g.command("attack", "")
+    guard = guard + 1
+  }
+  assert_true(g.state == "explore" or g.state == "dead")
+  if g.state == "explore" {
+    assert_eq(g.room()["monster"], null)
+    assert_eq(g.player.kills, 1)
+  }
+}
+
+test "nothing to attack and unknown verbs" {
+  g = new_game(1)
+  assert_eq(g.command("attack", ""), ["There is nothing to attack."])
+  assert_eq(g.command("dance", ""), ["I do not understand 'dance'."])
+}
+
+test "winning takes the crown and ends the game" {
+  g = new_game(1)
+  g.player.pos = new Vec2(0, 2)
+  g.rooms["0,2"]["monster"] = null
+  assert_contains(g.command("take", "crown")[0], "You win")
+  assert_eq(g.state, "won")
+  assert_eq(g.command("look", ""), ["The game is over (won)."])
+}
+
+test "the scripted walkthrough wins with seed 1" {
+  g = new_game(1)
+  for cmd in script_commands(split(readFile("data/walkthrough.txt"), "\n")) {
+    g.command(cmd[0], cmd[1])
+  }
+  assert_eq(g.state, "won")
+  assert_eq(g.player.kills, 3)
+  assert_eq(g.player.hp, 4)
+  assert_eq(g.turns, 30)
+}
+
+test "save and load round trip the whole state" {
+  g = new_game(5)
+  run_cmds(g, ["go north", "attack", "attack", "look"])
+  text = json_pretty(g.to_dict())
+  g2 = game_from_dict(json_parse(text), load_world("data/world.json"))
+  assert_eq(json_pretty(g2.to_dict()), text)
+  assert_eq(g2.player.pos.key(), g.player.pos.key())
+  assert_true(g2.player instanceof Player)
+}
+
+test "a game resumed from a save continues exactly like the original" {
+  a = new_game(9)
+  run_cmds(a, ["go north", "attack"])
+  saved = json_stringify(a.to_dict())
+  b = game_from_dict(json_parse(saved), load_world("data/world.json"))
+  rest = ["attack", "attack", "attack", "go east", "take sword", "go west", "look"]
+  assert_eq(run_cmds(a, rest), run_cmds(b, rest))
+  assert_eq(json_stringify(a.to_dict()), json_stringify(b.to_dict()))
+}
+
+test "bad saves are rejected" {
+  ok = true
+  try {
+    load_game("data/no_such_save.json", load_world("data/world.json"))
+    ok = false
+  } catch e {
+    assert_contains(str(e), "no save file")
+  }
+  assert_true(ok)
+  d = new_game(1).to_dict()
+  d["version"] = 99
+  try {
+    game_from_dict(d, load_world("data/world.json"))
+    ok = false
+  } catch e2 {
+    assert_contains(str(e2), "unsupported save version")
+  }
+  assert_true(ok)
+}
+
+test "unknown monster kinds are an error" {
+  caught = false
+  try {
+    make_monster("lich")
+  } catch e {
+    caught = true
+  }
+  assert_true(caught)
+}

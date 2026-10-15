@@ -1,0 +1,109 @@
+# dungeon: play a scripted game, optionally saving or resuming.
+#
+#   killer run src/main.killer play data/walkthrough.txt [--seed N] [--save FILE]
+#   killer run src/main.killer resume FILE data/more.txt [--save FILE]
+#   killer run src/main.killer fights SEED          fight transcripts (mirrored by tests/mirror.py)
+#
+# Exit codes: 0 finished normally, 3 the hero died, 1 bad file or save, 2 usage error.
+import "engine.killer"
+
+USAGE = "usage: dungeon play SCRIPT [--seed N] [--save FILE] | dungeon resume SAVE SCRIPT [--save FILE] | dungeon fights SEED"
+WORLD = "data/world.json"
+
+fn fail(code, msg) {
+  eprintln("dungeon: " + msg)
+  exit(code)
+}
+
+fn flag(argv, name, default) {
+  for i in range(len(argv)) {
+    if argv[i] == name {
+      if i + 1 >= len(argv) {
+        fail(2, name + " needs a value\n" + USAGE)
+      }
+      return argv[i + 1]
+    }
+  }
+  return default
+}
+
+fn run_script(game, path) {
+  if not fileExists(path) {
+    fail(1, "cannot read " + path)
+  }
+  for cmd in script_commands(split(readFile(path), "\n")) {
+    println("> " + trim(cmd[0] + " " + cmd[1]))
+    for line in game.command(cmd[0], cmd[1]) {
+      println(line)
+    }
+  }
+}
+
+fn finish(game, argv) {
+  save = flag(argv, "--save", null)
+  if save != null {
+    save_game(game, save)
+    println("saved to " + save)
+  }
+  println("state: " + game.state + ", turns: " + str(game.turns) + ", hp: " + str(game.player.hp) + ", kills: " + str(game.player.kills))
+  if game.state == "dead" {
+    exit(3)
+  }
+}
+
+# a standalone fight with the stock goblin/troll/dragon against a fresh hero
+fn fights(seed) {
+  for kind in ["goblin", "troll", "dragon"] {
+    rng = new Rng(seed)
+    hero = new Player("hero")
+    hero.weapon_bonus = 3
+    monster = make_monster(kind)
+    println("-- " + kind + " (seed " + str(seed) + ")")
+    for step in fight_rounds(hero, monster, rng, 0, 1) {
+      println("round " + str(step["round"]) + " hero " + str(step["p_dmg"]) + " " + kind + " " + str(step["m_dmg"]) + " hp " + str(step["p_hp"]) + "/" + str(step["m_hp"]))
+    }
+    println(hero.alive() ? "hero wins" : kind + " wins")
+  }
+}
+
+fn main() {
+  argv = args()
+  if len(argv) == 0 {
+    fail(2, USAGE)
+  }
+  cmd = argv[0]
+  try {
+    if cmd == "play" {
+      if len(argv) < 2 {
+        fail(2, USAGE)
+      }
+      seed = int(flag(argv, "--seed", "1"))
+      game = new Game(load_world(WORLD), seed)
+      println("Welcome to the dungeon.")
+      for line in game.describe() {
+        println(line)
+      }
+      run_script(game, argv[1])
+      finish(game, argv)
+    } else if cmd == "resume" {
+      if len(argv) < 3 {
+        fail(2, USAGE)
+      }
+      game = load_game(argv[1], load_world(WORLD))
+      println("Resumed at turn " + str(game.turns) + " (" + game.state + ").")
+      run_script(game, argv[2])
+      finish(game, argv)
+    } else if cmd == "fights" {
+      if len(argv) < 2 {
+        fail(2, USAGE)
+      }
+      fights(int(argv[1]))
+    } else {
+      fail(2, "unknown command '" + cmd + "'\n" + USAGE)
+    }
+  } catch e {
+    fail(1, str(e))
+  }
+}
+
+main()

@@ -73,3 +73,8 @@ entry). Entries are numbered in the order I hit them.
     turn one into a list (`next()` and `has_next()` exist but are not in the docs). Fix: new
     builtin `list(x)` (list, string, dict keys, set, generator) and generators passed to the
     sequence-consuming builtins are drained first (`src/iter_builtins.rs`).
+17. **`%` disagrees with itself**: `-7 % 3` is `-1` for plain numbers (C remainder) but `2` for
+    bigints (`-7n % 3n`, Python floor semantics), and `floor(-7 / 2)` is `-4`. A seeded random
+    generator mirrored in Python gave different streams for negative seeds. NOT changed (the JIT,
+    constant folding and fused slot instructions all implement the C remainder, and the choice is a
+    language decision); the dungeon app takes `abs(seed)`. Listed in the report as a rough edge.
