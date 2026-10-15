@@ -264,3 +264,33 @@ fn kx_closures_program_and_error_exit_codes() {
     let out = run_app_main("kx", &["-e", "2 ^ 100"]);
     assert_eq!(norm(&out.stdout).trim(), "=> 1267650600228229401496703205376");
 }
+
+#[test]
+fn csv_parse_and_write_follow_rfc4180_and_keep_column_order() {
+    let src = r#"r = parse_csv("zeta,alpha,mid\n1,2,3\n")
+println(keys(r[0]))
+println(len(parse_csv("a,b\n\"multi\nline\",2\n")))
+println(parse_csv("a,b\n\"multi\nline\",2\n")[0]["a"] == "multi\nline")
+println(parse_csv("a,b\r\n1,2\r\n\r\n3,4"))
+println(parse_csv(""))
+stdout_write(to_csv([["a","b"],["x,y","q\"r"],[1,2.5,null]]))
+stdout_write(to_csv([{"z": 1, "a": "x,y"}, {"z": 2, "a": 2n ** 70, "new": true}]))
+println(parse_csv("a;b\n1;2", ";"))
+println(parse_csv("a,b\n\" x \", y ")[0]["a"] == " x ")
+try {
+  parse_csv("a\n\"open")
+} catch e {
+  println(e)
+}
+"#;
+    assert_eq!(
+        run_src(src),
+        "[zeta, alpha, mid]\n1\ntrue\n[{a: 1, b: 2}, {a: 3, b: 4}]\n[]\na,b\n\"x,y\",\"q\"\"r\"\n1,2.5,\nz,a,new\n1,\"x,y\",\n2,1180591620717411303424,true\n[{a: 1, b: 2}]\ntrue\nparse_csv(): unterminated quoted field starting on line 2"
+    );
+}
+
+#[test]
+fn print_accepts_several_arguments_and_stdout_write_has_no_newline() {
+    let src = "print(\"a\", 1, [2])\nprint(\"b\")\nstdout_write(\"x\")\nstdout_write(\"y\", 3)\nstdout_flush()\nprintln(\"\")\nprintln(\"z\")\n";
+    assert_eq!(run_src(src), "a 1 [2]\nb\nxy 3\nz");
+}

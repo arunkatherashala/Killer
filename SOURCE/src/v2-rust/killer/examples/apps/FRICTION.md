@@ -37,3 +37,15 @@ entry). Entries are numbered in the order I hit them.
    for `SharedArray`/`SharedDict`/`SharedObject` (explicit work list), plus `==` short-circuits
    on identity for arrays. Still open: `==` between two distinct 5000-deep structures and
    `json_stringify` of one still recurse natively (listed under "still rough").
+10. **CSV handling was lossy** (found by the CSV tool app): `parse_csv` split on lines before
+    looking at quotes, so a quoted field containing a newline became two broken rows; the result
+    dicts were built from a `HashMap` so columns came back in alphabetical order (a report could
+    not keep the file's column order); `to_csv` sorted its header alphabetically, silently
+    returned an empty string for a list of lists, and dropped bigints. Fix: new
+    `src/csv_builtins.rs` (RFC 4180 state machine, insertion-ordered dicts, BOM, blank lines,
+    unterminated-quote error with the line number, list-of-lists rows, first-seen column order).
+11. **`print` is not what the stdlib index says.** The index says "without a newline" but
+    `print` is `println`; and `print("a", 1)` was a parse error while `println("a", 1)` worked.
+    There was no way to write a prompt or progress line without a newline. Fix: statement
+    `print` with several arguments goes through the builtin; new `stdout_write` /
+    `stdout_flush`; the index text now says what `print` really does.
