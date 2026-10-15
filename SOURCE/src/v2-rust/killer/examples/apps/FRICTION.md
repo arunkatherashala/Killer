@@ -94,3 +94,8 @@ entry). Entries are numbered in the order I hit them.
 20. **No way to tell a folder from a file.** Ingesting a folder of documents needs to recurse into
     sub-folders, but `fileExists` is true for both and `listDir` returns bare names. Fix: new
     builtins `isDir(path)` and `isFile(path)` (`src/fs_builtins.rs`, file-read capability).
+21. **`killer run` crashed with "thread 'main' has overflowed its stack"** for a `serve` handler
+    that used `sorted(xs, key_fn)` (two nested interpreter levels; `killer_super --run` was fine).
+    Root cause: `killer_super` runs on a 512 MB-stack worker thread, the `killer` driver ran on the
+    1 MB main thread, and a debug build uses several hundred KB per nested interpreter run. Fix:
+    the `killer` driver now runs every command on the same kind of big-stack thread.

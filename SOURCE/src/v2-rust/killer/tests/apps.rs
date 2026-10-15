@@ -744,3 +744,142 @@ fn isdir_and_isfile_tell_folders_from_files() {
     );
     assert_eq!(run_src(&src), "true false true true false false false");
 }
+
+// ---------------------------------------------------------------------------------------------
+// app 2: rag (document Q&A)
+// ---------------------------------------------------------------------------------------------
+
+fn rag(args: &[&str]) -> Output {
+    run_app_main("rag", args)
+}
+
+#[test]
+fn rag_unit_tests_pass() {
+    let _ = std::fs::create_dir_all(app_dir("rag").join("build"));
+    let (ok, text) = app_tests("rag");
+    assert!(ok, "{text}");
+    assert!(text.contains("0 failed"), "{text}");
+}
+
+#[test]
+fn rag_ingest_ask_and_persistence_through_the_cli() {
+    let t = Tmp::new("rag");
+    let index = t.0.join("idx").join("docs");
+    let o = rag(&["ingest", "data/docs", "--index", index.to_str().unwrap()]);
+    let out = norm(&o.stdout);
+    assert!(o.status.success(), "{}", norm(&o.stderr));
+    assert!(out.starts_with("indexed 8 files into 27 chunks"), "{out}");
+    assert!(out.contains("skipped empty.txt (empty)"), "{out}");
+    // a new process loads the saved index
+    let o = rag(&["ask", "How do I reset my password?", "--index", index.to_str().unwrap(), "--k", "2"]);
+    let out = norm(&o.stdout);
+    assert!(out.starts_with("(stub, no OPENAI_API_KEY) Resetting your password"), "{out}");
+    assert!(out.contains("password-reset.txt#0"), "{out}");
+    assert_eq!(out.lines().filter(|l| l.starts_with("  [")).count(), 2, "{out}");
+    let o = rag(&["ask", "quantum chromodynamics lattice", "--index", index.to_str().unwrap()]);
+    assert_eq!(norm(&o.stdout).trim(), "I do not know: nothing in the documents matches.");
+    // unicode question and answer
+    let o = rag(&["ask", "München office hours", "--index", index.to_str().unwrap(), "--k", "1"]);
+    assert!(norm(&o.stdout).contains("Königsstraße"), "{}", norm(&o.stdout));
+}
+
+#[test]
+fn rag_ranking_matches_the_python_mirror() {
+    let Some(py) = python() else { return };
+    let t = Tmp::new("ragmirror");
+    let index = t.0.join("docs");
+    assert!(rag(&["ingest", "data/docs", "--index", index.to_str().unwrap()]).status.success());
+    let o = rag(&["dump", "when is my invoice generated", "can I delete my data", "How do I reset my password?", "München", "quantum", "--index", index.to_str().unwrap()]);
+    assert!(o.status.success(), "{}", norm(&o.stderr));
+    let dump = t.write("dump.json", &norm(&o.stdout));
+    let m = Command::new(py).arg("-I").arg(app_dir("rag").join("tests/mirror.py")).arg(&dump).output().unwrap();
+    assert_eq!(norm(&m.stdout).trim(), "MATCH", "{}", norm(&m.stderr));
+}
+
+#[test]
+fn rag_exit_codes() {
+    let t = Tmp::new("ragexit");
+    let idx = t.0.join("none");
+    let idx = idx.to_str().unwrap();
+    assert_eq!(rag(&[]).status.code(), Some(2));
+    assert_eq!(rag(&["bogus"]).status.code(), Some(2));
+    assert_eq!(rag(&["ingest", "data/docs"]).status.code(), Some(2));
+    assert_eq!(rag(&["ask", "q"]).status.code(), Some(2));
+    let o = rag(&["ask", "q", "--index", idx]);
+    assert_eq!(o.status.code(), Some(1));
+    assert!(norm(&o.stderr).contains("no index at"), "{}", norm(&o.stderr));
+    let o = rag(&["ingest", "data/no_such_folder", "--index", idx]);
+    assert_eq!(o.status.code(), Some(1));
+    assert!(norm(&o.stderr).contains("not a folder"), "{}", norm(&o.stderr));
+    assert!(rag(&["ingest", "data/docs", "--index", idx]).status.success());
+    assert_eq!(rag(&["ask", "reset", "--index", idx, "--k", "x"]).status.code(), Some(2));
+    assert_eq!(rag(&["ask", "", "--index", idx]).status.code(), Some(2));
+    assert_eq!(rag(&["serve", "--index", idx, "--port", "99x"]).status.code(), Some(2));
+}
+
+#[test]
+fn rag_service_answers_http_requests() {
+    let t = Tmp::new("ragsrv");
+    let index = t.0.join("docs");
+    assert!(rag(&["ingest", "data/docs", "--index", index.to_str().unwrap()]).status.success());
+    let port = free_port();
+    let server = Command::new(env!("CARGO_BIN_EXE_killer"))
+        .current_dir(app_dir("rag"))
+        .args(["run", "src/main.killer", "serve", "--index", index.to_str().unwrap(), "--port", &port.to_string(), "--max-requests", "5"])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let src = format!(
+        r#"fn call(method, path, body) {{
+  o = {{"method": method, "url": "http://127.0.0.1:{port}" + path, "timeout": 20, "retries": 6}}
+  if body != null {{
+    o["body"] = body
+  }}
+  return http_request(o)
+}}
+a = call("POST", "/ask", {{"question": "how long does express delivery take", "k": 2}})
+d = json_parse(a["body"])
+println(a["status"], d["sources"][0]["source"], len(d["sources"]), contains(d["answer"], "Orders ship"))
+b = call("POST", "/ask", "{{oops")
+println(b["status"])
+c = call("POST", "/ask", {{"question": ""}})
+println(c["status"], json_parse(c["body"])["error"])
+e = call("GET", "/health", null)
+println(e["status"], json_parse(e["body"])["chunks"])
+f = call("GET", "/nope", null)
+println(f["status"])
+"#
+    );
+    let f = t.write("client.killer", &src);
+    let out = norm(&killer(&t.0, &["run", f.to_str().unwrap()]).stdout);
+    let s = server.wait_with_output().unwrap();
+    assert_eq!(
+        out.trim(),
+        "200 shipping.txt 2 true\n400\n422 question must be a non-empty string\n200 27\n404",
+        "server: {}{}",
+        norm(&s.stdout),
+        norm(&s.stderr)
+    );
+    assert!(norm(&s.stdout).contains("served 5 requests"));
+}
+
+#[test]
+fn nested_callbacks_inside_a_serve_handler_do_not_overflow_the_driver_stack() {
+    let src = r#"fn inner(x) {
+  return sorted([3, 1, 2], fn(v) { return v })
+}
+fn handler(req) {
+  return {"a": map([1, 2], fn(x) { return inner(x) })}
+}
+port = free_port()
+fn clients(port) {
+  return http_request({"url": "http://127.0.0.1:" + str(port) + "/x", "timeout": 20, "retries": 6})
+}
+h = async_spawn(clients, port)
+n = serve(port, handler, {"max_requests": 1})
+r = async_await(h)
+println(r["status"], r["body"])
+"#;
+    assert_eq!(run_src(src), "200 {\"a\":[[1,2,3],[1,2,3]]}");
+}
