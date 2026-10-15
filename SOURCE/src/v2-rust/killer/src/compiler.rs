@@ -3201,7 +3201,8 @@ fn compile_simple_statement(
         return Ok(());
     }
 
-    if let Some(inner) = extract_call_arg(stmt, "print") {
+    // single-argument `print(x)`; several arguments go through the builtin like `println(a, b)`
+    if let Some(inner) = extract_call_arg(stmt, "print").filter(|i| split_arguments(i).map_or(true, |a| a.len() <= 1)) {
         compile_expr_str(inner, line_no, state, context)?;
         state.instructions.push(Instruction::Print);
         return Ok(());
