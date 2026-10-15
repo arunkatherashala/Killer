@@ -3618,9 +3618,26 @@ fn compile_kstring(
     let mut in_expr = false;
     let mut brace_depth = 0usize;
 
-    for ch in inner.chars() {
+    let mut chars_iter = inner.chars().peekable();
+    while let Some(ch) = chars_iter.next() {
         if !in_expr {
-            if ch == '{' {
+            if ch == '\\' {
+                // escapes in the literal text: \n \t \r \\ \" \' (anything else is kept as written)
+                match chars_iter.peek().copied() {
+                    Some('n') => { buf.push('\n'); chars_iter.next(); }
+                    Some('t') => { buf.push('\t'); chars_iter.next(); }
+                    Some('r') => { buf.push('\r'); chars_iter.next(); }
+                    Some(c @ ('\\' | '"' | '\'')) => { buf.push(c); chars_iter.next(); }
+                    _ => buf.push('\\'),
+                }
+            } else if ch == '{' && chars_iter.peek() == Some(&'{') {
+                // `{{` is a literal brace
+                buf.push('{');
+                chars_iter.next();
+            } else if ch == '}' && chars_iter.peek() == Some(&'}') {
+                buf.push('}');
+                chars_iter.next();
+            } else if ch == '{' {
                 if !buf.is_empty() {
                     segments.push((false, buf.clone()));
                     buf.clear();
