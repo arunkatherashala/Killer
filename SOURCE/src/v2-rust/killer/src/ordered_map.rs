@@ -83,6 +83,12 @@ impl<V> OrderedMap<V> {
         }
     }
 
+    /// Move every live value out (in insertion order), leaving the map empty.
+    pub fn take_values(&mut self) -> Vec<V> {
+        self.index.clear();
+        std::mem::take(&mut self.entries).into_iter().flatten().map(|(_, v)| v).collect()
+    }
+
     pub fn clear(&mut self) {
         self.entries.clear();
         self.index.clear();

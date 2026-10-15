@@ -169,3 +169,37 @@ fn large_floats_print_exactly_and_exponent_literals_parse() {
         "1000000000000000000000\n-10000000000000000000000000\n1180591620717411300000\n0.0000001\n2501\n0.06\n4\n123456789012345680"
     );
 }
+
+#[test]
+fn deeply_nested_containers_are_freed_without_overflowing_the_stack() {
+    let src = r#"x = {"v": 0}
+i = 0
+while i < 100000 {
+  x = {"l": x, "i": i}
+  i = i + 1
+}
+x = null
+ys = []
+j = 0
+while j < 100000 {
+  ys = [ys]
+  j = j + 1
+}
+println("same", ys == ys)
+ys = null
+class N {
+  fn init(next) {
+    this.next = next
+  }
+}
+n = null
+k = 0
+while k < 50000 {
+  n = new N(n)
+  k = k + 1
+}
+n = null
+println("freed")
+"#;
+    assert_eq!(run_src(src), "same true\nfreed");
+}
