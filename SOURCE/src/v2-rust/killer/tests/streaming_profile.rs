@@ -453,3 +453,194 @@ fn killer_super_profile_flag_and_normal_runs_are_unaffected() {
     let plain = run_super(&src, &["--run"]);
     assert_eq!(plain.trim(), "ok");
 }
+
+// ---------------------------------------------------------------- server robustness
+
+use std::io::{Read, Write};
+use std::net::TcpStream;
+use std::process::Stdio;
+use std::time::{Duration, Instant};
+
+fn free_port() -> u16 {
+    std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port()
+}
+
+/// Start a script in the background (killer_super --run) and return the child.
+fn spawn_script(src: &str) -> (std::process::Child, std::path::PathBuf) {
+    let path = std::env::temp_dir().join(format!("killer_sp_{}_{}.killer", std::process::id(), NEXT.fetch_add(1, Ordering::SeqCst)));
+    std::fs::write(&path, src).unwrap();
+    let child = Command::new(env!("CARGO_BIN_EXE_killer_super"))
+        .arg(&path)
+        .arg("--run")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    (child, path)
+}
+
+/// Wait up to `secs` for the child; kills it and panics on a hang. Returns stdout+stderr.
+fn finish(mut child: std::process::Child, path: std::path::PathBuf, secs: u64) -> String {
+    let start = Instant::now();
+    loop {
+        if child.try_wait().unwrap().is_some() {
+            break;
+        }
+        if start.elapsed() > Duration::from_secs(secs) {
+            let _ = child.kill();
+            let _ = child.wait();
+            let _ = std::fs::remove_file(&path);
+            panic!("script hung for more than {} s", secs);
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    let _ = std::fs::remove_file(&path);
+    let mut out = String::new();
+    child.stdout.take().unwrap().read_to_string(&mut out).unwrap();
+    let mut err = String::new();
+    child.stderr.take().unwrap().read_to_string(&mut err).unwrap();
+    format!("{}{}", out, err).replace("\r\n", "\n").trim().to_string()
+}
+
+fn run_timeout(src: &str, secs: u64) -> String {
+    let (c, p) = spawn_script(src);
+    finish(c, p, secs)
+}
+
+fn connect_retry(port: u16) -> TcpStream {
+    let start = Instant::now();
+    loop {
+        match TcpStream::connect(("127.0.0.1", port)) {
+            Ok(s) => return s,
+            Err(_) if start.elapsed() < Duration::from_secs(20) => std::thread::sleep(Duration::from_millis(50)),
+            Err(e) => panic!("cannot connect: {}", e),
+        }
+    }
+}
+
+#[test]
+fn idle_and_dribbling_clients_cannot_block_the_next_request() {
+    let port = free_port();
+    let src = format!(
+        "fn h(req) {{\n  return \"pong\"\n}}\nn = serve({port}, h, {{\"max_requests\": 1, \"read_timeout\": 0.6}})\nprintln(\"served\", n)\n"
+    );
+    let (child, path) = spawn_script(&src);
+    let idle = connect_retry(port); // sends nothing
+    std::thread::sleep(Duration::from_millis(50));
+    let dribble = std::thread::spawn(move || {
+        let mut s = connect_retry(port);
+        let mut cut_off = false;
+        for b in b"GET / HTTP/1.1\r\nHost: x\r\nX-Slow: yes\r\n".iter() {
+            if s.write_all(&[*b]).is_err() {
+                cut_off = true;
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(120));
+        }
+        // the server may reset the connection, so the 408 text is not guaranteed to be readable
+        let mut reply = String::new();
+        let _ = s.set_read_timeout(Some(Duration::from_secs(10)));
+        let read_failed = s.read_to_string(&mut reply).is_err();
+        cut_off || read_failed || reply.contains("408")
+    });
+    std::thread::sleep(Duration::from_millis(100));
+    let started = Instant::now();
+    let mut good = connect_retry(port);
+    good.set_read_timeout(Some(Duration::from_secs(15))).unwrap();
+    good.write_all(b"GET / HTTP/1.1\r\nHost: x\r\n\r\n").unwrap();
+    let mut reply = String::new();
+    let _ = good.read_to_string(&mut reply);
+    assert!(reply.starts_with("HTTP/1.1 200 OK") && reply.ends_with("pong"), "{}", reply);
+    assert!(started.elapsed() < Duration::from_secs(8), "took {:?}", started.elapsed());
+    assert!(dribble.join().unwrap(), "the dribbling client was never cut off");
+    drop(idle);
+    assert_eq!(finish(child, path, 15), "served 1");
+}
+
+#[test]
+fn server_stop_from_another_thread_ends_an_idle_server() {
+    let port = free_port();
+    let src = format!(
+        "fn h(req) {{\n  return \"x\"\n}}\nfn stopper() {{\n  sleep_ms(400)\n  server_stop()\n  return 1\n}}\nt = async_spawn(stopper)\nn = serve({port}, h)\nprintln(\"stopped\", n)\nasync_await(t)\n"
+    );
+    assert_eq!(run_timeout(&src, 20), "stopped 0");
+}
+
+#[test]
+fn server_stop_interrupts_a_connection_that_is_mid_request() {
+    let port = free_port();
+    let src = format!(
+        "fn h(req) {{\n  return \"x\"\n}}\nfn stopper() {{\n  sleep_ms(500)\n  server_stop()\n  return 1\n}}\nt = async_spawn(stopper)\nn = serve({port}, h, {{\"read_timeout\": 600}})\nprintln(\"stopped\", n)\nasync_await(t)\n"
+    );
+    let (child, path) = spawn_script(&src);
+    let mut half = connect_retry(port);
+    half.write_all(b"GET / HTT").unwrap(); // never completed
+    let out = finish(child, path, 20);
+    drop(half);
+    assert_eq!(out, "stopped 0");
+}
+
+#[test]
+fn a_runaway_handler_gets_a_503_at_the_deadline_and_the_server_carries_on() {
+    let port = free_port();
+    let src = format!(
+        r#"
+port = {port}
+fn handler(req) {{
+  if req["path"] == "/slow" {{
+    while true {{
+      x = 1
+    }}
+  }}
+  return "fast"
+}}
+fn client(port) {{
+  base = "http://127.0.0.1:" + str(port)
+  http_request({{"url": base + "/fast", "retries": 6, "timeout": 10}})
+  a = http_request({{"url": base + "/slow", "timeout": 30}})
+  b = http_request({{"url": base + "/fast", "timeout": 10}})
+  return [a["status"], contains(a["body"], "deadline"), b["body"]]
+}}
+t = async_spawn(client, port)
+serve(port, handler, {{"max_requests": 3, "request_timeout": 0.5}})
+println(async_await(t))
+"#
+    );
+    assert_eq!(run_timeout(&src, 40), "[503, true, fast]");
+}
+
+#[test]
+fn a_slow_handler_cannot_hold_off_server_stop_beyond_its_deadline() {
+    let port = free_port();
+    let src = format!(
+        r#"
+port = {port}
+fn handler(req) {{
+  if req["path"] == "/ready" {{
+    return "ok"
+  }}
+  while true {{
+    x = 1
+  }}
+}}
+fn client(port) {{
+  base = "http://127.0.0.1:" + str(port)
+  http_request({{"url": base + "/ready", "retries": 6, "timeout": 10}})
+  return http_request({{"url": base + "/slow", "timeout": 30}})["status"]
+}}
+fn stopper() {{
+  sleep_ms(1500)
+  server_stop()
+  return 1
+}}
+c = async_spawn(client, port)
+s = async_spawn(stopper)
+n = serve(port, handler, {{"request_timeout": 0.4}})
+println("stopped", n, async_await(c))
+async_await(s)
+"#
+    );
+    let started = Instant::now();
+    assert_eq!(run_timeout(&src, 40), "stopped 2 503");
+    assert!(started.elapsed() < Duration::from_secs(30));
+}

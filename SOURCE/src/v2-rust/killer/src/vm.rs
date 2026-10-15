@@ -6175,6 +6175,22 @@ impl VirtualMachine {
         Value::Generator(self.generator_manager.create_native(src))
     }
 
+    /// `call_value_nested` with a wall-clock deadline (`wall_ms`, 0 = none): the call fails with a
+    /// `SecurityError` once it has run that long (checked on loop back-edges). The VM's own
+    /// budget is restored afterwards.
+    pub(crate) fn call_value_nested_with_deadline(&mut self, func: &Value, args: Vec<Value>, program: &Program, wall_ms: u64) -> Result<Value, VmError> {
+        if wall_ms == 0 {
+            return self.call_value_nested(func, args, program);
+        }
+        let saved = (self.execution_budget.take(), self.exec_start.take());
+        self.execution_budget = Some(ExecutionBudget { max_instruction_steps: 0, max_wall_ms: wall_ms, max_heap_bytes: 0 });
+        self.exec_start = Some(std::time::Instant::now());
+        let r = self.call_value_nested(func, args, program);
+        self.execution_budget = saved.0;
+        self.exec_start = saved.1;
+        r
+    }
+
     pub(crate) fn call_stack_depth(&self) -> usize {
         self.call_stack.len()
     }

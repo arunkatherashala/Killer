@@ -111,6 +111,9 @@ pub fn write_stream(conn: &mut TcpStream, vm: &mut VirtualMachine, program: &Pro
         _ => Vec::new().into_iter(),
     };
     loop {
+        if crate::http_serve::stop_requested() {
+            break;
+        }
         if started.elapsed() > limit {
             let _ = conn.write_all(crate::sse::encode_event(Some("error"), "stream timeout").as_bytes());
             break;
