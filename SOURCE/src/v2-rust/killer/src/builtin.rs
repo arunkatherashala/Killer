@@ -643,8 +643,8 @@ impl BuiltinFunctions {
             
             // JSON/CSV functions (Week 24: Data Serialization)
             "json_pretty" => Self::json_pretty(args),
-            "parse_csv" => Self::parse_csv(args),
-            "to_csv" => Self::to_csv(args),
+            "parse_csv" => crate::csv_builtins::parse_csv(args),
+            "to_csv" => crate::csv_builtins::to_csv(args),
             "to_yaml" => Self::to_yaml(args),
             
             // WebSocket functions (Week 24: Real-time Communication)
