@@ -13,7 +13,8 @@
 //! Options (dict, third argument of `serve`): `host` (default "127.0.0.1"; use "0.0.0.0" to
 //! expose the server), `max_requests` (stop after N requests), `idle_timeout` (seconds without a
 //! connection before stopping). A handler can call `server_stop()` to stop gracefully after the
-//! current response has been written.
+//! current response has been written. A handler may return `{stream: generator_or_array}` to
+//! send Server-Sent Events (see `http_sse`); `stream_timeout` (seconds, default 300) bounds a stream.
 
 use std::cell::{Cell, RefCell};
 use std::io::{Read, Write};
@@ -370,6 +371,7 @@ fn serve_loop(vm: &mut VirtualMachine, args: &[Value], program: &Program, once: 
     };
     let max_requests = if once { Some(1) } else { opt_num(opts.as_ref(), "max_requests").map(|n| n.max(0.0) as u64) };
     let idle = opt_num(opts.as_ref(), "idle_timeout").map(Duration::from_secs_f64);
+    let stream_limit = Duration::from_secs_f64(opt_num(opts.as_ref(), "stream_timeout").unwrap_or(300.0).clamp(0.1, 86400.0));
     if handler.is_none() && ROUTES.with(|r| r.borrow().is_empty()) {
         return err(format!("{}(): pass a handler function or register routes with route() first", who));
     }
@@ -406,6 +408,11 @@ fn serve_loop(vm: &mut VirtualMachine, args: &[Value], program: &Program, once: 
                 let resp = match target {
                     None => text_resp(404, "text/plain; charset=utf-8", format!("Not Found: {} {}", req.method, req.path)),
                     Some(f) => match vm.call_value_nested(&f, vec![req_to_value(&req, &params)], program) {
+                        Ok(v) if crate::http_sse::stream_reply(&v).is_some() => {
+                            let reply = crate::http_sse::stream_reply(&v).unwrap();
+                            crate::http_sse::write_stream(&mut stream, vm, program, &reply, stream_limit);
+                            continue;
+                        }
                         Ok(v) => value_to_resp(&v).unwrap_or_else(|e| text_resp(500, "text/plain; charset=utf-8", format!("Internal Server Error: {}", e))),
                         Err(e) => text_resp(500, "text/plain; charset=utf-8", format!("Internal Server Error: {}", e)),
                     },

@@ -27,7 +27,15 @@ pub struct GenFrame {
     pub ip: usize,
 }
 
+/// A generator driven by Rust code instead of a bytecode frame (e.g. a streaming LLM reply).
+pub trait NativeSource {
+    /// The next value, `Ok(None)` when finished.
+    fn next_value(&mut self) -> Result<Option<Value>, String>;
+}
+
 struct GenSlot {
+    /// Set for native generators; `frame` is then always `None`.
+    native: Option<Box<dyn NativeSource>>,
     /// `None` while the generator is running (a re-entrant `next` is an error).
     frame: Option<GenFrame>,
     /// A value produced early by `has_next`, handed out by the next `next`.
@@ -57,8 +65,32 @@ impl GeneratorManager {
     pub fn create(&mut self, frame: GenFrame) -> String {
         let id = format!("gen_{}", self.gen_counter);
         self.gen_counter += 1;
-        self.slots.insert(id.clone(), GenSlot { frame: Some(frame), peeked: None });
+        self.slots.insert(id.clone(), GenSlot { native: None, frame: Some(frame), peeked: None });
         id
+    }
+
+    /// Register a generator backed by a Rust [`NativeSource`].
+    pub fn create_native(&mut self, src: Box<dyn NativeSource>) -> String {
+        let id = format!("gen_{}", self.gen_counter);
+        self.gen_counter += 1;
+        self.slots.insert(id.clone(), GenSlot { native: Some(src), frame: None, peeked: None });
+        id
+    }
+
+    /// `Some(result)` when `id` is a native generator (it is forgotten once it ends or fails).
+    pub fn native_next(&mut self, id: &str) -> Option<Result<Option<Value>, String>> {
+        let slot = self.slots.get_mut(id)?;
+        let src = slot.native.as_mut()?;
+        let r = src.next_value();
+        if !matches!(r, Ok(Some(_))) {
+            self.slots.remove(id);
+        }
+        Some(r)
+    }
+
+    /// Drop a generator now (a native source releases its resources, e.g. kills curl).
+    pub fn close(&mut self, id: &str) {
+        self.slots.remove(id);
     }
 
     /// A value `has_next` already produced, if any.

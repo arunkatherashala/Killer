@@ -3062,6 +3062,12 @@ impl VirtualMachine {
                         self.ip += 1;
                         continue;
                     }
+                    if let Some(r) = crate::llm_stream::vm_call(self, name, &args, program) {
+                        let v = r?;
+                        self.stack.push(v);
+                        self.ip += 1;
+                        continue;
+                    }
                     if let Some(r) = crate::http_serve::vm_call(self, name, &args, program) {
                         let v = r?;
                         self.stack.push(v);
@@ -6145,7 +6151,19 @@ impl VirtualMachine {
         }
     }
 
+    /// Register a Rust-driven generator (see `generator::NativeSource`) and return its handle.
+    pub(crate) fn register_native_gen(&mut self, src: Box<dyn crate::generator::NativeSource>) -> Value {
+        Value::Generator(self.generator_manager.create_native(src))
+    }
+
+    pub(crate) fn close_generator(&mut self, id: &str) {
+        self.generator_manager.close(id);
+    }
+
     fn gen_resume(&mut self, id: &str, program: &Program) -> Result<Option<Value>, VmError> {
+        if let Some(r) = self.generator_manager.native_next(id) {
+            return r.map_err(VmError::runtime_error);
+        }
         self.enter_native()?;
         let r = self.gen_resume_inner(id, program);
         self.native_depth -= 1;

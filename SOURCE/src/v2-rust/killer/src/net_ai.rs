@@ -8,6 +8,7 @@ use crate::value::Value;
 
 pub fn is_builtin(name: &str) -> bool {
     crate::http_serve::NAMES.contains(&name)
+        || crate::llm_stream::NAMES.contains(&name)
         || name == "http_request"
         || crate::vec_builtins::NAMES.contains(&name)
         || crate::rag_builtins::NAMES.contains(&name)
