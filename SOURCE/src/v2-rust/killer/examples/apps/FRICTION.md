@@ -99,3 +99,9 @@ entry). Entries are numbered in the order I hit them.
     Root cause: `killer_super` runs on a 512 MB-stack worker thread, the `killer` driver ran on the
     1 MB main thread, and a debug build uses several hundred KB per nested interpreter run. Fix:
     the `killer` driver now runs every command on the same kind of big-stack thread.
+22. **Tooling disagreed with the language.** `killer lint` reported "call of undefined function"
+    for `mock_embed`, `vec_new`, `vec_add`, `chunk_text`, `isDir`, `csv_columns`... (every builtin
+    that is not in the compiler's classic list, although they run fine), and `killer fmt --check`
+    wanted `push(out, {` ... `})` bodies indented two levels instead of one (it counted every open
+    bracket as a level). Fix: the linter also consults the net/AI/stdlib builtin tables; the
+    formatter adds one indentation level per line that still has open brackets.

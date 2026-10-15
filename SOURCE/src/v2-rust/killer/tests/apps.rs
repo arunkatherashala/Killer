@@ -883,3 +883,17 @@ println(r["status"], r["body"])
 "#;
     assert_eq!(run_src(src), "200 {\"a\":[[1,2,3],[1,2,3]]}");
 }
+
+#[test]
+fn fmt_indents_a_dict_argument_one_level_and_lint_knows_the_library_builtins() {
+    let t = Tmp::new("fmtlint");
+    let f = t.write(
+        "a.killer",
+        "fn f(out) {\n  push(out, {\n    \"a\": 1,\n    \"b\": [\n      1,\n      2\n    ]\n  })\n  return out\n}\nprintln(f([]))\nprintln(mock_embed(\"x\", 4))\nprintln(vec_new(4))\nprintln(isDir(\".\"))\nprintln(eprintln(\"\"))\nprintln(csv_columns(\"a\"))\nprintln(list([1]))\n",
+    );
+    let out = killer(&t.0, &["fmt", "--check", f.to_str().unwrap()]);
+    assert!(out.status.success(), "fmt wants to change it: {}{}", norm(&out.stdout), norm(&out.stderr));
+    let out = killer(&t.0, &["lint", f.to_str().unwrap()]);
+    let text = norm(&out.stdout);
+    assert!(!text.contains("undefined-function"), "{text}");
+}
