@@ -48,6 +48,7 @@ pub fn cmd_run(args: &[String]) -> i32 {
             return 1;
         }
     };
+    crate::imports::set_script(path);
     match crate::run_killer_source(&source) {
         Ok(()) => 0,
         Err(e) => {
