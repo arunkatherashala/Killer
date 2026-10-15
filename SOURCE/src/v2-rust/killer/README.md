@@ -1,252 +1,125 @@
 # Killer Language
 
-[![Rust](https://img.shields.io/badge/language-Rust-orange.svg)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-run%20cargo%20test%20--tests-brightgreen.svg)](#testing)
-[![Version](https://img.shields.io/badge/version-1.0.0%20beta-blueviolet.svg)](#)
+[![Status](https://img.shields.io/badge/status-beta-orange.svg)](#status)
 
-**Killer** is a high-performance, AI-native scripting language with a Rust-powered runtime. It combines Python-style expressiveness with native-speed execution via JIT compilation, trinary (3-valued) logic, built-in AI primitives, and a rich 600+ function standard library — all with zero external crate dependencies.
+**Killer** is a from-scratch scripting language with a bytecode VM, written in Rust with **zero external
+crates**. It has Python-like syntax (braces for blocks), closures, classes, generators, exceptions with
+file and line numbers, big integers, a large builtin library, an optional x86-64 JIT for numeric code
+(other architectures use the interpreter), and a few unusual features: three-valued logic, uncertain
+numbers, and offline building blocks for AI programs.
 
-> Created by [Sai Arun Kumar Katherashala](https://github.com/arunkatherashala)
+## Status
 
----
+**Beta / pre-release.** The version is the one in `Cargo.toml` (1.0.0). The language is exercised by 166
+parity probes (all pass), 18 real-world programs and about 3,250 Rust tests; the honest list of what
+does not work yet is in [`parity/PARITY_REPORT.md`](parity/PARITY_REPORT.md) and the *Known limitations*
+below. Performance numbers are only quoted from [`bench/RESULTS.md`](bench/RESULTS.md); anything else is
+"not measured". Many older documents under the repository's `DOCS/` folder are historical session
+reports and are not authoritative.
 
-## What makes Killer unique?
+## Features
 
-| Feature | Other languages | Killer |
-|---------|----------------|--------|
-| Logic system | Binary (true/false) | **Trinary** (T_POS / T_NEG / T_ZERO) |
-| Runtime | GC'd or manual | **Rust VM + tri-color cycle GC** |
-| JIT | Optional/external | **Built-in x86-64 JIT** for pure numeric functions and arrays (x86-64 only) |
-| AI primitives | Library calls | **Native `believe`, `async_spawn`, LLM client** |
-| Dependencies | Many crates | **Zero external crate dependencies** |
-| Package manager | Separate tool | **Built-in KPM** with local/registry install |
+- **Language**: functions, lambdas, closures that share captured variables, classes with inheritance and
+  operator overloading, lazy generators, `try`/`catch`/`finally`, `match`/`switch`, comprehensions,
+  destructuring, default and keyword arguments, `for k, v in dict`, one-line blocks, builtins as values,
+  optional type annotations, `async`/`spawn`/channels/mutexes (tasks get deep copies).
+- **Numbers**: 64-bit numbers plus arbitrary-precision integers (`123n`, `factorial`, `powmod`, `divmod`).
+- **Standard library**: 711 registered builtin names ([`docs/STDLIB_INDEX.md`](docs/STDLIB_INDEX.md)):
+  strings, collections, files, JSON/CSV, dates, regex, crypto, concurrency, HTTP.
+- **Network and AI**: a real HTTP server (`serve`, `route`), a hardened curl-backed HTTP client (TLS on by
+  default, secrets via stdin), a vector store, text chunking, offline embeddings, RAG prompt building,
+  structured logging, an LLM client.
+- **Tooling**: the `killer` driver (`run`, `fmt`, `lint`, `test`, `repl`, `lsp`), a test framework
+  (`test "name" { }`), a formatter and linter, a language server, a VS Code extension, a Debug Adapter
+  Protocol server (`killer_dap`).
+- **Packages**: `killer.toml`, `killer.lock` with checksums, semver resolution, `killer_pkg`
+  (`new/add/install/publish/check`), compile-time `import`.
+- **Safety**: recursion, allocation and nesting limits that produce catchable errors instead of crashes,
+  a deterministic fuzz harness, capability checks on every builtin that touches files, network, processes
+  or native code.
+- **Unusual**: trits (`T_POS`, `T_ZERO`, `T_NEG`) with Kleene logic, `believe x = 10 ± 1` uncertain numbers.
 
----
+## Install
 
-## Quick Start
-
-```bash
-# Build
-cargo build --release
-
-# Run a Killer program
-cargo run --bin killer_super -- hello.killer --run
-
-# Interactive REPL
-cargo run --bin killer-repl
-
-# Online playground
-cargo run --bin killer-playground
-# → open http://127.0.0.1:3000
-```
-
----
-
-## Language Overview
-
-### Hello World
-
-```killer
-println("Hello, Killer!")
-```
-
-### Variables and arithmetic
-
-```killer
-x = 42
-y = x * 2 + 1
-println("Result: " + str(y))
-```
-
-### Functions
-
-```killer
-fn fib(n) {
-  if n <= 1 { n }
-  else { fib(n-1) + fib(n-2) }
-}
-
-for i in range(10) {
-  println("fib(" + str(i) + ") = " + str(fib(i)))
-}
-```
-
-### Arrays and list comprehensions
-
-```killer
-nums = [1, 2, 3, 4, 5]
-doubled = [x * 2 for x in nums if x > 2]
-println(str(doubled))   # [6, 8, 10]
-```
-
-### Trinary (3-valued) logic
-
-```killer
-a = T_POS    # positive / true
-b = T_NEG    # negative / false
-c = T_ZERO   # indeterminate / unknown
-
-result = a AND c    # T_ZERO (Kleene logic)
-println(str(result))
-```
-
-### Uncertain values
-
-```killer
-temp = believe 98.6 ± 0.4    # value with uncertainty bounds
-println(str(temp))
-```
-
-### Async concurrency
-
-```killer
-fn worker(id) {
-  println("Worker " + str(id) + " starting")
-  id * 100
-}
-
-handle = async_spawn(fn() { worker(1) })
-result = async_await(handle)
-println("Got: " + str(result))
-```
-
-### JSON and HTTP
-
-```killer
-data = json_parse('{"name":"Killer","score":10}')
-println(data["name"])
-
-resp = http_get("https://api.example.com/data")
-parsed = json_parse(resp)
-```
-
-### File I/O
-
-```killer
-writeFile("output.txt", "Hello from Killer!")
-content = readFile("output.txt")
-println(content)
-```
-
----
-
-## Architecture
-
-```
-Source (.killer)
-    │
-    ▼
-Lexer → Tokens
-    │
-    ▼
-Parser → AST
-    │
-    ▼ constant folding (compile-time)
-Compiler → Bytecode
-    │
-    ▼ peephole optimizer
-Optimizer → Bytecode (optimized)
-    │
-    ▼
-VM (register-based, threaded dispatch)
-    │         │
-    ▼         ▼
-JIT x86-64  GC (tri-color mark-and-sweep)
-```
-
-- **VM**: Register-style stack VM, ~60 opcodes, interpreter dispatch
-- **JIT**: Hot loops compiled to native x86-64 (threshold: 500 iterations)
-- **GC**: Tri-color mark-and-sweep on top of `Rc<RefCell<>>` to collect reference cycles
-- **Optimizer**: Two-pass: AST-level constant folding + bytecode peephole pass
-
----
-
-## Standard Library (600+ functions)
-
-| Category | Functions |
-|----------|-----------|
-| Math | `abs`, `sqrt`, `pow`, `sin`, `cos`, `floor`, `ceil`, `log`, `gcd`, `lcm`, … |
-| Strings | `len`, `split`, `join`, `trim`, `replace`, `upper`, `lower`, `contains`, `startsWith`, … |
-| Arrays | `push`, `pop`, `sort`, `reverse`, `filter`, `map`, `reduce`, `zip`, `enumerate`, … |
-| File I/O | `readFile`, `writeFile`, `appendFile`, `fileExists`, `listDir`, `mkdir`, `pathJoin`, … |
-| HTTP | `http_get`, `http_post`, `http_put`, `http_delete`, `http_get_json`, `http_with_headers`, … |
-| JSON | `json_parse`, `json_stringify` |
-| Date/Time | `date_now`, `date_parse`, `date_format`, `date_diff`, `date_add`, `timestamp`, … |
-| Concurrency | `async_spawn`, `async_await`, `chan_send`, `chan_recv`, `mutex_new`, … |
-| AI | `llm_complete`, `llm_embed`, `ghost_ask`, … |
-| Crypto | `sha256`, `hmac_sha256`, `base64_encode`, `base64_decode`, … |
-| System | `env`, `exit`, `args`, `sleep`, `gc_stats`, `jit_stats`, … |
-
----
-
-## Binaries
-
-| Binary | Purpose |
-|--------|---------|
-| `killer_super` | Main compiler/runner — execute `.killer` files |
-| `killer-repl` | Interactive REPL with persistent variables and `.gc`/`.jit` commands |
-| `killer-playground` | Web playground server at `http://127.0.0.1:3000` |
-| `kpm-registry` | KPM package registry server |
-| `killer-mcp` | MCP server — AI assistant tool bridge |
-| `killer_ui_serve` | Kala UI chat server |
-| `ghost_hive` | Ghost VM distributed coordinator |
-| `kore_bench` | KORE/Nova format benchmarks |
-
----
-
-## Package Manager (KPM)
-
-```killer
-# In a .killer file or REPL
-kpm_install("math-utils")
-kpm_install("http-helpers@1.2.0")
-
-import math_utils
-println(math_utils.factorial(10))
-```
+**Prebuilt binaries** (tagged releases; Linux x64, Windows x64, macOS x64 and arm64) with checksum
+verification, installed to `~/.killer/bin`:
 
 ```bash
-# Start the registry
-cargo run --bin kpm-registry
-# → http://127.0.0.1:8080
+sh install.sh            # Linux / macOS (see --help, --dry-run)
+```
+```powershell
+./install.ps1            # Windows PowerShell
 ```
 
----
+The scripts are in the repository root; they download from the project's GitHub releases.
+
+**From source** (Rust stable, no other dependencies; `curl` is needed at run time for HTTPS):
+
+```bash
+cd SOURCE/src/v2-rust/killer
+cargo build --release --bin killer --bin killer_super --bin killer_pkg --bin killer_lsp --bin killer_dap
+# binaries are in target/release/
+```
+
+## Quickstart
+
+```bash
+echo 'println("hello, killer")' > hello.killer
+killer run hello.killer              # same as: killer_super hello.killer --run
+killer repl                          # interactive prompt
+killer fmt --check .                 # formatting check
+killer lint .                        # lint
+killer test                          # run test "..." { } blocks and fn test_*()
+killer_pkg new myapp                 # a project with killer.toml
+```
+
+```killer
+fn greet(name, greeting = "Hello") {
+  return greeting + ", " + name + "!"
+}
+println(greet("Ada"))
+
+counts = {}
+for word in split("the cat and the hat", " ") {
+  counts[word] = get(counts, word, 0) + 1
+}
+for word, n in counts {
+  println(word, n)
+}
+println(factorial(30))
+```
+
+```killer
+port = free_port()
+route("GET", "/hello/:name", fn(req) {
+  return "hello " + req["params"]["name"]
+})
+serve(port, null, {"max_requests": 1})   # then: curl http://127.0.0.1:<port>/hello/ada
+```
+
+Next: the [tutorial](docs/TUTORIAL.md) (14 lessons), the [language reference](docs/LANGUAGE.md), the
+[standard library index](docs/STDLIB_INDEX.md), the [architecture guide for contributors](docs/ARCHITECTURE.md)
+and [`DOCS.md`](DOCS.md).
+
+## Architecture in one picture
+
+```
+source -> imports -> typecheck -> test blocks -> control-flow / lambda / sugar passes -> compile_block
+       -> bytecode -> optimizer -> VM (stack machine, interpreter loop)  [+ x86-64 JIT for hot numeric code]
+```
+
+Details, file by file, in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Performance
 
-Killer has two execution tiers:
-
-- A **bytecode interpreter** for everything.
-- A **built-in x86-64 JIT** that compiles *pure numeric* functions (numbers, arrays of numbers,
-  loops, `range`, `for ... in`, `sqrt/abs/floor/ceil/min/max`, calls to other such functions) to
-  machine code. Anything it cannot prove safe runs in the interpreter, and native code that hits
-  division by zero, a bad index or runaway recursion falls back to the interpreter automatically.
-
-Measured against CPython on the same machine, same algorithm, identical output (best of 5 runs;
-timings include process start-up and vary from run to run, so read the ratios, not the seconds):
-
-| Benchmark | Killer | Python | Result |
-|-----------|--------|--------|--------|
-| Bubble sort, 4000 numbers | 0.24 s | 1.66 s | 6.8x faster |
-| Collatz chains (loops, `%`) | 0.87 s | 4.06 s | 4.7x faster |
-| Count primes below 300k (`for`, `sqrt`) | 0.33 s | 0.49 s | 1.5x faster |
-| Dot product of arrays | 0.16 s | 0.22 s | 1.4x faster |
-| String building (`s = s + "x"`) | 0.14 s | 0.17 s | 1.3x faster |
-| `fib(30)` | 0.19 s | 0.24 s | 1.3x faster |
-| Top-level `while` loop | 0.43 s | 0.37 s | about level |
-| Array `push` loop | 0.23 s | 0.14 s | 1.6x slower |
-| Dict counting | 0.29 s | 0.12 s | 2.5x slower |
-| Object method calls | 0.40 s | 0.12 s | 3.3x slower |
-
-**Honest summary:** numeric and string-building code is faster than CPython; code dominated by
-dicts, objects and array building is still slower, because the JIT does not handle those yet.
-Killer is not a replacement for C, C++, Java or .NET on performance.
-
-The table above is an earlier manual measurement of the numeric JIT and is not produced by a script in this repo. The reproducible benchmark runner is `python bench/run.py` (Killer vs CPython on non-numeric workloads, results in `bench/RESULTS.md`; set `KILLER_BIN` to choose the binary). Status: beta / pre-release; version is the one in `Cargo.toml`.
-
----
+Killer has two execution tiers: a bytecode interpreter for everything, and a built-in x86-64 JIT for pure
+numeric functions and loops (anything it cannot prove safe runs in the interpreter; on other CPU
+architectures the JIT is disabled). Measurements against CPython (non-numeric workloads, geometric-mean
+time ratio 2.14 -> 1.81 after the first optimization round, plus CPU-time before/after for a second round)
+are in [`bench/RESULTS.md`](bench/RESULTS.md); reproduce with `python bench/run.py` (set `KILLER_BIN`).
+That file also lists where Killer is still slower than CPython (comprehensions, method calls, string
+indexing). No other performance claim is made here.
 
 ## Calling C libraries (FFI)
 
@@ -358,36 +231,48 @@ The constants `T_POS`, `T_ZERO` and `T_NEG` are plain names. Use `x == T_ZERO` t
 
 ## Known limitations
 
+- Block scoping: a variable first assigned inside an `if` or loop body is not visible after the block
+  (fix in progress); assign it before the block.
+- Plain 64-bit numbers saturate on overflow; use `n` literals / `big()` for exact large integers.
 - The JIT is x86-64 only and covers pure numeric code; everything else is interpreted.
-- Dicts and objects are shared references (like Python or JavaScript): `b = a` aliases, and a
-  dict or object that contains itself is never garbage-collected.
+- The HTTP server has no TLS and serves one request at a time; the HTTP client needs `curl` (HTTPS).
+- `len(s)` and `s[i]` are O(n) on very long strings; `count_tokens` is an approximation.
+- The debugger shows one stack frame.
+- Dicts and objects are shared references (like Python or JavaScript): `b = a` aliases, and a dict or
+  object that contains itself is never garbage-collected.
 - The FFI is minimal (see above) and has no safety net against a wrong signature.
-- Killer has no package ecosystem to speak of and is a one-person project.
+- About 190 source files in `src/` are never compiled (see `parity/PARITY_REPORT.md`).
+- Killer is a one-person project with a young package ecosystem.
 
----
+## Binaries
+
+| Binary | Purpose |
+|--------|---------|
+| `killer` | The driver: `run`, `fmt`, `lint`, `test`, `repl`, `lsp` |
+| `killer_super` | Compiler/runner: `killer_super file.killer --run` |
+| `killer_pkg` | Package manager: `new`, `add`, `install`, `publish`, `check` |
+| `killer_lsp` | Language server (stdio) |
+| `killer_dap` | Debug Adapter Protocol server (stdio) |
+| `kpm-registry` | File-backed package registry served over HTTP |
+| `killer-repl`, `killer-playground` | Older REPL and web playground |
+| `killer-mcp` | MCP server: AI assistant tool bridge |
+| `ghost_hive`, `kore_bench`, `killer_ui_serve` | Distributed VM coordinator, format benchmarks, chat UI |
 
 ## Testing
 
 ```bash
-# Library unit tests
-cargo test --lib
-
-# Integration tests
-cargo test --test pipeline_conformance
-cargo test --test trit_three_valued
-
-# All tests
-cargo test
+cd SOURCE/src/v2-rust/killer
+cargo test --tests                                   # lib, binaries and all integration tests (long)
+cargo build --bins
+KILLER_BIN=$PWD/target/debug/killer_super python parity/run_parity.py    # 166 probes
+KILLER_BIN=$PWD/target/debug/killer_super python docs/check_examples.py  # every doc example
+python docs/check_links.py                                               # relative links in the docs
 ```
-
----
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for how to get started. Issues and PRs welcome!
-
----
+See [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Issues and PRs welcome.
 
 ## License
 
-MIT — see [LICENSE](LICENSE)
+MIT, see [LICENSE](LICENSE).
