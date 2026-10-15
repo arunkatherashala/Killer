@@ -4781,11 +4781,11 @@ fn find_top_level_add_sub_rightmost(expr: &str) -> Option<(usize, u8)> {
                 depth -= 1;
                 i += 1;
             }
-            b'+' if depth == 0 => {
+            b'+' if depth == 0 && !is_exponent_sign_at(bytes, i) => {
                 best = Some((i, b'+'));
                 i += 1;
             }
-            b'-' if depth == 0 && is_binary_minus_at(bytes, i) => {
+            b'-' if depth == 0 && !is_exponent_sign_at(bytes, i) && is_binary_minus_at(bytes, i) => {
                 best = Some((i, b'-'));
                 i += 1;
             }
@@ -4793,6 +4793,20 @@ fn find_top_level_add_sub_rightmost(expr: &str) -> Option<(usize, u8)> {
         }
     }
     best
+}
+
+/// True when the `+`/`-` at `i` is the sign of a float literal's exponent (`1e-7`, `2.5E+3`),
+/// not an operator.
+fn is_exponent_sign_at(bytes: &[u8], i: usize) -> bool {
+    if i < 2 || !(bytes[i - 1] == b'e' || bytes[i - 1] == b'E') || !(i + 1 < bytes.len() && bytes[i + 1].is_ascii_digit()) {
+        return false;
+    }
+    let mut j = i - 1; // the 'e'
+    while j > 0 && (bytes[j - 1].is_ascii_digit() || bytes[j - 1] == b'.') {
+        j -= 1;
+    }
+    // the mantissa must start with a digit and must not be the tail of an identifier (`x1e-5`)
+    j < i - 1 && bytes[j].is_ascii_digit() && (j == 0 || !(bytes[j - 1].is_ascii_alphanumeric() || bytes[j - 1] == b'_' || bytes[j - 1] == b'.'))
 }
 
 /// Rightmost `*`, `/`, or `%` at depth 0; `*` must not be part of `**`.
