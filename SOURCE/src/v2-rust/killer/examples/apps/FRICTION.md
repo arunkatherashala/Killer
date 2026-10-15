@@ -16,7 +16,7 @@ entry). Entries are numbered in the order I hit them.
    stdout. Fix: new builtins `eprintln` / `eprint` (src/stdio_builtins.rs).
 4. **`f"...\n..."` printed a literal backslash-n** (escapes were not processed in f-strings /
    k-strings, only in plain strings) and `{{`/`}}` produced "unsupported expression". Fix in
-   `compile_kstring`: escapes `\n \t \r \ \" \'` and doubled braces.
+   `compile_kstring`: the escapes backslash-n, -t, -r, double backslash, backslash-quote and doubled braces.
 5. **Indexing a long string with `s[i]` in a loop is quadratic** (48k characters: 3 s in a debug
    build for ASCII text, 48 s with one accented character). Worked around by `split(s, "")` first.
    See "still rough" in the final report.
@@ -105,3 +105,19 @@ entry). Entries are numbered in the order I hit them.
     wanted `push(out, {` ... `})` bodies indented two levels instead of one (it counted every open
     bracket as a level). Fix: the linter also consults the net/AI/stdlib builtin tables; the
     formatter adds one indentation level per line that still has open brackets.
+
+## Still rough (not fixed)
+
+- `s[i]` on a long string is O(i) (and every load of the string copies it): a 48k-character loop
+  takes seconds in a debug build; use `split(s, "")` once.
+- `%` is a C remainder for numbers and floor-modulo for bigints (entry 17).
+- `==` of two distinct very deeply nested lists/dicts and `json_stringify` of one recurse natively
+  (about 5000 levels) and can overflow the stack.
+- `for k, v in {"a": 1} {` (a dict literal directly after `in`) fails; with a variable it works.
+- Operator overloading has no `__len__`, `__getitem__`, `__contains__`, `__iter__`, `__pow__`.
+- `print` still ends the line (use `stdout_write`); `parse_csv` trims unquoted fields.
+- A `serve` handler error returns the raw VM error text as a 500 body (the todo app wraps its
+  handlers to avoid leaking it).
+- `docs/LANGUAGE.md` and `docs/STDLIB_INDEX.md` do not describe `serve`/`route`, `vec_*`, the
+  `test "name" { }` framework, `killer.toml`, bigints, `next`/`has_next`, `list`, `isDir`,
+  `eprintln`, `stdout_write` or `csv_columns`; the apps in this folder are the only worked examples.
