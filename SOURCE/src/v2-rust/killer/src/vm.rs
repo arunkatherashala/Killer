@@ -120,6 +120,29 @@ fn int_key(n: f64, buf: &mut [u8; 24]) -> Option<&str> {
     std::str::from_utf8(&buf[i..]).ok()
 }
 
+/// Ordering of two `sorted` keys: numbers (and bigints), strings, booleans, and lists of those
+/// compared element by element like Python tuples. `None` when the keys cannot be compared.
+fn compare_sort_keys(a: &Value, b: &Value) -> Option<std::cmp::Ordering> {
+    use std::cmp::Ordering;
+    match (a, b) {
+        (Value::Number(x), Value::Number(y)) => Some(x.partial_cmp(y).unwrap_or(Ordering::Equal)),
+        (Value::Str(x), Value::Str(y)) => Some(x.cmp(y)),
+        (Value::Bool(x), Value::Bool(y)) => Some(x.cmp(y)),
+        (Value::BigInt(_), Value::BigInt(_) | Value::Number(_)) | (Value::Number(_), Value::BigInt(_)) => crate::bigint_ops::compare(a, b),
+        (Value::Array(x), Value::Array(y)) => {
+            let (x, y) = (x.to_vec(), y.to_vec());
+            for (p, q) in x.iter().zip(y.iter()) {
+                match compare_sort_keys(p, q)? {
+                    Ordering::Equal => {}
+                    other => return Some(other),
+                }
+            }
+            Some(x.len().cmp(&y.len()))
+        }
+        _ => None,
+    }
+}
+
 /// `object[index]` for arrays, strings (by character), dicts and objects.
 fn index_value(object: &Value, index: &Value) -> Result<Value, VmError> {
     if let Some(n) = crate::bigint_ops::small_number(index) {
@@ -6355,11 +6378,10 @@ impl VirtualMachine {
                     keyed.push((key, item));
                 }
                 let mut failure: Option<VmError> = None;
-                keyed.sort_by(|a, b| match (&a.0, &b.0) {
-                    (Value::Number(x), Value::Number(y)) => x.partial_cmp(y).unwrap_or(std::cmp::Ordering::Equal),
-                    (Value::Str(x), Value::Str(y)) => x.cmp(y),
-                    _ => {
-                        failure = Some(VmError::runtime_error("sorted() keys must be all numbers or all strings".to_string()));
+                keyed.sort_by(|a, b| match compare_sort_keys(&a.0, &b.0) {
+                    Some(o) => o,
+                    None => {
+                        failure = Some(VmError::runtime_error("sorted() keys must be all numbers, all strings, all booleans or lists of those (compared like Python tuples)".to_string()));
                         std::cmp::Ordering::Equal
                     }
                 });
