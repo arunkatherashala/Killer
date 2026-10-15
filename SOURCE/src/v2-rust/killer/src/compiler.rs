@@ -380,7 +380,6 @@ pub fn compile_killer_subset(source: &str) -> Result<Program, VmError> {
     // subsequent stages always see `{}`-delimited blocks.
     let (indented, pass) = preprocess_indentation_mapped(source);
     let map = map.compose(&pass);
-
     // Pre-process @lang{} blocks BEFORE normalize_lines() splits braces.
     // This preserves embedded language code (Go, Rust, etc.) that uses { }.
     let (preprocessed, pass) = preprocess_polyglot_mapped(&indented);
@@ -4694,6 +4693,36 @@ fn split_logical(expr: &str) -> Option<(&str, &str, &str)> {
 
 /// Find the first occurrence of `op` at bracket/paren/brace depth 0, ignoring
 /// characters inside string literals. Handles `[]`, `()`, `{}`, and `""`.
+/// Quotes are paired and brackets balanced (outside strings): the operand can be re-parsed alone.
+fn operand_is_balanced(text: &str) -> bool {
+    let bytes = text.as_bytes();
+    let (mut depth, mut in_string, mut i) = (0i32, false, 0usize);
+    while i < bytes.len() {
+        let c = bytes[i];
+        if in_string {
+            if c == b'\\' {
+                i += 1;
+            } else if c == b'"' {
+                in_string = false;
+            }
+        } else {
+            match c {
+                b'"' => in_string = true,
+                b'(' | b'[' | b'{' => depth += 1,
+                b')' | b']' | b'}' => {
+                    depth -= 1;
+                    if depth < 0 {
+                        return false;
+                    }
+                }
+                _ => {}
+            }
+        }
+        i += 1;
+    }
+    !in_string && depth == 0
+}
+
 fn find_top_level_op(expr: &str, op: &str) -> Option<usize> {
     let mut depth: i32 = 0;
     let mut in_string = false;
@@ -6121,6 +6150,14 @@ fn compile_binary_operators(
             }
         } else {
             // a < b < c  ==  (a < b) && (b < c)   (the middle operands are evaluated twice)
+            // The rewrite is textual: an operand with an unterminated string or unbalanced brackets
+            // would make the rewritten text split as a chain again, forever.
+            if operands.iter().any(|o| !operand_is_balanced(o)) {
+                return Err(VmError::parse_error_simple(format!(
+                    "Line {}: unterminated string or unbalanced brackets in comparison `{}`",
+                    line_no, expr
+                )));
+            }
             let mut text = String::new();
             for (i, op) in ops.iter().enumerate() {
                 if i > 0 {
