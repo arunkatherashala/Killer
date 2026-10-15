@@ -587,3 +587,43 @@ println(r3["ok"])
     let out = run_src(src2);
     assert!(out.contains("real error") && !out.contains("unreachable"), "{out}");
 }
+
+#[test]
+fn a_bare_return_yields_null_and_names_starting_with_return_are_variables() {
+    let src = r#"class T {
+  fn init(p) {
+    this.p = p
+  }
+  fn persist(x) {
+    if this.p == null {
+      return
+    }
+    println("persisting", x)
+  }
+  fn commit(x) {
+    this.persist(x)
+    this.v = x
+  }
+}
+t = new T(null)
+t.commit(1)
+println(t.v)
+fn f() {
+  return
+}
+println(f())
+y = f()
+println(y == null)
+t2 = new T("x")
+t2.commit(2)
+returned = 5
+return_code = 7
+fn g() {
+  returns = 3
+  return_value = returns + 1
+  return return_value
+}
+println(returned, return_code, g())
+"#;
+    assert_eq!(run_src(src), "1\nnull\ntrue\npersisting 2\n5 7 4");
+}

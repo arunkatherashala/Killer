@@ -85,3 +85,9 @@ entry). Entries are numbered in the order I hit them.
     had returned long before) instead of an error. Root cause: `Instruction::Ret` never discarded
     the handlers of the returning frame, and the handler staleness test only looks at call depth.
     Fix: `Ret` pops every handler with `call_len >= depth`.
+19. **A bare `return` crashed the VM** ("POP requires one value on stack", "Stack underflow",
+    "STORE_SLOT requires one value"): `return` with no expression pushed no value, so
+    `this.persist(x)` as a statement, `y = f()` or `println(f())` underflowed the stack whenever
+    the callee took the early-return path. Also `return_code = 7` (any statement starting with the
+    letters `return`) was parsed as a return. Fix: a bare return pushes null; the keyword must be
+    followed by a non-identifier character.

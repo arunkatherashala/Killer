@@ -1218,6 +1218,8 @@ fn compile_stmt(
         Stmt::Return(expr_opt) => {
             if let Some(expr) = expr_opt {
                 compile_expr(expr, state, context)?;
+            } else {
+                state.instructions.push(Instruction::ConstNull);
             }
             state.instructions.push(Instruction::Ret);
         }
@@ -3138,7 +3140,7 @@ fn compile_simple_statement(
         return Ok(());
     }
 
-    if let Some(rest) = stmt.strip_prefix("return") {
+    if let Some(rest) = stmt.strip_prefix("return").filter(|r| !r.starts_with(|c: char| c.is_alphanumeric() || c == '_')) {
         if !context.in_function {
             return Err(VmError::parse_error_simple(format!(
                 "Line {}: `return` is only valid inside a function",
@@ -3149,6 +3151,9 @@ fn compile_simple_statement(
         let expr = rest.trim();
         if !expr.is_empty() {
             compile_expr_str(expr, line_no, state, context)?;
+        } else {
+            // a bare `return` returns null (the caller always expects one value)
+            state.instructions.push(Instruction::ConstNull);
         }
         
         // the returned value stays on the stack while the `finally` bodies of enclosing tries run
