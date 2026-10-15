@@ -36,6 +36,14 @@ pub fn expand_paths(args: &[String]) -> Vec<PathBuf> {
 }
 
 /// `killer run <file>`: compile and run a program.
+/// Resolve `import` relative to the script's folder and name the script in error messages
+/// (what `killer_super` does before compiling).
+pub fn prepare_script(path: &Path) {
+    let dir = path.parent().filter(|d| !d.as_os_str().is_empty()).unwrap_or(Path::new("."));
+    crate::imports::set_base_dir(dir);
+    crate::imports::set_main_file(path.display().to_string());
+}
+
 pub fn cmd_run(args: &[String]) -> i32 {
     let Some(path) = args.first() else {
         eprintln!("usage: killer run <file.killer>");
@@ -48,6 +56,7 @@ pub fn cmd_run(args: &[String]) -> i32 {
             return 1;
         }
     };
+    prepare_script(Path::new(path));
     match crate::run_killer_source(&source) {
         Ok(()) => 0,
         Err(e) => {

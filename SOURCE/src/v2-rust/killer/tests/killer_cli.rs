@@ -115,3 +115,15 @@ fn test_command_runs_blocks_and_writes_junit() {
     // blocks are inert in a normal run
     assert_eq!(d.killer(&["run", "math_test.killer"]).0, 0);
 }
+
+#[test]
+fn run_resolves_imports_next_to_the_script_and_names_it_in_errors() {
+    let d = Dir::new();
+    std::fs::create_dir_all(d.0.join("sub")).unwrap();
+    d.write("sub/helper.killer", "fn five() {\n  return 5\n}\n");
+    d.write("sub/main.killer", "import \"helper.killer\"\nprintln(five())\nprintln(nope)\n");
+    let (code, out, err) = d.killer(&["run", "sub/main.killer"]);
+    assert_eq!(code, 1);
+    assert_eq!(out.trim(), "5");
+    assert!(err.contains("main.killer:3"), "{err}");
+}

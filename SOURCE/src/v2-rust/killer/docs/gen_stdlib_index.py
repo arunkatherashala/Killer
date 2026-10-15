@@ -31,8 +31,8 @@ DESC = {
     "upper": "uppercase a string", "lower": "lowercase a string", "starts_with": "string starts with prefix", "ends_with": "string ends with suffix",
     "startsWith": "alias of starts_with", "endsWith": "alias of ends_with", "substr": "substring by start and length",
     "substring": "substring by start and end", "slice": "slice(x, start, end) of a list or string",
-    "format": "string formatting (registered but not implemented; use f-strings)", "parse_int": "parse text to int (registered but not implemented; use int)",
-    "parse_float": "parse text to float (registered but not implemented; use float)", "parseInt": "parse text to integer", "parseFloat": "parse text to float",
+    "format": "string formatting: format(\"{} is {:.2}\", a, b) with {}, {N} and {:.N} placeholders", "parse_int": "parse text to int",
+    "parse_float": "parse text to float", "parseInt": "parse text to integer", "parseFloat": "parse text to float",
     "abs": "absolute value", "floor": "round down", "ceil": "round up", "round": "round to nearest", "sqrt": "square root", "pow": "power",
     "sin": "sine", "cos": "cosine", "tan": "tangent", "random": "random float in [0, 1)",
     "bit_and": "bitwise and", "bit_or": "bitwise or", "bit_xor": "bitwise xor", "bit_shl": "shift left", "bit_shr": "shift right",
@@ -107,9 +107,9 @@ DESC = {
     "db_open": "open a key-value database file", "db_get": "read a key", "db_set": "write a key", "db_delete": "delete a key", "db_keys": "all keys",
     "db_keys_prefix": "keys with a prefix", "db_count": "number of keys", "db_close": "close the database", "db_drop": "delete the database",
     "readline": "read a line from stdin", "readline_prompt": "print a prompt, then read a line",
-    "file_read": "read a file (registered but not implemented; use readFile)", "file_write": "write a file (registered but not implemented; use writeFile)",
-    "file_exists": "file exists (registered but not implemented; use fileExists)", "file_delete": "delete a file (registered but not implemented; use deleteFile)",
-    "file_append": "append to a file (registered but not implemented; use appendFile)",
+    "file_read": "alias of readFile", "file_write": "alias of writeFile",
+    "file_exists": "alias of fileExists", "file_delete": "alias of deleteFile",
+    "file_append": "alias of appendFile",
     "T_POS": "trit constant: true", "T_NEG": "trit constant: false", "T_ZERO": "trit constant: unknown",
     "uncertain": "build an uncertain value: value with margin", "gauss": "uncertain value from mean and sigma",
     "unc_value": "central value of an uncertain number", "unc_margin": "margin of an uncertain number", "unc_lo": "lower bound", "unc_hi": "upper bound",
@@ -133,6 +133,27 @@ DESC = {
 }
 
 # (prefix, group title, generic description)
+NEWDESC = {
+    "big": "convert a number or string to a bigint", "factorial": "n! as an exact bigint", "divmod": "divmod(a, b) -> [quotient, remainder], floor semantics",
+    "idiv": "integer (floor) division, exact for bigints", "powmod": "powmod(base, exp, mod): modular exponentiation without huge intermediates",
+    "isqrt": "integer square root", "bit_length": "number of bits of an integer", "__iter_pairs": "internal: turns a dict into [key, value] pairs for `for k, v in d`",
+    "serve": "serve(port, handler[, opts]): HTTP server on this thread; handler(req) returns text, a dict or JSON",
+    "serve_once": "serve exactly one request, then return", "route": "route(method, path, fn): register a handler; `:name` and trailing `*` match path parts",
+    "routes_clear": "remove all registered routes", "server_stop": "stop the running server after the current response", "free_port": "an unused local TCP port",
+    "http_request": "http_request({method, url, headers, body, timeout, retries}) -> {status, headers, body}",
+    "vec_new": "vec_new(dim): create an in-memory vector store handle", "vec_add": "vec_add(store, id, vector[, meta]): insert or replace an entry",
+    "vec_search": "vec_search(store, query, k[, filter]): nearest entries by cosine similarity, as [{id, score, meta}]",
+    "vec_get": "fetch one entry by id", "vec_delete": "remove an entry by id (true if it existed)", "vec_len": "number of entries", "vec_clear": "remove all entries",
+    "vec_free": "release a store", "vec_save": "write a store to a file", "vec_load": "read a store written by vec_save",
+    "cosine": "cosine similarity of two number lists", "dot": "dot product", "norm": "Euclidean norm", "top_k": "top_k(scores, k): indexes of the k largest",
+    "chunk_text": "chunk_text(text, size, overlap): sliding character windows that avoid cutting words", "chunk_by_sentence": "chunk_by_sentence(text, max_chars): pack whole sentences",
+    "count_tokens": "approximate token count (no model tokenizer; roughly 10-20 percent off GPT-style counts)", "build_rag_prompt": "build_rag_prompt(question, chunks): grounded prompt text",
+    "mock_embed": "mock_embed(text, dim): deterministic offline embedding for tests and demos", "llm_embed_batch": "embed many texts through a provider (OpenAI, Ollama, any compatible server)",
+    "log_debug": "log at debug level (message[, fields])", "log_info": "log at info level", "log_warn": "log at warn level", "log_error": "log at error level",
+    "log_set_level": "set the minimum log level at run time", "load_env": "load a .env file into the environment without overriding existing variables; returns the names set",
+}
+DESC.update(NEWDESC)
+
 PREFIX = [
     ("nova_", "Nova columnar data format", "Nova columnar-format helper"),
     ("kore_", "Kore data format", "Kore data-format helper"),
@@ -173,9 +194,9 @@ PREFIX = [
     ("stack_", "Tooling", "stack-trace helper"),
     ("watch", "Tooling", "value/file watcher"),
     ("ui_", "UI", "UI runtime helper"),
-    ("mic_", "Device (Android only)", "microphone helper (registered but not implemented on desktop)"),
-    ("call_detect_", "Device (Android only)", "call detection (registered but not implemented on desktop)"),
-    ("phone_", "Device (Android only)", "phone helper (registered but not implemented on desktop)"),
+    ("mic_", "Device (Android only)", "microphone helper (Android feature; reports simulated state on desktop)"),
+    ("call_detect_", "Device (Android only)", "call detection helper (Android feature)"),
+    ("phone_", "Device (Android only)", "phone helper (Android feature)"),
     ("service_", "Device (Android only)", "Android service helper"),
     ("secure_", "Security", "encryption / secure-storage helper"),
     ("evidence_", "Security", "evidence hashing helper"),
@@ -187,12 +208,16 @@ PREFIX = [
 
 GROUPS = [
     "Core", "Strings", "Math and statistics", "Collections and sets", "Files, paths and time", "Data formats",
-    "Concurrency", "Network", "Regex and database", "Trits (three-valued logic)", "Signals", "Qubits", "Uncertain values",
+    "Big integers", "Concurrency", "Network", "Vectors, RAG and embeddings", "Logging", "Regex and database", "Trits (three-valued logic)", "Signals", "Qubits", "Uncertain values",
     "AI and LLM (needs a provider)", "Nova columnar data format", "Kore data format", "Foreign function interface",
     "Bytes and memory", "Packages", "Tooling", "UI", "Device (Android only)", "Security", "Polyglot", "OS-level (unsafe)", "Other",
 ]
 
 NAMES_BY_GROUP = {
+    "Big integers": "big factorial divmod idiv powmod isqrt bit_length".split(),
+    "Vectors, RAG and embeddings": "vec_new vec_add vec_search vec_get vec_delete vec_len vec_clear vec_free vec_save vec_load cosine dot norm top_k chunk_text "
+                                   "chunk_by_sentence count_tokens build_rag_prompt mock_embed llm_embed_batch".split(),
+    "Logging": "log_debug log_info log_warn log_error log_set_level load_env".split(),
     "Strings": "upper lower trim strip lstrip rstrip split join replace starts_with ends_with startsWith endsWith substr substring repeat charAt charCodeAt "
                "ord chr pad_left pad_right capitalize title swapcase center zfill isdigit isalpha isalnum isspace isupper islower splitlines find rfind count "
                "format indexOf includes base64_encode base64_decode b64_encode b64_decode hex_encode hex_decode sha256 sha256_bytes hmac_sha256".split(),
@@ -210,7 +235,7 @@ NAMES_BY_GROUP = {
     "Data formats": "parse_json json_parse json_encode json_stringify json_pretty parse_csv to_csv to_yaml compress decompress rle lz77 compress_ratio compress_info".split(),
     "Concurrency": "mutex_new mutex_get mutex_set mutex_add mutex_free chan_new chan_send chan_recv chan_try_recv chan_close async_spawn async_await async_all "
                    "async_race async_sleep async_timeout async_chain async_map async_resolve async_reject await_future spawn_thread join_thread".split(),
-    "Network": "http_get http_post http_post_json http_put http_delete http_patch http_head http_status http_download http_get_json http_with_headers".split(),
+    "Network": "serve serve_once route routes_clear server_stop free_port http_request http_get http_post http_post_json http_put http_delete http_patch http_head http_status http_download http_get_json http_with_headers".split(),
     "Regex and database": "regex_match regex_find regex_find_all regex_replace regex_split regex_test db_open db_get db_set db_delete db_keys db_keys_prefix db_count db_close db_drop".split(),
     "Uncertain values": "uncertain gauss unc_value unc_margin unc_lo unc_hi unc_sigma prob_gt prob_lt".split(),
     "Core": "print println type type_of to_string to_int to_float to_integer str int float bool String Number Boolean assert assert_eq assert_ne assert_true "
@@ -248,10 +273,19 @@ def main():
     blk = []
     i += 1
     while not src[i].strip().startswith("];"):
-        blk.append(src[i])
+        blk.append(re.sub(r"//.*", "", src[i]))  # comment words are not names
         i += 1
     names = []
     for n in re.findall(r'"([A-Za-z_0-9]+)"', "\n".join(blk)):
+        if n not in names:
+            names.append(n)
+    # names owned by the net/AI modules (src/net_ai.rs `is_builtin`)
+    extra = ["http_request"]
+    for mod in ("http_serve", "vec_builtins", "rag_builtins", "embed_builtins", "log_builtins"):
+        text = open(os.path.join(CRATE, "src", mod + ".rs"), encoding="utf-8").read()
+        m = re.search(r"pub const NAMES: &\[&str\] = &\[(.*?)\];", text, re.S)
+        extra += re.findall(r'"([A-Za-z_0-9]+)"', m.group(1))
+    for n in extra:
         if n not in names:
             names.append(n)
     dead = set(open(os.path.join(CRATE, "parity", "REGISTERED_BUT_DEAD.txt"), encoding="utf-8").read().split())
@@ -261,8 +295,9 @@ def main():
     out = []
     out.append("# Killer standard library index\n")
     out.append("Generated by `docs/gen_stdlib_index.py` from `const BUILTINS` in `src/compiler.rs` "
-               "(%d names). Do not edit by hand; regenerate. Names marked *registered but not implemented* "
-               "appear in the registry but calling them fails (see `parity/REGISTERED_BUT_DEAD.txt`). "
+               "and the NAMES tables of the net/AI modules (%d names). Do not edit by hand; regenerate. "
+               "A name marked *registered but not implemented* would appear in the registry but fail when called "
+               "(`parity/REGISTERED_BUT_DEAD.txt` lists them; it is empty now). "
                "Descriptions are one-liners, not full specifications: see `docs/LANGUAGE.md` for semantics and "
                "`parity/PARITY_REPORT.md` for what is verified.\n" % len(names))
     for g in GROUPS:

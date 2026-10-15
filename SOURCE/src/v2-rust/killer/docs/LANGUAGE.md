@@ -5,10 +5,12 @@ interpreter actually does. Every `killer` example below is executed by `docs/che
 (`# expect:` comments are the expected output, one line each), so the examples cannot drift from
 the implementation. Anything that does not work is listed under [Known limitations](#known-limitations).
 
-Run a program with `killer_super file.killer --run`.
+Run a program with `killer run file.killer` (the `killer` driver, see [Tooling](#tooling)) or
+`killer_super file.killer --run`. Both use the same compiler and VM.
 
 - [Values and types](#values-and-types)
 - [Operators and precedence](#operators-and-precedence)
+- [Big integers](#big-integers)
 - [Comments](#comments)
 - [Strings](#strings)
 - [Lists, dicts and sets](#lists-dicts-and-sets)
@@ -19,6 +21,13 @@ Run a program with `killer_super file.killer --run`.
 - [Generators](#generators)
 - [Imports](#imports)
 - [Async, channels and mutexes](#async-channels-and-mutexes)
+- [HTTP servers and clients](#http-servers-and-clients)
+- [Vectors, RAG and embeddings](#vectors-rag-and-embeddings)
+- [Logging and environment](#logging-and-environment)
+- [Packages](#packages)
+- [Tests](#tests)
+- [Tooling](#tooling)
+- [Resource limits and capabilities](#resource-limits-and-capabilities)
 - [Killer-specific values](#killer-specific-values)
 - [Standard library](#standard-library)
 - [Known limitations](#known-limitations)
@@ -56,8 +65,9 @@ println(type(s))
 ```
 
 Integers and floats are both reported as `number`; integers print without a decimal point and
-`10 / 5` is `2`, `10 / 4` is `2.5`. Hex literals (`0xFF`) are supported. Integers are 64-bit and
-**saturate** instead of overflowing or growing (see limitations).
+`10 / 5` is `2`, `10 / 4` is `2.5`. Hex literals (`0xFF`) are supported. Plain numbers are 64-bit
+and **saturate** instead of overflowing (`2 ** 63` is `9223372036854775807`); for exact large
+integers use [big integers](#big-integers) (`123n`).
 
 `type_of(x)` is the same as `type(x)`. Conversions: `str`, `int`, `float`, `bool`.
 
@@ -178,6 +188,71 @@ try {
 # expect: caught
 ```
 
+## Big integers
+
+A literal with an `n` suffix (`123n`, `0xFFn`) or `big(x)` makes an arbitrary-precision integer, type
+name `bigint`. `factorial(n)`, `powmod(base, exp, mod)`, `divmod(a, b)`, `idiv(a, b)`, `isqrt`,
+`bit_length` and `gcd` accept them, and so do `abs`, `pow`, `sorted`, comparisons, `str`, f-strings and
+JSON output. Nothing overflows: `2n ** 100` has 31 digits.
+
+```killer
+println(2n ** 100)
+println(factorial(25))
+println(big(2) ** 70 + 1)
+println(123456789012345678901234567890n * 987654321n)
+println(powmod(4, 13, 497))
+println(divmod(17, 5))
+println(idiv(7, 2))
+println(type(5n))
+println(0xFFn)
+println(factorial(20) == 2432902008176640000)
+println(sorted([3n, 1, 2n]))
+println(json_stringify({"n": 2n ** 70}))
+# expect: 1267650600228229401496703205376
+# expect: 15511210043330985984000000
+# expect: 1180591620717411303425
+# expect: 121932631124828532112482853211126352690
+# expect: 445
+# expect: [3, 2]
+# expect: 3
+# expect: bigint
+# expect: 255
+# expect: true
+# expect: [1, 2, 3]
+# expect: {"n":1180591620717411303424}
+```
+
+Mixed arithmetic rules:
+
+- `+ - * **` with a bigint and an integral number give an exact bigint.
+- A bigint combined with a non-integral float gives a float (precision is lost).
+- `a / b` is an exact bigint when `b` divides `a`, otherwise a float.
+- `%`, `idiv` and `divmod` use **floor** semantics (like Python): `-7n % 3n` is `2`. Plain Number `%`
+  keeps C semantics: `-7 % 3` is `-1`.
+- A bigint equals and orders exactly against a number (`2n ** 64 == 18446744073709551616n`).
+- `**` refuses absurd result sizes with an error; division by zero is a catchable error.
+
+```killer
+println(-7n % 3n)
+println(-7 % 3)
+println(6n / 2n)
+println(7n % 3n)
+println(2n ** 64 == 18446744073709551616n)
+println(2n ** 64 > 1e19)
+try {
+  println(1n / 0n)
+} catch e {
+  println("caught")
+}
+# expect: 2
+# expect: -1
+# expect: 3
+# expect: 1
+# expect: true
+# expect: true
+# expect: caught
+```
+
 ## Comments
 
 Three comment styles exist: `#`, `//` and `--`, each running to the end of the line.
@@ -193,12 +268,22 @@ println(x + y + z)
 # expect: 6
 ```
 
-**`//` is always a comment, never integer division.** Writing `7 // 2` is a parse error
-("`//` starts a comment in Killer; use `floor(a / b)` for integer division"). Use `floor`:
+**`//` is always a comment, never integer division.** Because `x // 2` would silently become `x`, the
+compiler rejects it: a `//` that follows an expression-ending token (a name, number, `)` or `]`) and is
+followed by an operand (a number or `(`, a lowercase name glued to it, or a name already used earlier in
+the program) is a compile error: "`//` starts a comment in Killer; use floor(a / b) for integer
+division". `// some prose`, `//TODO`, full-line comments, strings and `@lang` blocks are unaffected.
+Use `floor` (or `idiv(a, b)` for exact big-integer division):
 
 ```killer
 println(floor(7 / 2))
 # expect: 3
+```
+
+```killer
+x = 7
+y = x // 2
+# expect-error: starts a comment in Killer
 ```
 
 ## Strings
@@ -358,8 +443,8 @@ for i, x in enumerate(["a", "b"]) {
 
 Dicts: string, number or bool keys; a missing key reads as `null`. Insertion order is preserved.
 `keys(d)`, `values(d)` and `entries(d)` (a list of `[key, value]`) give lists; `delete(d, k)`
-removes a key; `in` tests for a key. Iterating a dict with `for k in d` yields its keys; to get
-pairs iterate `entries(d)`.
+removes a key; `in` tests for a key. `for k in d` yields the keys and `for k, v in d` yields key and
+value (it iterates the `[key, value]` pairs; any non-dict is iterated as before).
 
 ```killer
 d = {"a": 1}
@@ -373,6 +458,9 @@ println(values(d))
 for e in entries(d) {
   println(e[0] + str(e[1]))
 }
+for k, v in d {
+  println(k, v)
+}
 delete(d, "a")
 println(len(keys(d)))
 println({k: k * 2 for k in range(3)})
@@ -385,6 +473,8 @@ println({"x": {"y": 5}}["x"]["y"])
 # expect: [1, 2]
 # expect: a1
 # expect: b2
+# expect: a 1
+# expect: b 2
 # expect: 1
 # expect: {0: 0, 1: 2, 2: 4}
 # expect: 5
@@ -412,8 +502,9 @@ and the caller unpacks it: `a, b = f()`.
 
 ## Control flow
 
-The condition is not parenthesised and the body always uses braces **on separate lines** (a whole
-`if c { stmt }` on one line is not supported; see limitations).
+The condition is not parenthesised and the body uses braces. A body may be on separate lines or on
+the same line (`if c { stmt }`, also for `else`, `while`, `for` and `try`/`catch`): a brace after a
+control header opens a block, never a dict literal. (`fn name() { ... }` on one line is not supported.)
 
 ```killer
 x = 7
@@ -434,12 +525,19 @@ while i < 3 {
   i = i + 1
 }
 println(i)
+if x > 5 { println("one line") } else { println("never") }
+for n in range(2) { println(n) }
 # expect: mid
 # expect: elif works
 # expect: 3
+# expect: one line
+# expect: 0
+# expect: 1
 ```
 
-Loops: `while`, `for x in iterable`, `for i in range(...)`, C-style `for (i = 0; i < n; i++)`, and
+Loops: `while`, `for x in iterable` (every iteration rebinds the loop variable, even when a variable of
+that name already exists: after `i = 7`, `for i in range(2)` leaves `i == 1`; an empty loop leaves the old
+value alone), `for k, v in dict`, `for i in range(...)`, C-style `for (i = 0; i < n; i++)`, and
 `do { } while cond`. `break` and `continue` work in all of them. `range(n)`, `range(a, b)`,
 `range(a, b, step)` build a list.
 
@@ -546,8 +644,12 @@ println(table["say"]())
 # expect: hi
 ```
 
-Closures capture variables by reference and keep their state. Assigning inside a function creates
-a local variable unless the name is declared `global`; reading globals needs no declaration.
+Closures **share** the variables they capture. A local that a nested function assigns (or that the
+enclosing function reassigns after the nested definition) lives in one cell for the whole call: every
+closure created by that call, and the enclosing function itself, see the same variable. Loop variables
+are captured per iteration (like JavaScript `let`): each closure created in a loop remembers its own
+value. Assigning inside a function creates a local variable unless the name is declared `global`;
+reading globals needs no declaration.
 
 ```killer
 fn make() {
@@ -567,6 +669,28 @@ fn add_local(n) {
 }
 add_local(5)
 println(total)
+fn counter() {
+  n = 0
+  fn inc() {
+    n = n + 1
+    return n
+  }
+  fn get() {
+    return n
+  }
+  return [inc, get]
+}
+pair = counter()
+pair[0]()
+pair[0]()
+println(pair[1]())
+fns = []
+for i in range(3) {
+  push(fns, fn() {
+    return i * 10
+  })
+}
+println(fns[0](), fns[1](), fns[2]())
 fn add_global(n) {
   global total
   total = total + n
@@ -576,11 +700,14 @@ println(total)
 # expect: 1
 # expect: 2
 # expect: 0
+# expect: 2
+# expect: 0 10 20
 # expect: 5
 ```
 
 Decorators wrap a function: `@loud` above `fn base` means `base = loud(base)`. Recursion works
-(5000 levels deep is tested) and self tail-calls run in constant stack depth. Parameters may carry
+(depth 50,000 is fine; the limit is 100,000 frames, see [Resource limits](#resource-limits-and-capabilities))
+and self tail-calls run in constant stack depth. Parameters may carry
 type annotations (`a: number`, `-> number`) which are checked at call time.
 
 ```killer
@@ -611,8 +738,45 @@ println(depth(5000))
 # expect: 5000
 ```
 
-Built-in functions are not first-class values: `f = print` is an "undefined variable" error.
-Wrap them: `f = fn(x) { return upper(x) }`.
+Built-in functions are first-class values: `f = print`, `map(xs, str)`, `sorted(xs, abs)` work. A bare
+builtin name compiles to a lookup that prefers a variable of that name and falls back to a callable
+wrapper around the builtin. (Only names in the compiler's builtin table qualify; see limitations.)
+
+```killer
+f = len
+println(f([1, 2, 3]))
+println(map(["a", "b"], upper))
+println(reduce([1, 5, 2], max, 0))
+say = println
+say("hi")
+# expect: 3
+# expect: [A, B]
+# expect: 5
+# expect: hi
+```
+
+Beyond the basics, `format("{} is {:.2}", name, x)` fills `{}`, `{N}` and `{:.N}` placeholders,
+`substr(s, start[, len])` slices by character count, `time_now()` is the current time as a number, and
+`to_float`, `to_int`, `to_string`, `type_of`, `parse_int`, `parse_float` and the snake_case file names
+(`file_read`, `file_write`, `file_append`, `file_exists`, `file_delete`) are aliases of the longer
+builtins.
+
+```killer
+println(format("{} + {} = {}", 1, 2, 3))
+println(format("{1} {0}", "a", "b"))
+println(format("{:.3}", 2))
+println(substr("hello", 1, 3))
+println(to_float("2.5") + 1)
+println(type(time_now()))
+println(parse_int("42") + 1)
+# expect: 1 + 2 = 3
+# expect: b a
+# expect: 2.000
+# expect: ell
+# expect: 3.5
+# expect: number
+# expect: 43
+```
 
 ## Classes
 
@@ -707,7 +871,9 @@ println(new V(0).bump().bump().x)
 
 ## Errors
 
-`throw` any value; `try { } catch e { }` binds it; `finally` always runs. Runtime errors (division
+`throw` any value; `try { } catch e { }` binds it; `finally` runs on **every** exit of its `try`: normal
+end, caught or uncaught error, `return` (the value is computed before `finally` runs), `break` and
+`continue`. A `return` or `throw` inside `finally` overrides the pending one. Runtime errors (division
 by zero, bad index, calling an undefined function) are also catchable. An uncaught error prints
 `ERROR: ...` with the file and line to stderr and exits non-zero.
 
@@ -747,6 +913,24 @@ try {
 }
 assert(1 == 1)
 println("ok")
+fn f() {
+  try {
+    return "from try"
+  } finally {
+    println("cleanup")
+  }
+}
+println(f())
+for j in range(3) {
+  try {
+    if j == 1 {
+      continue
+    }
+    println("body", j)
+  } finally {
+    println("fin", j)
+  }
+}
 # expect: caught boom
 # expect: 42
 # expect: a
@@ -755,6 +939,13 @@ println("ok")
 # expect: f
 # expect: got deep
 # expect: ok
+# expect: cleanup
+# expect: from try
+# expect: body 0
+# expect: fin 0
+# expect: fin 1
+# expect: body 2
+# expect: fin 2
 ```
 
 An uncaught error carries the line number:
@@ -800,8 +991,12 @@ for x in naturals() {
 
 ## Imports
 
-`import "file.killer"` runs another file and makes its top-level functions and variables available.
-Paths are relative to the importing file.
+`import "file.killer"` includes another file at compile time and makes its top-level functions,
+classes and variables available, as if its text had been written at that place (error lines still
+point into the imported file). Paths are relative to the importing file; a file is included once, so
+repeated or circular imports are skipped. `import name` (bare) and `import "name/sub.killer"` also
+resolve through installed packages (see [Packages](#packages)). An import that cannot be found is a
+compile error that lists the places searched.
 
 ```killer
 # file: helper.killer
@@ -823,6 +1018,12 @@ function concurrently and returns a handle that `await` accepts. The functional 
 `async_spawn(f)`, `async_await(handle)`. Channels pass values between tasks and a mutex guards a
 shared value.
 
+**Tasks get deep copies.** Arguments, the function's captured variables, a snapshot of the globals,
+channel messages and results are all copied across the thread boundary (no object is ever shared between
+OS threads). Mutating a list, dict, object or set inside a task is invisible to the parent and the
+parent's later changes are invisible to the task; communicate with channels, `mutex_*` cells or the
+returned value. `async_spawn(f, args...)` passes arguments.
+
 ```killer
 async fn five() {
   return 5
@@ -841,12 +1042,298 @@ println(chan_recv(ch))
 m = mutex_new(1)
 mutex_add(m, 4)
 println(mutex_get(m))
+mutex_set(m, 9)
+println(mutex_get(m))
+items = [1, 2]
+fn work(xs) {
+  push(xs, 99)
+  return len(xs)
+}
+h3 = async_spawn(work, items)
+println(async_await(h3))
+println(len(items))
 # expect: 5
 # expect: 7
 # expect: 7
 # expect: 9
 # expect: 5
+# expect: 9
+# expect: 3
+# expect: 2
 ```
+
+## HTTP servers and clients
+
+**Server.** `serve(port, handler[, opts])` binds a TCP port and runs the accept loop on the calling
+thread, one request at a time. The handler receives a dict `{method, path, query, headers, body,
+params}` (header names are lower case) and returns a string (200 `text/plain`), a dict with `status`
+(and optional `headers` and `body`), or any other dict or list (sent as JSON). A handler that throws
+produces a `500` and the server keeps going. `route(method, path, fn)` registers handlers instead of one
+catch-all: `:name` segments land in `req["params"]`, a trailing `*` matches the rest, and `serve(port,
+null)` dispatches to the routes (unmatched requests get `404`). Options: `host` (default `127.0.0.1`;
+`"0.0.0.0"` exposes the server), `max_requests`, `idle_timeout` (seconds). `serve_once(port, handler)`
+serves one request, `server_stop()` called from a handler stops after the current response,
+`routes_clear()` forgets the routes and `free_port()` returns an unused local port. `serve` returns the
+number of requests served. There is no TLS in the server; put a reverse proxy in front for HTTPS.
+
+**Client.** `http_get(url[, headers, timeout])` returns the body text. `http_post`, `http_put`,
+`http_delete`, `http_patch`, `http_head`, `http_get_json` and `http_download` are the other verbs.
+`http_request({method, url, headers, body, timeout, retries})` returns `{status, headers, body}`; a dict
+body is sent as JSON, and failures on connection errors or `5xx` are retried with exponential backoff.
+The client is a hardened wrapper around `curl` (which must be installed, especially for HTTPS): the URL,
+headers and body are passed on curl's **stdin**, never on its command line, so API keys do not show up
+in the process list; TLS certificates are verified by default (`insecure: true` opts out); plain `http://`
+is refused except for `localhost`, `127.0.0.1` and `::1` (or `allow_http: true`); header values with
+control characters are rejected; every request has a timeout.
+
+A server and its client cannot share one thread, so the example starts the client as a task. (Tasks get
+copies, so the port is passed as an argument.)
+
+```killer
+port = free_port()
+route("GET", "/hello/:name", fn(req) {
+  return "hello " + req["params"]["name"]
+})
+route("POST", "/sum", fn(req) {
+  data = json_parse(req["body"])
+  return {"total": data["a"] + data["b"]}
+})
+fn client(port) {
+  base = "http://127.0.0.1:" + str(port)
+  a = http_get(base + "/hello/ada", {}, 10)
+  b = http_request({"method": "POST", "url": base + "/sum", "body": {"a": 2, "b": 3}, "timeout": 10})
+  c = http_get(base + "/nope", {}, 10)
+  return [a, b, c]
+}
+h = async_spawn(client, port)
+n = serve(port, null, {"max_requests": 3})
+r = async_await(h)
+println("served", n)
+println(r[0])
+println(r[1]["status"], r[1]["body"])
+println(r[2])
+routes_clear()
+# expect: served 3
+# expect: hello ada
+# expect: 200 {"total":5}
+# expect: Not Found: GET /nope
+```
+
+## Vectors, RAG and embeddings
+
+Offline building blocks for retrieval-augmented generation, with no model required.
+
+- `vec_new(dim)` creates a store handle; `vec_add(store, id, vector[, meta])` inserts or replaces an entry
+  (`meta` is any JSON-like dict); `vec_search(store, query, k[, filter])` returns the `k` nearest entries by
+  cosine similarity as `[{id, score, meta}]`, best first, optionally only those whose metadata matches
+  `filter`; `vec_get`, `vec_delete`, `vec_len`, `vec_clear`, `vec_free`; `vec_save(store, path)` and
+  `vec_load(path)` use a validated binary file.
+- `cosine(a, b)`, `dot(a, b)`, `norm(v)` and `top_k(scores, k)` (indexes of the largest scores).
+- `chunk_text(text, size, overlap)` makes overlapping character windows that avoid cutting words;
+  `chunk_by_sentence(text, max_chars)` packs whole sentences; `count_tokens(text)` is an
+  **approximation** (letters cost one token per 4 characters, digits one per 3, punctuation one each),
+  usually within 10-20 percent of GPT-style counts, good for budgeting but not exact;
+  `build_rag_prompt(question, chunks)` builds a grounded prompt from strings, `{text: ...}` dicts or search hits.
+- `mock_embed(text, dim)` is a deterministic offline embedding for tests and demos. `llm_embed_batch`
+  and `llm_embed(opts, text)` call a real provider (`provider`, `model`, `base_url` for any
+  OpenAI-compatible server, `key_env` naming the environment variable that holds the key); they use the
+  hardened client above.
+
+```killer
+store = vec_new(3)
+vec_add(store, "a", [1, 0, 0], {"tag": "x"})
+vec_add(store, "b", [0, 1, 0], {"tag": "y"})
+hits = vec_search(store, [0.9, 0.1, 0], 1)
+println(hits[0]["id"], round(hits[0]["score"] * 100) / 100, hits[0]["meta"]["tag"])
+println(vec_len(store))
+println(cosine([1, 0], [1, 1]))
+println(dot([1, 2], [3, 4]), norm([3, 4]), top_k([0.1, 0.9, 0.5], 2))
+chunks = chunk_text("one two three four five six seven eight nine ten", 20, 5)
+println(len(chunks), chunks[0])
+println(chunk_by_sentence("Hi there. How are you? Fine.", 15))
+println(count_tokens("Hello, world! 12345"))
+println(len(mock_embed("hello", 8)), mock_embed("hello", 8) == mock_embed("hello", 8))
+println(build_rag_prompt("What is Killer?", ["Killer is a scripting language."]))
+# expect: a 0.99 x
+# expect: 2
+# expect: 0.7071067811865475
+# expect: 11 5 [1, 2]
+# expect: 3 one two three four
+# expect: [Hi there., How are you?, Fine.]
+# expect: 8
+# expect: 8 true
+# expect: Answer the question using only the context below. If the context does not contain the answer, say you do not know.
+# expect:
+# expect: Context:
+# expect: [1] Killer is a scripting language.
+# expect:
+# expect: Question: What is Killer?
+# expect: Answer:
+```
+
+`examples/rag_demo.killer` combines all of this with `serve` into a small question-answering service.
+
+## Logging and environment
+
+`log_debug`, `log_info`, `log_warn` and `log_error(message[, fields])` write one line to stderr. The
+minimum level comes from the `KILLER_LOG` environment variable (`debug`, `info`, `warn`, `error`, `off`;
+default `info`) or `log_set_level(name)`. `KILLER_LOG_FORMAT=json` switches to one JSON object per line.
+`load_env(path)` reads a `.env` file (`KEY=VALUE`, `export KEY=VALUE`, `#` comments, quotes) into the
+process environment without overriding variables that already exist, and returns the names it set (never
+the values); read them with `env_get(name)`.
+
+```killer
+writeFile("demo.env", "A_KEY=1\nexport B=\"two words\"\n# comment\n")
+println(load_env("demo.env"))
+println(env_get("B"))
+log_set_level("warn")
+log_info("not shown")
+log_warn("shown on stderr", {"code": 7})
+# expect: [A_KEY, B]
+# expect: two words
+```
+
+## Packages
+
+A project is a folder with a `killer.toml` manifest; dependencies are pinned in `killer.lock` with a
+SHA-256 per package. The `killer_pkg` tool manages them:
+
+```text
+killer_pkg new app              # application: killer.toml, src/main.killer, tests/, .gitignore
+killer_pkg new mathx --lib      # library: entry src/lib.killer
+killer_pkg add mathx --path ../mathx        # also: add name@^1.2 | --git URL [--rev R] | --dev
+killer_pkg install              # resolve, download, verify, write killer.lock, fill .killer/packages
+killer_pkg update [name]        # re-resolve to the newest allowed versions
+killer_pkg list | remove NAME
+killer_pkg publish --registry URL --token T [--dry-run]   # registry: file:///dir, a directory, or http://host:port
+killer_pkg check                # re-hash installed packages against killer.lock
+```
+
+```toml
+[package]
+name = "app"
+version = "0.1.0"
+entry = "src/main.killer"
+
+[dependencies]
+mathx = { path = "../mathx" }       # or  libA = "^1.2"  or  libC = { git = "https://host/c.git", rev = "abc" }
+```
+
+Version requirements are `^1.2`, `~1.2.3`, `>=1.0, <2.0`, `=1.2.3`, `1.2.3` and `*`; conflicts name the
+packages involved. Imports are resolved at **compile time**: after `killer_pkg install`,
+`import mathx` inlines the package's entry file (and `import "mathx/sub.killer"` a file inside it), so its
+functions are called by name. Lookup order: the importing file's own folder, then `packages/<name>` and `.killer/packages/<name>` in
+each folder from the script's up to the project root (nearest `killer.toml`), then path dependencies
+from the manifest and lock file. Registries are served by
+`kpm-registry` (a directory of immutable releases over HTTP, token-protected publish) or are simply a
+directory used as a `file://` registry.
+
+## Tests
+
+A `test "name" { ... }` block defines a test; so does any top-level zero-argument `fn test_*()`. A plain
+run (`killer run`) only defines them; `killer test` runs each one inside its own `try/catch`, so one
+failure never stops the others, and prints a table. `assert_eq(a, b)` fails with both values and where
+they first differ, `assert_throws(fn, "text")` passes when the function throws an error containing the
+text, and `assert`, `assert_ne`, `assert_true`, `assert_false`, `assert_contains`, `assert_nil` are also
+available.
+
+```killer
+fn double(x) {
+  return x * 2
+}
+test "doubles" {
+  assert_eq(double(2), 4)
+}
+test "rejects bad input" {
+  assert_throws(fn() {
+    throw "boom"
+  }, "boom")
+}
+println("tests are only defined here")
+# expect: tests are only defined here
+```
+
+```text
+$ killer test                      # every test in ./ (test blocks, fn test_*, legacy test_*.killer files)
+  ok    t.killer::doubles (0 ms)
+  FAIL  t.killer::fails
+          assert_eq failed
+            left:  4
+            right: 5
+3 passed, 1 failed, 4 total in 0.01s
+$ killer test --junit out.xml doubles     # filter = substring of "file::test name"; JUnit XML for CI
+$ killer test --list
+```
+
+The exit code is 1 when any test fails.
+
+## Tooling
+
+One driver, `killer`, covers everyday work (`cargo build --bin killer`):
+
+| Command | What it does |
+|---------|--------------|
+| `killer run file.killer` (or `killer file.killer`) | run a program |
+| `killer fmt [--check] paths` | re-indent brace code (2 spaces), strip trailing whitespace, collapse blank lines; behaviour-preserving and idempotent; `--check` exits 1 if a file would change |
+| `killer lint [--deny-warnings] [--allow RULE] [--rules] paths` | lint; exit 1 on errors (or any warning with `--deny-warnings`) |
+| `killer test [--junit FILE] [--list] [filter] [paths]` | run tests (above) |
+| `killer repl` | interactive prompt; variables persist, a line ending in `{` continues until braces balance |
+| `killer lsp` | language server over stdio |
+| `killer --version` | print the version |
+
+**Lint rules** (`killer lint --rules`): `undefined-function` (error: call of a name that is not a function,
+class, variable or builtin), `unused-variable`, `unreachable-code` (after `return`/`throw`/`break`/`continue`),
+`shadowed-builtin`, `floor-division-comment` (`a // 2` is a comment). Suppress a finding with
+`# lint:ignore RULE` on the line or alone on the line above (no rule id ignores every rule), or
+`# lint:ignore-file RULE` for a whole file.
+
+**Editor support.** `killer_lsp` (also `killer lsp`) is a language server built on the real compiler:
+diagnostics with the user's line numbers, completion of keywords, builtins and your own functions, hover
+with one-line docs, go-to-definition and the document outline. `editors/vscode` is a VS Code extension
+(syntax highlighting, snippets including `test` blocks, and the language client); see its README for
+installation. **Debugger.** `killer_dap` is a Debug Adapter Protocol server (stdio) with line
+breakpoints, step in/over/out, continue and variable inspection; point any DAP client at it. It reports
+only the innermost scope plus globals and a single stack frame.
+
+## Resource limits and capabilities
+
+Whatever a script contains, the compiler and VM report a Killer error instead of crashing or hanging:
+
+| Limit | Value | Result |
+|-------|-------|--------|
+| Call depth | 100,000 frames | catchable `stack overflow: recursion too deep` |
+| Re-entry through callbacks, `__add__`, `toString`, generators | 400 levels | same error |
+| String built by `+`, `*`, `repeat`, `pad_*` | 256 MB | `string is too large` |
+| List built by `+` or `*` | 16M elements | `list is too large` |
+| `range(n)` materialised | 32M elements | `range is too large ... use a while loop` |
+| `json_stringify` output | 64 MB | `output is too large` |
+| Source nesting (brackets, blocks, lambdas) | 200 levels | `nesting is too deep` |
+| Operators in one expression | 1,000 | `expression is too long` |
+
+```killer
+fn forever(n) {
+  return forever(n + 1) + 1
+}
+try {
+  forever(0)
+} catch e {
+  println(e)
+}
+try {
+  x = repeat("ab", 1e12)
+} catch e {
+  println("too large")
+}
+# expect: stack overflow: recursion too deep
+# expect: too large
+```
+
+Capabilities: every builtin that touches files, the network, processes, native code (FFI) or language
+models first checks a per-thread `CapabilitySet` (`allow_file_read`, `allow_file_write`,
+`allow_network`, `allow_process_spawn`, `allow_native_jit`, `allow_llm`, `allow_ffi`). The `killer`
+binaries run with everything allowed (`CapabilitySet::trusted_local()`); an embedder that runs untrusted
+scripts installs `CapabilitySet::restricted()` (everything denied) or its own set with
+`CapabilityScopeGuard`, and `tests/capabilities.rs` checks that every dispatcher name honours it.
 
 ## Killer-specific values
 
@@ -871,32 +1358,32 @@ println(trit_and(T_POS, T_ZERO))
 
 ## Standard library
 
-The full list of the 710 registered builtin names, grouped, with one-line descriptions, is in
-[STDLIB_INDEX.md](STDLIB_INDEX.md). It is generated from `const BUILTINS` in `src/compiler.rs` by
-`docs/gen_stdlib_index.py`. Some registered names are not implemented (listed in
-`parity/REGISTERED_BUT_DEAD.txt`, flagged in the index). Many AI, device and OS-level builtins need
-external services or hardware and are not exercised by the examples here.
+The full list of registered builtin names, grouped, with one-line descriptions, is in
+[STDLIB_INDEX.md](STDLIB_INDEX.md). It is generated from `const BUILTINS` in `src/compiler.rs` and the
+`NAMES` tables of the net/AI modules by `docs/gen_stdlib_index.py`. Every registered name is callable
+(`parity/REGISTERED_BUT_DEAD.txt` is empty). Many AI, device and OS-level builtins need external services
+or hardware and are not exercised by the examples here.
 
 ## Known limitations
 
-These were observed while writing this document (not hypothetical):
+Observed, not hypothetical:
 
-- **Integer overflow saturates**: `2 ** 63` and `9223372036854775807 + 1` both give
-  `9223372036854775807`. There is no arbitrary-precision integer; `2 ** 62` is exact.
-- **One-line blocks are not parsed**: `if x > 1 { println(x) }` and
-  `for i in xs { println(i) }` on a single line fail with "unsupported expression"; put the body on
-  following lines.
-- **A `for ... in` loop does not rebind a variable that already exists**: after `i = 7`,
-  `for i in range(3) { println(i) }` prints `7` three times and leaves `i == 7` (same in
-  functions, and after a C-style `for (i = 0; ...)` that used the same name). Use a fresh loop
-  variable name.
-- `//` is a comment, so there is no integer-division operator (use `floor(a / b)`).
-- **`for k, v in d` over a dict** does not give key/value pairs (`v` is `null`); use
-  `for e in entries(d)`.
-- **Builtins are not first-class values** (`f = print` fails).
-- `format(...)`, `parse_int`, `parse_float`, `file_read`/`file_write` and about fifty other names
-  are registered but not implemented (see the index); use f-strings, `int`, `float`, `readFile`,
-  `writeFile`.
-- The x86-64 JIT only handles pure numeric functions; on other CPU architectures everything runs
-  in the interpreter (same results, slower).
+- **Block scoping**: a variable first assigned inside an `if`, `while` or `for` body is not visible after
+  the block (`Undefined variable`). Assign it before the block. A fix is in progress.
+- **Plain integers saturate**: `2 ** 63` and `9223372036854775807 + 1` give `9223372036854775807`, and a
+  float of 2^63 or more prints saturated too; use `n` literals / `big()` for exact values. `int(5n)` is not
+  supported, and `bool(0n)` returns `true` (an `if` on a zero bigint is falsy; compare with `== 0` instead).
+- **Number `%` keeps C semantics** (`-7 % 3` is `-1`) while bigints use floor semantics (`-7n % 3n` is `2`).
+- **Closures created before the enclosing function first assigns a captured variable** keep the old copy
+  semantics instead of sharing it.
+- `//` is a comment, so there is no integer-division operator (use `floor(a / b)` or `idiv`).
+- `fn name() { ... }` on one line is not parsed (control statements are).
+- **Builtins as values** work for names in the compiler's builtin table; names owned only by the net/AI
+  modules (for example `vec_new`, `llm_embed_batch`) can be called but not passed around; wrap them in a `fn`.
+- `len(s)` and `s[i]` on very long strings are O(n) per call.
+- `count_tokens` is an approximation, not a model tokenizer.
+- The HTTP server has no TLS and serves one request at a time; the HTTP client needs `curl` for HTTPS.
+- The debugger shows one stack frame.
+- The x86-64 JIT only handles pure numeric functions; on other CPU architectures everything runs in the
+  interpreter (same results, slower).
 - Performance claims: only `bench/RESULTS.md` is measured; anything else is not measured.

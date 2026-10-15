@@ -74,6 +74,10 @@ jobs:
           KILLER_BIN: ${{ github.workspace }}/SOURCE/src/v2-rust/killer/target/debug/killer_super${{ runner.os == 'Windows' && '.exe' || '' }}
         run: python docs/check_examples.py
 
+      - name: Documentation links
+        working-directory: SOURCE/src/v2-rust/killer
+        run: python docs/check_links.py
+
   bench-smoke:
     name: Benchmark smoke (no gating)
     runs-on: ubuntu-latest

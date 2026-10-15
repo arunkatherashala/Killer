@@ -12,7 +12,7 @@ Status: beta / pre-release. Summarised from `git log --oneline`; the measured nu
 **Parity audit.** Added a reproducible parity audit (`parity/run_parity.py`, 166 probe programs
 written the way a Python/JS/Java programmer would write them). Before the fixes 76 of 166 passed
 (46%); now 166 of 166 pass. 63 builtins that were registered but unreachable were wired up
-(`f6e5f58`); about fifty more remain registered but not implemented (`parity/REGISTERED_BUT_DEAD.txt`).
+(`f6e5f58`); the registered-but-not-implemented names were later implemented or removed (see "Stdlib" below; the dead list is empty).
 
 **Language features added**
 - First-class functions, globals, reliable `return`; default arguments and inherited constructors
@@ -49,7 +49,50 @@ Unix JIT build fixed by adding `libc`; subprocess capture test made portable.
 - The x86-64 JIT no longer allocates executable pages on other architectures (aarch64 falls back to the interpreter)
 - New `docs/LANGUAGE.md`, `docs/TUTORIAL.md`, generated `docs/STDLIB_INDEX.md`; every example is executed in CI
 
-**Not present:** arbitrary-precision integers (64-bit integers saturate on overflow).
+**Superseded:** this paragraph used to say arbitrary-precision integers were missing; big integers (`123n`) now exist, see below. Plain 64-bit numbers still saturate on overflow.
+
+### Seven merged workstreams (language semantics, tooling, packages, network and AI, VM performance, robustness, docs)
+
+Everything below is from `git log 40336af..HEAD` (about 50 commits); measured numbers are in
+`parity/PARITY_REPORT.md` and `bench/RESULTS.md`.
+
+**Language**
+- Closures share the variables they capture (one cell per call, decided before the body is compiled by `closure_scan.rs`); loop variables are captured per iteration, recursive closures work.
+- `for x in ...` rebinds a loop variable that already exists (slot, parameter, catch variable or C-style counter).
+- `finally` is covered by a test matrix on every exit path (return, break, continue, nested, generators, closures, overriding return/throw).
+- `x // 2` is a compile error ("`//` starts a comment in Killer; use floor(a / b) for integer division"); four repo files that relied on the silent behaviour now use `floor`.
+- Big integers: hand-written `bigint.rs` (Karatsuba multiplication, Knuth division, floor semantics), `123n` / `0xFFn` literals, `big`, `factorial`, `divmod`, `idiv`, `powmod`, `isqrt`, `bit_length`, mixed arithmetic rules, JSON and `sorted` support; cross-checked against Python on thousands of random cases.
+- One-line blocks (`if c { stmt }`, `for`, `while`, `else`, `try`/`catch`), `for k, v in dict`, builtins as first-class values (`f = print`, `map(xs, str)`).
+- `killer run` and `killer test` resolve `import` relative to the script's folder and name the script in error messages (they used the current directory and `<script>`).
+- `reversed(xs)` returns a copy instead of reversing in place; a function stored in an object field is callable like a method (`this.callback(x)`); `delete(d, 5)` works for number keys.
+
+**Standard library**
+- Implemented the registered-but-dead builtins that are useful: `format("{} is {:.2}", ...)`, `substr`, `time_now`, `to_float`, `to_int`, `to_string`, `type_of`, `parse_int`, `parse_float` and the snake_case file names; the unreachable `phone_*`, `mic_*`, `service_*` names were dropped from the registry.
+
+**AI and network**
+- Real HTTP server with Killer handlers: `serve`, `serve_once`, `route`, `routes_clear`, `server_stop`, `free_port`.
+- Hardened HTTP client: URL, headers and body go to curl on stdin (secrets never on a command line), TLS verification on by default, `http://` only for loopback, header-injection checks, `http_request` with timeouts and retries with exponential backoff; LLM provider calls use the same path.
+- Vector store (`vec_new/add/search/get/delete/len/clear/free/save/load`), `cosine`, `dot`, `norm`, `top_k`, `chunk_text`, `chunk_by_sentence`, `count_tokens` (documented approximation), `build_rag_prompt`, `mock_embed`, `llm_embed_batch`, `llm_embed(opts, text)`, `log_debug/info/warn/error` (`KILLER_LOG`, `KILLER_LOG_FORMAT=json`), `load_env`, and `examples/rag_demo.killer`.
+
+**Tooling**
+- `killer` driver: `run`, `fmt`, `lint`, `test`, `repl`, `lsp`, `--version`.
+- Formatter (behaviour-preserving, idempotent), linter with real rules (`undefined-function`, `unused-variable`, `unreachable-code`, `shadowed-builtin`, `floor-division-comment`, `# lint:ignore`), test framework (`test "name" { }`, `fn test_*`, `assert_eq` diffs, `assert_throws`, JUnit XML).
+- Language server `killer_lsp`, VS Code extension (`editors/vscode`), Debug Adapter Protocol server `killer_dap` (breakpoints, stepping, variables; one stack frame).
+
+**Packages**
+- `killer.toml` manifest, `killer.lock` with SHA-256, semver requirements, backtracking resolver; `killer_pkg new/init/add/remove/install/update/list/publish/check`; file-backed registry (`kpm-registry`, `file://` registries); compile-time `import name` through packages; a missing import is a compile error.
+
+**Safety**
+- Call depth limited to 100,000 frames (catchable error), 400 levels of Rust re-entry, 256 MB strings, 16M-element lists, 32M `range`, nesting limit 200, 1,000 operators per expression, bounded JSON output; deterministic fuzz harness (`tests/robustness.rs`).
+- No `Rc` is shared between OS threads: every value crossing a task boundary is deep-copied; pooled spawn VMs are reset; task threads get a 128 MB stack.
+- Capability audit: every builtin touching files, network, processes, native code or models is gated (`tests/capabilities.rs`); `io_port_*`/`interrupts_*` no longer execute privileged instructions; temp files for `@python`/`@c`/... blocks use private per-run directories.
+
+**Performance** (CPU seconds, same benchmark before/after, `bench/RESULTS.md` round 2)
+- List comprehensions in frame slots (-19%), literal-key dict reads without cloning (-22% nested_data), pooled scope tables and FNV object fields (obj_methods -18%, recursion_objects -36%), `for ch in s` splits once, JSON fast paths (no measurable change at benchmark size).
+
+**Documentation and CI**
+- Language reference, tutorial (14 lessons), generated stdlib index, contributor architecture guide; `docs/check_examples.py` runs every example and `docs/check_links.py` checks relative links, both in CI.
+- Eight more real-world programs in `parity/realworld/` (matrix, mini language, text wrapping, LRU cache, events, heap, dates, test runner).
 
 ### Earlier unreleased notes
 

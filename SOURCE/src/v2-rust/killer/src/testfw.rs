@@ -319,6 +319,7 @@ pub fn run_file(path: &Path, filter: Option<&str>) -> Vec<TestResult> {
         Ok(s) => s,
         Err(e) => return vec![TestResult { file: file.clone(), name: "(read)".into(), ok: false, error: format!("cannot read {file}: {e}"), millis: 0 }],
     };
+    crate::cli_tools::prepare_script(path);
     let tests = discover(&source);
     let started = std::time::Instant::now();
     let matches = |name: &str| filter.map_or(true, |f| f.is_empty() || format!("{file}::{name}").contains(f));
