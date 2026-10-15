@@ -63,6 +63,7 @@ Everything below is from `git log 40336af..HEAD` (about 50 commits); measured nu
 - `x // 2` is a compile error ("`//` starts a comment in Killer; use floor(a / b) for integer division"); four repo files that relied on the silent behaviour now use `floor`.
 - Big integers: hand-written `bigint.rs` (Karatsuba multiplication, Knuth division, floor semantics), `123n` / `0xFFn` literals, `big`, `factorial`, `divmod`, `idiv`, `powmod`, `isqrt`, `bit_length`, mixed arithmetic rules, JSON and `sorted` support; cross-checked against Python on thousands of random cases.
 - One-line blocks (`if c { stmt }`, `for`, `while`, `else`, `try`/`catch`), `for k, v in dict`, builtins as first-class values (`f = print`, `map(xs, str)`).
+- `killer run` and `killer test` resolve `import` relative to the script's folder and name the script in error messages (they used the current directory and `<script>`).
 - `reversed(xs)` returns a copy instead of reversing in place; a function stored in an object field is callable like a method (`this.callback(x)`); `delete(d, 5)` works for number keys.
 
 **Standard library**
