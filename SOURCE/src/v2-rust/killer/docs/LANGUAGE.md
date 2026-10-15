@@ -1356,6 +1356,92 @@ println(trit_and(T_POS, T_ZERO))
 # expect: T_ZERO
 ```
 
+## HTTP server: one request at a time
+
+`serve(port, handler[, opts])` runs the accept loop and every handler on the VM thread, so
+**requests are handled strictly one after another**; a slow handler delays the requests queued
+behind it (there is no `workers` option). Guards that keep one bad client or handler from wedging
+the process:
+
+- `read_timeout` (seconds, default 10): the total time a client has to send its request. An idle
+  or dribbling connection gets `408 Request Timeout` and the next client is served.
+- `request_timeout` (seconds, default 60, `0` turns it off): wall-clock deadline for one handler
+  call, checked on loop back-edges. A handler stuck in `while true` is aborted and the client gets
+  `503`; the server keeps running. A single blocking builtin (`sleep_ms(1e6)`) cannot be interrupted.
+- `server_stop()` is process-wide: call it from a handler or from a task on another thread (for
+  example a watchdog started with `async_spawn`). It interrupts reads and streams within about
+  200 ms; a handler that is mid-call finishes (or hits its deadline) first.
+- `stream_timeout` (seconds, default 300) bounds a Server-Sent Events reply.
+- Other options: `host`, `max_requests`, `idle_timeout`.
+
+## Streaming model output
+
+`llm_stream(opts, prompt)` returns a lazy generator of text chunks (deltas): the request goes out
+when the first chunk is asked for and the reply is read as it arrives, so output shows up while the
+model is still writing. `break` stops consuming; `gen_close(g)` also kills the underlying `curl`.
+`llm_stream_cb(opts, prompt, fn)` calls `fn(chunk)` for every chunk (return `false` to stop) and
+returns the whole text. `opts`: `provider` (`openai` default, `openai_compatible`, `groq`,
+`anthropic`, `ollama`, `mock`), `model`, `base_url`, `key` or `key_env`, `system`, `max_tokens`,
+`temperature`, `timeout` (seconds for the whole stream, default 120). `prompt` is a string or an
+array of `{role, content}` dicts. Wire formats: OpenAI-compatible SSE (`data: {...}` ... `[DONE]`),
+Anthropic SSE (`content_block_delta`), Ollama NDJSON. Keys and prompts travel on curl's stdin, never
+its command line. `provider: "mock"` needs no network (`reply`, `chunks`, `delay_ms`, `fail_after`).
+
+```killer
+for chunk in llm_stream({"provider": "mock", "chunks": ["str", "eam", "ing"]}, "hi") {
+  println(chunk)
+}
+# expect: str
+# expect: eam
+# expect: ing
+```
+
+A `serve` handler can stream too: return `{stream: generator_or_array, headers: {...}}` and the
+server sends `text/event-stream`, one `data:` event per item, flushing each (a string is the data; a
+dict with only `event`/`data`/`id` becomes a named event; other values are sent as JSON). A
+generator that raises ends the stream with an `event: error`; a client that disconnects closes the
+generator. The serve option `stream_timeout` (seconds, default 300) bounds a stream.
+
+```killer skip
+fn ticker() {
+  for i in range(3) {
+    yield {"event": "tick", "data": {"n": i}}
+  }
+}
+serve(8080, fn(req) { return {"stream": ticker()} })
+```
+
+## Profiling
+
+`killer profile script.killer [--html out.html] [--top N] [--lines N]` (or
+`killer_super script.killer --profile [--profile-html out.html]`) runs the script and prints a table
+of functions sorted by self time (calls, self ms, total ms, self %) and the hottest source lines
+(hit counts and time). `--html` writes a self-contained flame graph page (inline CSS and
+JavaScript, click a box to zoom). In a script, `profile_start()` / `profile_stop()` bracket a
+region and `profile_report(format)` returns `"text"` (default), `"html"`, `"functions"` (array of
+`{name, calls, self_ms, total_ms, self_pct}`) or `"lines"` (array of `{file, line, hits, ms}`).
+Self time excludes callees; total time counts a recursive function once. The native JIT is switched
+off while profiling so every call and loop iteration is counted; with profiling off the cost is one
+branch per instruction. Spawned tasks run on their own VMs and are not profiled.
+
+```killer
+fn square(x) {
+  return x * x
+}
+profile_start()
+total = 0
+for i in range(5) {
+  total = total + square(i)
+}
+profile_stop()
+for row in profile_report("functions") {
+  if row["name"] == "square" {
+    println(row["calls"])
+  }
+}
+# expect: 5
+```
+
 ## Standard library
 
 The full list of registered builtin names, grouped, with one-line descriptions, is in

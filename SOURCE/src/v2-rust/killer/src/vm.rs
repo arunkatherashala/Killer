@@ -298,6 +298,9 @@ pub struct VirtualMachine {
     /// Calls in progress to closures with captured variables: (call depth, captures to write back).
     closure_frames: Vec<(usize, crate::value::Captures)>,
     generator_manager: GeneratorManager,  // Manages generator state
+    /// Profiling on/off: the only cost when off is one branch per instruction (see `vm_profile`).
+    pub(crate) profiling: bool,
+    pub(crate) profiler: Option<Box<crate::vm_profile::Profiler>>,
     /// Generators currently being resumed, innermost last.
     gen_ctx: Vec<GenCtx>,
     /// Set by `Yield` for the `gen_resume` that is waiting for it: (value, saved frame).
@@ -386,6 +389,8 @@ impl Default for VirtualMachine {
             pending_throw: None,
             closure_frames: Vec::new(),
             generator_manager: GeneratorManager::default(),
+            profiling: false,
+            profiler: None,
             gen_ctx: Vec::new(),
             gen_yielded: None,
             yielded_values: Vec::new(),
@@ -520,6 +525,8 @@ impl VirtualMachine {
             pending_throw: None,
             closure_frames: Vec::new(),
             generator_manager: GeneratorManager::default(),
+            profiling: false,
+            profiler: None,
             gen_ctx: Vec::new(),
             gen_yielded: None,
             yielded_values: Vec::new(),
@@ -989,6 +996,11 @@ impl VirtualMachine {
         let mut gc_poll: u32 = 0;
         while self.ip < program.instructions.len() {
             self.enforce_step_budget()?;
+            if self.profiling {
+                if let Some(p) = self.profiler.as_mut() {
+                    p.step(self.ip, self.call_stack.len());
+                }
+            }
 
             // GC: check if the global alloc counter crossed a new interval boundary
             // (polled every 256 instructions; the interval is 50,000 allocations).
@@ -2184,7 +2196,7 @@ impl VirtualMachine {
                         if header_is_jit_eligible {
                             // on_loop_back returns Copy (JitLoopFn, HotPatternKind) — borrow ends here
                             let jit_info = self.jit_engine.on_loop_back(dest, &program.instructions);
-                            let jit_info = if crate::security::current_capabilities().allow_native_jit {
+                            let jit_info = if crate::security::current_capabilities().allow_native_jit && !self.profiling {
                                 jit_info
                             } else {
                                 None
@@ -2658,6 +2670,7 @@ impl VirtualMachine {
                     if *arg_count <= 8 && self.stack.len() >= *arg_count
                         && self.execution_budget.is_none()
                         && crate::security::current_capabilities().allow_native_jit
+                        && !self.profiling
                     {
                         let base = self.stack.len() - *arg_count;
                         if let Some(r) = self.fn_jit.try_call(
@@ -3059,6 +3072,18 @@ impl VirtualMachine {
                         d.insert("hot_threshold".to_string(), Value::Number(threshold as f64));
                         d.insert("active".to_string(), Value::Bool(compiled > 0));
                         self.stack.push(Value::Dict(crate::value::SharedDict::new(d)));
+                        self.ip += 1;
+                        continue;
+                    }
+                    if let Some(r) = crate::vm_profile::vm_call(self, name, &args, program) {
+                        let v = r?;
+                        self.stack.push(v);
+                        self.ip += 1;
+                        continue;
+                    }
+                    if let Some(r) = crate::llm_stream::vm_call(self, name, &args, program) {
+                        let v = r?;
+                        self.stack.push(v);
                         self.ip += 1;
                         continue;
                     }
@@ -6145,7 +6170,39 @@ impl VirtualMachine {
         }
     }
 
+    /// Register a Rust-driven generator (see `generator::NativeSource`) and return its handle.
+    pub(crate) fn register_native_gen(&mut self, src: Box<dyn crate::generator::NativeSource>) -> Value {
+        Value::Generator(self.generator_manager.create_native(src))
+    }
+
+    /// `call_value_nested` with a wall-clock deadline (`wall_ms`, 0 = none): the call fails with a
+    /// `SecurityError` once it has run that long (checked on loop back-edges). The VM's own
+    /// budget is restored afterwards.
+    pub(crate) fn call_value_nested_with_deadline(&mut self, func: &Value, args: Vec<Value>, program: &Program, wall_ms: u64) -> Result<Value, VmError> {
+        if wall_ms == 0 {
+            return self.call_value_nested(func, args, program);
+        }
+        let saved = (self.execution_budget.take(), self.exec_start.take());
+        self.execution_budget = Some(ExecutionBudget { max_instruction_steps: 0, max_wall_ms: wall_ms, max_heap_bytes: 0 });
+        self.exec_start = Some(std::time::Instant::now());
+        let r = self.call_value_nested(func, args, program);
+        self.execution_budget = saved.0;
+        self.exec_start = saved.1;
+        r
+    }
+
+    pub(crate) fn call_stack_depth(&self) -> usize {
+        self.call_stack.len()
+    }
+
+    pub(crate) fn close_generator(&mut self, id: &str) {
+        self.generator_manager.close(id);
+    }
+
     fn gen_resume(&mut self, id: &str, program: &Program) -> Result<Option<Value>, VmError> {
+        if let Some(r) = self.generator_manager.native_next(id) {
+            return r.map_err(VmError::runtime_error);
+        }
         self.enter_native()?;
         let r = self.gen_resume_inner(id, program);
         self.native_depth -= 1;

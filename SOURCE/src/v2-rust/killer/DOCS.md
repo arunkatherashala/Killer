@@ -1020,6 +1020,24 @@ println(msg)    -- 42
 | `http_status(url)` | Returns HTTP status code as number |
 | `http_download(url, path)` | Download URL to local file |
 
+### HTTP server: one request at a time
+
+`serve(port, handler[, opts])` runs the accept loop and every handler on the VM thread, so
+**requests are handled strictly one after another**; a slow handler delays the requests queued
+behind it (there is no `workers` option). Guards that keep one bad client or handler from wedging
+the process:
+
+- `read_timeout` (seconds, default 10): the total time a client has to send its request. An idle
+  or dribbling connection gets `408 Request Timeout` and the next client is served.
+- `request_timeout` (seconds, default 60, `0` turns it off): wall-clock deadline for one handler
+  call, checked on loop back-edges. A handler stuck in `while true` is aborted and the client gets
+  `503`; the server keeps running. A single blocking builtin (`sleep_ms(1e6)`) cannot be interrupted.
+- `server_stop()` is process-wide: call it from a handler or from a task on another thread (for
+  example a watchdog started with `async_spawn`). It interrupts reads and streams within about
+  200 ms; a handler that is mid-call finishes (or hits its deadline) first.
+- `stream_timeout` (seconds, default 300) bounds a Server-Sent Events reply.
+- Other options: `host`, `max_requests`, `idle_timeout`.
+
 ### 7.10 JSON
 
 | Function | Description |

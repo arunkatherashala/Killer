@@ -13,9 +13,20 @@
 //! Options (dict, third argument of `serve`): `host` (default "127.0.0.1"; use "0.0.0.0" to
 //! expose the server), `max_requests` (stop after N requests), `idle_timeout` (seconds without a
 //! connection before stopping). A handler can call `server_stop()` to stop gracefully after the
-//! current response has been written.
+//! current response has been written. A handler may return `{stream: generator_or_array}` to
+//! send Server-Sent Events (see `http_sse`); `stream_timeout` (seconds, default 300) bounds a stream.
+//!
+//! **One request at a time.** The accept loop and the handlers share the VM thread, so requests are
+//! handled strictly one after another. To keep one bad client or handler from wedging the process:
+//! `read_timeout` (seconds, default 10) is the *total* time a client gets to send its request, an
+//! idle or dribbling connection gets `408` and the next client is served; `request_timeout`
+//! (seconds, default 60, 0 = off) is a wall-clock deadline for one handler call, checked on loop
+//! back-edges (a handler stuck in `while true` gets a `503` and the server carries on; a single
+//! blocking builtin such as `sleep_ms(1e6)` cannot be interrupted); `server_stop()` is process-wide,
+//! so it also works from a task on another thread (e.g. a watchdog started with `async_spawn`), and
+//! it interrupts reads and streams within about 200 ms.
 
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::time::{Duration, Instant};
@@ -36,7 +47,14 @@ struct Route {
 
 thread_local! {
     static ROUTES: RefCell<Vec<Route>> = RefCell::new(Vec::new());
-    static STOP: Cell<bool> = Cell::new(false);
+}
+
+/// Set by `server_stop()`; process-wide so a task on another thread can stop the server too.
+static STOP: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// True once `server_stop()` has been called (streams and reads poll this to wind down).
+pub fn stop_requested() -> bool {
+    STOP.load(std::sync::atomic::Ordering::SeqCst)
 }
 
 fn err<T>(msg: impl Into<String>) -> Result<T, VmError> {
@@ -126,7 +144,27 @@ pub fn parse_head(head: &str) -> Result<Req, String> {
     Ok(Req { method, path: percent_decode(raw_path, false), query, headers, body: String::new() })
 }
 
-fn read_request(stream: &mut TcpStream) -> Result<Req, String> {
+/// One read bounded by an overall `deadline` (not per read, so a client dribbling bytes cannot
+/// hold the single-threaded server) and interruptible by `server_stop()`: waits in 200 ms slices.
+fn read_some(stream: &mut TcpStream, buf: &mut [u8], deadline: Instant) -> Result<usize, String> {
+    loop {
+        if stop_requested() {
+            return Err("server stopping".to_string());
+        }
+        let now = Instant::now();
+        if now >= deadline {
+            return Err("timeout".to_string());
+        }
+        let _ = stream.set_read_timeout(Some((deadline - now).min(Duration::from_millis(200))));
+        match stream.read(buf) {
+            Ok(n) => return Ok(n),
+            Err(e) if matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut | std::io::ErrorKind::Interrupted) => continue,
+            Err(e) => return Err(format!("read: {}", e)),
+        }
+    }
+}
+
+fn read_request(stream: &mut TcpStream, deadline: Instant) -> Result<Req, String> {
     let mut buf: Vec<u8> = Vec::with_capacity(2048);
     let mut chunk = [0u8; 4096];
     let head_end = loop {
@@ -136,7 +174,7 @@ fn read_request(stream: &mut TcpStream) -> Result<Req, String> {
         if buf.len() > MAX_HEADER_BYTES {
             return Err("headers too large".to_string());
         }
-        let n = stream.read(&mut chunk).map_err(|e| format!("read: {}", e))?;
+        let n = read_some(stream, &mut chunk, deadline)?;
         if n == 0 {
             return Err("connection closed".to_string());
         }
@@ -155,7 +193,7 @@ fn read_request(stream: &mut TcpStream) -> Result<Req, String> {
     }
     let mut body: Vec<u8> = buf[head_end + 4..].to_vec();
     while body.len() < len {
-        let n = stream.read(&mut chunk).map_err(|e| format!("read body: {}", e))?;
+        let n = read_some(stream, &mut chunk, deadline)?;
         if n == 0 {
             break;
         }
@@ -226,6 +264,7 @@ pub fn status_text(code: u16) -> &'static str {
         404 => "Not Found",
         405 => "Method Not Allowed",
         409 => "Conflict",
+        408 => "Request Timeout",
         413 => "Payload Too Large",
         422 => "Unprocessable Entity",
         429 => "Too Many Requests",
@@ -370,17 +409,22 @@ fn serve_loop(vm: &mut VirtualMachine, args: &[Value], program: &Program, once: 
     };
     let max_requests = if once { Some(1) } else { opt_num(opts.as_ref(), "max_requests").map(|n| n.max(0.0) as u64) };
     let idle = opt_num(opts.as_ref(), "idle_timeout").map(Duration::from_secs_f64);
+    // overall time a client gets to send its request (head and body); 0 or less is not allowed
+    let read_limit = Duration::from_secs_f64(opt_num(opts.as_ref(), "read_timeout").unwrap_or(10.0).clamp(0.05, 3600.0));
+    // wall-clock deadline for one handler call (checked on loop back-edges); 0 turns it off
+    let request_ms = (opt_num(opts.as_ref(), "request_timeout").unwrap_or(60.0).clamp(0.0, 86400.0) * 1000.0) as u64;
+    let stream_limit = Duration::from_secs_f64(opt_num(opts.as_ref(), "stream_timeout").unwrap_or(300.0).clamp(0.1, 86400.0));
     if handler.is_none() && ROUTES.with(|r| r.borrow().is_empty()) {
         return err(format!("{}(): pass a handler function or register routes with route() first", who));
     }
     let listener = TcpListener::bind((host.as_str(), port)).map_err(|e| VmError::runtime_error(format!("{}: cannot bind {}:{}: {}", who, host, port, e)))?;
     listener.set_nonblocking(true).map_err(|e| VmError::runtime_error(format!("{}: {}", who, e)))?;
-    STOP.with(|s| s.set(false));
+    STOP.store(false, std::sync::atomic::Ordering::SeqCst);
 
     let mut served: u64 = 0;
     let mut last_activity = Instant::now();
     loop {
-        if STOP.with(|s| s.get()) || max_requests.map_or(false, |m| served >= m) {
+        if stop_requested() || max_requests.map_or(false, |m| served >= m) {
             break;
         }
         match listener.accept() {
@@ -389,10 +433,12 @@ fn serve_loop(vm: &mut VirtualMachine, args: &[Value], program: &Program, once: 
                 let _ = stream.set_read_timeout(Some(Duration::from_secs(10)));
                 let _ = stream.set_write_timeout(Some(Duration::from_secs(10)));
                 last_activity = Instant::now();
-                let req = match read_request(&mut stream) {
+                let req = match read_request(&mut stream, Instant::now() + read_limit) {
                     Ok(r) => r,
                     Err(e) => {
-                        if e != "connection closed" {
+                        if e == "timeout" {
+                            write_resp(&mut stream, false, &text_resp(408, "text/plain; charset=utf-8", "Request Timeout".to_string()));
+                        } else if e != "connection closed" && e != "server stopping" {
                             write_resp(&mut stream, false, &text_resp(400, "text/plain; charset=utf-8", format!("Bad Request: {}", e)));
                         }
                         continue;
@@ -405,8 +451,14 @@ fn serve_loop(vm: &mut VirtualMachine, args: &[Value], program: &Program, once: 
                 };
                 let resp = match target {
                     None => text_resp(404, "text/plain; charset=utf-8", format!("Not Found: {} {}", req.method, req.path)),
-                    Some(f) => match vm.call_value_nested(&f, vec![req_to_value(&req, &params)], program) {
+                    Some(f) => match vm.call_value_nested_with_deadline(&f, vec![req_to_value(&req, &params)], program, request_ms) {
+                        Ok(v) if crate::http_sse::stream_reply(&v).is_some() => {
+                            let reply = crate::http_sse::stream_reply(&v).unwrap();
+                            crate::http_sse::write_stream(&mut stream, vm, program, &reply, stream_limit);
+                            continue;
+                        }
                         Ok(v) => value_to_resp(&v).unwrap_or_else(|e| text_resp(500, "text/plain; charset=utf-8", format!("Internal Server Error: {}", e))),
+                        Err(VmError::SecurityError { ref message, .. }) if message.contains("time limit") => text_resp(503, "text/plain; charset=utf-8", format!("Service Unavailable: the handler exceeded the {} s request deadline", request_ms as f64 / 1000.0)),
                         Err(e) => text_resp(500, "text/plain; charset=utf-8", format!("Internal Server Error: {}", e)),
                     },
                 };
@@ -457,7 +509,7 @@ pub fn call(name: &str, args: &[Value]) -> Option<Result<Value, VmError>> {
             Ok(Value::Null)
         }),
         "server_stop" => Some({
-            STOP.with(|s| s.set(true));
+            STOP.store(true, std::sync::atomic::Ordering::SeqCst);
             Ok(Value::Null)
         }),
         "free_port" => Some(
