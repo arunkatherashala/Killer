@@ -122,6 +122,9 @@ fn int_key(n: f64, buf: &mut [u8; 24]) -> Option<&str> {
 
 /// `object[index]` for arrays, strings (by character), dicts and objects.
 fn index_value(object: &Value, index: &Value) -> Result<Value, VmError> {
+    if let Some(n) = crate::bigint_ops::small_number(index) {
+        return index_value(object, &Value::Number(n));
+    }
     match (object, index) {
         (Value::Array(arr), Value::Number(idx)) => {
             let i = array_index(*idx, arr.len());
@@ -201,6 +204,8 @@ fn repeat_sequence(lhs: &Value, rhs: &Value) -> Option<Result<Value, String>> {
     let (seq, count) = match (lhs, rhs) {
         (Value::Str(_) | Value::Array(_), Value::Number(n)) => (lhs, *n),
         (Value::Number(n), Value::Str(_) | Value::Array(_)) => (rhs, *n),
+        (Value::Str(_) | Value::Array(_), Value::BigInt(_)) => (lhs, crate::bigint_ops::small_number(rhs).unwrap_or(f64::INFINITY)),
+        (Value::BigInt(_), Value::Str(_) | Value::Array(_)) => (rhs, crate::bigint_ops::small_number(lhs).unwrap_or(f64::INFINITY)),
         _ => return None,
     };
     if !count.is_finite() || count.fract() != 0.0 || count < 0.0 {
@@ -2851,7 +2856,7 @@ impl VirtualMachine {
                 }
                 Instruction::IndexWrite(name) => {
                     let value = self.pop_value()?;
-                    let index = self.pop_value()?;
+                    let index = crate::bigint_ops::demote_index(self.pop_value()?);
                     let object = self.load_var(name)?;
                     // Arrays, dicts and objects are shared handles: mutating through the clone that
                     // `load_var` returned already updates the variable, so no write-back is needed.
@@ -2900,7 +2905,7 @@ impl VirtualMachine {
                 }
                 Instruction::IndexWriteSlot(slot) => {
                     let value = self.pop_value()?;
-                    let index = self.pop_value()?;
+                    let index = crate::bigint_ops::demote_index(self.pop_value()?);
                     let si = *slot as usize;
                     let object = {
                         let frame = self.locals_stack.last().ok_or_else(|| {
@@ -2973,6 +2978,13 @@ impl VirtualMachine {
                         args.push(self.pop_value()?);
                     }
                     args.reverse();
+
+                    // bigint arguments: native int/float/min/max/sum, small bigints as counts
+                    if let Some(r) = crate::bigint_ops::prepass(name, &mut args) {
+                        self.stack.push(r.map_err(VmError::runtime_error)?);
+                        self.ip += 1;
+                        continue;
+                    }
 
                     // ── Debug checkpoint injected by compile_killer_debug ──────
                     if name == "__dl" {

@@ -83,6 +83,7 @@ pub fn slice_bounds(start: &Value, end: &Value, len: usize) -> Result<(usize, us
             Value::Null => Ok(default),
             Value::Number(n) if n.is_finite() => Ok(n.trunc() as i64),
             Value::Integer(i) => Ok(*i),
+            Value::BigInt(b) => Ok(b.to_i64().unwrap_or(if b.is_negative() { i64::MIN / 2 } else { i64::MAX / 2 })),
             other => err(format!("slice bounds must be numbers, got {}", other.type_name())),
         }
     };

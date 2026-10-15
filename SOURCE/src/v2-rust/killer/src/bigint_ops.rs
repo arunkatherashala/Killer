@@ -56,6 +56,23 @@ pub fn involves(a: &Value, b: &Value) -> bool {
     matches!(a, Value::BigInt(_)) || matches!(b, Value::BigInt(_))
 }
 
+/// A bigint that fits comfortably in an `f64` mantissa (|v| <= 2^53) as a plain number: used so
+/// that an index, slice bound, repeat count or builtin argument may be a bigint.
+pub fn small_number(v: &Value) -> Option<f64> {
+    match v {
+        Value::BigInt(b) => b.to_i64().filter(|i| i.unsigned_abs() <= (1u64 << 53)).map(|i| i as f64),
+        _ => None,
+    }
+}
+
+/// `v` as a `Number` when it is a small bigint, otherwise unchanged.
+pub fn demote_index(v: Value) -> Value {
+    match small_number(&v) {
+        Some(n) => Value::Number(n),
+        None => v,
+    }
+}
+
 pub fn big(v: BigInt) -> Value {
     Value::BigInt(Rc::new(v))
 }
@@ -285,4 +302,93 @@ pub fn json_array(v: &Value) -> String {
         Value::Array(a) => format!("[{}]", a.to_vec().iter().map(item).collect::<Vec<_>>().join(",")),
         other => item(other),
     }
+}
+
+fn order_any(a: &Value, b: &Value) -> Option<Ordering> {
+    match (a, b) {
+        (Value::Number(x), Value::Number(y)) => x.partial_cmp(y),
+        _ => compare(a, b),
+    }
+}
+
+/// Builtins that must understand a bigint argument natively: `int`, `float`, `round`, `floor`,
+/// `ceil`, `trunc` (a bigint is already whole), and `min`, `max`, `sum` over bigints (exact).
+/// Returns `None` when the call has no bigint in it or the builtin is not one of these, so the
+/// normal implementation runs.
+pub fn native_builtin(name: &str, args: &[Value]) -> Option<Result<Value, String>> {
+    if !matches!(name, "int" | "float" | "round" | "floor" | "ceil" | "trunc" | "min" | "max" | "sum") {
+        return None;
+    }
+    let scan_arrays = matches!(name, "min" | "max" | "sum");
+    if !args.iter().any(|a| matches!(a, Value::BigInt(_)) || (scan_arrays && matches!(a, Value::Array(arr) if arr.to_vec().iter().any(|x| matches!(x, Value::BigInt(_)))))) {
+        return None;
+    }
+    match (name, args) {
+        ("int" | "round" | "floor" | "ceil" | "trunc", [v @ Value::BigInt(_)]) => Some(Ok(v.clone())),
+        ("float", [Value::BigInt(b)]) => Some(Ok(Value::Number(b.to_f64()))),
+        ("min" | "max", _) => {
+            let items: Vec<Value> = match args {
+                [Value::Array(a)] => a.to_vec(),
+                _ => args.to_vec(),
+            };
+            let mut it = items.into_iter();
+            let mut best = match it.next() {
+                Some(v) => v,
+                None => return Some(Err(format!("{}() of an empty sequence", name))),
+            };
+            for v in it {
+                match order_any(&v, &best) {
+                    Some(o) => {
+                        if (name == "min" && o == Ordering::Less) || (name == "max" && o == Ordering::Greater) {
+                            best = v;
+                        }
+                    }
+                    None => return Some(Err(format!("{}() expects numbers", name))),
+                }
+            }
+            Some(Ok(best))
+        }
+        ("sum", [Value::Array(a)]) => {
+            let mut acc = Value::Number(0.0);
+            for v in a.to_vec() {
+                acc = match arith(Op::Add, &acc, &v) {
+                    Ok(r) => r,
+                    Err(e) => return Some(Err(e)),
+                };
+            }
+            Some(Ok(acc))
+        }
+        _ => None,
+    }
+}
+
+/// `args` with every small bigint replaced by a number (also inside a single array argument is
+/// NOT done); `None` when nothing changes. Used to retry a builtin that rejected a bigint.
+pub fn demote_args(args: &[Value]) -> Option<Vec<Value>> {
+    if !args.iter().any(|a| small_number(a).is_some()) {
+        return None;
+    }
+    Some(args.iter().map(|a| demote_index(a.clone())).collect())
+}
+
+/// Builtins whose arguments are counts, sizes or codes: a small bigint is just a number there.
+const DEMOTE_NAMES: &[&str] = &["range", "chr", "pad_left", "pad_right", "repeat", "insert", "sleep_ms", "sleep", "sqrt"];
+
+/// VM entry hook for every builtin call: native bigint builtins return a value; for the names in
+/// `DEMOTE_NAMES` small bigints in `args` are replaced by numbers. `None`: carry on normally.
+pub fn prepass(name: &str, args: &mut [Value]) -> Option<Result<Value, String>> {
+    if !args.iter().any(|a| matches!(a, Value::BigInt(_) | Value::Array(_))) {
+        return None;
+    }
+    if let Some(r) = native_builtin(name, args) {
+        return Some(r);
+    }
+    if DEMOTE_NAMES.contains(&name) {
+        for a in args.iter_mut() {
+            if let Some(n) = small_number(a) {
+                *a = Value::Number(n);
+            }
+        }
+    }
+    None
 }
