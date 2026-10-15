@@ -674,7 +674,7 @@ impl Display for Value {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
             Value::Number(n) => {
-                if n.fract() == 0.0 {
+                if n.fract() == 0.0 && n.abs() < 9.0e18 {
                     write!(f, "{}", *n as i64)
                 } else {
                     write!(f, "{n}")
