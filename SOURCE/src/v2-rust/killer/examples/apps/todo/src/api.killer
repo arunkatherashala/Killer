@@ -1,0 +1,162 @@
+# HTTP layer: route handlers over a TodoStore. A handler returns {status, body} (body is encoded
+# as JSON) so every response, including errors, is JSON.
+import "store.killer"
+
+fn reply(status, body) {
+  return {"status": status, "body": body}
+}
+
+fn problem(status, message, details) {
+  body = {"error": message}
+  if details != null {
+    body["details"] = details
+  }
+  return reply(status, body)
+}
+
+# {"ok": true, "doc": value} or {"ok": false, "response": 400 reply}
+fn parse_body(req) {
+  if len(trim(req["body"])) == 0 {
+    return {"ok": false, "response": problem(400, "request body is empty", null)}
+  }
+  try {
+    return {"ok": true, "doc": json_parse(req["body"])}
+  } catch e {
+    return {"ok": false, "response": problem(400, "invalid JSON: " + str(e), null)}
+  }
+}
+
+# ids in the path must be whole numbers: "7" yes, "7x" or "-1" no
+fn parse_id(text) {
+  if not all_digits(text) or len(text) > 9 {
+    return null
+  }
+  return int(text)
+}
+
+fn whole_param(query, name, default, max) {
+  v = query[name]
+  if v == null {
+    return default
+  }
+  if not all_digits(v) or len(v) > 9 {
+    return null
+  }
+  n = int(v)
+  return n > max ? max : n
+}
+
+# any error inside a handler (a full disk, a bug) becomes a JSON 500 instead of leaking internals
+fn guard(handler) {
+  return fn(req) {
+    try {
+      return handler(req)
+    } catch e {
+      return problem(500, "internal error", str(e))
+    }
+  }
+}
+
+fn build_api(store) {
+  fn list_todos(req) {
+    q = req["query"]
+    if q["done"] != null and q["done"] != "true" and q["done"] != "false" {
+      return problem(400, "done must be true or false", null)
+    }
+    limit = whole_param(q, "limit", 50, 100)
+    offset = whole_param(q, "offset", 0, 1000000)
+    if limit == null or offset == null {
+      return problem(400, "limit and offset must be whole numbers", null)
+    }
+    found = store.query(q)
+    end = min(offset + limit, len(found))
+    page = offset >= len(found) ? [] : found[offset:end]
+    return reply(200, {"total": len(found), "offset": offset, "limit": limit, "items": page})
+  }
+
+  fn create_todo(req) {
+    parsed = parse_body(req)
+    if not parsed["ok"] {
+      return parsed["response"]
+    }
+    errors = validate_todo(parsed["doc"], true)
+    if len(errors) > 0 {
+      return problem(422, "validation failed", errors)
+    }
+    item = store.create(parsed["doc"])
+    return {"status": 201, "headers": {"Location": "/todos/" + str(item["id"])}, "body": item}
+  }
+
+  fn get_todo(req) {
+    id = parse_id(req["params"]["id"])
+    if id == null {
+      return problem(400, "invalid id '" + req["params"]["id"] + "'", null)
+    }
+    item = store.get(id)
+    if item == null {
+      return problem(404, "todo " + str(id) + " not found", null)
+    }
+    return reply(200, item)
+  }
+
+  fn change_todo(req, replace) {
+    id = parse_id(req["params"]["id"])
+    if id == null {
+      return problem(400, "invalid id '" + req["params"]["id"] + "'", null)
+    }
+    if store.get(id) == null {
+      return problem(404, "todo " + str(id) + " not found", null)
+    }
+    parsed = parse_body(req)
+    if not parsed["ok"] {
+      return parsed["response"]
+    }
+    errors = validate_todo(parsed["doc"], replace)
+    if len(errors) > 0 {
+      return problem(422, "validation failed", errors)
+    }
+    return reply(200, store.update(id, parsed["doc"], replace))
+  }
+
+  fn put_todo(req) {
+    return change_todo(req, true)
+  }
+
+  fn patch_todo(req) {
+    return change_todo(req, false)
+  }
+
+  fn delete_todo(req) {
+    id = parse_id(req["params"]["id"])
+    if id == null {
+      return problem(400, "invalid id '" + req["params"]["id"] + "'", null)
+    }
+    if not store.remove(id) {
+      return problem(404, "todo " + str(id) + " not found", null)
+    }
+    return {"status": 204}
+  }
+
+  fn stats(req) {
+    return reply(200, store.stats())
+  }
+
+  fn health(req) {
+    return reply(200, {"status": "ok", "todos": len(store.items)})
+  }
+
+  fn not_found(req) {
+    return problem(404, "no route for " + req["method"] + " " + req["path"], null)
+  }
+
+  routes_clear()
+  route("GET", "/health", guard(health))
+  route("GET", "/stats", guard(stats))
+  route("GET", "/todos", guard(list_todos))
+  route("POST", "/todos", guard(create_todo))
+  route("GET", "/todos/:id", guard(get_todo))
+  route("PUT", "/todos/:id", guard(put_todo))
+  route("PATCH", "/todos/:id", guard(patch_todo))
+  route("DELETE", "/todos/:id", guard(delete_todo))
+  route("*", "/*", guard(not_found))
+}

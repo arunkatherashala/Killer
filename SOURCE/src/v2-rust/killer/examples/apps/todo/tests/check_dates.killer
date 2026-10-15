@@ -1,0 +1,19 @@
+# usage: killer run tests/check_dates.killer CASES.tsv     (CASES from tests/dates.py)
+import "../src/validate.killer"
+
+lines = split(readFile(args()[0]), "\n")
+bad = 0
+total = 0
+for line in lines {
+  if line == "" {
+    continue
+  }
+  parts = split(line, "\t")
+  total = total + 1
+  got = valid_date(parts[0]) ? "1" : "0"
+  if got != parts[1] {
+    bad = bad + 1
+    println("MISMATCH", "[" + parts[0] + "]", "expected", parts[1], "got", got)
+  }
+}
+println("cases", total, "mismatches", bad)

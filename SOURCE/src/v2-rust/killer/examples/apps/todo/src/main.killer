@@ -1,0 +1,59 @@
+# todo service:  killer run src/main.killer --port 8080 --data todos.json [--max-requests N]
+# Prints "listening on http://127.0.0.1:PORT" and serves until max-requests (default: forever).
+# Exit codes: 0 stopped normally, 1 cannot load the data file, 2 usage error.
+import "api.killer"
+
+fn fail(code, msg) {
+  eprintln("todo: " + msg)
+  exit(code)
+}
+
+fn option(argv, name, default) {
+  for i in range(len(argv)) {
+    if argv[i] == name {
+      if i + 1 >= len(argv) {
+        fail(2, name + " needs a value")
+      }
+      return argv[i + 1]
+    }
+  }
+  return default
+}
+
+fn number_option(argv, name, default) {
+  v = option(argv, name, null)
+  if v == null {
+    return default
+  }
+  if not all_digits(v) {
+    fail(2, name + " needs a whole number, got '" + v + "'")
+  }
+  return int(v)
+}
+
+fn main() {
+  argv = args()
+  port = number_option(argv, "--port", 8080)
+  if port > 65535 {
+    fail(2, "--port must be at most 65535")
+  }
+  max_requests = number_option(argv, "--max-requests", null)
+  data = option(argv, "--data", null)
+  store = null
+  try {
+    store = new TodoStore(data)
+  } catch e {
+    fail(1, str(e))
+  }
+  build_api(store)
+  opts = {}
+  if max_requests != null {
+    opts["max_requests"] = max_requests
+  }
+  println("listening on http://127.0.0.1:" + str(port) + " (" + str(len(store.items)) + " todos loaded)")
+  stdout_flush()
+  served = serve(port, null, opts)
+  println("served " + str(served) + " requests")
+}
+
+main()

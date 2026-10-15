@@ -1,0 +1,187 @@
+import "../src/api.killer"
+
+DATA = "todo_test_data.json"
+
+fn fresh_path(name) {
+  p = "todo_test_" + name + ".json"
+  if fileExists(p) {
+    deleteFile(p)
+  }
+  return p
+}
+
+test "dates: leap years, month lengths, formats" {
+  assert_true(valid_date("2024-02-29"))
+  assert_false(valid_date("2023-02-29"))
+  assert_false(valid_date("1900-02-29"))
+  assert_true(valid_date("2000-02-29"))
+  assert_true(valid_date("2030-12-31"))
+  assert_false(valid_date("2030-04-31"))
+  assert_false(valid_date("2030-13-01"))
+  assert_false(valid_date("2030-00-10"))
+  assert_false(valid_date("2030-1-10"))
+  assert_false(valid_date("30-01-10"))
+  assert_false(valid_date("2030/01/10"))
+  assert_false(valid_date(20300110))
+  assert_false(valid_date(""))
+  assert_false(valid_date("abcd-ef-gh"))
+}
+
+test "validate_todo accepts a full valid document" {
+  doc = {"title": "x", "done": false, "priority": 5, "tags": ["a", "b"], "due": "2030-01-01", "notes": "n"}
+  assert_eq(validate_todo(doc, true), [])
+  assert_eq(validate_todo({}, false), [])
+}
+
+test "validate_todo reports every problem" {
+  errs = validate_todo({"title": 5, "done": "yes", "priority": 2.5, "tags": "a", "due": "x", "notes": 1, "extra": 1}, true)
+  assert_eq(len(errs), 7)
+  assert_contains(errs[0], "unknown field 'extra'")
+  assert_eq(validate_todo({}, true), ["title is required"])
+  assert_eq(validate_todo({"title": "   "}, true), ["title must not be empty"])
+  assert_eq(validate_todo({"title": repeat("x", 121)}, true), ["title must be at most 120 characters"])
+  assert_eq(validate_todo({"title": repeat("é", 120)}, true), [])
+  assert_eq(validate_todo([1], true), ["body must be a JSON object"])
+  assert_eq(validate_todo({"title": "t", "priority": 0}, true), ["priority must be a whole number from 1 to 5"])
+  assert_eq(validate_todo({"title": "t", "tags": ["a", "a"]}, true), ["duplicate tag 'a'"])
+  assert_eq(validate_todo({"title": "t", "tags": ["1", "2", "3", "4", "5", "6"]}, true), ["at most 5 tags"])
+  assert_eq(validate_todo({"title": "t", "tags": [""]}, true), ["every tag must be a non-empty string"])
+}
+
+test "store creates, updates, removes and queries" {
+  s = new TodoStore(null)
+  a = s.create({"title": "  one  ", "tags": ["x"]})
+  b = s.create({"title": "two", "done": true, "notes": "Hello World"})
+  assert_eq([a["id"], b["id"]], [1, 2])
+  assert_eq(a["title"], "one")
+  assert_eq(a["priority"], 3)
+  assert_eq(len(s.query({})), 2)
+  assert_eq(len(s.query({"done": "true"})), 1)
+  assert_eq(len(s.query({"tag": "x"})), 1)
+  assert_eq(len(s.query({"q": "WORLD"})), 1)
+  assert_eq(len(s.query({"q": "nothing"})), 0)
+  u = s.update(1, {"priority": 1}, false)
+  assert_eq([u["title"], u["priority"], u["tags"]], ["one", 1, ["x"]])
+  r = s.update(1, {"title": "uno"}, true)
+  assert_eq([r["title"], r["priority"], r["tags"]], ["uno", 3, []])
+  assert_eq(s.update(99, {}, false), null)
+  assert_true(s.remove(1))
+  assert_false(s.remove(1))
+  c = s.create({"title": "three"})
+  assert_eq(c["id"], 3)
+}
+
+test "store stats" {
+  s = new TodoStore(null)
+  s.create({"title": "a", "priority": 1, "tags": ["x", "y"]})
+  s.create({"title": "b", "priority": 1, "done": true, "tags": ["x"]})
+  st = s.stats()
+  assert_eq([st["total"], st["done"], st["open"]], [2, 1, 1])
+  assert_eq(st["by_priority"]["1"], 2)
+  assert_eq(st["tags"]["x"], 2)
+}
+
+test "persistence survives a restart and ids keep counting" {
+  p = fresh_path("persist")
+  s = new TodoStore(p)
+  s.create({"title": "kept"})
+  s.create({"title": "also kept"})
+  s.remove(2)
+  s2 = new TodoStore(p)
+  assert_eq(len(s2.items), 1)
+  assert_eq(s2.items[0]["title"], "kept")
+  assert_eq(s2.create({"title": "new"})["id"], 3)
+  assert_false(fileExists(p + ".tmp"))
+  deleteFile(p)
+}
+
+test "a failed write leaves memory unchanged" {
+  s = new TodoStore("no_such_dir_xyz/todos.json")
+  failed = false
+  try {
+    s.create({"title": "x"})
+  } catch e {
+    failed = true
+  }
+  assert_true(failed)
+  assert_eq(len(s.items), 0)
+  assert_eq(s.next_id, 1)
+}
+
+test "corrupt and empty data files" {
+  p = fresh_path("corrupt")
+  writeFile(p, "{not json")
+  caught = false
+  try {
+    new TodoStore(p)
+  } catch e {
+    caught = true
+  }
+  assert_true(caught)
+  writeFile(p, "{\"foo\": 1}")
+  caught = false
+  try {
+    new TodoStore(p)
+  } catch e2 {
+    caught = true
+    assert_contains(str(e2), "corrupt todo file")
+  }
+  assert_true(caught)
+  writeFile(p, "")
+  assert_eq(len(new TodoStore(p).items), 0)
+  deleteFile(p)
+}
+
+test "path ids and paging parameters" {
+  assert_eq(parse_id("7"), 7)
+  assert_eq(parse_id("007"), 7)
+  assert_eq(parse_id("7x"), null)
+  assert_eq(parse_id("-1"), null)
+  assert_eq(parse_id(""), null)
+  assert_eq(parse_id("12345678901"), null)
+  assert_eq(whole_param({}, "limit", 50, 100), 50)
+  assert_eq(whole_param({"limit": "500"}, "limit", 50, 100), 100)
+  assert_eq(whole_param({"limit": "x"}, "limit", 50, 100), null)
+}
+
+fn fetch(base, method, path, body) {
+  opts = {"method": method, "url": base + path, "timeout": 10, "retries": 6}
+  if body != null {
+    opts["body"] = body
+  }
+  return http_request(opts)
+}
+
+fn client_session(base) {
+  out = []
+  push(out, fetch(base, "POST", "/todos", {"title": "via http", "tags": ["t"]}))
+  push(out, fetch(base, "GET", "/todos/1", null))
+  push(out, fetch(base, "POST", "/todos", "{oops"))
+  push(out, fetch(base, "GET", "/todos?limit=abc", null))
+  push(out, fetch(base, "DELETE", "/todos/1", null))
+  push(out, fetch(base, "GET", "/todos/1", null))
+  push(out, fetch(base, "GET", "/missing/route", null))
+  return out
+}
+
+test "the HTTP API end to end inside one process" {
+  store = new TodoStore(null)
+  build_api(store)
+  port = free_port()
+  h = async_spawn(client_session, "http://127.0.0.1:" + str(port))
+  served = serve(port, null, {"max_requests": 7})
+  r = async_await(h)
+  routes_clear()
+  assert_eq(served, 7)
+  assert_eq(r[0]["status"], 201)
+  assert_eq(json_parse(r[0]["body"])["title"], "via http")
+  assert_eq(r[0]["headers"]["location"], "/todos/1")
+  assert_eq(r[1]["status"], 200)
+  assert_eq(r[2]["status"], 400)
+  assert_contains(json_parse(r[2]["body"])["error"], "invalid JSON")
+  assert_eq(r[3]["status"], 400)
+  assert_eq(r[4]["status"], 204)
+  assert_eq(r[5]["status"], 404)
+  assert_eq(r[6]["status"], 404)
+  assert_eq(json_parse(r[6]["body"])["error"], "no route for GET /missing/route")
+}

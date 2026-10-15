@@ -627,3 +627,109 @@ println(returned, return_code, g())
 "#;
     assert_eq!(run_src(src), "1\nnull\ntrue\npersisting 2\n5 7 4");
 }
+
+// ---------------------------------------------------------------------------------------------
+// app 1: todo REST service (server and client are separate processes)
+// ---------------------------------------------------------------------------------------------
+
+fn free_port() -> u16 {
+    std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port()
+}
+
+fn start_todo_server(port: u16, data: &Path, max_requests: u32) -> std::process::Child {
+    Command::new(env!("CARGO_BIN_EXE_killer"))
+        .current_dir(app_dir("todo"))
+        .args(["run", "src/main.killer", "--port", &port.to_string(), "--data", data.to_str().unwrap(), "--max-requests", &max_requests.to_string()])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap()
+}
+
+#[test]
+fn todo_unit_tests_pass() {
+    let (ok, text) = app_tests("todo");
+    assert!(ok, "{text}");
+    assert!(text.contains("0 failed"), "{text}");
+}
+
+#[test]
+fn todo_client_script_against_the_server_matches_the_golden_transcript_and_persists() {
+    let t = Tmp::new("todo");
+    let data = t.0.join("todos.json");
+    let port = free_port();
+    let server = start_todo_server(port, &data, 22);
+    let client = killer(&app_dir("todo"), &["run", "src/client.killer", &port.to_string()]);
+    let out = server.wait_with_output().unwrap();
+    assert!(client.status.success(), "{}", norm(&client.stderr));
+    let expected = norm(&std::fs::read(app_dir("todo").join("tests/client.expected")).unwrap());
+    assert_eq!(norm(&client.stdout), expected);
+    let server_out = norm(&out.stdout);
+    assert!(server_out.contains("served 22 requests"), "{server_out}{}", norm(&out.stderr));
+    // the file holds the two surviving todos and the id counter
+    let saved = std::fs::read_to_string(&data).unwrap();
+    assert!(saved.contains("\"next_id\": 4") && saved.contains("Write the final report") && !saved.contains("Buy milk"), "{saved}");
+    assert!(!t.0.join("todos.json.tmp").exists());
+    // restart on the same file: the data is still there and ids keep counting
+    let port2 = free_port();
+    let server2 = start_todo_server(port2, &data, 2);
+    let probe = |method: &str, path: &str, body: Option<&str>| {
+        let src = format!(
+            "r = http_request({{\"method\": \"{}\", \"url\": \"http://127.0.0.1:{}{}\", \"timeout\": 10, \"retries\": 6{}}})\nprintln(r[\"status\"], r[\"body\"])\n",
+            method,
+            port2,
+            path,
+            body.map(|b| format!(", \"body\": {:?}", b)).unwrap_or_default()
+        );
+        let f = t.write("probe.killer", &src);
+        norm(&killer(&t.0, &["run", f.to_str().unwrap()]).stdout)
+    };
+    assert_eq!(probe("GET", "/health", None).trim(), "200 {\"status\":\"ok\",\"todos\":2}");
+    let created = probe("POST", "/todos", Some("{\"title\": \"after restart\"}"));
+    assert!(created.starts_with("201 {\"id\":4,\"title\":\"after restart\""), "{created}");
+    let out2 = server2.wait_with_output().unwrap();
+    assert!(norm(&out2.stdout).contains("(2 todos loaded)"), "{}", norm(&out2.stdout));
+}
+
+#[test]
+fn todo_server_startup_errors_and_storage_failures() {
+    let t = Tmp::new("todo2");
+    let run = |args: &[&str]| {
+        let mut a = vec!["run", "src/main.killer"];
+        a.extend_from_slice(args);
+        killer(&app_dir("todo"), &a)
+    };
+    let o = run(&["--port", "abc"]);
+    assert_eq!(o.status.code(), Some(2));
+    assert!(norm(&o.stderr).contains("--port needs a whole number"), "{}", norm(&o.stderr));
+    let o = run(&["--port", "70000"]);
+    assert_eq!(o.status.code(), Some(2));
+    let corrupt = t.write("bad.json", "{broken");
+    let o = run(&["--port", "1", "--data", corrupt.to_str().unwrap()]);
+    assert_eq!(o.status.code(), Some(1));
+    assert!(norm(&o.stderr).contains("todo: invalid JSON"), "{}", norm(&o.stderr));
+    // an unwritable data file: the POST gets a JSON 500 and nothing is half-stored
+    let port = free_port();
+    let bad_path = t.0.join("no_such_dir").join("todos.json");
+    let server = start_todo_server(port, &bad_path, 2);
+    let src = format!(
+        "a = http_request({{\"method\": \"POST\", \"url\": \"http://127.0.0.1:{p}/todos\", \"body\": \"{{\\\"title\\\": \\\"x\\\"}}\", \"timeout\": 10, \"retries\": 0}})\nprintln(a[\"status\"], contains(a[\"body\"], \"internal error\"))\nb = http_request({{\"url\": \"http://127.0.0.1:{p}/health\", \"timeout\": 10, \"retries\": 6}})\nprintln(b[\"body\"])\n",
+        p = port
+    );
+    let f = t.write("probe2.killer", &src);
+    let out = norm(&killer(&t.0, &["run", f.to_str().unwrap()]).stdout);
+    let _ = server.wait_with_output();
+    assert_eq!(out.trim(), "500 true\n{\"status\":\"ok\",\"todos\":0}");
+}
+
+#[test]
+fn todo_date_validation_agrees_with_python_datetime() {
+    let Some(py) = python() else { return };
+    let t = Tmp::new("dates");
+    let cases = t.0.join("cases.tsv");
+    let g = Command::new(py).arg("-I").arg(app_dir("todo").join("tests/dates.py")).arg(&cases).output().unwrap();
+    assert!(g.status.success(), "{}", norm(&g.stderr));
+    let out = killer(&app_dir("todo"), &["run", "tests/check_dates.killer", cases.to_str().unwrap()]);
+    let text = norm(&out.stdout);
+    assert!(text.trim_end().ends_with("mismatches 0"), "{text}{}", norm(&out.stderr));
+}

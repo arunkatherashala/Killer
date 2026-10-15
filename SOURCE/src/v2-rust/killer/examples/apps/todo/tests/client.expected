@@ -1,0 +1,22 @@
+GET /health -> 200 {"status":"ok","todos":0}
+POST /todos -> 201 {"id":1,"title":"Write the report","done":false,"priority":2,"tags":["work","urgent"],"due":"2030-02-28","notes":""}
+POST /todos -> 201 {"id":2,"title":"Buy milk","done":false,"priority":3,"tags":["home"],"due":null,"notes":"Oat, 2 litres"}
+POST /todos -> 201 {"id":3,"title":"Café ☕ meeting","done":true,"priority":3,"tags":["work"],"due":null,"notes":""}
+POST /todos -> 422 {"error":"validation failed","details":["unknown field 'color'","title must not be empty","priority must be a whole number from 1 to 5","duplicate tag 'a'","due must be a valid date like 2024-12-31"]}
+POST /todos -> 400 {"error":"invalid JSON: invalid JSON at line 1, column 2: expected a string key"}
+POST /todos -> 422 {"error":"validation failed","details":["body must be a JSON object"]}
+GET /todos/1 -> 200 {"id":1,"title":"Write the report","done":false,"priority":2,"tags":["work","urgent"],"due":"2030-02-28","notes":""}
+GET /todos/99 -> 404 {"error":"todo 99 not found"}
+GET /todos/abc -> 400 {"error":"invalid id 'abc'"}
+PATCH /todos/2 -> 200 {"id":2,"title":"Buy milk","done":true,"priority":5,"tags":["home"],"due":null,"notes":"Oat, 2 litres"}
+PUT /todos/1 -> 200 {"id":1,"title":"Write the final report","done":false,"priority":3,"tags":[],"due":null,"notes":"v2"}
+PATCH /todos/3 -> 422 {"error":"validation failed","details":["priority must be a whole number from 1 to 5"]}
+GET /todos?done=true -> 200 {"total":2,"offset":0,"limit":50,"items":[{"id":2,"title":"Buy milk","done":true,"priority":5,"tags":["home"],"due":null,"notes":"Oat, 2 litres"},{"id":3,"title":"Café ☕ meeting","done":true,"priority":3,"tags":["work"],"due":null,"notes":""}]}
+GET /todos?tag=work&limit=1&offset=1 -> 200 {"total":1,"offset":1,"limit":1,"items":[]}
+GET /todos?q=MILK -> 200 {"total":1,"offset":0,"limit":50,"items":[{"id":2,"title":"Buy milk","done":true,"priority":5,"tags":["home"],"due":null,"notes":"Oat, 2 litres"}]}
+GET /todos?done=maybe -> 400 {"error":"done must be true or false"}
+GET /stats -> 200 {"total":3,"done":2,"open":1,"by_priority":{"3":2,"5":1},"tags":{"home":1,"work":1}}
+DELETE /todos/2 -> 204 (empty)
+DELETE /todos/2 -> 404 {"error":"todo 2 not found"}
+GET /nowhere -> 404 {"error":"no route for GET /nowhere"}
+GET /todos?limit=2 -> 200 {"total":2,"offset":0,"limit":2,"items":[{"id":1,"title":"Write the final report","done":false,"priority":3,"tags":[],"due":null,"notes":"v2"},{"id":3,"title":"Café ☕ meeting","done":true,"priority":3,"tags":["work"],"due":null,"notes":""}]}
