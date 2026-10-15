@@ -1,0 +1,74 @@
+# Retrieval and answering. The language model call is stubbed: without OPENAI_API_KEY the
+# "answer" is the best matching passage, so the whole service is deterministic and offline.
+import "index.killer"
+
+MIN_SCORE = 0.05
+
+# Top k passages for a question: [{id, source, chunk, score, text}], best first. Passages below
+# MIN_SCORE are dropped (a question about nothing in the corpus should find nothing).
+fn retrieve(store, question, k) {
+  want = keywords(question)
+  need = len(keys(want))
+  hits = vec_search(store, embed(question), k * 4)
+  out = []
+  for h in hits {
+    # hybrid score: vector similarity plus the share of question words found in the passage;
+    # a passage that shares no word with the question is not an answer, whatever the vectors say
+    have = keywords(h["meta"]["text"])
+    shared = 0
+    for w in keys(want) {
+      if w in have {
+        shared = shared + 1
+      }
+    }
+    if shared == 0 or h["score"] < MIN_SCORE {
+      continue
+    }
+    score = h["score"] + 0.3 * shared / need
+    push(out, {
+      "id": h["id"],
+      "source": h["meta"]["source"],
+      "chunk": h["meta"]["chunk"],
+      "score": round(score * 10000) / 10000,
+      "vector_score": round(h["score"] * 10000) / 10000,
+      "shared": shared,
+      "text": h["meta"]["text"]
+    })
+  }
+  out = sorted(out, fn(p) { return [0 - p["score"], p["id"]] })
+  return len(out) > k ? out[0:k] : out
+}
+
+fn ask_llm(prompt, key) {
+  reply = http_request({
+    "method": "POST",
+    "url": "https://api.openai.com/v1/chat/completions",
+    "headers": {"Authorization": "Bearer " + key, "Content-Type": "application/json"},
+    "body": {"model": "gpt-4o-mini", "messages": [{"role": "user", "content": prompt}]},
+    "timeout": 60,
+    "retries": 2
+  })
+  data = json_parse(reply["body"])
+  return data["choices"][0]["message"]["content"]
+}
+
+# The full answer document for a question.
+fn answer(store, question, k) {
+  passages = retrieve(store, question, k)
+  if len(passages) == 0 {
+    return {"answer": "I do not know: nothing in the documents matches.", "sources": [], "prompt_tokens": 0}
+  }
+  hits = []
+  for p in passages {
+    push(hits, {"id": p["id"], "score": p["score"], "meta": {"source": p["source"], "text": p["text"]}})
+  }
+  prompt = build_rag_prompt(question, hits)
+  key = env_get("OPENAI_API_KEY")
+  text = ""
+  if key == null or key == "" {
+    text = "(stub, no OPENAI_API_KEY) " + passages[0]["text"]
+  } else {
+    text = ask_llm(prompt, key)
+  }
+  return {"answer": text, "sources": passages, "prompt_tokens": count_tokens(prompt)}
+}

@@ -180,6 +180,30 @@ pub struct BuiltinFunctions;
 impl BuiltinFunctions {
     /// Fast dispatch by numeric ID (no string matching).
     pub fn call_by_id(id: u16, args: &[Value]) -> Result<Value, VmError> {
+        // bigint arguments of int/sum/sqrt/floor/ceil/round/min/max/range (see bigint_ops::prepass)
+        let name = match id {
+            2 => "int",
+            11 => "sum",
+            16 => "sqrt",
+            19 => "floor",
+            20 => "ceil",
+            21 => "round",
+            22 => "min",
+            23 => "max",
+            36 => "range",
+            _ => "",
+        };
+        if !name.is_empty() && args.iter().any(|a| matches!(a, Value::BigInt(_) | Value::Array(_))) {
+            let mut copy = args.to_vec();
+            if let Some(r) = crate::bigint_ops::prepass(name, &mut copy) {
+                return r.map_err(VmError::runtime_error);
+            }
+            return Self::call_by_id_inner(id, &copy);
+        }
+        Self::call_by_id_inner(id, args)
+    }
+
+    fn call_by_id_inner(id: u16, args: &[Value]) -> Result<Value, VmError> {
         match id {
             0  => Self::len(args),
             1  => Self::str(args),
@@ -326,8 +350,25 @@ impl BuiltinFunctions {
         }
     }
 
-    /// Call a builtin function by name
+    /// Call a builtin function by name. A bigint argument is handled natively by `int`, `float`,
+    /// `min`, `max`, `sum`...; any other builtin that rejects a call containing a small bigint is
+    /// retried once with those arguments as plain numbers (so `chr(65n)`, `range(3n)` work).
     pub fn call(name: &str, args: &[Value]) -> Result<Value, VmError> {
+        if let Some(r) = crate::bigint_ops::native_builtin(name, args) {
+            return r.map_err(VmError::runtime_error);
+        }
+        let first = Self::call_inner(name, args);
+        if first.is_err() {
+            if let Some(demoted) = crate::bigint_ops::demote_args(args) {
+                if let Ok(v) = Self::call_inner(name, &demoted) {
+                    return Ok(v);
+                }
+            }
+        }
+        first
+    }
+
+    fn call_inner(name: &str, args: &[Value]) -> Result<Value, VmError> {
         match name {
             // Length/Count functions
             "len" | "length" => Self::len(args),
@@ -602,8 +643,8 @@ impl BuiltinFunctions {
             
             // JSON/CSV functions (Week 24: Data Serialization)
             "json_pretty" => Self::json_pretty(args),
-            "parse_csv" => Self::parse_csv(args),
-            "to_csv" => Self::to_csv(args),
+            "parse_csv" => crate::csv_builtins::parse_csv(args),
+            "to_csv" => crate::csv_builtins::to_csv(args),
             "to_yaml" => Self::to_yaml(args),
             
             // WebSocket functions (Week 24: Real-time Communication)
@@ -4051,13 +4092,14 @@ impl BuiltinFunctions {
             ));
         }
         
+        // a string is JSON text to re-indent; any other value (dict, list, number, ...) is
+        // encoded first, so `json_pretty(report)` works like `json_stringify` with indentation
         let json_str = match &args[0] {
             Value::Str(s) => s.clone(),
-            _ => {
-                return Err(VmError::runtime_error(
-                    "json_pretty(): first argument must be a JSON string".to_string(),
-                ))
-            }
+            other => match crate::json_lang::builtin_stringify(std::slice::from_ref(other))? {
+                Value::Str(s) => s,
+                _ => return Err(VmError::runtime_error("json_pretty(): could not encode the value".to_string())),
+            },
         };
 
         let indent = if args.len() > 1 {

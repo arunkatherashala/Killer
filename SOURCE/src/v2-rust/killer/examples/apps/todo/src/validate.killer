@@ -1,0 +1,113 @@
+# Input validation for todo documents. Every function returns a list of error messages
+# (empty = valid), so a handler can report all the problems at once.
+
+FIELDS = {"title": true, "done": true, "priority": true, "tags": true, "due": true, "notes": true}
+
+fn is_leap(y) {
+  return (y % 4 == 0 and y % 100 != 0) or y % 400 == 0
+}
+
+fn days_in_month(y, m) {
+  if m == 2 {
+    return is_leap(y) ? 29 : 28
+  }
+  if m == 4 or m == 6 or m == 9 or m == 11 {
+    return 30
+  }
+  return 31
+}
+
+fn all_digits(s) {
+  if len(s) == 0 {
+    return false
+  }
+  for ch in split(s, "") {
+    if ch < "0" or ch > "9" {
+      return false
+    }
+  }
+  return true
+}
+
+# "2024-02-29" -> true
+fn valid_date(s) {
+  if type(s) != "string" {
+    return false
+  }
+  parts = split(s, "-")
+  if len(parts) != 3 or len(parts[0]) != 4 or len(parts[1]) != 2 or len(parts[2]) != 2 {
+    return false
+  }
+  if not (all_digits(parts[0]) and all_digits(parts[1]) and all_digits(parts[2])) {
+    return false
+  }
+  y = int(parts[0])
+  m = int(parts[1])
+  d = int(parts[2])
+  return m >= 1 and m <= 12 and d >= 1 and d <= days_in_month(y, m)
+}
+
+fn is_whole(x) {
+  return type(x) == "number" and x == floor(x)
+}
+
+# Check the fields present in doc. With require_title the title must be there (create / replace).
+fn validate_todo(doc, require_title) {
+  errors = []
+  if type(doc) != "dict" {
+    return ["body must be a JSON object"]
+  }
+  for k in keys(doc) {
+    if FIELDS[k] != true {
+      push(errors, "unknown field '" + k + "'")
+    }
+  }
+  if doc["title"] == null {
+    if require_title {
+      push(errors, "title is required")
+    }
+  } else if type(doc["title"]) != "string" {
+    push(errors, "title must be a string")
+  } else {
+    t = trim(doc["title"])
+    if len(t) == 0 {
+      push(errors, "title must not be empty")
+    } else if len(t) > 120 {
+      push(errors, "title must be at most 120 characters")
+    }
+  }
+  if doc["done"] != null and type(doc["done"]) != "bool" {
+    push(errors, "done must be true or false")
+  }
+  if doc["priority"] != null {
+    if not is_whole(doc["priority"]) or doc["priority"] < 1 or doc["priority"] > 5 {
+      push(errors, "priority must be a whole number from 1 to 5")
+    }
+  }
+  if doc["tags"] != null {
+    tags = doc["tags"]
+    if type(tags) != "array" {
+      push(errors, "tags must be a list of strings")
+    } else {
+      if len(tags) > 5 {
+        push(errors, "at most 5 tags")
+      }
+      seen = {}
+      for tag in tags {
+        if type(tag) != "string" or len(trim(tag)) == 0 {
+          push(errors, "every tag must be a non-empty string")
+        } else if tag in seen {
+          push(errors, "duplicate tag '" + tag + "'")
+        }
+        seen[str(tag)] = true
+      }
+    }
+  }
+  if doc["due"] != null and not valid_date(doc["due"]) {
+    push(errors, "due must be a valid date like 2024-12-31")
+  }
+  if doc["notes"] != null and type(doc["notes"]) != "string" {
+    push(errors, "notes must be a string")
+  }
+  return errors
+}

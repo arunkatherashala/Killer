@@ -449,8 +449,12 @@ pub fn normalize_source(source: &str, config: &FormatterConfig) -> String {
     let reindent = !is_indentation_sensitive(&lines);
     let unit = if config.indent_style == IndentStyle::Spaces { " ".repeat(config.indent_size) } else { "\t".to_string() };
     let mut out: Vec<String> = Vec::with_capacity(lines.len());
-    let mut depth: i64 = 0;
+    // one entry per still-open bracket: the number of the line that opened it. Brackets opened on
+    // the same line (`push(out, {`, `[{`) add ONE indentation level between them, not one each.
+    let mut open: Vec<usize> = Vec::new();
+    let distinct = |v: &[usize]| -> usize { v.iter().enumerate().filter(|(i, l)| *i == 0 || v[*i - 1] != **l).count() };
     let mut blank_run = 0usize;
+    let mut line_no = 0usize;
     for line in &lines {
         let trimmed = line.trim_end();
         if trimmed.trim().is_empty() {
@@ -464,12 +468,15 @@ pub fn normalize_source(source: &str, config: &FormatterConfig) -> String {
         if reindent {
             let body = trimmed.trim_start();
             let masked = mask_code(body);
-            let leading_closers = masked.chars().take_while(|c| matches!(c, '}' | ']' | ')')).count() as i64;
-            let level = (depth - leading_closers).max(0) as usize;
+            line_no += 1;
+            let leading_closers = masked.chars().take_while(|c| matches!(c, '}' | ']' | ')')).count();
+            let level = distinct(&open[..open.len().saturating_sub(leading_closers)]);
             for c in masked.chars() {
                 match c {
-                    '{' | '[' | '(' => depth += 1,
-                    '}' | ']' | ')' => depth = (depth - 1).max(0),
+                    '{' | '[' | '(' => open.push(line_no),
+                    '}' | ']' | ')' => {
+                        open.pop();
+                    }
                     _ => {}
                 }
             }

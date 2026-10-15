@@ -1,0 +1,7 @@
+[package]
+name = "rag"
+version = "0.1.0"
+description = "Document Q&A: ingest a folder, embed, persist a vector index, rank, build prompts, serve POST /ask"
+entry = "src/main.killer"
+
+[dependencies]

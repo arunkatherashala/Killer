@@ -1,0 +1,181 @@
+# kx tokenizer: source text -> list of tokens {t, v, line, col}.
+# Token types: num (v is a big integer), str, id, kw, op, nl (statement break), eof.
+
+KEYWORDS = {"let": true, "set": true, "fn": true, "if": true, "then": true, "else": true, "true": true, "false": true, "nil": true}
+VALUE_END = {"num": true, "str": true, "id": true}
+
+fn kx_error(kind, msg, line, col) {
+  return {"kind": kind, "msg": msg, "line": line, "col": col}
+}
+
+fn is_digit(c) {
+  return c != "" and c >= "0" and c <= "9"
+}
+
+fn is_alpha(c) {
+  return c != "" and ((c >= "a" and c <= "z") or (c >= "A" and c <= "Z") or c == "_")
+}
+
+fn make_tok(t, v, line, col) {
+  return {"t": t, "v": v, "line": line, "col": col}
+}
+
+# A newline ends a statement only when the previous token could end an expression and we are
+# not inside parentheses or brackets (braces open a new statement context).
+fn ends_value(tok) {
+  if tok == null {
+    return false
+  }
+  if VALUE_END[tok["t"]] == true {
+    return true
+  }
+  if tok["t"] == "kw" {
+    return tok["v"] == "true" or tok["v"] == "false" or tok["v"] == "nil"
+  }
+  if tok["t"] == "op" {
+    return tok["v"] == ")" or tok["v"] == "]" or tok["v"] == "}"
+  }
+  return false
+}
+
+fn tokenize(src) {
+  cs = split(src, "")
+  n = len(cs)
+  tokens = []
+  stack = []
+  i = 0
+  line = 1
+  col = 1
+  while i < n {
+    c = cs[i]
+    if c == "\n" {
+      last = null
+      if len(tokens) > 0 {
+        last = tokens[len(tokens) - 1]
+      }
+      top = null
+      if len(stack) > 0 {
+        top = stack[len(stack) - 1]
+      }
+      if ends_value(last) and (top == null or top == "{") {
+        push(tokens, make_tok("nl", "\n", line, col))
+      }
+      i = i + 1
+      line = line + 1
+      col = 1
+      continue
+    }
+    if c == " " or c == "\t" or c == "\r" {
+      i = i + 1
+      col = col + 1
+      continue
+    }
+    if c == "#" {
+      while i < n and cs[i] != "\n" {
+        i = i + 1
+        col = col + 1
+      }
+      continue
+    }
+    if is_digit(c) {
+      start = col
+      text = ""
+      while i < n and (is_digit(cs[i]) or cs[i] == "_") {
+        if cs[i] != "_" {
+          text = text + cs[i]
+        }
+        i = i + 1
+        col = col + 1
+      }
+      if i < n and is_alpha(cs[i]) {
+        throw kx_error("SyntaxError", "invalid number literal '" + text + cs[i] + "'", line, start)
+      }
+      push(tokens, make_tok("num", big(text), line, start))
+      continue
+    }
+    if is_alpha(c) {
+      start = col
+      word = ""
+      while i < n and (is_alpha(cs[i]) or is_digit(cs[i])) {
+        word = word + cs[i]
+        i = i + 1
+        col = col + 1
+      }
+      if KEYWORDS[word] == true {
+        push(tokens, make_tok("kw", word, line, start))
+      } else {
+        push(tokens, make_tok("id", word, line, start))
+      }
+      continue
+    }
+    if c == "\"" {
+      start = col
+      start_line = line
+      i = i + 1
+      col = col + 1
+      text = ""
+      closed = false
+      while i < n and not closed {
+        d = cs[i]
+        if d == "\"" {
+          closed = true
+          i = i + 1
+          col = col + 1
+        } else if d == "\n" {
+          throw kx_error("SyntaxError", "unterminated string", start_line, start)
+        } else if d == "\\" {
+          if i + 1 >= n {
+            throw kx_error("SyntaxError", "unterminated string", start_line, start)
+          }
+          e = cs[i + 1]
+          if e == "n" {
+            text = text + "\n"
+          } else if e == "t" {
+            text = text + "\t"
+          } else if e == "\\" or e == "\"" {
+            text = text + e
+          } else {
+            throw kx_error("SyntaxError", "unknown escape \\" + e, line, col)
+          }
+          i = i + 2
+          col = col + 2
+        } else {
+          text = text + d
+          i = i + 1
+          col = col + 1
+        }
+      }
+      if not closed {
+        throw kx_error("SyntaxError", "unterminated string", start_line, start)
+      }
+      push(tokens, make_tok("str", text, start_line, start))
+      continue
+    }
+    two = ""
+    if i + 1 < n {
+      two = c + cs[i + 1]
+    }
+    if two == "=>" or two == "==" or two == "!=" or two == "<=" or two == ">=" or two == "&&" or two == "||" {
+      push(tokens, make_tok("op", two, line, col))
+      i = i + 2
+      col = col + 2
+      continue
+    }
+    if contains("+-*/%^<>=!(){}[],;:", c) {
+      if c == "(" or c == "[" or c == "{" {
+        push(stack, c)
+      } else if c == ")" or c == "]" or c == "}" {
+        if len(stack) > 0 {
+          pop(stack)
+        }
+      }
+      push(tokens, make_tok("op", c, line, col))
+      i = i + 1
+      col = col + 1
+      continue
+    }
+    throw kx_error("SyntaxError", "unexpected character '" + c + "'", line, col)
+  }
+  push(tokens, make_tok("eof", "", line, col))
+  return tokens
+}

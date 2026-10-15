@@ -1,0 +1,355 @@
+# The game engine: a state machine (explore -> combat -> won / dead) driven by text commands.
+import "entities.killer"
+
+# Items with effects. `bonus` raises weapon_bonus, `armor` reduces damage taken, `heal` restores hp.
+ITEMS = {
+  "torch": {"desc": "a smoky torch"},
+  "sword": {"desc": "a gleaming sword", "bonus": 3},
+  "shield": {"desc": "a dented shield", "armor": 1},
+  "potion": {"desc": "a red potion", "heal": 12},
+  "key": {"desc": "an iron key"},
+  "crown": {"desc": "a golden crown"}
+}
+
+# One fight, round by round, as a generator: each yielded value describes one exchange.
+# The player strikes first; the fight ends when somebody drops to 0 hp.
+fn fight_rounds(player, monster, rng, armor, first_round) {
+  round = first_round
+  while player.alive() and monster.alive() {
+    p_dmg = player.attack_power(round) + rng.below(4)
+    monster.hurt(p_dmg)
+    m_dmg = 0
+    if monster.alive() {
+      m_dmg = max(monster.attack_power(round) + rng.below(3) - armor, 0)
+      player.hurt(m_dmg)
+    }
+    yield {"round": round, "p_dmg": p_dmg, "m_dmg": m_dmg, "p_hp": player.hp, "m_hp": monster.hp}
+    round = round + 1
+  }
+}
+
+# Turn order for any group of entities: endless round robin (use with break).
+fn turn_order(entities) {
+  i = 0
+  while len(entities) > 0 {
+    yield entities[i % len(entities)]
+    i = i + 1
+  }
+}
+
+# Commands from a script: skips blank lines and # comments, lower-cases, yields [verb, argument].
+fn script_commands(lines) {
+  for raw in lines {
+    line = lower(trim(raw))
+    if line == "" or starts_with(line, "#") {
+      continue
+    }
+    parts = []
+    for w in split(line, " ") {
+      if w != "" {
+        push(parts, w)
+      }
+    }
+    verb = parts[0]
+    arg = ""
+    if len(parts) > 1 {
+      arg = join(parts[1:len(parts)], " ")
+    }
+    yield [verb, arg]
+  }
+}
+
+class Game {
+  fn init(world, seed) {
+    this.rooms = {}
+    for r in world["rooms"] {
+      pos = new Vec2(r["pos"][0], r["pos"][1])
+      room = {"name": r["name"], "desc": r["desc"], "items": copy(r["items"]), "monster": null}
+      if r["monster"] != null {
+        room["monster"] = make_monster(r["monster"]).to_dict()
+      }
+      this.rooms[pos.key()] = room
+    }
+    this.locked = world["locked"]
+    this.player = new Player("hero")
+    this.player.pos = new Vec2(world["start"][0], world["start"][1])
+    this.rng = new Rng(seed)
+    this.state = "explore"
+    this.turns = 0
+    this.fight = null
+    this.round_no = 0
+  }
+
+  fn room() {
+    return this.rooms[this.player.pos.key()]
+  }
+
+  fn describe() {
+    r = this.room()
+    lines = ["== " + r["name"] + " ==", r["desc"]]
+    if len(r["items"]) > 0 {
+      lines = lines + ["You see: " + join(r["items"], ", ")]
+    }
+    if r["monster"] != null {
+      lines = lines + ["A " + r["monster"]["kind"] + " blocks the way!"]
+    }
+    exits = []
+    for name in keys(DIRECTIONS) {
+      if this.rooms[(this.player.pos + DIRECTIONS[name]).key()] != null {
+        push(exits, name)
+      }
+    }
+    return lines + ["Exits: " + join(exits, ", ")]
+  }
+
+  fn armor() {
+    return this.player.has("shield") ? 1 : 0
+  }
+
+  fn current_monster() {
+    return monster_from_dict(this.room()["monster"])
+  }
+
+  # run one command; returns the output lines
+  fn command(verb, arg) {
+    this.turns = this.turns + 1
+    if this.state == "won" or this.state == "dead" {
+      return ["The game is over (" + this.state + ")."]
+    }
+    if verb == "look" {
+      return this.describe()
+    }
+    if verb == "inv" or verb == "inventory" {
+      if len(this.player.inventory) == 0 {
+        return ["You carry nothing. hp " + str(this.player.hp) + "/" + str(this.player.max_hp)]
+      }
+      return ["You carry: " + join(this.player.inventory, ", ") + ". hp " + str(this.player.hp) + "/" + str(this.player.max_hp)]
+    }
+    if this.state == "combat" {
+      return this.combat_command(verb, arg)
+    }
+    if verb == "go" {
+      return this.go(arg)
+    }
+    if verb == "take" {
+      return this.take(arg)
+    }
+    if verb == "drop" {
+      return this.drop(arg)
+    }
+    if verb == "use" {
+      return this.use_item(arg)
+    }
+    if verb == "attack" {
+      return this.start_fight()
+    }
+    return ["I do not understand '" + verb + "'."]
+  }
+
+  fn go(direction) {
+    d = DIRECTIONS[direction]
+    if d == null {
+      return ["Go where? (north, south, east, west)"]
+    }
+    target = this.player.pos + d
+    key = target.key()
+    if this.rooms[key] == null {
+      return ["You cannot go " + direction + "."]
+    }
+    here = this.room()
+    if here["monster"] != null {
+      return ["The " + here["monster"]["kind"] + " blocks your way. Attack or flee."]
+    }
+    need = this.locked[key]
+    if need != null and not this.player.has(need) {
+      return ["The door is locked. You need the " + need + "."]
+    }
+    this.player.pos = target
+    return this.describe()
+  }
+
+  fn take(item) {
+    if item == "" {
+      return ["Take what?"]
+    }
+    r = this.room()
+    if not (item in r["items"]) {
+      return ["There is no " + item + " here."]
+    }
+    if r["monster"] != null {
+      return ["The " + r["monster"]["kind"] + " will not let you."]
+    }
+    r["items"] = this.without(r["items"], item)
+    push(this.player.inventory, item)
+    info = ITEMS[item]
+    if info["bonus"] != null {
+      this.player.weapon_bonus = this.player.weapon_bonus + info["bonus"]
+    }
+    if item == "crown" {
+      this.state = "won"
+      return ["You take the " + item + ". You win after " + str(this.turns) + " turns!"]
+    }
+    return ["Taken: " + info["desc"] + "."]
+  }
+
+  fn drop(item) {
+    if not this.player.has(item) {
+      return ["You do not have " + item + "."]
+    }
+    this.player.inventory = this.without(this.player.inventory, item)
+    push(this.room()["items"], item)
+    info = ITEMS[item]
+    if info["bonus"] != null {
+      this.player.weapon_bonus = this.player.weapon_bonus - info["bonus"]
+    }
+    return ["Dropped " + item + "."]
+  }
+
+  fn without(items, item) {
+    out = []
+    removed = false
+    for it in items {
+      if it == item and not removed {
+        removed = true
+      } else {
+        push(out, it)
+      }
+    }
+    return out
+  }
+
+  fn use_item(item) {
+    if not this.player.has(item) {
+      return ["You do not have " + item + "."]
+    }
+    info = ITEMS[item]
+    if info["heal"] == null {
+      return ["Nothing happens."]
+    }
+    before = this.player.hp
+    this.player.heal(info["heal"])
+    this.player.inventory = this.without(this.player.inventory, item)
+    return ["You drink the potion: hp " + str(before) + " -> " + str(this.player.hp) + "."]
+  }
+
+  fn start_fight() {
+    r = this.room()
+    if r["monster"] == null {
+      return ["There is nothing to attack."]
+    }
+    this.state = "combat"
+    return ["You attack the " + r["monster"]["kind"] + "!"] + this.fight_round()
+  }
+
+  # one exchange of the fight generator; the generator lives in this.fight between commands
+  fn fight_round() {
+    monster = this.current_monster()
+    if this.fight == null {
+      this.fight = fight_rounds(this.player, monster, this.rng, this.armor(), this.round_no + 1)
+    }
+    step = next(this.fight)
+    this.round_no = step["round"]
+    r = this.room()
+    line = "Round " + str(step["round"]) + ": you hit for " + str(step["p_dmg"]) + " (" + monster.name + " hp " + str(step["m_hp"]) + ")"
+    lines = []
+    if step["m_hp"] <= 0 {
+      r["monster"] = null
+      this.fight = null
+      this.round_no = 0
+      this.state = "explore"
+      this.player.kills = this.player.kills + 1
+      return [line + ". The " + monster.name + " dies."]
+    }
+    line = line + ", it hits for " + str(step["m_dmg"]) + " (you hp " + str(step["p_hp"]) + ")"
+    r["monster"]["hp"] = step["m_hp"]
+    if step["p_hp"] <= 0 {
+      this.fight = null
+      this.state = "dead"
+      return [line + ". You die."]
+    }
+    return [line]
+  }
+
+  fn combat_command(verb, arg) {
+    if verb == "attack" {
+      return this.fight_round()
+    }
+    if verb == "use" {
+      return this.use_item(arg)
+    }
+    if verb == "flee" {
+      if this.rng.below(2) == 0 {
+        this.fight = null
+        this.round_no = 0
+        this.state = "explore"
+        this.player.pos = this.player.pos - this.last_step()
+        return ["You escape back to the " + this.room()["name"] + "."]
+      }
+      m = this.current_monster()
+      hit = max(m.attack_power(0) - this.armor(), 0)
+      this.player.hurt(hit)
+      if not this.player.alive() {
+        this.state = "dead"
+        return ["You fail to flee and the " + m.name + " hits for " + str(hit) + ". You die."]
+      }
+      return ["You fail to flee; the " + m.name + " hits for " + str(hit) + " (hp " + str(this.player.hp) + ")."]
+    }
+    return ["You are fighting! attack, use, flee."]
+  }
+
+  # the way back: the direction we most likely came from is south, else any open neighbour
+  fn last_step() {
+    for name in ["north", "east", "west", "south"] {
+      back = this.player.pos - DIRECTIONS[name]
+      if this.rooms[back.key()] != null and this.rooms[back.key()]["monster"] == null {
+        return DIRECTIONS[name]
+      }
+    }
+    return new Vec2(0, 0)
+  }
+
+  # ---- save / load ----
+
+  fn to_dict() {
+    return {
+      "version": 1,
+      "state": this.state,
+      "turns": this.turns,
+      "round_no": this.round_no,
+      "player": this.player.to_dict(),
+      "rng": this.rng.to_dict(),
+      "rooms": this.rooms,
+      "locked": this.locked
+    }
+  }
+}
+
+fn game_from_dict(d, world) {
+  if d["version"] != 1 {
+    throw "unsupported save version: " + str(d["version"])
+  }
+  g = new Game(world, 1)
+  g.state = d["state"]
+  g.turns = d["turns"]
+  g.round_no = d["round_no"]
+  g.player = player_from_dict(d["player"])
+  g.rng = rng_from_dict(d["rng"])
+  g.rooms = d["rooms"]
+  g.locked = d["locked"]
+  return g
+}
+
+fn save_game(game, path) {
+  writeFile(path, json_pretty(game.to_dict()))
+}
+
+fn load_game(path, world) {
+  if not fileExists(path) {
+    throw "no save file at " + path
+  }
+  return game_from_dict(json_parse(readFile(path)), world)
+}
+
+fn load_world(path) {
+  return json_parse(readFile(path))
+}

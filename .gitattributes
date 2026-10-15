@@ -1,2 +1,7 @@
 install.sh text eol=lf
 *.sh text eol=lf
+
+# Test fixtures are byte-exact: keep LF so embedded newlines (multi-line CSV fields, golden outputs) are identical on every OS
+SOURCE/src/v2-rust/killer/examples/apps/** text eol=lf
+SOURCE/src/v2-rust/killer/tests/data/** text eol=lf
+SOURCE/src/v2-rust/killer/parity/realworld/** text eol=lf

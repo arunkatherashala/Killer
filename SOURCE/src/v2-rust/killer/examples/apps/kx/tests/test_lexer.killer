@@ -1,0 +1,68 @@
+import "../src/lexer.killer"
+
+fn kinds(src) {
+  out = []
+  for t in tokenize(src) {
+    push(out, t["t"])
+  }
+  return out
+}
+
+test "numbers become big integers" {
+  toks = tokenize("123456789012345678901234567890")
+  assert_eq(toks[0]["t"], "num")
+  assert_eq(str(toks[0]["v"] + 1), "123456789012345678901234567891")
+  assert_eq(str(tokenize("1_000_000")[0]["v"]), "1000000")
+}
+
+test "identifiers keywords and operators" {
+  assert_eq(kinds("let x = 1 + y"), ["kw", "id", "op", "num", "op", "id", "eof"])
+  assert_eq(kinds("a => b == c != d <= e >= f && g || h"), ["id", "op", "id", "op", "id", "op", "id", "op", "id", "op", "id", "op", "id", "op", "id", "eof"])
+}
+
+test "comments are skipped and newlines separate statements" {
+  assert_eq(kinds("1 # one\n2"), ["num", "nl", "num", "eof"])
+  assert_eq(kinds("(1\n+ 2)"), ["op", "num", "op", "num", "op", "eof"])
+  assert_eq(kinds("1 +\n2"), ["num", "op", "num", "eof"])
+}
+
+test "positions are 1-based line and column" {
+  toks = tokenize("ab\n  cd")
+  assert_eq([toks[0]["line"], toks[0]["col"]], [1, 1])
+  assert_eq([toks[2]["line"], toks[2]["col"]], [2, 3])
+}
+
+test "strings with escapes and unicode" {
+  s = tokenize("\"a\\nb\\t\\\"q\\\"\"")[0]
+  assert_eq(s["v"], "a\nb\t\"q\"")
+  u = tokenize("\"héllo wörld ✓\"")[0]
+  assert_eq(len(u["v"]), 13)
+}
+
+test "lexical errors carry a position" {
+  r = null
+  try {
+    tokenize("1 + $")
+  } catch e {
+    r = e
+  }
+  assert_eq(r["kind"], "SyntaxError")
+  assert_eq([r["line"], r["col"]], [1, 5])
+  try {
+    tokenize("\"open")
+  } catch e2 {
+    r = e2
+  }
+  assert_eq(r["msg"], "unterminated string")
+  try {
+    tokenize("12ab")
+  } catch e3 {
+    r = e3
+  }
+  assert_contains(r["msg"], "invalid number")
+}
+
+test "empty input" {
+  assert_eq(kinds(""), ["eof"])
+  assert_eq(kinds("   \n\n  # only a comment"), ["eof"])
+}

@@ -1,0 +1,101 @@
+import "../src/eval.killer"
+
+fn run1(src) {
+  r = kx_run(src)
+  if not r["ok"] {
+    return "ERR " + r["error"]
+  }
+  return r["shown"]
+}
+
+test "arithmetic precedence and associativity" {
+  assert_eq(run1("2 + 3 * 4"), "14")
+  assert_eq(run1("2 ^ 3 ^ 2"), "512")
+  assert_eq(run1("-2 ^ 2"), "-4")
+  assert_eq(run1("10 - 3 - 2"), "5")
+  assert_eq(run1("100 / 10 / 5"), "2")
+  assert_eq(run1("(1 + 2) * 3"), "9")
+}
+
+test "floor division and modulo follow Python" {
+  assert_eq(run1("-7 / 2"), "-4")
+  assert_eq(run1("-7 % 3"), "2")
+  assert_eq(run1("7 / -2"), "-4")
+  assert_eq(run1("7 % -2"), "-1")
+}
+
+test "exact big integers" {
+  assert_eq(run1("2 ^ 100"), "1267650600228229401496703205376")
+  assert_eq(run1("2 ^ 100 + 1 - 2 ^ 100"), "1")
+  assert_eq(run1("99999999999999999999 * 99999999999999999999"), "9999999999999999999800000000000000000001")
+  assert_eq(run1("9007199254740993 + 0"), "9007199254740993")
+}
+
+test "let, blocks and shadowing" {
+  assert_eq(run1("let a = 5\nlet b = a * 2\nb + a"), "15")
+  assert_eq(run1("let a = 1\n{ let a = 2\n a } + a"), "3")
+}
+
+test "closures capture their environment" {
+  src = "let mk(n) = fn(x) => x + n\nlet add2 = mk(2)\nlet add10 = mk(10)\nadd2(1) * 100 + add10(1)"
+  assert_eq(run1(src), "311")
+  counter = "let mk() = { let n = 0\n fn() => { set n = n + 1\n n } }\nlet c = mk()\nc()\nc()\nc()"
+  assert_eq(run1(counter), "3")
+}
+
+test "recursion" {
+  assert_eq(run1("let f(n) = if n <= 1 then 1 else n * f(n - 1)\nf(25)"), "15511210043330985984000000")
+}
+
+test "lists strings and booleans" {
+  assert_eq(run1("[1, 2] + [3]"), "[1, 2, 3]")
+  assert_eq(run1("\"ab\" + \"cd\""), "\"abcd\"")
+  assert_eq(run1("[10, 20, 30][1]"), "20")
+  assert_eq(run1("1 < 2 && 2 < 3"), "true")
+  assert_eq(run1("nil || 7"), "7")
+  assert_eq(run1("!false"), "true")
+  assert_eq(run1("[1, [2]] == [1, [2]]"), "true")
+  assert_eq(run1("\"b\" > \"a\""), "true")
+}
+
+test "builtins" {
+  assert_eq(run1("gcd(48, 180)"), "12")
+  assert_eq(run1("powmod(2, 100, 1000000007)"), "976371285")
+  assert_eq(run1("isqrt(10 ^ 30)"), "1000000000000000")
+  assert_eq(run1("len(range(0, 10))"), "10")
+  assert_eq(run1("abs(0 - 5)"), "5")
+  assert_eq(run1("digits(2 ^ 64)"), "20")
+}
+
+test "error reporting has line and column" {
+  e = kx_run("let x = 1\nlet y = x +\n  zzz")["err"]
+  assert_eq([e["kind"], e["line"], e["col"]], ["RuntimeError", 3, 3])
+  e = kx_run("1 +* 2")["err"]
+  assert_eq([e["kind"], e["line"], e["col"]], ["SyntaxError", 1, 4])
+  r = kx_run("1 / (3 - 3)")
+  assert_eq(r["error"], "RuntimeError at 1:3: division by zero\n  1 / (3 - 3)\n    ^")
+  assert_contains(kx_run("1 + \"a\"")["error"], "cannot be applied to int and string")
+  assert_contains(kx_run("let f(a) = a\nf(1, 2)")["error"], "f expects 1 argument(s) but got 2")
+  assert_contains(kx_run("[1][5]")["error"], "index 5 out of range (length 1)")
+  assert_contains(kx_run("(1")["error"], "expected ')' but found end of input")
+  assert_contains(kx_run("if 1 then 2")["error"], "expected 'else'")
+  assert_contains(kx_run("nil(1)")["error"], "cannot call a nil")
+}
+
+test "deep recursion is reported instead of crashing" {
+  r = kx_run("let f(n) = if n == 0 then 0 else 1 + f(n - 1)\nf(100000)")
+  assert_contains(r["error"], "stack overflow")
+  ok = kx_run("let f(n) = if n == 0 then 0 else 1 + f(n - 1)\nf(100)")
+  assert_eq(ok["shown"], "100")
+}
+
+test "print is captured" {
+  r = kx_run("print(1)\nprint(\"two\")\nprint([3, \"x\"])")
+  assert_eq(r["out"], ["1", "two", "[3, \"x\"]"])
+}
+
+test "empty program" {
+  r = kx_run("")
+  assert_eq(r["ok"], true)
+  assert_eq(r["value"], null)
+}

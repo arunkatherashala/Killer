@@ -1,0 +1,152 @@
+# Entities: players and monsters share a base class; each monster kind customises its attack.
+import "util.killer"
+
+class Entity {
+  fn init(name, hp, power) {
+    this.name = name
+    this.hp = hp
+    this.max_hp = hp
+    this.power = power
+  }
+
+  fn alive() {
+    return this.hp > 0
+  }
+
+  fn attack_power(round) {
+    return this.power
+  }
+
+  fn hurt(amount) {
+    this.hp = max(this.hp - amount, 0)
+    return this.hp
+  }
+
+  fn heal(amount) {
+    this.hp = min(this.hp + amount, this.max_hp)
+    return this.hp
+  }
+
+  fn kind() {
+    return "entity"
+  }
+
+  fn to_dict() {
+    return {"kind": this.kind(), "name": this.name, "hp": this.hp, "max_hp": this.max_hp, "power": this.power}
+  }
+}
+
+class Player extends Entity {
+  fn init(name) {
+    super.init(name, 30, 4)
+    this.pos = new Vec2(0, 0)
+    this.inventory = []
+    this.weapon_bonus = 0
+    this.kills = 0
+  }
+
+  fn attack_power(round) {
+    return super.attack_power(round) + this.weapon_bonus
+  }
+
+  fn has(item) {
+    return item in this.inventory
+  }
+
+  fn kind() {
+    return "player"
+  }
+
+  fn to_dict() {
+    d = super.to_dict()
+    d["pos"] = this.pos.to_dict()
+    d["inventory"] = this.inventory
+    d["weapon_bonus"] = this.weapon_bonus
+    d["kills"] = this.kills
+    return d
+  }
+}
+
+class Monster extends Entity {
+  fn kind() {
+    return "monster"
+  }
+}
+
+class Goblin extends Monster {
+  fn init() {
+    super.init("goblin", 12, 3)
+  }
+
+  fn kind() {
+    return "goblin"
+  }
+}
+
+class Troll extends Monster {
+  fn init() {
+    super.init("troll", 22, 4)
+  }
+
+  # trolls hit harder when they are hurt
+  fn attack_power(round) {
+    bonus = 0
+    if this.hp * 2 < this.max_hp {
+      bonus = 2
+    }
+    return super.attack_power(round) + bonus
+  }
+
+  fn kind() {
+    return "troll"
+  }
+}
+
+class Dragon extends Monster {
+  fn init() {
+    super.init("dragon", 40, 5)
+  }
+
+  # every third round the dragon breathes fire
+  fn attack_power(round) {
+    if round % 3 == 0 {
+      return super.attack_power(round) + 6
+    }
+    return super.attack_power(round)
+  }
+
+  fn kind() {
+    return "dragon"
+  }
+}
+
+fn make_monster(kind) {
+  if kind == "goblin" {
+    return new Goblin()
+  }
+  if kind == "troll" {
+    return new Troll()
+  }
+  if kind == "dragon" {
+    return new Dragon()
+  }
+  throw "unknown monster kind: " + str(kind)
+}
+
+fn monster_from_dict(d) {
+  m = make_monster(d["kind"])
+  m.hp = d["hp"]
+  return m
+}
+
+fn player_from_dict(d) {
+  p = new Player(d["name"])
+  p.hp = d["hp"]
+  p.max_hp = d["max_hp"]
+  p.power = d["power"]
+  p.pos = Vec2.from_dict(d["pos"])
+  p.inventory = d["inventory"]
+  p.weapon_bonus = d["weapon_bonus"]
+  p.kills = d["kills"]
+  return p
+}

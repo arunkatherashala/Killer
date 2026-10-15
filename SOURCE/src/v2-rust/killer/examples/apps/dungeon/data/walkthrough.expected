@@ -1,0 +1,97 @@
+Welcome to the dungeon.
+== Cellar ==
+A damp cellar. Rough stairs lead north.
+You see: torch
+Exits: north
+> look
+== Cellar ==
+A damp cellar. Rough stairs lead north.
+You see: torch
+Exits: north
+> take torch
+Taken: a smoky torch.
+> go north
+== Great Hall ==
+A great hall with doors east, west and a heavy iron door north.
+A goblin blocks the way!
+Exits: north, south, east, west
+> attack
+You attack the goblin!
+Round 1: you hit for 7 (goblin hp 5), it hits for 3 (you hp 27)
+> attack
+Round 2: you hit for 6 (goblin hp 0). The goblin dies.
+> look
+== Great Hall ==
+A great hall with doors east, west and a heavy iron door north.
+Exits: north, south, east, west
+> go east
+== Armory ==
+Racks of rusted weapons. One sword still gleams.
+You see: sword
+Exits: west
+> take sword
+Taken: a gleaming sword.
+> go west
+== Great Hall ==
+A great hall with doors east, west and a heavy iron door north.
+Exits: north, south, east, west
+> go west
+== Library ==
+Dusty shelves. A passage leads north into the dark.
+You see: key, potion
+Exits: north, east
+> take key
+Taken: an iron key.
+> take potion
+Taken: a red potion.
+> go north
+== Crypt ==
+Cold air and old bones.
+You see: shield, potion
+A troll blocks the way!
+Exits: south, east
+> attack
+You attack the troll!
+Round 1: you hit for 8 (troll hp 14), it hits for 5 (you hp 22)
+> attack
+Round 2: you hit for 10 (troll hp 4), it hits for 8 (you hp 14)
+> attack
+Round 3: you hit for 8 (troll hp 0). The troll dies.
+> take shield
+Taken: a dented shield.
+> take potion
+Taken: a red potion.
+> use potion
+You drink the potion: hp 14 -> 26.
+> go east
+== Dragon Lair ==
+Heat and the smell of sulphur. Gold glitters under a huge shape.
+You see: crown
+A dragon blocks the way!
+Exits: south, west
+> look
+== Dragon Lair ==
+Heat and the smell of sulphur. Gold glitters under a huge shape.
+You see: crown
+A dragon blocks the way!
+Exits: south, west
+> use potion
+You drink the potion: hp 26 -> 30.
+> attack
+You attack the dragon!
+Round 1: you hit for 10 (dragon hp 30), it hits for 6 (you hp 24)
+> attack
+Round 2: you hit for 10 (dragon hp 20), it hits for 6 (you hp 18)
+> attack
+Round 3: you hit for 10 (dragon hp 10), it hits for 10 (you hp 8)
+> attack
+Round 4: you hit for 8 (dragon hp 2), it hits for 4 (you hp 4)
+> attack
+Round 5: you hit for 8 (dragon hp 0). The dragon dies.
+> attack
+There is nothing to attack.
+> take crown
+You take the crown. You win after 29 turns!
+> inv
+The game is over (won).
+state: won, turns: 30, hp: 4, kills: 3

@@ -1,0 +1,7 @@
+[package]
+name = "csvtool"
+version = "0.1.0"
+description = "Command-line CSV tool: describe columns, aggregate by group, aligned tables, JSON reports"
+entry = "src/main.killer"
+
+[dependencies]

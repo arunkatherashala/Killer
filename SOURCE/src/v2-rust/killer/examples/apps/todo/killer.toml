@@ -1,0 +1,7 @@
+[package]
+name = "todo"
+version = "0.1.0"
+description = "Persistent TODO REST service: serve/route, JSON bodies, validation, file persistence"
+entry = "src/main.killer"
+
+[dependencies]

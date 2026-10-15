@@ -1,0 +1,146 @@
+# The todo store: an in-memory list persisted to a JSON file after every change.
+import "validate.killer"
+
+class TodoStore {
+  fn init(path) {
+    this.path = path
+    this.items = []
+    this.next_id = 1
+    if path != null and fileExists(path) {
+      this.load()
+    }
+  }
+
+  fn load() {
+    text = readFile(this.path)
+    if len(trim(text)) == 0 {
+      return
+    }
+    data = json_parse(text)
+    if type(data) != "dict" or type(data["items"]) != "array" {
+      throw "corrupt todo file " + this.path
+    }
+    this.items = data["items"]
+    this.next_id = data["next_id"]
+  }
+
+  # write to a temporary file and rename it over the real one, so a crash cannot leave half a file
+  fn persist(items, next_id) {
+    if this.path == null {
+      return
+    }
+    tmp = this.path + ".tmp"
+    writeFile(tmp, json_pretty({"next_id": next_id, "items": items}))
+    renameFile(tmp, this.path)
+  }
+
+  # every change is written first and committed to memory only if the write worked
+  fn commit(items, next_id) {
+    this.persist(items, next_id)
+    this.items = items
+    this.next_id = next_id
+  }
+
+  fn find_index(id) {
+    for i in range(len(this.items)) {
+      if this.items[i]["id"] == id {
+        return i
+      }
+    }
+    return -1
+  }
+
+  fn get(id) {
+    i = this.find_index(id)
+    return i < 0 ? null : this.items[i]
+  }
+
+  fn create(doc) {
+    item = {
+      "id": this.next_id,
+      "title": trim(doc["title"]),
+      "done": doc["done"] ?? false,
+      "priority": doc["priority"] ?? 3,
+      "tags": doc["tags"] ?? [],
+      "due": doc["due"],
+      "notes": doc["notes"] ?? ""
+    }
+    this.commit(this.items + [item], this.next_id + 1)
+    return item
+  }
+
+  # replace = true: PUT (missing optional fields reset to their defaults); false: PATCH
+  fn update(id, doc, replace) {
+    i = this.find_index(id)
+    if i < 0 {
+      return null
+    }
+    old = this.items[i]
+    item = {"id": id}
+    defaults = {"done": false, "priority": 3, "tags": [], "due": null, "notes": ""}
+    for k in ["title", "done", "priority", "tags", "due", "notes"] {
+      if doc[k] != null {
+        item[k] = k == "title" ? trim(doc[k]) : doc[k]
+      } else if replace and k != "title" {
+        item[k] = defaults[k]
+      } else {
+        item[k] = old[k]
+      }
+    }
+    items = copy(this.items)
+    items[i] = item
+    this.commit(items, this.next_id)
+    return item
+  }
+
+  fn remove(id) {
+    i = this.find_index(id)
+    if i < 0 {
+      return false
+    }
+    out = []
+    for j in range(len(this.items)) {
+      if j != i {
+        push(out, this.items[j])
+      }
+    }
+    this.commit(out, this.next_id)
+    return true
+  }
+
+  # filters: done ("true"/"false"), tag, q (substring of title or notes, case-insensitive)
+  fn query(filters) {
+    out = []
+    q = filters["q"] == null ? null : lower(filters["q"])
+    for it in this.items {
+      if filters["done"] != null and str(it["done"]) != filters["done"] {
+        continue
+      }
+      if filters["tag"] != null and not (filters["tag"] in it["tags"]) {
+        continue
+      }
+      if q != null and not (contains(lower(it["title"]), q) or contains(lower(it["notes"]), q)) {
+        continue
+      }
+      push(out, it)
+    }
+    return out
+  }
+
+  fn stats() {
+    done = 0
+    by_priority = {}
+    tags = {}
+    for it in this.items {
+      if it["done"] {
+        done = done + 1
+      }
+      p = str(it["priority"])
+      by_priority[p] = (by_priority[p] ?? 0) + 1
+      for t in it["tags"] {
+        tags[t] = (tags[t] ?? 0) + 1
+      }
+    }
+    return {"total": len(this.items), "done": done, "open": len(this.items) - done, "by_priority": by_priority, "tags": tags}
+  }
+}

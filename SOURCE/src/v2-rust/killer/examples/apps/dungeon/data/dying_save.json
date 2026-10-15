@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "state": "combat",
+  "turns": 25,
+  "round_no": 3,
+  "player": {
+    "kind": "player",
+    "name": "hero",
+    "hp": 1,
+    "max_hp": 30,
+    "power": 4,
+    "pos": {
+      "x": 0,
+      "y": 2
+    },
+    "inventory": [
+      "torch",
+      "sword",
+      "key",
+      "shield"
+    ],
+    "weapon_bonus": 3,
+    "kills": 2
+  },
+  "rng": {
+    "state": 1738531149
+  },
+  "rooms": {
+    "0,0": {
+      "name": "Cellar",
+      "desc": "A damp cellar. Rough stairs lead north.",
+      "items": [],
+      "monster": null
+    },
+    "0,1": {
+      "name": "Great Hall",
+      "desc": "A great hall with doors east, west and a heavy iron door north.",
+      "items": [],
+      "monster": null
+    },
+    "1,1": {
+      "name": "Armory",
+      "desc": "Racks of rusted weapons. One sword still gleams.",
+      "items": [],
+      "monster": null
+    },
+    "-1,1": {
+      "name": "Library",
+      "desc": "Dusty shelves. A passage leads north into the dark.",
+      "items": [],
+      "monster": null
+    },
+    "-1,2": {
+      "name": "Crypt",
+      "desc": "Cold air and old bones.",
+      "items": [],
+      "monster": null
+    },
+    "0,2": {
+      "name": "Dragon Lair",
+      "desc": "Heat and the smell of sulphur. Gold glitters under a huge shape.",
+      "items": [
+        "crown"
+      ],
+      "monster": {
+        "kind": "dragon",
+        "name": "dragon",
+        "hp": 10,
+        "max_hp": 40,
+        "power": 5
+      }
+    }
+  },
+  "locked": {
+    "0,2": "key"
+  }
+}

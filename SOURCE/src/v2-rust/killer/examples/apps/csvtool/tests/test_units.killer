@@ -1,0 +1,151 @@
+import "../src/cli.killer"
+import "../src/table.killer"
+import "../src/data.killer"
+
+SPEC = {"flags": {"group-by": true, "value": true, "top": true}, "switches": {"skip-bad": true}}
+
+test "parse_args handles command positional flags and switches" {
+  p = parse_args(["summary", "f.csv", "--group-by", "region", "--value=amount", "--skip-bad"], SPEC)
+  assert_eq(p["error"], null)
+  assert_eq(p["cmd"], "summary")
+  assert_eq(p["positional"], ["f.csv"])
+  assert_eq(p["flags"]["group-by"], "region")
+  assert_eq(p["flags"]["value"], "amount")
+  assert_eq(p["flags"]["skip-bad"], true)
+}
+
+test "parse_args reports bad input" {
+  assert_eq(parse_args(["x", "--nope"], SPEC)["error"], "unknown option --nope")
+  assert_eq(parse_args(["x", "--value"], SPEC)["error"], "option --value needs a value")
+  assert_eq(parse_args([], SPEC)["cmd"], null)
+}
+
+test "values may contain equals signs and unicode" {
+  p = parse_args(["s", "--group-by=a=b", "--value", "é✓"], SPEC)
+  assert_eq(p["flags"]["group-by"], "a=b")
+  assert_eq(p["flags"]["value"], "é✓")
+}
+
+test "int_flag validates whole numbers" {
+  assert_eq(int_flag({"top": "5"}, "top", null), 5)
+  assert_eq(int_flag({}, "top", 9), 9)
+  assert_eq(int_flag({"top": "x"}, "top", null), null)
+  assert_eq(int_flag({"top": "-1"}, "top", null), null)
+  assert_eq(int_flag({"top": ""}, "top", null), null)
+}
+
+test "fmt2 rounds to cents" {
+  assert_eq(fmt2(0), "0.00")
+  assert_eq(fmt2(1.005 * 1000 / 1000), "1.00")
+  assert_eq(fmt2(2.5), "2.50")
+  assert_eq(fmt2(1234.567), "1234.57")
+  assert_eq(fmt2(-3.2), "-3.20")
+  assert_eq(fmt2(-0.001), "0.00")
+  assert_eq(fmt2(99999.999), "100000.00")
+}
+
+test "commas groups thousands" {
+  assert_eq(commas(0), "0")
+  assert_eq(commas(999), "999")
+  assert_eq(commas(1000), "1,000")
+  assert_eq(commas(1234567), "1,234,567")
+  assert_eq(commas(-9876543), "-9,876,543")
+}
+
+test "render_table aligns columns and counts characters not bytes" {
+  lines = render_table(["name", "n"], [["Zürich", "5"], ["x", "100"]], ["l", "r"])
+  assert_eq(lines[0], "name   |   n")
+  assert_eq(lines[1], "-------+----")
+  assert_eq(lines[2], "Zürich |   5")
+  assert_eq(lines[3], "x      | 100")
+}
+
+test "render_table with no rows still prints the header" {
+  assert_eq(len(render_table(["a", "b"], [], ["l", "l"])), 2)
+}
+
+test "is_number_text" {
+  for s in ["0", "12", "-3.5", "+4", "0.25", ".5", "5."] {
+    assert_true(is_number_text(s), "should accept " + s)
+  }
+  for s in ["", "-", ".", "1e5", "1,5", " 1", "1 ", "abc", "1.2.3", "--1", "١٢"] {
+    assert_false(is_number_text(s), "should reject " + s)
+  }
+}
+
+test "load_csv reports problems without throwing" {
+  assert_contains(load_csv("data/does_not_exist.csv")["error"], "no such file")
+  assert_contains(load_csv("data/empty.csv")["error"], "is empty")
+  h = load_csv("data/header_only.csv")
+  assert_eq(h["ok"], true)
+  assert_eq(h["columns"], ["id", "region", "amount"])
+  assert_eq(len(h["rows"]), 0)
+}
+
+test "load_csv handles quotes multi-line fields and trimming" {
+  t = load_csv("data/tricky.csv")
+  assert_eq(t["ok"], true)
+  assert_eq(len(t["rows"]), 4)
+  assert_eq(t["rows"][0]["region"], "North, \"Far\"")
+  assert_eq(t["rows"][1]["amount"], "")
+  assert_eq(t["rows"][2]["amount"], "5")
+  assert_eq(t["rows"][3]["region"], "multi\nline")
+}
+
+test "aggregate sums counts min max avg and orders by sum" {
+  rows = [
+    {"g": "a", "v": "1.5"}, {"g": "b", "v": "10"}, {"g": "a", "v": "2.5"}, {"g": "", "v": "4"}, {"g": "b", "v": "-2"}
+  ]
+  r = aggregate(rows, "g", "v", false)
+  assert_eq(r["ok"], true)
+  assert_eq(r["total"], 16)
+  assert_eq(len(r["groups"]), 3)
+  assert_eq(r["groups"][0]["group"], "b")
+  assert_eq(r["groups"][0]["sum"], 8)
+  assert_eq(r["groups"][0]["min"], -2)
+  assert_eq(r["groups"][0]["max"], 10)
+  assert_eq(r["groups"][0]["avg"], 4)
+  assert_eq(r["groups"][1]["group"], "(none)")
+  assert_eq(r["groups"][2]["group"], "a")
+  assert_eq(r["groups"][2]["count"], 2)
+}
+
+test "aggregate ties are ordered by group name" {
+  rows = [{"g": "y", "v": "1"}, {"g": "x", "v": "1"}, {"g": "z", "v": "1"}]
+  r = aggregate(rows, "g", "v", false)
+  assert_eq([r["groups"][0]["group"], r["groups"][1]["group"], r["groups"][2]["group"]], ["x", "y", "z"])
+}
+
+test "aggregate reports the spreadsheet line of a bad value or skips it" {
+  b = load_csv("data/bad.csv")
+  r = aggregate(b["rows"], "region", "amount", false)
+  assert_eq(r["ok"], false)
+  assert_eq(r["error"], "line 3: value 'abc' in column 'amount' is not a number")
+  s = aggregate(b["rows"], "region", "amount", true)
+  assert_eq(s["ok"], true)
+  assert_eq(s["skipped"], 1)
+  assert_eq(s["rows"], 2)
+  assert_eq(s["total"], 14.5)
+}
+
+test "aggregate on no rows" {
+  r = aggregate([], "g", "v", false)
+  assert_eq(r["ok"], true)
+  assert_eq(len(r["groups"]), 0)
+  assert_eq(r["total"], 0)
+}
+
+test "describe infers column kinds" {
+  d = describe(["a", "b", "c", "d"], [
+    {"a": "1", "b": "1.5", "c": "x", "d": ""},
+    {"a": "2", "b": "2", "c": "x", "d": ""}
+  ])
+  assert_eq([d[0]["kind"], d[1]["kind"], d[2]["kind"], d[3]["kind"]], ["int", "number", "text", "empty"])
+  assert_eq(d[2]["distinct"], 1)
+  assert_eq(d[0]["non_empty"], 2)
+}
+
+test "duplicate column names are detected" {
+  assert_eq(find_duplicate(["a", "b", "a"]), "a")
+  assert_eq(find_duplicate(["a", "b"]), null)
+}

@@ -14,7 +14,7 @@ CRATE = os.path.dirname(HERE)
 
 DESC = {
     # core / output
-    "print": "write values to stdout without a newline", "println": "write values separated by spaces, then a newline",
+    "print": "write values separated by spaces, then a newline (same as println; use stdout_write for no newline)", "println": "write values separated by spaces, then a newline",
     "len": "length of a string, list, dict, set", "length": "alias of len",
     "push": "append an item to a list (in place)", "pop": "remove and return the last item of a list",
     "contains": "true if a list/string/dict contains the item", "index_of": "position of an item or substring, -1 if absent",

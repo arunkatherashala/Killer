@@ -1,0 +1,7 @@
+API rate limits and quotas
+
+The public API allows 600 requests per minute for each API key. Requests above the limit receive status 429 with a Retry-After header that says how many seconds to wait. Bursts of up to 50 requests per second are tolerated, but sustained traffic above the limit is throttled.
+
+Free plans have a daily quota of 10000 requests, paid plans have no daily quota. Webhook deliveries do not count against the limit. To raise the limit for a production integration, contact sales with your expected peak traffic.
+
+Authenticate every request with a bearer token in the Authorization header. Tokens can be rotated in the Developer settings; the previous token keeps working for twenty four hours after a rotation.

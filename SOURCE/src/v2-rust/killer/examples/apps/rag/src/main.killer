@@ -1,0 +1,154 @@
+# rag: document question answering.
+#
+#   killer run src/main.killer ingest data/docs --index build/docs
+#   killer run src/main.killer ask "How do I reset my password?" --index build/docs [--k 3]
+#   killer run src/main.killer serve --index build/docs --port 8081 [--max-requests N]
+#   killer run src/main.killer dump QUESTION... --index build/docs     vectors + rankings as JSON
+#
+# POST /ask {"question": "...", "k": 3}   GET /health   GET /stats
+# Exit codes: 0 ok, 1 problem with the data or the index, 2 usage error.
+import "handlers.killer"
+
+USAGE = "usage: rag ingest DIR --index PATH | rag ask QUESTION --index PATH [--k N] | rag serve --index PATH [--port N] [--max-requests N] | rag dump QUESTION... --index PATH"
+
+fn fail(code, msg) {
+  eprintln("rag: " + msg)
+  exit(code)
+}
+
+fn option(argv, name, default) {
+  for i in range(len(argv)) {
+    if argv[i] == name {
+      if i + 1 >= len(argv) {
+        fail(2, name + " needs a value")
+      }
+      return argv[i + 1]
+    }
+  }
+  return default
+}
+
+fn whole(text, what) {
+  if len(text) == 0 or len(text) > 9 {
+    fail(2, what + " needs a whole number, got '" + text + "'")
+  }
+  for ch in split(text, "") {
+    if ch < "0" or ch > "9" {
+      fail(2, what + " needs a whole number, got '" + text + "'")
+    }
+  }
+  return int(text)
+}
+
+# positional arguments: everything that is not an option or an option's value
+fn positionals(argv) {
+  out = []
+  i = 0
+  while i < len(argv) {
+    if starts_with(argv[i], "--") {
+      i = i + 2
+    } else {
+      push(out, argv[i])
+      i = i + 1
+    }
+  }
+  return out
+}
+
+fn cmd_ingest(argv) {
+  pos = positionals(argv)
+  index = option(argv, "--index", null)
+  if len(pos) != 1 or index == null {
+    fail(2, USAGE)
+  }
+  built = ingest_folder(pos[0])
+  folder = pathDirname(index)
+  if folder != "" and not isDir(folder) {
+    mkdir(folder)
+  }
+  save_index(built, index)
+  println("indexed " + str(built["files"]) + " files into " + str(built["chunks"]) + " chunks")
+  for s in built["skipped"] {
+    println("skipped " + s)
+  }
+}
+
+fn open_index(argv) {
+  index = option(argv, "--index", null)
+  if index == null {
+    fail(2, "--index is required\n" + USAGE)
+  }
+  return load_index(index)
+}
+
+fn cmd_ask(argv) {
+  pos = positionals(argv)
+  if len(pos) != 1 or len(trim(pos[0])) == 0 {
+    fail(2, USAGE)
+  }
+  k = whole(option(argv, "--k", "3"), "--k")
+  loaded = open_index(argv)
+  result = answer(loaded["store"], pos[0], k)
+  println(result["answer"])
+  for s in result["sources"] {
+    println("  [" + str(s["score"]) + "] " + s["id"])
+  }
+}
+
+fn cmd_dump(argv) {
+  loaded = open_index(argv)
+  store = loaded["store"]
+  queries = []
+  for q in positionals(argv) {
+    hits = vec_search(store, embed(q), 5)
+    ids = []
+    for h in hits {
+      push(ids, h["id"])
+    }
+    push(queries, {"q": q, "vec": embed(q), "top": ids})
+  }
+  chunks = []
+  for i in range(vec_len(store)) {
+    id = loaded["manifest"]["ids"][i]
+    push(chunks, {"id": id, "vec": vec_get(store, id)["vector"]})
+  }
+  println(json_stringify({"chunks": chunks, "queries": queries}))
+}
+
+fn cmd_serve(argv) {
+  loaded = open_index(argv)
+  port = whole(option(argv, "--port", "8081"), "--port")
+  opts = {}
+  mx = option(argv, "--max-requests", null)
+  if mx != null {
+    opts["max_requests"] = whole(mx, "--max-requests")
+  }
+  println("listening on http://127.0.0.1:" + str(port) + " (" + str(vec_len(loaded["store"])) + " chunks)")
+  stdout_flush()
+  served = serve(port, make_handler(loaded["store"]), opts)
+  println("served " + str(served) + " requests")
+}
+
+fn main() {
+  argv = args()
+  if len(argv) == 0 {
+    fail(2, USAGE)
+  }
+  try {
+    if argv[0] == "ingest" {
+      cmd_ingest(argv[1:len(argv)])
+    } else if argv[0] == "ask" {
+      cmd_ask(argv[1:len(argv)])
+    } else if argv[0] == "serve" {
+      cmd_serve(argv[1:len(argv)])
+    } else if argv[0] == "dump" {
+      cmd_dump(argv[1:len(argv)])
+    } else {
+      fail(2, "unknown command '" + argv[0] + "'\n" + USAGE)
+    }
+  } catch e {
+    fail(1, str(e))
+  }
+}
+
+main()

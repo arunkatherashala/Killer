@@ -1,0 +1,74 @@
+# Number formatting and aligned text tables.
+
+# 2 decimals, rounding half away from zero, exact for the cents we care about
+fn fmt2(x) {
+  neg = x < 0
+  cents = round(abs(x) * 100)
+  whole = floor(cents / 100)
+  frac = cents - whole * 100
+  s = str(whole) + "." + pad_left(str(frac), 2, "0")
+  if neg and cents != 0 {
+    s = "-" + s
+  }
+  return s
+}
+
+# thousands separators for whole numbers: 1234567 -> 1,234,567
+fn commas(n) {
+  s = str(abs(n))
+  out = ""
+  count = 0
+  digits = split(s, "")
+  idx = len(digits) - 1
+  while idx >= 0 {
+    if count > 0 and count % 3 == 0 {
+      out = "," + out
+    }
+    out = digits[idx] + out
+    count = count + 1
+    idx = idx - 1
+  }
+  if n < 0 {
+    out = "-" + out
+  }
+  return out
+}
+
+# rows: list of lists of strings; align: list of "l" or "r" per column.
+# Returns the lines (header, rule, rows) with every column padded to its widest cell.
+fn render_table(headers, rows, align) {
+  widths = []
+  for h in headers {
+    push(widths, len(h))
+  }
+  for r in rows {
+    for c in range(len(headers)) {
+      w = len(r[c])
+      if w > widths[c] {
+        widths[c] = w
+      }
+    }
+  }
+  lines = [format_row(headers, widths, align)]
+  rule = []
+  for w in widths {
+    push(rule, repeat("-", w))
+  }
+  push(lines, join(rule, "-+-"))
+  for r in rows {
+    push(lines, format_row(r, widths, align))
+  }
+  return lines
+}
+
+fn format_row(cells, widths, align) {
+  parts = []
+  for c in range(len(cells)) {
+    if align[c] == "r" {
+      push(parts, pad_left(cells[c], widths[c], " "))
+    } else {
+      push(parts, pad_right(cells[c], widths[c], " "))
+    }
+  }
+  return join(parts, " | ")
+}

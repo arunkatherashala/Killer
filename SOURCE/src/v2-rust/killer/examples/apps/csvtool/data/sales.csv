@@ -1,0 +1,241 @@
+id,region,product,units,amount
+1,East,"Gadget, large",26,854.19
+2,North,Widget,35,124.37
+3,East,Widget,33,282.40
+4,North,Widget,28,549.10
+5,North,"Gadget, large",6,723.26
+6,West,Widget,37,163.26
+7,South,Widget,37,768.48
+8,West,Widget,15,62.05
+9,Zürich,"Gadget, large",19,550.37
+10,South,Widget,37,405.33
+11,Zürich,"Gadget, large",7,763.31
+12,Zürich,"Gadget, large",24,128.70
+13,Zürich,Widget,37,79.12
+14,Zürich,"Gadget, large",32,892.81
+15,Zürich,Doohickey,21,611.27
+16,Zürich,Doohickey,24,393.91
+17,South,"Gadget, large",16,108.28
+18,Zürich,"Gizmo ""Pro""",34,649.95
+19,East,Doohickey,19,799.17
+20,North,Widget,33,549.04
+21,South,"Gizmo ""Pro""",10,641.89
+22,West,Widget,5,732.48
+23,Zürich,"Gizmo ""Pro""",22,912.33
+24,East,Doohickey,38,598.95
+25,North,Widget,18,622.41
+26,São Paulo,Widget,4,959.34
+27,São Paulo,"Gizmo ""Pro""",37,893.91
+28,West,"Gizmo ""Pro""",25,877.41
+29,East,Widget,30,466.91
+30,South,Widget,32,78.27
+31,South,"Gizmo ""Pro""",9,968.78
+32,South,Doohickey,26,651.78
+33,North,"Gadget, large",29,527.44
+34,Zürich,"Gizmo ""Pro""",9,565.29
+35,Zürich,"Gizmo ""Pro""",27,471.24
+36,São Paulo,Doohickey,15,198.81
+37,North,"Gadget, large",10,305.03
+38,São Paulo,"Gadget, large",1,636.65
+39,Zürich,"Gadget, large",17,370.53
+40,North,"Gadget, large",27,701.69
+41,East,"Gizmo ""Pro""",9,906.04
+42,Zürich,Widget,30,893.04
+43,Zürich,Doohickey,26,523.94
+44,West,Widget,31,832.37
+45,West,Widget,13,89.27
+46,South,Doohickey,11,145.08
+47,East,Widget,7,1.30
+48,Zürich,"Gadget, large",35,133.99
+49,East,Widget,5,273.56
+50,Zürich,Doohickey,10,832.53
+51,East,"Gizmo ""Pro""",39,478.31
+52,West,Widget,8,640.72
+53,West,Doohickey,31,409.75
+54,North,"Gadget, large",7,983.61
+55,East,"Gizmo ""Pro""",31,908.09
+56,South,Widget,14,693.39
+57,East,"Gadget, large",35,36.44
+58,Zürich,"Gizmo ""Pro""",6,913.51
+59,East,"Gizmo ""Pro""",11,467.21
+60,South,"Gizmo ""Pro""",15,804.77
+61,South,"Gadget, large",26,970.76
+62,South,"Gadget, large",34,646.89
+63,East,Widget,2,367.23
+64,West,"Gizmo ""Pro""",13,908.70
+65,Zürich,"Gizmo ""Pro""",29,948.81
+66,East,"Gizmo ""Pro""",6,289.96
+67,North,"Gadget, large",31,258.82
+68,East,"Gadget, large",31,818.97
+69,Zürich,Widget,31,856.87
+70,East,Widget,8,510.26
+71,São Paulo,"Gadget, large",31,234.99
+72,West,"Gizmo ""Pro""",6,947.11
+73,West,Doohickey,26,975.32
+74,North,"Gadget, large",11,167.51
+75,North,"Gadget, large",38,610.94
+76,São Paulo,"Gadget, large",40,782.01
+77,West,"Gizmo ""Pro""",10,720.13
+78,Zürich,"Gadget, large",2,19.66
+79,São Paulo,Widget,34,983.37
+80,South,Doohickey,13,277.61
+81,North,"Gizmo ""Pro""",14,384.99
+82,Zürich,"Gadget, large",38,428.28
+83,East,Doohickey,9,80.82
+84,São Paulo,"Gizmo ""Pro""",30,869.31
+85,Zürich,Doohickey,33,172.39
+86,Zürich,"Gadget, large",34,670.18
+87,North,Doohickey,12,798.64
+88,North,"Gadget, large",12,186.54
+89,West,Widget,36,81.94
+90,East,Doohickey,7,735.39
+91,North,"Gadget, large",13,363.96
+92,North,Widget,33,593.67
+93,Zürich,Widget,5,581.97
+94,East,"Gadget, large",18,593.89
+95,Zürich,Doohickey,33,325.60
+96,São Paulo,"Gizmo ""Pro""",36,266.53
+97,West,"Gadget, large",27,160.41
+98,West,Doohickey,21,96.08
+99,São Paulo,"Gadget, large",28,96.84
+100,South,"Gizmo ""Pro""",8,203.43
+101,São Paulo,"Gizmo ""Pro""",10,332.75
+102,South,Doohickey,15,979.69
+103,North,Doohickey,32,214.37
+104,São Paulo,"Gadget, large",11,926.79
+105,West,Doohickey,22,553.17
+106,South,"Gizmo ""Pro""",21,121.84
+107,São Paulo,"Gizmo ""Pro""",2,443.99
+108,Zürich,Doohickey,29,922.63
+109,North,Doohickey,22,679.21
+110,Zürich,"Gizmo ""Pro""",33,85.26
+111,North,"Gadget, large",7,111.18
+112,East,"Gizmo ""Pro""",3,238.96
+113,East,"Gadget, large",28,887.01
+114,East,Doohickey,10,704.33
+115,Zürich,Doohickey,21,118.25
+116,East,Widget,12,558.47
+117,North,"Gizmo ""Pro""",2,832.57
+118,North,"Gizmo ""Pro""",6,798.15
+119,South,Widget,17,160.48
+120,West,Widget,22,725.91
+121,West,"Gizmo ""Pro""",40,170.37
+122,North,"Gadget, large",8,212.61
+123,East,Widget,12,265.46
+124,East,"Gizmo ""Pro""",34,996.48
+125,South,"Gizmo ""Pro""",29,656.47
+126,São Paulo,"Gadget, large",18,455.82
+127,North,"Gizmo ""Pro""",3,21.11
+128,North,"Gadget, large",33,623.27
+129,South,Doohickey,7,863.87
+130,São Paulo,Doohickey,32,716.53
+131,West,"Gizmo ""Pro""",14,301.89
+132,East,"Gadget, large",9,531.44
+133,East,Widget,9,19.68
+134,North,"Gizmo ""Pro""",28,214.97
+135,North,Widget,25,664.14
+136,São Paulo,"Gizmo ""Pro""",39,318.47
+137,São Paulo,"Gizmo ""Pro""",3,603.21
+138,South,"Gadget, large",18,585.35
+139,North,"Gizmo ""Pro""",24,432.13
+140,Zürich,"Gizmo ""Pro""",16,46.15
+141,East,"Gadget, large",23,240.80
+142,North,"Gizmo ""Pro""",25,110.95
+143,West,"Gizmo ""Pro""",33,860.85
+144,South,"Gadget, large",33,7.48
+145,North,"Gizmo ""Pro""",6,189.56
+146,West,Widget,26,30.48
+147,East,"Gizmo ""Pro""",15,111.73
+148,Zürich,"Gadget, large",39,511.54
+149,East,Doohickey,10,373.47
+150,São Paulo,"Gadget, large",3,938.17
+151,Zürich,Doohickey,33,183.59
+152,Zürich,Widget,38,933.16
+153,São Paulo,"Gadget, large",6,41.84
+154,North,"Gadget, large",24,138.51
+155,West,Doohickey,36,67.55
+156,São Paulo,Widget,35,893.16
+157,South,Doohickey,17,5.34
+158,West,Widget,33,702.49
+159,North,Widget,31,331.55
+160,North,"Gizmo ""Pro""",16,956.95
+161,South,"Gadget, large",30,648.42
+162,West,Widget,31,897.13
+163,East,Widget,40,830.41
+164,São Paulo,"Gadget, large",5,787.04
+165,South,"Gizmo ""Pro""",17,854.97
+166,São Paulo,"Gizmo ""Pro""",40,745.17
+167,South,Widget,31,80.50
+168,West,"Gizmo ""Pro""",7,908.26
+169,South,Doohickey,19,930.13
+170,Zürich,"Gizmo ""Pro""",30,611.66
+171,West,Widget,36,262.16
+172,East,Widget,31,23.94
+173,East,Doohickey,5,665.03
+174,West,"Gizmo ""Pro""",25,276.03
+175,South,Widget,38,119.36
+176,South,"Gizmo ""Pro""",24,174.80
+177,Zürich,"Gizmo ""Pro""",8,922.87
+178,East,"Gadget, large",32,638.19
+179,West,Widget,11,5.70
+180,West,Doohickey,26,396.77
+181,São Paulo,"Gadget, large",27,451.83
+182,West,"Gizmo ""Pro""",8,435.27
+183,North,"Gizmo ""Pro""",22,523.00
+184,North,"Gadget, large",1,970.81
+185,East,"Gizmo ""Pro""",24,86.16
+186,West,Doohickey,38,101.13
+187,East,Doohickey,18,64.26
+188,East,Widget,4,868.66
+189,East,"Gadget, large",16,349.29
+190,West,"Gizmo ""Pro""",13,490.35
+191,West,Widget,26,727.33
+192,Zürich,"Gadget, large",6,65.84
+193,São Paulo,Doohickey,29,806.98
+194,South,"Gizmo ""Pro""",32,65.19
+195,Zürich,"Gadget, large",11,619.90
+196,West,"Gizmo ""Pro""",19,391.29
+197,East,"Gizmo ""Pro""",26,860.82
+198,South,"Gizmo ""Pro""",31,731.49
+199,São Paulo,Doohickey,8,220.32
+200,São Paulo,"Gadget, large",5,273.46
+201,Zürich,Doohickey,36,289.39
+202,West,"Gizmo ""Pro""",29,561.23
+203,South,"Gadget, large",16,119.90
+204,South,"Gizmo ""Pro""",36,120.39
+205,East,"Gadget, large",24,339.63
+206,Zürich,"Gadget, large",2,983.59
+207,West,Doohickey,27,978.58
+208,Zürich,"Gadget, large",25,355.20
+209,East,Widget,32,364.74
+210,Zürich,"Gizmo ""Pro""",9,901.14
+211,Zürich,"Gadget, large",6,356.23
+212,South,Doohickey,26,847.45
+213,West,Doohickey,20,29.58
+214,South,Widget,28,930.97
+215,West,Doohickey,1,96.86
+216,West,Doohickey,29,326.66
+217,North,"Gadget, large",10,200.31
+218,Zürich,Widget,30,112.41
+219,Zürich,Widget,1,165.69
+220,South,Widget,20,168.72
+221,São Paulo,"Gizmo ""Pro""",34,834.99
+222,West,Widget,7,93.21
+223,East,"Gadget, large",25,342.94
+224,South,Widget,1,705.48
+225,East,Doohickey,18,415.65
+226,São Paulo,"Gadget, large",31,690.80
+227,South,"Gadget, large",2,540.76
+228,São Paulo,"Gizmo ""Pro""",4,29.55
+229,South,Doohickey,27,107.28
+230,East,"Gadget, large",28,486.25
+231,South,Doohickey,3,913.02
+232,East,Doohickey,24,895.65
+233,West,"Gadget, large",1,383.87
+234,São Paulo,Widget,14,650.71
+235,South,"Gizmo ""Pro""",13,303.52
+236,West,"Gadget, large",17,997.76
+237,East,Widget,40,650.80
+238,Zürich,"Gadget, large",15,636.76
+239,West,Widget,39,192.86
+240,West,Widget,14,31.97

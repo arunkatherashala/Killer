@@ -1219,6 +1219,8 @@ fn compile_stmt(
         Stmt::Return(expr_opt) => {
             if let Some(expr) = expr_opt {
                 compile_expr(expr, state, context)?;
+            } else {
+                state.instructions.push(Instruction::ConstNull);
             }
             state.instructions.push(Instruction::Ret);
         }
@@ -3159,7 +3161,7 @@ fn compile_simple_statement(
         return Ok(());
     }
 
-    if let Some(rest) = stmt.strip_prefix("return") {
+    if let Some(rest) = stmt.strip_prefix("return").filter(|r| !r.starts_with(|c: char| c.is_alphanumeric() || c == '_')) {
         if !context.in_function {
             return Err(VmError::parse_error_simple(format!(
                 "Line {}: `return` is only valid inside a function",
@@ -3170,6 +3172,9 @@ fn compile_simple_statement(
         let expr = rest.trim();
         if !expr.is_empty() {
             compile_expr_str(expr, line_no, state, context)?;
+        } else {
+            // a bare `return` returns null (the caller always expects one value)
+            state.instructions.push(Instruction::ConstNull);
         }
         
         // the returned value stays on the stack while the `finally` bodies of enclosing tries run
@@ -3222,7 +3227,8 @@ fn compile_simple_statement(
         return Ok(());
     }
 
-    if let Some(inner) = extract_call_arg(stmt, "print") {
+    // single-argument `print(x)`; several arguments go through the builtin like `println(a, b)`
+    if let Some(inner) = extract_call_arg(stmt, "print").filter(|i| split_arguments(i).map_or(true, |a| a.len() <= 1)) {
         compile_expr_str(inner, line_no, state, context)?;
         state.instructions.push(Instruction::Print);
         return Ok(());
@@ -3640,9 +3646,26 @@ fn compile_kstring(
     let mut in_expr = false;
     let mut brace_depth = 0usize;
 
-    for ch in inner.chars() {
+    let mut chars_iter = inner.chars().peekable();
+    while let Some(ch) = chars_iter.next() {
         if !in_expr {
-            if ch == '{' {
+            if ch == '\\' {
+                // escapes in the literal text: \n \t \r \\ \" \' (anything else is kept as written)
+                match chars_iter.peek().copied() {
+                    Some('n') => { buf.push('\n'); chars_iter.next(); }
+                    Some('t') => { buf.push('\t'); chars_iter.next(); }
+                    Some('r') => { buf.push('\r'); chars_iter.next(); }
+                    Some(c @ ('\\' | '"' | '\'')) => { buf.push(c); chars_iter.next(); }
+                    _ => buf.push('\\'),
+                }
+            } else if ch == '{' && chars_iter.peek() == Some(&'{') {
+                // `{{` is a literal brace
+                buf.push('{');
+                chars_iter.next();
+            } else if ch == '}' && chars_iter.peek() == Some(&'}') {
+                buf.push('}');
+                chars_iter.next();
+            } else if ch == '{' {
                 if !buf.is_empty() {
                     segments.push((false, buf.clone()));
                     buf.clear();
@@ -4817,11 +4840,11 @@ fn find_top_level_add_sub_rightmost(expr: &str) -> Option<(usize, u8)> {
                 depth -= 1;
                 i += 1;
             }
-            b'+' if depth == 0 => {
+            b'+' if depth == 0 && !is_exponent_sign_at(bytes, i) => {
                 best = Some((i, b'+'));
                 i += 1;
             }
-            b'-' if depth == 0 && is_binary_minus_at(bytes, i) => {
+            b'-' if depth == 0 && !is_exponent_sign_at(bytes, i) && is_binary_minus_at(bytes, i) => {
                 best = Some((i, b'-'));
                 i += 1;
             }
@@ -4829,6 +4852,20 @@ fn find_top_level_add_sub_rightmost(expr: &str) -> Option<(usize, u8)> {
         }
     }
     best
+}
+
+/// True when the `+`/`-` at `i` is the sign of a float literal's exponent (`1e-7`, `2.5E+3`),
+/// not an operator.
+fn is_exponent_sign_at(bytes: &[u8], i: usize) -> bool {
+    if i < 2 || !(bytes[i - 1] == b'e' || bytes[i - 1] == b'E') || !(i + 1 < bytes.len() && bytes[i + 1].is_ascii_digit()) {
+        return false;
+    }
+    let mut j = i - 1; // the 'e'
+    while j > 0 && (bytes[j - 1].is_ascii_digit() || bytes[j - 1] == b'.') {
+        j -= 1;
+    }
+    // the mantissa must start with a digit and must not be the tail of an identifier (`x1e-5`)
+    j < i - 1 && bytes[j].is_ascii_digit() && (j == 0 || !(bytes[j - 1].is_ascii_alphanumeric() || bytes[j - 1] == b'_' || bytes[j - 1] == b'.'))
 }
 
 /// Rightmost `*`, `/`, or `%` at depth 0; `*` must not be part of `**`.

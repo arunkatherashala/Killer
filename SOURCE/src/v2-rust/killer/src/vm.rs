@@ -120,8 +120,34 @@ fn int_key(n: f64, buf: &mut [u8; 24]) -> Option<&str> {
     std::str::from_utf8(&buf[i..]).ok()
 }
 
+/// Ordering of two `sorted` keys: numbers (and bigints), strings, booleans, and lists of those
+/// compared element by element like Python tuples. `None` when the keys cannot be compared.
+fn compare_sort_keys(a: &Value, b: &Value) -> Option<std::cmp::Ordering> {
+    use std::cmp::Ordering;
+    match (a, b) {
+        (Value::Number(x), Value::Number(y)) => Some(x.partial_cmp(y).unwrap_or(Ordering::Equal)),
+        (Value::Str(x), Value::Str(y)) => Some(x.cmp(y)),
+        (Value::Bool(x), Value::Bool(y)) => Some(x.cmp(y)),
+        (Value::BigInt(_), Value::BigInt(_) | Value::Number(_)) | (Value::Number(_), Value::BigInt(_)) => crate::bigint_ops::compare(a, b),
+        (Value::Array(x), Value::Array(y)) => {
+            let (x, y) = (x.to_vec(), y.to_vec());
+            for (p, q) in x.iter().zip(y.iter()) {
+                match compare_sort_keys(p, q)? {
+                    Ordering::Equal => {}
+                    other => return Some(other),
+                }
+            }
+            Some(x.len().cmp(&y.len()))
+        }
+        _ => None,
+    }
+}
+
 /// `object[index]` for arrays, strings (by character), dicts and objects.
 fn index_value(object: &Value, index: &Value) -> Result<Value, VmError> {
+    if let Some(n) = crate::bigint_ops::small_number(index) {
+        return index_value(object, &Value::Number(n));
+    }
     match (object, index) {
         (Value::Array(arr), Value::Number(idx)) => {
             let i = array_index(*idx, arr.len());
@@ -201,6 +227,8 @@ fn repeat_sequence(lhs: &Value, rhs: &Value) -> Option<Result<Value, String>> {
     let (seq, count) = match (lhs, rhs) {
         (Value::Str(_) | Value::Array(_), Value::Number(n)) => (lhs, *n),
         (Value::Number(n), Value::Str(_) | Value::Array(_)) => (rhs, *n),
+        (Value::Str(_) | Value::Array(_), Value::BigInt(_)) => (lhs, crate::bigint_ops::small_number(rhs).unwrap_or(f64::INFINITY)),
+        (Value::BigInt(_), Value::Str(_) | Value::Array(_)) => (rhs, crate::bigint_ops::small_number(lhs).unwrap_or(f64::INFINITY)),
         _ => return None,
     };
     if !count.is_finite() || count.fract() != 0.0 || count < 0.0 {
@@ -1462,6 +1490,12 @@ impl VirtualMachine {
                     self.stack.push(value);
                 }
                 Instruction::Add => {
+                    if self.objects_on_stack_top() {
+                        if self.object_binop("add", program)? {
+                            self.ip += 1;
+                            continue;
+                        }
+                    }
                     // PERF: fast path for number+number (most common case)
                     let rhs = self.pop_value()?;
                     let lhs = self.pop_value()?;
@@ -1566,6 +1600,12 @@ impl VirtualMachine {
                     }
                 }
                 Instruction::Sub => {
+                    if self.objects_on_stack_top() {
+                        if self.object_binop("sub", program)? {
+                            self.ip += 1;
+                            continue;
+                        }
+                    }
                     // Phase 12: Check for __sub__ operator overload
                     let rhs = self.pop_value()?;
                     let lhs = self.pop_value()?;
@@ -1632,6 +1672,12 @@ impl VirtualMachine {
                     } // close else block for Integer/Pointer fast path
                 }
                 Instruction::Mul => {
+                    if self.objects_on_stack_top() {
+                        if self.object_binop("mul", program)? {
+                            self.ip += 1;
+                            continue;
+                        }
+                    }
                     // Phase 12: Check for __mul__ operator overload
                     let rhs = self.pop_value()?;
                     let lhs = self.pop_value()?;
@@ -1691,6 +1737,12 @@ impl VirtualMachine {
                     }
                 }
                 Instruction::Div => {
+                    if self.objects_on_stack_top() {
+                        if self.object_binop("div", program)? {
+                            self.ip += 1;
+                            continue;
+                        }
+                    }
                     // Phase 12: Check for __div__ operator overload
                     let rhs = self.pop_value()?;
                     let lhs = self.pop_value()?;
@@ -1799,6 +1851,12 @@ impl VirtualMachine {
                         .push(Value::Number((lhs_num / rhs_num).floor()));
                 }
                 Instruction::Mod => {
+                    if self.objects_on_stack_top() {
+                        if self.object_binop("mod", program)? {
+                            self.ip += 1;
+                            continue;
+                        }
+                    }
                     if matches!(self.stack.last(), Some(Value::BigInt(_)))
                         || (self.stack.len() >= 2 && matches!(self.stack[self.stack.len() - 2], Value::BigInt(_)))
                     {
@@ -1981,6 +2039,12 @@ impl VirtualMachine {
                     }
                 }
                 Instruction::Gt => {
+                    if self.objects_on_stack_top() {
+                        if self.object_binop("gt", program)? {
+                            self.ip += 1;
+                            continue;
+                        }
+                    }
                     // Phase 12: Check for __gt__ operator overload on left operand
                     let rhs = self.pop_value()?;
                     let lhs = self.pop_value()?;
@@ -2032,6 +2096,12 @@ impl VirtualMachine {
                     }
                 }
                 Instruction::Ge => {
+                    if self.objects_on_stack_top() {
+                        if self.object_binop("ge", program)? {
+                            self.ip += 1;
+                            continue;
+                        }
+                    }
                     // Phase 12: Check for __ge__ operator overload
                     let rhs = self.pop_value()?;
                     let lhs = self.pop_value()?;
@@ -2082,6 +2152,12 @@ impl VirtualMachine {
                     }
                 }
                 Instruction::Lt => {
+                    if self.objects_on_stack_top() {
+                        if self.object_binop("lt", program)? {
+                            self.ip += 1;
+                            continue;
+                        }
+                    }
                     let rhs = self.pop_value()?;
                     let lhs = self.pop_value()?;
                     if let (Value::Str(l), Value::Str(r)) = (&lhs, &rhs) {
@@ -2136,6 +2212,12 @@ impl VirtualMachine {
                     }
                 }
                 Instruction::Le => {
+                    if self.objects_on_stack_top() {
+                        if self.object_binop("le", program)? {
+                            self.ip += 1;
+                            continue;
+                        }
+                    }
                     // Phase 12: Check for __le__ operator overload
                     let rhs = self.pop_value()?;
                     let lhs = self.pop_value()?;
@@ -2768,6 +2850,12 @@ impl VirtualMachine {
                     }
                 }
                 Instruction::Ret => {
+                    // `try { return x }`: the returning frame's handlers die with it (otherwise a
+                    // later error in a *different* frame at the same depth lands in this catch)
+                    let depth = self.call_stack.len();
+                    while self.handlers.last().map_or(false, |h| h.call_len >= depth) {
+                        self.handlers.pop();
+                    }
                     if self.closure_frames.last().map_or(false, |(d, _)| *d == self.call_stack.len()) {
                         let (_, caps) = self.closure_frames.pop().expect("checked");
                         caps.refresh_with(|name| self.load_var(name).ok());
@@ -2869,7 +2957,7 @@ impl VirtualMachine {
                 }
                 Instruction::IndexWrite(name) => {
                     let value = self.pop_value()?;
-                    let index = self.pop_value()?;
+                    let index = crate::bigint_ops::demote_index(self.pop_value()?);
                     let object = self.load_var(name)?;
                     // Arrays, dicts and objects are shared handles: mutating through the clone that
                     // `load_var` returned already updates the variable, so no write-back is needed.
@@ -2918,7 +3006,7 @@ impl VirtualMachine {
                 }
                 Instruction::IndexWriteSlot(slot) => {
                     let value = self.pop_value()?;
-                    let index = self.pop_value()?;
+                    let index = crate::bigint_ops::demote_index(self.pop_value()?);
                     let si = *slot as usize;
                     let object = {
                         let frame = self.locals_stack.last().ok_or_else(|| {
@@ -2992,6 +3080,18 @@ impl VirtualMachine {
                     }
                     args.reverse();
 
+                    // generators given to list/sum/sorted/...: drain them into lists first
+                    if args.iter().any(|a| matches!(a, Value::Generator(_))) && crate::iter_builtins::MATERIALIZE.contains(&name.as_str()) {
+                        self.drain_generators(&mut args, name, program)?;
+                    }
+
+                    // bigint arguments: native int/float/min/max/sum, small bigints as counts
+                    if let Some(r) = crate::bigint_ops::prepass(name, &mut args) {
+                        self.stack.push(r.map_err(VmError::runtime_error)?);
+                        self.ip += 1;
+                        continue;
+                    }
+
                     // ── Debug checkpoint injected by compile_killer_debug ──────
                     if name == "__dl" {
                         let line = match args.first() {
@@ -3062,7 +3162,7 @@ impl VirtualMachine {
                         self.ip += 1;
                         continue;
                     }
-                    if (name == "println" || name == "print") && args.iter().any(|a| matches!(a, Value::Object(_))) {
+                    if (name == "println" || name == "print" || name == "eprintln" || name == "eprint") && args.iter().any(|a| matches!(a, Value::Object(_))) {
                         // objects with a toString method print as their text
                         for a in args.iter_mut() {
                             if matches!(a, Value::Object(_)) {
@@ -4172,7 +4272,10 @@ impl VirtualMachine {
                 }
                 // Allocation-free paths for the very common 1- and 2-argument builtins.
                 Instruction::CallBuiltinId(id, 1) => {
-                    let a = self.pop_value()?;
+                    let mut a = self.pop_value()?;
+                    if matches!(a, Value::Generator(_)) && !matches!(*id, 0 | 1 | 3 | 49) {
+                        self.drain_generators(std::slice::from_mut(&mut a), "builtin", program)?;
+                    }
                     // `str(obj)` / `println(obj)` render objects through their toString method
                     let a = if (*id == 1 || *id == 49) && matches!(a, Value::Object(_)) {
                         Value::Str(self.display_value(&a, program)?)
@@ -4187,6 +4290,9 @@ impl VirtualMachine {
                     let b = self.pop_value()?;
                     let a = self.pop_value()?;
                     let mut args = [a, b];
+                    if args.iter().any(|v| matches!(v, Value::Generator(_))) && !matches!(*id, 0 | 1 | 3 | 49) {
+                        self.drain_generators(&mut args, "builtin", program)?;
+                    }
                     if *id == 49 {
                         for v in args.iter_mut() {
                             if matches!(v, Value::Object(_)) {
@@ -4208,6 +4314,9 @@ impl VirtualMachine {
                         args.push(self.pop_value()?);
                     }
                     args.reverse();
+                    if args.iter().any(|v| matches!(v, Value::Generator(_))) && !matches!(*id, 0 | 1 | 3 | 49) {
+                        self.drain_generators(&mut args, "builtin", program)?;
+                    }
                     if *id == 49 {
                         for v in args.iter_mut() {
                             if matches!(v, Value::Object(_)) {
@@ -6204,6 +6313,24 @@ impl VirtualMachine {
         self.generator_manager.close(id);
     }
 
+    /// Replace every generator in `args` by the list of the values it yields.
+    fn drain_generators(&mut self, args: &mut [Value], what: &str, program: &Program) -> Result<(), VmError> {
+        for a in args.iter_mut() {
+            if let Value::Generator(gen_id) = a {
+                let gen_id = gen_id.clone();
+                let mut items = Vec::new();
+                while let Some(v) = self.gen_next(&gen_id, program)? {
+                    items.push(v);
+                    if items.len() > crate::iter_builtins::MAX_ITEMS {
+                        return Err(VmError::runtime_error(format!("{}(): the generator produced more than {} items", what, crate::iter_builtins::MAX_ITEMS)));
+                    }
+                }
+                *a = Value::from(items);
+            }
+        }
+        Ok(())
+    }
+
     fn gen_resume(&mut self, id: &str, program: &Program) -> Result<Option<Value>, VmError> {
         if let Some(r) = self.generator_manager.native_next(id) {
             return r.map_err(VmError::runtime_error);
@@ -6405,11 +6532,10 @@ impl VirtualMachine {
                     keyed.push((key, item));
                 }
                 let mut failure: Option<VmError> = None;
-                keyed.sort_by(|a, b| match (&a.0, &b.0) {
-                    (Value::Number(x), Value::Number(y)) => x.partial_cmp(y).unwrap_or(std::cmp::Ordering::Equal),
-                    (Value::Str(x), Value::Str(y)) => x.cmp(y),
-                    _ => {
-                        failure = Some(VmError::runtime_error("sorted() keys must be all numbers or all strings".to_string()));
+                keyed.sort_by(|a, b| match compare_sort_keys(&a.0, &b.0) {
+                    Some(o) => o,
+                    None => {
+                        failure = Some(VmError::runtime_error("sorted() keys must be all numbers, all strings, all booleans or lists of those (compared like Python tuples)".to_string()));
                         std::cmp::Ordering::Equal
                     }
                 });
@@ -6449,7 +6575,18 @@ impl VirtualMachine {
                 self.stack.push(v);
                 Ok(())
             }
-            None => Err(VmError::runtime_error(format!("{}: slot is not a number", what))),
+            None => match op {
+                // an object (or anything else without ordering) is simply not equal to a number
+                crate::uncertain::CmpOp::Eq => {
+                    self.stack.push(Value::Bool(false));
+                    Ok(())
+                }
+                crate::uncertain::CmpOp::Ne => {
+                    self.stack.push(Value::Bool(true));
+                    Ok(())
+                }
+                _ => Err(VmError::runtime_error(format!("cannot compare {} with a number ({})", val.type_name(), what))),
+            },
         }
     }
 
@@ -6787,6 +6924,82 @@ impl VirtualMachine {
     /// Phase 12: Try to call an operator overload method (__add__, __sub__, etc.)
     /// Returns Ok(Some(result)) if method exists and executes, Ok(None) if method doesn't exist,
     /// or Err if something goes wrong
+    /// True when one of the two values on top of the stack is an object (cheap pre-check before
+    /// the operator-overload dispatch in `object_binop`).
+    #[inline]
+    fn objects_on_stack_top(&self) -> bool {
+        let n = self.stack.len();
+        n >= 2 && (matches!(self.stack[n - 1], Value::Object(_)) || matches!(self.stack[n - 2], Value::Object(_)))
+    }
+
+    /// Operator overloading beyond what each instruction does inline. Pops two operands; returns
+    /// true (result pushed) when a user-defined method handled the operation, otherwise puts the
+    /// operands back and returns false so the instruction reports its usual error.
+    /// * reflected forms: `3 * v` calls `v.__rmul__(3)` (`__radd__`, `__rsub__`, `__rdiv__`, `__rmod__`);
+    /// * `-v` (compiled as `0 - v`) calls `__neg__` when there is no `__rsub__`;
+    /// * `__mod__` (and `__pow__` is not an instruction, see the `pow` note in the docs);
+    /// * with only `__lt__` defined, `a > b` is `b < a`, `a <= b` is `not (b < a)` and
+    ///   `a >= b` is `not (a < b)` (a total order is assumed, like `functools.total_ordering`).
+    fn object_binop(&mut self, op: &str, program: &Program) -> Result<bool, VmError> {
+        let rhs = self.pop_value()?;
+        let lhs = self.pop_value()?;
+        let direct = format!("__{}__", op);
+        let reflected = format!("__r{}__", op);
+        let find = |vm: &Self, v: &Value, name: &str| -> Option<usize> {
+            match v {
+                Value::Object(o) => vm.find_method_in_class(&o.class_name().clone(), name, program).map(|(start, _)| start),
+                _ => None,
+            }
+        };
+        let mut result: Option<Value> = None;
+        match op {
+            "gt" | "ge" | "lt" | "le" => {
+                if let Some(start) = find(self, &lhs, &direct) {
+                    result = Some(self.call_method_nested(lhs.clone(), start, vec![rhs.clone()], program)?);
+                } else if op == "gt" {
+                    if let Some(start) = find(self, &rhs, "__lt__") {
+                        result = Some(self.call_method_nested(rhs.clone(), start, vec![lhs.clone()], program)?);
+                    }
+                } else if op == "le" {
+                    if let Some(start) = find(self, &rhs, "__lt__") {
+                        let r = self.call_method_nested(rhs.clone(), start, vec![lhs.clone()], program)?;
+                        result = Some(Value::Bool(!self.is_truthy(&r)));
+                    }
+                } else if op == "ge" {
+                    if let Some(start) = find(self, &lhs, "__lt__") {
+                        let r = self.call_method_nested(lhs.clone(), start, vec![rhs.clone()], program)?;
+                        result = Some(Value::Bool(!self.is_truthy(&r)));
+                    }
+                }
+                if let Some(r) = result {
+                    let b = self.is_truthy(&r);
+                    self.stack.push(Value::Bool(b));
+                    return Ok(true);
+                }
+            }
+            _ => {
+                if let Some(start) = find(self, &lhs, &direct) {
+                    result = Some(self.call_method_nested(lhs.clone(), start, vec![rhs.clone()], program)?);
+                } else if !matches!(lhs, Value::Object(_)) {
+                    if let Some(start) = find(self, &rhs, &reflected) {
+                        result = Some(self.call_method_nested(rhs.clone(), start, vec![lhs.clone()], program)?);
+                    } else if op == "sub" && matches!(lhs, Value::Number(n) if n == 0.0) {
+                        if let Some(start) = find(self, &rhs, "__neg__") {
+                            result = Some(self.call_method_nested(rhs.clone(), start, vec![], program)?);
+                        }
+                    }
+                }
+                if let Some(r) = result {
+                    self.stack.push(r);
+                    return Ok(true);
+                }
+            }
+        }
+        self.stack.push(lhs);
+        self.stack.push(rhs);
+        Ok(false)
+    }
+
     fn try_call_operator_method(
         &mut self,
         this: Value,

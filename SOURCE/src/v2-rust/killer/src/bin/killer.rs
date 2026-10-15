@@ -66,7 +66,20 @@ fn dispatch(args: &[String]) -> i32 {
     }
 }
 
+/// The interpreter recurses on the Rust stack for nested calls (callbacks, `serve` handlers,
+/// resumed generators), and the default 1 MB main-thread stack overflows after one or two such
+/// levels in a debug build, so every command runs on a thread with a large (lazily committed)
+/// stack, like `killer_super` does.
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    std::process::exit(dispatch(&args));
+    let worker_args = args.clone();
+    let worker = std::thread::Builder::new()
+        .name("killer-main".to_string())
+        .stack_size(512 * 1024 * 1024)
+        .spawn(move || dispatch(&worker_args));
+    let code = match worker {
+        Ok(handle) => handle.join().unwrap_or(101),
+        Err(_) => dispatch(&args),
+    };
+    std::process::exit(code);
 }

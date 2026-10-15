@@ -1,0 +1,7 @@
+Troubleshooting login and sync problems
+
+If the app shows a blank screen after login, clear the application cache and restart it. On mobile devices make sure the operating system is at least two major versions old; older versions are not supported. Sync problems are usually caused by an unstable network connection, so switch from mobile data to WiFi and try again.
+
+When two devices edit the same document offline, the newest edit wins and the older one is saved as a conflict copy next to it. You can restore it from the version history. A red banner with the text error 503 means the service is under maintenance; check the status page and wait a few minutes.
+
+For crashes that repeat, send the diagnostic log from Help and then Report a problem.

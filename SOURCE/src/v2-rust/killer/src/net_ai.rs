@@ -11,13 +11,26 @@ pub fn is_builtin(name: &str) -> bool {
         || crate::llm_stream::NAMES.contains(&name)
         || crate::vm_profile::NAMES.contains(&name)
         || name == "http_request"
+        || name == "csv_columns"
+        || crate::iter_builtins::NAMES.contains(&name)
+        || crate::fs_builtins::NAMES.contains(&name)
         || crate::vec_builtins::NAMES.contains(&name)
         || crate::rag_builtins::NAMES.contains(&name)
         || crate::embed_builtins::NAMES.contains(&name)
         || crate::log_builtins::NAMES.contains(&name)
+        || crate::stdio_builtins::NAMES.contains(&name)
 }
 
 pub fn call(name: &str, args: &[Value]) -> Option<Result<Value, VmError>> {
+    if let Some(r) = crate::iter_builtins::call(name, args) {
+        return Some(r);
+    }
+    if let Some(r) = crate::fs_builtins::call(name, args) {
+        return Some(r);
+    }
+    if name == "csv_columns" {
+        return Some(crate::csv_builtins::csv_columns(args));
+    }
     if name == "http_request" {
         return Some(crate::http_req::builtin_http_request(args));
     }
@@ -26,4 +39,5 @@ pub fn call(name: &str, args: &[Value]) -> Option<Result<Value, VmError>> {
         .or_else(|| crate::rag_builtins::call(name, args))
         .or_else(|| crate::embed_builtins::call(name, args))
         .or_else(|| crate::log_builtins::call(name, args))
+        .or_else(|| crate::stdio_builtins::call(name, args))
 }

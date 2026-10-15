@@ -1103,6 +1103,7 @@ pub fn lint_killer(source: &str) -> Vec<LintViolation> {
                 }
                 if defined.contains(w)
                     || builtins.contains(&w.as_str())
+                    || crate::net_ai::is_builtin(w)
                     || crate::lsp_core::KEYWORDS.contains(&w.as_str())
                     || matches!(w.as_str(), "super" | "this" | "assert_throws")
                 {

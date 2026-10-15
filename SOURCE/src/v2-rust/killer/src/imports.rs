@@ -42,6 +42,14 @@ pub fn set_base_dir(dir: impl Into<PathBuf>) {
     BASE_DIR.with(|b| *b.borrow_mut() = Some(dir.into()));
 }
 
+/// Point import resolution and diagnostics at a script file (what a driver does before running
+/// it): relative imports are resolved against the script's own folder, not the current directory.
+pub fn set_script(path: &str) {
+    set_main_file(path);
+    let dir = Path::new(path).parent().filter(|d| !d.as_os_str().is_empty()).unwrap_or(Path::new("."));
+    set_base_dir(dir);
+}
+
 fn base_dir() -> PathBuf {
     BASE_DIR
         .with(|b| b.borrow().clone())

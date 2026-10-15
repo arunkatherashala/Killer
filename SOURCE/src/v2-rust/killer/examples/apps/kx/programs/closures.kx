@@ -1,0 +1,26 @@
+# closures, higher-order functions, lists, strings
+let make_counter() = {
+  let n = 0
+  fn() => { set n = n + 1; n }
+}
+let c1 = make_counter()
+let c2 = make_counter()
+c1()
+c1()
+print(c1())
+print(c2())
+let compose(f, g) = fn(x) => f(g(x))
+let inc(x) = x + 1
+let dbl(x) = x * 2
+print(compose(inc, dbl)(10))
+print(compose(dbl, inc)(10))
+let map(f, xs) = if len(xs) == 0 then [] else append(map(f, tail(xs)), f(head(xs)))
+let rev_map(f, xs) = map(f, xs)
+print(rev_map(dbl, range(0, 6)))
+let fold(f, acc, xs) = if len(xs) == 0 then acc else fold(f, f(acc, head(xs)), tail(xs))
+print(fold(fn(a, b) => a + b, 0, range(1, 101)))
+print("kx" + "-" + str(42))
+print(["a", 1, [true, nil]])
+let adder(n) = fn(x) => x + n
+let add5 = adder(5)
+add5(37)

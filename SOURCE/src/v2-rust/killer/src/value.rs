@@ -18,7 +18,7 @@ impl Debug for SharedArray {
 
 impl PartialEq for SharedArray {
     fn eq(&self, other: &Self) -> bool {
-        *self.0.borrow() == *other.0.borrow()
+        Rc::ptr_eq(&self.0, &other.0) || *self.0.borrow() == *other.0.borrow()
     }
 }
 
@@ -199,9 +199,11 @@ impl IntoIterator for SharedArray {
     type Item = Value;
     type IntoIter = std::vec::IntoIter<Value>;
     fn into_iter(self) -> Self::IntoIter {
-        match Rc::try_unwrap(self.0) {
-            Ok(cell) => cell.into_inner().into_iter(),
-            Err(rc) => rc.borrow().clone().into_iter(),
+        // (SharedArray has a Drop impl, so the vector is cloned or taken rather than moved out)
+        if Rc::strong_count(&self.0) == 1 {
+            std::mem::take(&mut *self.0.borrow_mut()).into_iter()
+        } else {
+            self.0.borrow().clone().into_iter()
         }
     }
 }
@@ -674,7 +676,7 @@ impl Display for Value {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
             Value::Number(n) => {
-                if n.fract() == 0.0 {
+                if n.fract() == 0.0 && n.abs() < 9.0e18 {
                     write!(f, "{}", *n as i64)
                 } else {
                     write!(f, "{n}")
@@ -860,6 +862,84 @@ impl Value {
             Value::Set(_) => "set",
             Value::QualityWrapped(_) => "quality",
             Value::Null => "null",
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Iterative drop of nested containers
+//
+// Dropping `Rc<RefCell<Vec<Value>>>` recursively frees children from inside the parent's `Drop`,
+// so a list nested 2000 levels deep (a linked list, a deep AST, `x = [x]` in a loop) overflowed
+// the native stack when it was freed and killed the process. When the last owner of a container
+// goes away its children are moved onto an explicit work list instead.
+// ---------------------------------------------------------------------------------------------
+
+fn is_container(v: &Value) -> bool {
+    matches!(v, Value::Array(_) | Value::Dict(_) | Value::Object(_))
+}
+
+fn unwind_children(mut stack: Vec<Value>) {
+    while let Some(v) = stack.pop() {
+        match v {
+            Value::Array(a) => {
+                if Rc::strong_count(&a.0) == 1 {
+                    if let Ok(mut b) = a.0.try_borrow_mut() {
+                        stack.extend(std::mem::take(&mut *b));
+                    }
+                }
+            }
+            Value::Dict(d) => {
+                if Rc::strong_count(&d.0) == 1 {
+                    if let Ok(mut b) = d.0.try_borrow_mut() {
+                        stack.extend(b.take_values());
+                    }
+                }
+            }
+            Value::Object(o) => {
+                if Rc::strong_count(&o.0) == 1 {
+                    if let Ok(mut b) = o.0.try_borrow_mut() {
+                        stack.extend(b.fields.drain().map(|(_, v)| v));
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+impl Drop for SharedArray {
+    fn drop(&mut self) {
+        if Rc::strong_count(&self.0) == 1 {
+            if let Ok(mut b) = self.0.try_borrow_mut() {
+                if b.iter().any(is_container) {
+                    unwind_children(std::mem::take(&mut *b));
+                }
+            }
+        }
+    }
+}
+
+impl Drop for SharedDict {
+    fn drop(&mut self) {
+        if Rc::strong_count(&self.0) == 1 {
+            if let Ok(mut b) = self.0.try_borrow_mut() {
+                if b.values().any(is_container) {
+                    unwind_children(b.take_values());
+                }
+            }
+        }
+    }
+}
+
+impl Drop for SharedObject {
+    fn drop(&mut self) {
+        if Rc::strong_count(&self.0) == 1 {
+            if let Ok(mut b) = self.0.try_borrow_mut() {
+                if b.fields.values().any(is_container) {
+                    unwind_children(b.fields.drain().map(|(_, v)| v).collect());
+                }
+            }
         }
     }
 }

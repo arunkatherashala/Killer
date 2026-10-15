@@ -1,0 +1,170 @@
+# The document index: ingestion from a folder of text files, persistence and loading.
+#
+# An index is two files: INDEX.kvec (the vectors, written by vec_save) and INDEX.json (a manifest
+# with the parameters and one sha256 per source file). Loading checks both, so an index built
+# with other parameters, or edited by hand, is refused instead of silently giving wrong answers.
+
+DIM = 512
+CHUNK_SIZE = 240
+CHUNK_OVERLAP = 40
+MAX_FILE_BYTES = 2000000
+
+# every .txt file below dir, as paths relative to dir with forward slashes, sorted
+fn find_documents(dir) {
+  found = []
+  walk(dir, "", found)
+  return sorted(found)
+}
+
+fn walk(root, rel, found) {
+  here = rel == "" ? root : root + "/" + rel
+  for name in sorted(listDir(here)) {
+    sub = rel == "" ? name : rel + "/" + name
+    full = root + "/" + sub
+    if isDir(full) {
+      walk(root, sub, found)
+    } else if pathExtension(name) == "txt" {
+      push(found, sub)
+    }
+  }
+}
+
+# Common words carry no topic; left in, they dominate a hashed bag-of-words vector.
+STOPWORDS = set(["a", "an", "the", "is", "are", "was", "were", "be", "to", "of", "in", "on", "at", "for", "and", "or", "my", "your", "i", "you", "it", "this", "that", "do", "does", "can", "how", "what", "when", "where", "which", "who", "will", "with", "from", "by", "as", "if", "me", "we", "our"])
+
+# the text that gets embedded: lower case words without stop words (the stored passage is untouched)
+fn embed_text(text) {
+  words = []
+  for w in split(lower(replace(replace(replace(replace(text, ",", " "), ".", " "), "?", " "), "!", " ")), " ") {
+    if w != "" and not set_has(STOPWORDS, w) {
+      push(words, w)
+    }
+  }
+  return join(words, " ")
+}
+
+# very light stemming so "invoices" matches "invoice" and "deleted" matches "delete"
+fn stem(word) {
+  w = word
+  if len(w) > 4 and ends_with(w, "ies") {
+    w = w[0:len(w) - 3] + "y"
+  } else if len(w) > 4 and ends_with(w, "ed") {
+    w = w[0:len(w) - 2]
+  } else if len(w) > 3 and ends_with(w, "s") and not ends_with(w, "ss") {
+    w = w[0:len(w) - 1]
+  }
+  if len(w) > 3 and ends_with(w, "e") {
+    w = w[0:len(w) - 1]
+  }
+  return w
+}
+
+# the set of stemmed topic words of a text
+fn keywords(text) {
+  out = {}
+  for w in split(embed_text(text), " ") {
+    if w != "" {
+      out[stem(w)] = true
+    }
+  }
+  return out
+}
+
+fn embed(text) {
+  return mock_embed(embed_text(text), DIM)
+}
+
+# normalise whitespace so line breaks inside a paragraph do not split words oddly
+fn clean(text) {
+  out = replace(replace(text, "\r", ""), "\t", " ")
+  return trim(out)
+}
+
+# Ingest every document of dir into a new store. Returns {store, files, chunks, skipped, hashes}.
+fn ingest_folder(dir) {
+  if not isDir(dir) {
+    throw "not a folder: " + dir
+  }
+  store = vec_new(DIM)
+  files = 0
+  chunks = 0
+  skipped = []
+  hashes = {}
+  ids = []
+  for rel in find_documents(dir) {
+    path = dir + "/" + rel
+    if fileSize(path) > MAX_FILE_BYTES {
+      push(skipped, rel + " (too large)")
+      continue
+    }
+    raw = readFile(path)
+    text = clean(raw)
+    hashes[rel] = sha256(raw)
+    if len(text) == 0 {
+      push(skipped, rel + " (empty)")
+      continue
+    }
+    files = files + 1
+    pieces = chunk_text(text, CHUNK_SIZE, CHUNK_OVERLAP)
+    for i in range(len(pieces)) {
+      id = rel + "#" + str(i)
+      vec_add(store, id, embed(pieces[i]), {"source": rel, "chunk": i, "text": pieces[i]})
+      push(ids, id)
+      chunks = chunks + 1
+    }
+  }
+  return {"store": store, "files": files, "chunks": chunks, "skipped": skipped, "hashes": hashes, "ids": ids}
+}
+
+fn save_index(built, path) {
+  vec_save(built["store"], path + ".kvec")
+  manifest = {
+    "version": 1,
+    "dim": DIM,
+    "chunk_size": CHUNK_SIZE,
+    "chunk_overlap": CHUNK_OVERLAP,
+    "files": built["files"],
+    "chunks": built["chunks"],
+    "skipped": built["skipped"],
+    "hashes": built["hashes"],
+    "ids": built["ids"]
+  }
+  writeFile(path + ".json", json_pretty(manifest))
+}
+
+# {store, manifest}; throws a readable error when the index is missing, damaged or incompatible
+fn load_index(path) {
+  if not fileExists(path + ".json") or not fileExists(path + ".kvec") {
+    throw "no index at " + path + " (run: ingest DIR --index " + path + ")"
+  }
+  manifest = json_parse(readFile(path + ".json"))
+  if manifest["version"] != 1 {
+    throw "unsupported index version " + str(manifest["version"])
+  }
+  if manifest["dim"] != DIM or manifest["chunk_size"] != CHUNK_SIZE or manifest["chunk_overlap"] != CHUNK_OVERLAP {
+    throw "index was built with different parameters; ingest again"
+  }
+  store = vec_load(path + ".kvec")
+  if vec_len(store) != manifest["chunks"] {
+    throw "index is damaged: manifest says " + str(manifest["chunks"]) + " chunks, vectors file has " + str(vec_len(store))
+  }
+  return {"store": store, "manifest": manifest}
+}
+
+# source files whose content changed (or appeared / vanished) since the index was built
+fn stale_files(dir, manifest) {
+  out = []
+  current = find_documents(dir)
+  for rel in current {
+    h = manifest["hashes"][rel]
+    if h == null or h != sha256(readFile(dir + "/" + rel)) {
+      push(out, rel)
+    }
+  }
+  for rel in keys(manifest["hashes"]) {
+    if not (rel in current) {
+      push(out, rel)
+    }
+  }
+  return sorted(out)
+}

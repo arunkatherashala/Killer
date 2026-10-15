@@ -1,0 +1,7 @@
+[package]
+name = "dungeon"
+version = "0.1.0"
+description = "Text adventure engine: classes, inheritance, operator overloading, generators, JSON save/load"
+entry = "src/main.killer"
+
+[dependencies]

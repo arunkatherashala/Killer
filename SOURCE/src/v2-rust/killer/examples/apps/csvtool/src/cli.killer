@@ -1,0 +1,66 @@
+# Command-line parsing: `command positional... --flag value --flag=value --switch`.
+# parse_args(argv, spec) with spec = {"flags": {name: true}, "switches": {name: true}}
+# returns {"cmd", "positional", "flags", "error"}; error is null when the line is valid.
+
+fn parse_args(argv, spec) {
+  res = {"cmd": null, "positional": [], "flags": {}, "error": null}
+  i = 0
+  n = len(argv)
+  while i < n and res["error"] == null {
+    a = argv[i]
+    if starts_with(a, "--") and len(a) > 2 {
+      name = substr_after(a, 2)
+      value = null
+      eq = index_of(name, "=")
+      if eq >= 0 {
+        value = name[eq + 1:len(name)]
+        name = name[0:eq]
+      }
+      if spec["switches"][name] == true {
+        res["flags"][name] = true
+      } else if spec["flags"][name] == true {
+        if value == null {
+          if i + 1 >= n {
+            res["error"] = "option --" + name + " needs a value"
+          } else {
+            i = i + 1
+            value = argv[i]
+          }
+        }
+        if res["error"] == null {
+          res["flags"][name] = value
+        }
+      } else {
+        res["error"] = "unknown option --" + name
+      }
+    } else if res["cmd"] == null {
+      res["cmd"] = a
+    } else {
+      push(res["positional"], a)
+    }
+    i = i + 1
+  }
+  return res
+}
+
+fn substr_after(s, k) {
+  return s[k:len(s)]
+}
+
+# whole-number option with a default; returns null when the text is not a positive integer
+fn int_flag(flags, name, default) {
+  if flags[name] == null {
+    return default
+  }
+  v = flags[name]
+  ok = len(v) > 0
+  for ch in split(v, "") {
+    if ch < "0" or ch > "9" {
+      ok = false
+    }
+  }
+  if not ok {
+    return null
+  }
+  return int(v)
+}

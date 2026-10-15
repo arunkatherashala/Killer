@@ -1,0 +1,52 @@
+# Exercises a running todo server:  killer run src/client.killer PORT
+# Sends 22 requests (so the server should be started with --max-requests 22) and prints one
+# line per exchange: "METHOD path -> status body".
+import "validate.killer"
+
+fn call(base, method, path, body) {
+  opts = {"method": method, "url": base + path, "timeout": 10, "retries": 6}
+  if body != null {
+    opts["body"] = body
+    opts["headers"] = {"Content-Type": "application/json"}
+  }
+  resp = http_request(opts)
+  text = resp["body"]
+  if len(text) == 0 {
+    text = "(empty)"
+  }
+  println(method + " " + path + " -> " + str(resp["status"]) + " " + text)
+  return resp
+}
+
+fn main() {
+  argv = args()
+  if len(argv) != 1 or not all_digits(argv[0]) {
+    eprintln("usage: client.killer PORT")
+    exit(2)
+  }
+  base = "http://127.0.0.1:" + argv[0]
+  call(base, "GET", "/health", null)
+  call(base, "POST", "/todos", {"title": "Write the report", "priority": 2, "tags": ["work", "urgent"], "due": "2030-02-28"})
+  call(base, "POST", "/todos", {"title": "Buy milk", "tags": ["home"], "notes": "Oat, 2 litres"})
+  call(base, "POST", "/todos", {"title": "  Café ☕ meeting  ", "done": true, "tags": ["work"]})
+  call(base, "POST", "/todos", {"title": "", "priority": 9, "tags": ["a", "a"], "due": "2023-02-29", "color": "red"})
+  call(base, "POST", "/todos", "{not json")
+  call(base, "POST", "/todos", [1, 2])
+  call(base, "GET", "/todos/1", null)
+  call(base, "GET", "/todos/99", null)
+  call(base, "GET", "/todos/abc", null)
+  call(base, "PATCH", "/todos/2", {"done": true, "priority": 5})
+  call(base, "PUT", "/todos/1", {"title": "Write the final report", "notes": "v2"})
+  call(base, "PATCH", "/todos/3", {"priority": 0})
+  call(base, "GET", "/todos?done=true", null)
+  call(base, "GET", "/todos?tag=work&limit=1&offset=1", null)
+  call(base, "GET", "/todos?q=MILK", null)
+  call(base, "GET", "/todos?done=maybe", null)
+  call(base, "GET", "/stats", null)
+  call(base, "DELETE", "/todos/2", null)
+  call(base, "DELETE", "/todos/2", null)
+  call(base, "GET", "/nowhere", null)
+  call(base, "GET", "/todos?limit=2", null)
+}
+
+main()

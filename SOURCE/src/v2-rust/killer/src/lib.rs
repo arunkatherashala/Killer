@@ -347,6 +347,10 @@ pub mod http_serve;            // real HTTP server with Killer handlers
 pub mod vec_builtins;          // dense vector store: vec_new/add/search/save, cosine, dot, top_k
 pub mod rag_builtins;          // chunk_text, chunk_by_sentence, count_tokens, build_rag_prompt
 pub mod embed_builtins;        // mock_embed, llm_embed_batch, llm_embed(opts, text)
+pub mod fs_builtins;            // isDir / isFile
+pub mod iter_builtins;          // list(x), generator materialisation
+pub mod csv_builtins;           // RFC 4180 parse_csv / to_csv
+pub mod stdio_builtins;        // eprintln / eprint (standard error)
 pub mod log_builtins;          // log_info/warn/error, load_env
 pub mod http_req;              // hardened curl core for the http_* client builtins
 pub mod lang_builtins;         // everyday builtins: ord/chr, padding, logs, stats, base64, sets

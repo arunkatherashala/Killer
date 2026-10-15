@@ -1,0 +1,7 @@
+Privacy and data retention
+
+We store personal data only as long as your account is active. You may request deletion of all your data at any time by contacting support; deletion requests are completed within thirty days. Backups are purged after thirty days as well, so data can remain in a backup for that period.
+
+You can export your data as a JSON archive from the Account page. The archive contains your profile, your orders, and the support conversations linked to your email address. We never sell personal data to third parties, and analytics cookies are only set after you give consent in the cookie banner.
+
+Employees can access customer data only for support purposes, and every access is logged and reviewed each quarter.
