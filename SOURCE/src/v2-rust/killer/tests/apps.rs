@@ -453,3 +453,29 @@ println(is_five(r), r == 5, r != 5)
 "#;
     assert_eq!(run_src(src), "R15\nR8\nR5\nR2\ntrue true true false false\nN-4\nfalse false true");
 }
+
+#[test]
+fn generators_can_be_given_to_list_sum_sorted_max_join_and_friends() {
+    let src = r#"fn g(n) {
+  i = 0
+  while i < n {
+    yield i * 2
+    i = i + 1
+  }
+}
+println(list(g(4)))
+println(sum(g(4)))
+println(sorted(g(3)))
+println(max(g(5)))
+println(join(g(3), "-"))
+println(list("héy"))
+println(list({"a": 1, "b": 2}))
+x = g(3)
+next(x)
+println(list(x))
+println(any(g(3)))
+println(list(map(g(3), fn(v) { return v + 1 })))
+println(list([1, 2]))
+"#;
+    assert_eq!(run_src(src), "[0, 2, 4, 6]\n12\n[0, 2, 4]\n8\n0-2-4\n[h, é, y]\n[a, b]\n[2, 4]\ntrue\n[1, 3, 5]\n[1, 2]");
+}

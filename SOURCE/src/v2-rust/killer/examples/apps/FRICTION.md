@@ -68,3 +68,8 @@ entry). Entries are numbered in the order I hit them.
     __rmod__`, `__neg__`, `__mod__`, comparisons derived from `__lt__`; comparing an object with a
     number constant is simply unequal. Not done: `__len__`, `__getitem__`, `__contains__`,
     `__iter__`, `__pow__`.
+16. **A generator could only be used in a `for` loop.** `sum(gen())`, `sorted(gen())`,
+    `max(gen())`, `join(gen(), ",")` failed ("expects an array") and there was no `list(...)` to
+    turn one into a list (`next()` and `has_next()` exist but are not in the docs). Fix: new
+    builtin `list(x)` (list, string, dict keys, set, generator) and generators passed to the
+    sequence-consuming builtins are drained first (`src/iter_builtins.rs`).

@@ -3056,6 +3056,11 @@ impl VirtualMachine {
                     }
                     args.reverse();
 
+                    // generators given to list/sum/sorted/...: drain them into lists first
+                    if args.iter().any(|a| matches!(a, Value::Generator(_))) && crate::iter_builtins::MATERIALIZE.contains(&name.as_str()) {
+                        self.drain_generators(&mut args, name, program)?;
+                    }
+
                     // bigint arguments: native int/float/min/max/sum, small bigints as counts
                     if let Some(r) = crate::bigint_ops::prepass(name, &mut args) {
                         self.stack.push(r.map_err(VmError::runtime_error)?);
@@ -4231,7 +4236,10 @@ impl VirtualMachine {
                 }
                 // Allocation-free paths for the very common 1- and 2-argument builtins.
                 Instruction::CallBuiltinId(id, 1) => {
-                    let a = self.pop_value()?;
+                    let mut a = self.pop_value()?;
+                    if matches!(a, Value::Generator(_)) && !matches!(*id, 0 | 1 | 3 | 49) {
+                        self.drain_generators(std::slice::from_mut(&mut a), "builtin", program)?;
+                    }
                     // `str(obj)` / `println(obj)` render objects through their toString method
                     let a = if (*id == 1 || *id == 49) && matches!(a, Value::Object(_)) {
                         Value::Str(self.display_value(&a, program)?)
@@ -4246,6 +4254,9 @@ impl VirtualMachine {
                     let b = self.pop_value()?;
                     let a = self.pop_value()?;
                     let mut args = [a, b];
+                    if args.iter().any(|v| matches!(v, Value::Generator(_))) && !matches!(*id, 0 | 1 | 3 | 49) {
+                        self.drain_generators(&mut args, "builtin", program)?;
+                    }
                     if *id == 49 {
                         for v in args.iter_mut() {
                             if matches!(v, Value::Object(_)) {
@@ -4267,6 +4278,9 @@ impl VirtualMachine {
                         args.push(self.pop_value()?);
                     }
                     args.reverse();
+                    if args.iter().any(|v| matches!(v, Value::Generator(_))) && !matches!(*id, 0 | 1 | 3 | 49) {
+                        self.drain_generators(&mut args, "builtin", program)?;
+                    }
                     if *id == 49 {
                         for v in args.iter_mut() {
                             if matches!(v, Value::Object(_)) {
@@ -6232,6 +6246,24 @@ impl VirtualMachine {
             }
             None => Ok(false),
         }
+    }
+
+    /// Replace every generator in `args` by the list of the values it yields.
+    fn drain_generators(&mut self, args: &mut [Value], what: &str, program: &Program) -> Result<(), VmError> {
+        for a in args.iter_mut() {
+            if let Value::Generator(gen_id) = a {
+                let gen_id = gen_id.clone();
+                let mut items = Vec::new();
+                while let Some(v) = self.gen_next(&gen_id, program)? {
+                    items.push(v);
+                    if items.len() > crate::iter_builtins::MAX_ITEMS {
+                        return Err(VmError::runtime_error(format!("{}(): the generator produced more than {} items", what, crate::iter_builtins::MAX_ITEMS)));
+                    }
+                }
+                *a = Value::from(items);
+            }
+        }
+        Ok(())
     }
 
     fn gen_resume(&mut self, id: &str, program: &Program) -> Result<Option<Value>, VmError> {
