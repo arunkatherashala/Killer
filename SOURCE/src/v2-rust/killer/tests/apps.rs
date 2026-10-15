@@ -123,3 +123,49 @@ fn eprintln_writes_to_stderr_only() {
     assert_eq!(norm(&out.stdout).trim(), "out");
     assert_eq!(norm(&out.stderr).trim(), "bad 1 [2]\nx");
 }
+
+fn run_src(src: &str) -> String {
+    let t = Tmp::new("src");
+    let f = t.write("p.killer", src);
+    let out = killer(&t.0, &["run", f.to_str().unwrap()]);
+    format!("{}{}", norm(&out.stdout), norm(&out.stderr)).trim().to_string()
+}
+
+#[test]
+fn bigints_work_as_indexes_counts_and_builtin_arguments() {
+    let src = r#"xs = [10, 20, 30]
+i = 1n
+println(xs[i])
+xs[i] = 21
+println(xs)
+println(xs[0n:2n])
+println("ab" * 2n)
+println(range(3n))
+println(int(5n))
+println(chr(65n))
+println(max(1n, 2n ** 70))
+println(min([5n, 2, 9]))
+println(sum([1n, 2n ** 70]))
+println(floor(7n))
+println(float(2n ** 70))
+fn f() {
+  ys = [1, 2]
+  ys[1n] = 7
+  return ys
+}
+println(f())
+"#;
+    assert_eq!(
+        run_src(src),
+        "20\n[10, 21, 30]\n[10, 21]\nabab\n[0, 1, 2]\n5\nA\n1180591620717411303424\n2\n1180591620717411303425\n7\n1180591620717411300000\n[1, 7]"
+    );
+}
+
+#[test]
+fn large_floats_print_exactly_and_exponent_literals_parse() {
+    let src = "println(1e21)\nprintln(-1e25)\nprintln(2.0 ** 70)\nprintln(1e-7)\nprintln(2.5E+3 + 1)\nprintln(3e-2 * 2)\ne = 5\nprintln(e-1)\nprintln(123456789012345678.0)\n";
+    assert_eq!(
+        run_src(src),
+        "1000000000000000000000\n-10000000000000000000000000\n1180591620717411300000\n0.0000001\n2501\n0.06\n4\n123456789012345680"
+    );
+}

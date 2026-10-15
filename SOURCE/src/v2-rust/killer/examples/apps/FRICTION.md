@@ -20,3 +20,13 @@ entry). Entries are numbered in the order I hit them.
 5. **Indexing a long string with `s[i]` in a loop is quadratic** (48k characters: 3 s in a debug
    build for ASCII text, 48 s with one accented character). Worked around by `split(s, "")` first.
    See "still rough" in the final report.
+6. **`println(1e21)` printed `9223372036854775807`** (and `float(2n ** 70)`, `2.0 ** 70`, `-1e25`
+   the i64 limits): the number printer cast every whole float to `i64`. Expected the exact digits.
+   Fix in `Display for Value`: only whole floats below 9e18 take the integer path.
+7. **`1e-7` is a parse error** ("unsupported expression `1e`"): the expression splitter cut the
+   literal at the `-`. Fix: `is_exponent_sign_at` in the compiler's `+`/`-` splitter.
+8. **Bigints do not work where a number is expected**: `xs[1n]` ("Cannot index"), `xs[i:2n]`,
+   `"ab" * 2n`, `range(3n)`, `int(5n)`, `float(big)`, `chr(65n)`, `max(1n, 2n)`, `sum([1n, 2n])`,
+   `round(2n)` all raised type errors, so an interpreter using exact integers could not even
+   index a list with one. Fix: `bigint_ops::prepass` (native int/float/min/max/sum/round for
+   bigints, small bigints demoted to numbers for count/size/code arguments) and bigint indexes.
