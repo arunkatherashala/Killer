@@ -321,6 +321,8 @@ struct CompileContext {
     try_depth: usize,
     /// Shared-variable (closure) bookkeeping for this function; see `closure_scan`.
     closure: ClosureInfo,
+    /// Names created in a frame slot by `let` (block-scoped); plain assignments stay function-scoped.
+    let_new: Vec<String>,
 }
 
 /// Which variables of a function live in shared cells and which ones it received from an
@@ -1980,6 +1982,7 @@ fn compile_expr(
                 finally_stack: Vec::new(),
                 try_depth: 0,
                 closure: Default::default(),
+                let_new: Vec::new(),
             };
             
             // Compile function body
@@ -2313,6 +2316,7 @@ fn compile_block(
     // Save slot map and next_slot to implement block scoping (shadowing)
     let saved_slot_map = context.slot_map.clone();
     let saved_next_slot = context.next_slot;
+    let let_mark = context.let_new.len();
 
     // Push runtime scope barrier for true blocks
     if needs_runtime_scope {
@@ -2336,9 +2340,7 @@ fn compile_block(
                     state.instructions.push(Instruction::ExitScope);
                     context.runtime_scope_depth -= 1;
                 }
-                // Restore slot map and next_slot
-                context.slot_map = saved_slot_map;
-                context.next_slot = saved_next_slot;
+                restore_block_scope(context, saved_slot_map, saved_next_slot, let_mark);
                 return Ok(());
             }
             return Err(VmError::parse_error_simple(format!(
@@ -2545,11 +2547,31 @@ fn compile_block(
         ));
     }
 
-    // Restore slot map and next_slot
-    context.slot_map = saved_slot_map;
-    context.next_slot = saved_next_slot;
+    restore_block_scope(context, saved_slot_map, saved_next_slot, let_mark);
 
     Ok(())
+}
+
+/// Leave a block: names bound by `let` inside it go out of scope (shadowing), while variables
+/// created by plain assignment stay visible for the rest of the function (Python rule). Their
+/// slots must not be reused, so `next_slot` stays above them.
+fn restore_block_scope(
+    context: &mut CompileContext,
+    saved_slot_map: HashMap<String, u16>,
+    saved_next_slot: u16,
+    let_mark: usize,
+) {
+    let lets: HashSet<String> = context.let_new.split_off(let_mark.min(context.let_new.len())).into_iter().collect();
+    let mut map = saved_slot_map;
+    let mut next = saved_next_slot;
+    for (name, &slot) in context.slot_map.iter() {
+        if !map.contains_key(name) && !lets.contains(name) {
+            map.insert(name.clone(), slot);
+            next = next.max(slot.saturating_add(1));
+        }
+    }
+    context.slot_map = map;
+    context.next_slot = next;
 }
 
 /// Store the value on top of the stack into variable `name`, creating a local if needed
@@ -3385,6 +3407,7 @@ fn compile_let(
         } else {
             let s = context.next_slot;
             context.slot_map.insert(name.to_string(), s);
+            context.let_new.push(name.to_string());
             context.next_slot = s.saturating_add(1);
             s
         };
@@ -4426,6 +4449,7 @@ fn shadowed_context(context: &CompileContext, hide: &[String]) -> CompileContext
         finally_stack: Vec::new(),
         try_depth: 0,
         closure: context.closure.clone(),
+        let_new: Vec::new(),
     }
 }
 
@@ -5758,6 +5782,7 @@ fn compile_fn_definition(
             captured: captured_vars.iter().map(|(n, _, _)| n.clone()).chain(shared_vars.iter().cloned()).chain(named_vars.iter().cloned()).collect(),
             loop_base: state.named_locals.len(),
         },
+        let_new: Vec::new(),
     };
     let param_list = params.clone();
     for (index, param) in params.into_iter().enumerate() {
@@ -5977,6 +6002,7 @@ fn compile_class_definition(
                 finally_stack: Vec::new(),
                 try_depth: 0,
                 closure: Default::default(),
+                let_new: Vec::new(),
             };
             for (index, param) in params.iter().enumerate() {
                 method_context.params.insert(param.clone(), index);
