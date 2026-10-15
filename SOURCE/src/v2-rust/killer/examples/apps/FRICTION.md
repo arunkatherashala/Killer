@@ -60,3 +60,11 @@ entry). Entries are numbered in the order I hit them.
     tool could not tell "no rows" from "wrong column". Fix: new builtin `csv_columns(text)`.
     (Also noted: `for k, v in {"a": 1} {` with a dict literal directly after `in` fails with
     "Undefined variable k"; with a variable it works. Left as rough.)
+15. **Operator overloading was half there** (found writing the game's vector and stat classes):
+    `3 * v` ("right operand must be a number, got object"), `-v` (same message, because unary
+    minus is `0 - v`), `v % k`, `a > b` / `a <= b` / `a >= b` with only `__lt__` defined ("does not
+    define __gt__"), and `obj == 5` inside a function (internal "EqSlotConst: slot is not a
+    number" error). Fix: `object_binop` in the VM: reflected `__radd__ __rsub__ __rmul__ __rdiv__
+    __rmod__`, `__neg__`, `__mod__`, comparisons derived from `__lt__`; comparing an object with a
+    number constant is simply unequal. Not done: `__len__`, `__getitem__`, `__contains__`,
+    `__iter__`, `__pow__`.

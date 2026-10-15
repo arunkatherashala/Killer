@@ -402,3 +402,54 @@ println(csv_columns(""))
         "a\nb\nc\n[1, 2, 3, 1180591620717411303424]\n[b, c, a]\n{\n  \"a\": [\n    1,\n    2\n  ],\n  \"b\": {\n    \"c\": null\n  }\n}\n{\n  \"x\": 1\n}\n[id, name]\n[]"
     );
 }
+
+#[test]
+fn operator_overloading_reflected_neg_mod_and_derived_comparisons() {
+    let src = r#"class R {
+  fn init(v) {
+    this.v = v
+  }
+  fn __rmul__(k) {
+    return new R(k * this.v)
+  }
+  fn __radd__(k) {
+    return new R(k + this.v)
+  }
+  fn __rsub__(k) {
+    return new R(k - this.v)
+  }
+  fn __mod__(k) {
+    return new R(this.v % k)
+  }
+  fn __lt__(o) {
+    return this.v < o.v
+  }
+  fn toString() {
+    return "R" + str(this.v)
+  }
+}
+class N {
+  fn init(v) {
+    this.v = v
+  }
+  fn __neg__() {
+    return new N(0 - this.v)
+  }
+  fn toString() {
+    return "N" + str(this.v)
+  }
+}
+r = new R(5)
+println(3 * r)
+println(3 + r)
+println(10 - r)
+println(r % 3)
+println(r > new R(2), r >= new R(5), r <= new R(5), r < new R(1), r <= new R(4))
+println(-new N(4))
+fn is_five(o) {
+  return o == 5
+}
+println(is_five(r), r == 5, r != 5)
+"#;
+    assert_eq!(run_src(src), "R15\nR8\nR5\nR2\ntrue true true false false\nN-4\nfalse false true");
+}

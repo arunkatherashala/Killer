@@ -1473,6 +1473,12 @@ impl VirtualMachine {
                     self.stack.push(value);
                 }
                 Instruction::Add => {
+                    if self.objects_on_stack_top() {
+                        if self.object_binop("add", program)? {
+                            self.ip += 1;
+                            continue;
+                        }
+                    }
                     // PERF: fast path for number+number (most common case)
                     let rhs = self.pop_value()?;
                     let lhs = self.pop_value()?;
@@ -1577,6 +1583,12 @@ impl VirtualMachine {
                     }
                 }
                 Instruction::Sub => {
+                    if self.objects_on_stack_top() {
+                        if self.object_binop("sub", program)? {
+                            self.ip += 1;
+                            continue;
+                        }
+                    }
                     // Phase 12: Check for __sub__ operator overload
                     let rhs = self.pop_value()?;
                     let lhs = self.pop_value()?;
@@ -1643,6 +1655,12 @@ impl VirtualMachine {
                     } // close else block for Integer/Pointer fast path
                 }
                 Instruction::Mul => {
+                    if self.objects_on_stack_top() {
+                        if self.object_binop("mul", program)? {
+                            self.ip += 1;
+                            continue;
+                        }
+                    }
                     // Phase 12: Check for __mul__ operator overload
                     let rhs = self.pop_value()?;
                     let lhs = self.pop_value()?;
@@ -1702,6 +1720,12 @@ impl VirtualMachine {
                     }
                 }
                 Instruction::Div => {
+                    if self.objects_on_stack_top() {
+                        if self.object_binop("div", program)? {
+                            self.ip += 1;
+                            continue;
+                        }
+                    }
                     // Phase 12: Check for __div__ operator overload
                     let rhs = self.pop_value()?;
                     let lhs = self.pop_value()?;
@@ -1810,6 +1834,12 @@ impl VirtualMachine {
                         .push(Value::Number((lhs_num / rhs_num).floor()));
                 }
                 Instruction::Mod => {
+                    if self.objects_on_stack_top() {
+                        if self.object_binop("mod", program)? {
+                            self.ip += 1;
+                            continue;
+                        }
+                    }
                     if matches!(self.stack.last(), Some(Value::BigInt(_)))
                         || (self.stack.len() >= 2 && matches!(self.stack[self.stack.len() - 2], Value::BigInt(_)))
                     {
@@ -1992,6 +2022,12 @@ impl VirtualMachine {
                     }
                 }
                 Instruction::Gt => {
+                    if self.objects_on_stack_top() {
+                        if self.object_binop("gt", program)? {
+                            self.ip += 1;
+                            continue;
+                        }
+                    }
                     // Phase 12: Check for __gt__ operator overload on left operand
                     let rhs = self.pop_value()?;
                     let lhs = self.pop_value()?;
@@ -2043,6 +2079,12 @@ impl VirtualMachine {
                     }
                 }
                 Instruction::Ge => {
+                    if self.objects_on_stack_top() {
+                        if self.object_binop("ge", program)? {
+                            self.ip += 1;
+                            continue;
+                        }
+                    }
                     // Phase 12: Check for __ge__ operator overload
                     let rhs = self.pop_value()?;
                     let lhs = self.pop_value()?;
@@ -2093,6 +2135,12 @@ impl VirtualMachine {
                     }
                 }
                 Instruction::Lt => {
+                    if self.objects_on_stack_top() {
+                        if self.object_binop("lt", program)? {
+                            self.ip += 1;
+                            continue;
+                        }
+                    }
                     let rhs = self.pop_value()?;
                     let lhs = self.pop_value()?;
                     if let (Value::Str(l), Value::Str(r)) = (&lhs, &rhs) {
@@ -2147,6 +2195,12 @@ impl VirtualMachine {
                     }
                 }
                 Instruction::Le => {
+                    if self.objects_on_stack_top() {
+                        if self.object_binop("le", program)? {
+                            self.ip += 1;
+                            continue;
+                        }
+                    }
                     // Phase 12: Check for __le__ operator overload
                     let rhs = self.pop_value()?;
                     let lhs = self.pop_value()?;
@@ -6421,7 +6475,18 @@ impl VirtualMachine {
                 self.stack.push(v);
                 Ok(())
             }
-            None => Err(VmError::runtime_error(format!("{}: slot is not a number", what))),
+            None => match op {
+                // an object (or anything else without ordering) is simply not equal to a number
+                crate::uncertain::CmpOp::Eq => {
+                    self.stack.push(Value::Bool(false));
+                    Ok(())
+                }
+                crate::uncertain::CmpOp::Ne => {
+                    self.stack.push(Value::Bool(true));
+                    Ok(())
+                }
+                _ => Err(VmError::runtime_error(format!("cannot compare {} with a number ({})", val.type_name(), what))),
+            },
         }
     }
 
@@ -6759,6 +6824,82 @@ impl VirtualMachine {
     /// Phase 12: Try to call an operator overload method (__add__, __sub__, etc.)
     /// Returns Ok(Some(result)) if method exists and executes, Ok(None) if method doesn't exist,
     /// or Err if something goes wrong
+    /// True when one of the two values on top of the stack is an object (cheap pre-check before
+    /// the operator-overload dispatch in `object_binop`).
+    #[inline]
+    fn objects_on_stack_top(&self) -> bool {
+        let n = self.stack.len();
+        n >= 2 && (matches!(self.stack[n - 1], Value::Object(_)) || matches!(self.stack[n - 2], Value::Object(_)))
+    }
+
+    /// Operator overloading beyond what each instruction does inline. Pops two operands; returns
+    /// true (result pushed) when a user-defined method handled the operation, otherwise puts the
+    /// operands back and returns false so the instruction reports its usual error.
+    /// * reflected forms: `3 * v` calls `v.__rmul__(3)` (`__radd__`, `__rsub__`, `__rdiv__`, `__rmod__`);
+    /// * `-v` (compiled as `0 - v`) calls `__neg__` when there is no `__rsub__`;
+    /// * `__mod__` (and `__pow__` is not an instruction, see the `pow` note in the docs);
+    /// * with only `__lt__` defined, `a > b` is `b < a`, `a <= b` is `not (b < a)` and
+    ///   `a >= b` is `not (a < b)` (a total order is assumed, like `functools.total_ordering`).
+    fn object_binop(&mut self, op: &str, program: &Program) -> Result<bool, VmError> {
+        let rhs = self.pop_value()?;
+        let lhs = self.pop_value()?;
+        let direct = format!("__{}__", op);
+        let reflected = format!("__r{}__", op);
+        let find = |vm: &Self, v: &Value, name: &str| -> Option<usize> {
+            match v {
+                Value::Object(o) => vm.find_method_in_class(&o.class_name().clone(), name, program).map(|(start, _)| start),
+                _ => None,
+            }
+        };
+        let mut result: Option<Value> = None;
+        match op {
+            "gt" | "ge" | "lt" | "le" => {
+                if let Some(start) = find(self, &lhs, &direct) {
+                    result = Some(self.call_method_nested(lhs.clone(), start, vec![rhs.clone()], program)?);
+                } else if op == "gt" {
+                    if let Some(start) = find(self, &rhs, "__lt__") {
+                        result = Some(self.call_method_nested(rhs.clone(), start, vec![lhs.clone()], program)?);
+                    }
+                } else if op == "le" {
+                    if let Some(start) = find(self, &rhs, "__lt__") {
+                        let r = self.call_method_nested(rhs.clone(), start, vec![lhs.clone()], program)?;
+                        result = Some(Value::Bool(!self.is_truthy(&r)));
+                    }
+                } else if op == "ge" {
+                    if let Some(start) = find(self, &lhs, "__lt__") {
+                        let r = self.call_method_nested(lhs.clone(), start, vec![rhs.clone()], program)?;
+                        result = Some(Value::Bool(!self.is_truthy(&r)));
+                    }
+                }
+                if let Some(r) = result {
+                    let b = self.is_truthy(&r);
+                    self.stack.push(Value::Bool(b));
+                    return Ok(true);
+                }
+            }
+            _ => {
+                if let Some(start) = find(self, &lhs, &direct) {
+                    result = Some(self.call_method_nested(lhs.clone(), start, vec![rhs.clone()], program)?);
+                } else if !matches!(lhs, Value::Object(_)) {
+                    if let Some(start) = find(self, &rhs, &reflected) {
+                        result = Some(self.call_method_nested(rhs.clone(), start, vec![lhs.clone()], program)?);
+                    } else if op == "sub" && matches!(lhs, Value::Number(n) if n == 0.0) {
+                        if let Some(start) = find(self, &rhs, "__neg__") {
+                            result = Some(self.call_method_nested(rhs.clone(), start, vec![], program)?);
+                        }
+                    }
+                }
+                if let Some(r) = result {
+                    self.stack.push(r);
+                    return Ok(true);
+                }
+            }
+        }
+        self.stack.push(lhs);
+        self.stack.push(rhs);
+        Ok(false)
+    }
+
     fn try_call_operator_method(
         &mut self,
         this: Value,
