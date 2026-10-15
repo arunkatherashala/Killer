@@ -67,6 +67,11 @@ first-class values (variables, arguments, return values, callbacks, lambdas, clo
   a name glued to it, or a name already used earlier) is rejected; `// prose`, `//TODO` and full-line comments are
   comments. For exact integer division of big values use `idiv(a, b)`.
 - Assignment inside a function is local unless declared `global` (the Python rule).
+- Scope follows Python: plain assignment is function-scoped (module-scoped at top level), so a variable first
+  assigned inside an `if`/`else`/`while`/`for`/`try`/`catch` body is visible after the block
+  (`if c { x = 1 } else { x = 2 }` then `println(x)`; `for i in xs { last = i }` then `last`). `let` is
+  block-scoped. A name that was never assigned on the path actually taken reads as `null` (no per-read check,
+  to keep the slot fast paths untouched).
 - `regex_match(text, pattern)` takes the text first.
 - Closures share the variables they capture: a local that a nested function assigns (or that the enclosing
   function reassigns after the nested definition) lives in one shared cell per call, so the counter

@@ -321,6 +321,8 @@ struct CompileContext {
     try_depth: usize,
     /// Shared-variable (closure) bookkeeping for this function; see `closure_scan`.
     closure: ClosureInfo,
+    /// Names created in a frame slot by `let` (block-scoped); plain assignments stay function-scoped.
+    let_new: Vec<String>,
 }
 
 /// Which variables of a function live in shared cells and which ones it received from an
@@ -378,7 +380,6 @@ pub fn compile_killer_subset(source: &str) -> Result<Program, VmError> {
     // subsequent stages always see `{}`-delimited blocks.
     let (indented, pass) = preprocess_indentation_mapped(source);
     let map = map.compose(&pass);
-
     // Pre-process @lang{} blocks BEFORE normalize_lines() splits braces.
     // This preserves embedded language code (Go, Rust, etc.) that uses { }.
     let (preprocessed, pass) = preprocess_polyglot_mapped(&indented);
@@ -1980,6 +1981,7 @@ fn compile_expr(
                 finally_stack: Vec::new(),
                 try_depth: 0,
                 closure: Default::default(),
+                let_new: Vec::new(),
             };
             
             // Compile function body
@@ -2313,6 +2315,7 @@ fn compile_block(
     // Save slot map and next_slot to implement block scoping (shadowing)
     let saved_slot_map = context.slot_map.clone();
     let saved_next_slot = context.next_slot;
+    let let_mark = context.let_new.len();
 
     // Push runtime scope barrier for true blocks
     if needs_runtime_scope {
@@ -2336,9 +2339,7 @@ fn compile_block(
                     state.instructions.push(Instruction::ExitScope);
                     context.runtime_scope_depth -= 1;
                 }
-                // Restore slot map and next_slot
-                context.slot_map = saved_slot_map;
-                context.next_slot = saved_next_slot;
+                restore_block_scope(context, saved_slot_map, saved_next_slot, let_mark);
                 return Ok(());
             }
             return Err(VmError::parse_error_simple(format!(
@@ -2545,11 +2546,31 @@ fn compile_block(
         ));
     }
 
-    // Restore slot map and next_slot
-    context.slot_map = saved_slot_map;
-    context.next_slot = saved_next_slot;
+    restore_block_scope(context, saved_slot_map, saved_next_slot, let_mark);
 
     Ok(())
+}
+
+/// Leave a block: names bound by `let` inside it go out of scope (shadowing), while variables
+/// created by plain assignment stay visible for the rest of the function (Python rule). Their
+/// slots must not be reused, so `next_slot` stays above them.
+fn restore_block_scope(
+    context: &mut CompileContext,
+    saved_slot_map: HashMap<String, u16>,
+    saved_next_slot: u16,
+    let_mark: usize,
+) {
+    let lets: HashSet<String> = context.let_new.split_off(let_mark.min(context.let_new.len())).into_iter().collect();
+    let mut map = saved_slot_map;
+    let mut next = saved_next_slot;
+    for (name, &slot) in context.slot_map.iter() {
+        if !map.contains_key(name) && !lets.contains(name) {
+            map.insert(name.clone(), slot);
+            next = next.max(slot.saturating_add(1));
+        }
+    }
+    context.slot_map = map;
+    context.next_slot = next;
 }
 
 /// Store the value on top of the stack into variable `name`, creating a local if needed
@@ -3385,6 +3406,7 @@ fn compile_let(
         } else {
             let s = context.next_slot;
             context.slot_map.insert(name.to_string(), s);
+            context.let_new.push(name.to_string());
             context.next_slot = s.saturating_add(1);
             s
         };
@@ -4426,6 +4448,7 @@ fn shadowed_context(context: &CompileContext, hide: &[String]) -> CompileContext
         finally_stack: Vec::new(),
         try_depth: 0,
         closure: context.closure.clone(),
+        let_new: Vec::new(),
     }
 }
 
@@ -4670,6 +4693,36 @@ fn split_logical(expr: &str) -> Option<(&str, &str, &str)> {
 
 /// Find the first occurrence of `op` at bracket/paren/brace depth 0, ignoring
 /// characters inside string literals. Handles `[]`, `()`, `{}`, and `""`.
+/// Quotes are paired and brackets balanced (outside strings): the operand can be re-parsed alone.
+fn operand_is_balanced(text: &str) -> bool {
+    let bytes = text.as_bytes();
+    let (mut depth, mut in_string, mut i) = (0i32, false, 0usize);
+    while i < bytes.len() {
+        let c = bytes[i];
+        if in_string {
+            if c == b'\\' {
+                i += 1;
+            } else if c == b'"' {
+                in_string = false;
+            }
+        } else {
+            match c {
+                b'"' => in_string = true,
+                b'(' | b'[' | b'{' => depth += 1,
+                b')' | b']' | b'}' => {
+                    depth -= 1;
+                    if depth < 0 {
+                        return false;
+                    }
+                }
+                _ => {}
+            }
+        }
+        i += 1;
+    }
+    !in_string && depth == 0
+}
+
 fn find_top_level_op(expr: &str, op: &str) -> Option<usize> {
     let mut depth: i32 = 0;
     let mut in_string = false;
@@ -5758,6 +5811,7 @@ fn compile_fn_definition(
             captured: captured_vars.iter().map(|(n, _, _)| n.clone()).chain(shared_vars.iter().cloned()).chain(named_vars.iter().cloned()).collect(),
             loop_base: state.named_locals.len(),
         },
+        let_new: Vec::new(),
     };
     let param_list = params.clone();
     for (index, param) in params.into_iter().enumerate() {
@@ -5977,6 +6031,7 @@ fn compile_class_definition(
                 finally_stack: Vec::new(),
                 try_depth: 0,
                 closure: Default::default(),
+                let_new: Vec::new(),
             };
             for (index, param) in params.iter().enumerate() {
                 method_context.params.insert(param.clone(), index);
@@ -6095,6 +6150,14 @@ fn compile_binary_operators(
             }
         } else {
             // a < b < c  ==  (a < b) && (b < c)   (the middle operands are evaluated twice)
+            // The rewrite is textual: an operand with an unterminated string or unbalanced brackets
+            // would make the rewritten text split as a chain again, forever.
+            if operands.iter().any(|o| !operand_is_balanced(o)) {
+                return Err(VmError::parse_error_simple(format!(
+                    "Line {}: unterminated string or unbalanced brackets in comparison `{}`",
+                    line_no, expr
+                )));
+            }
             let mut text = String::new();
             for (i, op) in ops.iter().enumerate() {
                 if i > 0 {

@@ -595,6 +595,34 @@ switch x {
 # expect: two
 ```
 
+## Scope
+
+Killer follows Python's rule. A plain assignment `x = ...` creates a variable for the whole function
+(for the whole file at top level); blocks (`if`, `else`, `while`, `for`, `try`, `catch`) do not open a
+scope for it:
+
+```killer
+if ready {
+  mode = "fast"
+} else {
+  mode = "slow"
+}
+println(mode)          // visible after the block
+
+for item in items {
+  last = item
+}
+println(last)          // the loop variable and `last` keep their final values
+```
+
+- `let x = ...` is block-scoped: it shadows an outer `x` and is gone after the closing brace.
+- A `for` loop variable (and a `let` in the loop body) is a fresh binding per iteration for closures;
+  a plain assigned variable is one variable per call.
+- Comprehension variables never overwrite an outer variable of the same name.
+- Parameters are local; assigning a top-level variable inside a function needs `global x`.
+- A variable that was not assigned on the path actually taken reads as `null` (there is no
+  "used before assignment" error; initialise it before the block if `null` would be a surprise).
+
 ## Functions
 
 Functions are declared with `fn`. A function without `return` yields `null`. Parameters may have
