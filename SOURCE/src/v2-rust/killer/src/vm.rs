@@ -3044,7 +3044,7 @@ impl VirtualMachine {
                         self.ip += 1;
                         continue;
                     }
-                    if (name == "println" || name == "print") && args.iter().any(|a| matches!(a, Value::Object(_))) {
+                    if (name == "println" || name == "print" || name == "eprintln" || name == "eprint") && args.iter().any(|a| matches!(a, Value::Object(_))) {
                         // objects with a toString method print as their text
                         for a in args.iter_mut() {
                             if matches!(a, Value::Object(_)) {

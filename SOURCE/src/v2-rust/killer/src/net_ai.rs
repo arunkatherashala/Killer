@@ -13,6 +13,7 @@ pub fn is_builtin(name: &str) -> bool {
         || crate::rag_builtins::NAMES.contains(&name)
         || crate::embed_builtins::NAMES.contains(&name)
         || crate::log_builtins::NAMES.contains(&name)
+        || crate::stdio_builtins::NAMES.contains(&name)
 }
 
 pub fn call(name: &str, args: &[Value]) -> Option<Result<Value, VmError>> {
@@ -24,4 +25,5 @@ pub fn call(name: &str, args: &[Value]) -> Option<Result<Value, VmError>> {
         .or_else(|| crate::rag_builtins::call(name, args))
         .or_else(|| crate::embed_builtins::call(name, args))
         .or_else(|| crate::log_builtins::call(name, args))
+        .or_else(|| crate::stdio_builtins::call(name, args))
 }
