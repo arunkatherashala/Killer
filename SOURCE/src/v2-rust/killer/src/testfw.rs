@@ -295,6 +295,15 @@ fn is_legacy_test_file(path: &Path) -> bool {
     })
 }
 
+/// A `.killer` file under a directory named `tests` that declares `test "name" { }` blocks or
+/// `fn test_*()` functions is a test file whatever its name is (so `tests/basic.killer` works).
+fn is_test_dir_file(path: &Path) -> bool {
+    let in_tests = path.parent().and_then(|d| d.file_name()).and_then(|n| n.to_str()) == Some("tests");
+    in_tests
+        && path.extension().and_then(|e| e.to_str()) == Some("killer")
+        && std::fs::read_to_string(path).map_or(false, |src| !discover(&src).is_empty())
+}
+
 fn collect_files(dir: &Path, out: &mut Vec<PathBuf>) {
     let Ok(rd) = std::fs::read_dir(dir) else { return };
     let mut entries: Vec<_> = rd.flatten().map(|e| e.path()).collect();
@@ -306,7 +315,7 @@ fn collect_files(dir: &Path, out: &mut Vec<PathBuf>) {
                 continue;
             }
             collect_files(&p, out);
-        } else if is_legacy_test_file(&p) {
+        } else if is_legacy_test_file(&p) || is_test_dir_file(&p) {
             out.push(p);
         }
     }
@@ -319,6 +328,7 @@ pub fn run_file(path: &Path, filter: Option<&str>) -> Vec<TestResult> {
         Ok(s) => s,
         Err(e) => return vec![TestResult { file: file.clone(), name: "(read)".into(), ok: false, error: format!("cannot read {file}: {e}"), millis: 0 }],
     };
+    crate::imports::set_script(&file);
     let tests = discover(&source);
     let started = std::time::Instant::now();
     let matches = |name: &str| filter.map_or(true, |f| f.is_empty() || format!("{file}::{name}").contains(f));

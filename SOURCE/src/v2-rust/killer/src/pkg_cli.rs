@@ -147,7 +147,7 @@ fn scaffold(dir: &Path, name: &str, lib: bool) -> Result<(), String> {
     } else {
         mk(entry, &format!("println(\"Hello from {}\")\n", name))?;
     }
-    mk("tests/basic.killer", "println(\"tests go here\")\n")?;
+    mk("tests/basic.killer", "test \"arithmetic works\" {\n  assert_eq(1 + 1, 2)\n}\n")?;
     let gi = dir.join(".gitignore");
     let existing = std::fs::read_to_string(&gi).unwrap_or_default();
     if !existing.lines().any(|l| l.trim() == ".killer/") {
