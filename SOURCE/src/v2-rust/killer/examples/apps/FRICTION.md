@@ -49,3 +49,14 @@ entry). Entries are numbered in the order I hit them.
     There was no way to write a prompt or progress line without a newline. Fix: statement
     `print` with several arguments goes through the builtin; new `stdout_write` /
     `stdout_flush`; the index text now says what `print` really does.
+12. **`sorted(rows, key)` with a list key failed** ("keys must be all numbers or all strings"):
+    ordering groups by sum descending then by name needs a tuple key like Python's
+    `key=lambda e: (-e.sum, e.name)`. Fix: keys may be lists (compared element by element),
+    booleans and bigints.
+13. **`json_pretty(value)` failed** ("first argument must be a JSON string") although the
+    stdlib index describes it as "encode a value as indented JSON text". Fix: non-string values
+    are encoded first; a string is still re-indented as JSON text.
+14. **A CSV with a header and no data rows has no columns** (`parse_csv` returns `[]`), so the
+    tool could not tell "no rows" from "wrong column". Fix: new builtin `csv_columns(text)`.
+    (Also noted: `for k, v in {"a": 1} {` with a dict literal directly after `in` fails with
+    "Undefined variable k"; with a variable it works. Left as rough.)

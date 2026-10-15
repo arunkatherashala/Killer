@@ -1,0 +1,138 @@
+# csvtool: describe and aggregate CSV files.
+#
+#   killer run src/main.killer describe data/sales.csv
+#   killer run src/main.killer summary data/sales.csv --group-by region --value amount [--top 5]
+#                                      [--json report.json] [--skip-bad]
+#
+# Exit codes: 0 success, 1 data problem (missing file, unknown column, bad number), 2 usage error.
+import "cli.killer"
+import "table.killer"
+import "data.killer"
+
+USAGE = "usage: csvtool describe FILE\n       csvtool summary FILE --group-by COL --value COL [--top N] [--json OUT] [--skip-bad]"
+
+fn fail(code, msg) {
+  eprintln("csvtool: " + msg)
+  exit(code)
+}
+
+fn need_column(loaded, name, what) {
+  if not (name in loaded["columns"]) {
+    fail(1, what + " column '" + name + "' not found (columns: " + join(loaded["columns"], ", ") + ")")
+  }
+}
+
+fn cmd_describe(path) {
+  loaded = load_csv(path)
+  if not loaded["ok"] {
+    fail(1, loaded["error"])
+  }
+  info = describe(loaded["columns"], loaded["rows"])
+  rows = []
+  for c in info {
+    push(rows, [c["column"], c["kind"], str(c["non_empty"]), str(c["distinct"])])
+  }
+  println(path + ": " + commas(len(loaded["rows"])) + " rows, " + str(len(loaded["columns"])) + " columns")
+  for line in render_table(["column", "kind", "non-empty", "distinct"], rows, ["l", "l", "r", "r"]) {
+    println(line)
+  }
+}
+
+fn group_rows(result, top) {
+  shown = result["groups"]
+  if top != null and top < len(shown) {
+    shown = shown[0:top]
+  }
+  rows = []
+  for g in shown {
+    push(rows, [g["group"], commas(g["count"]), fmt2(g["sum"]), fmt2(g["avg"]), fmt2(g["min"]), fmt2(g["max"])])
+  }
+  return rows
+}
+
+fn json_report(path, group_col, value_col, result) {
+  groups = []
+  for g in result["groups"] {
+    push(groups, {
+      "group": g["group"],
+      "count": g["count"],
+      "sum": round(g["sum"] * 100) / 100,
+      "avg": round(g["avg"] * 100) / 100,
+      "min": g["min"],
+      "max": g["max"]
+    })
+  }
+  return {
+    "file": path,
+    "group_by": group_col,
+    "value": value_col,
+    "rows": result["rows"],
+    "skipped": result["skipped"],
+    "total": round(result["total"] * 100) / 100,
+    "groups": groups
+  }
+}
+
+fn cmd_summary(path, flags) {
+  group_col = flags["group-by"]
+  value_col = flags["value"]
+  if group_col == null or value_col == null {
+    fail(2, "summary needs --group-by and --value\n" + USAGE)
+  }
+  top = int_flag(flags, "top", null)
+  if flags["top"] != null and (top == null or top == 0) {
+    fail(2, "--top needs a positive whole number, got '" + flags["top"] + "'")
+  }
+  loaded = load_csv(path)
+  if not loaded["ok"] {
+    fail(1, loaded["error"])
+  }
+  need_column(loaded, group_col, "group-by")
+  need_column(loaded, value_col, "value")
+  result = aggregate(loaded["rows"], group_col, value_col, flags["skip-bad"] == true)
+  if not result["ok"] {
+    fail(1, path + ": " + result["error"])
+  }
+  line = path + ": " + commas(result["rows"]) + " rows"
+  if result["skipped"] > 0 {
+    line = line + " (" + str(result["skipped"]) + " skipped)"
+  }
+  println(line + ", " + str(len(result["groups"])) + " groups by " + group_col + ", total " + value_col + " " + fmt2(result["total"]))
+  headers = [group_col, "count", "sum", "avg", "min", "max"]
+  for l in render_table(headers, group_rows(result, top), ["l", "r", "r", "r", "r", "r"]) {
+    println(l)
+  }
+  if flags["json"] != null {
+    writeFile(flags["json"], json_pretty(json_report(path, group_col, value_col, result)))
+    println("wrote " + flags["json"])
+  }
+}
+
+fn main() {
+  spec = {"flags": {"group-by": true, "value": true, "top": true, "json": true}, "switches": {"skip-bad": true, "help": true}}
+  parsed = parse_args(args(), spec)
+  if parsed["error"] != null {
+    fail(2, parsed["error"] + "\n" + USAGE)
+  }
+  if parsed["flags"]["help"] == true or parsed["cmd"] == "help" {
+    println(USAGE)
+    exit(0)
+  }
+  cmd = parsed["cmd"]
+  pos = parsed["positional"]
+  if cmd == null {
+    fail(2, "missing command\n" + USAGE)
+  }
+  if len(pos) != 1 {
+    fail(2, cmd + " needs exactly one FILE argument\n" + USAGE)
+  }
+  if cmd == "describe" {
+    cmd_describe(pos[0])
+  } else if cmd == "summary" {
+    cmd_summary(pos[0], parsed["flags"])
+  } else {
+    fail(2, "unknown command '" + cmd + "'\n" + USAGE)
+  }
+}
+
+main()

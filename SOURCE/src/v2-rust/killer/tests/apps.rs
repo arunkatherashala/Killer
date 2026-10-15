@@ -294,3 +294,111 @@ fn print_accepts_several_arguments_and_stdout_write_has_no_newline() {
     let src = "print(\"a\", 1, [2])\nprint(\"b\")\nstdout_write(\"x\")\nstdout_write(\"y\", 3)\nstdout_flush()\nprintln(\"\")\nprintln(\"z\")\n";
     assert_eq!(run_src(src), "a 1 [2]\nb\nxy 3\nz");
 }
+
+// ---------------------------------------------------------------------------------------------
+// app 3: csvtool
+// ---------------------------------------------------------------------------------------------
+
+#[test]
+fn csvtool_unit_tests_pass() {
+    let (ok, text) = app_tests("csvtool");
+    assert!(ok, "{text}");
+    assert!(text.contains("0 failed"), "{text}");
+}
+
+#[test]
+fn csvtool_summary_table_and_json_match_the_python_mirror() {
+    let out = run_app_main("csvtool", &["summary", "data/sales.csv", "--group-by", "region", "--value", "amount", "--top", "3"]);
+    let text = norm(&out.stdout);
+    assert!(out.status.success(), "{}", norm(&out.stderr));
+    let lines: Vec<&str> = text.lines().collect();
+    assert_eq!(lines[0], "data/sales.csv: 240 rows, 6 groups by region, total amount 117351.23");
+    assert_eq!(lines[1], "region | count |      sum |    avg |   min |    max");
+    assert_eq!(lines[2], "-------+-------+----------+--------+-------+-------");
+    assert_eq!(lines[3], "Zürich |    44 | 22510.86 | 511.61 | 19.66 | 983.59");
+    assert_eq!(lines.len(), 6);
+    let t = Tmp::new("csvjson");
+    let report = t.0.join("report.json");
+    let out = run_app_main("csvtool", &["summary", "data/sales.csv", "--group-by", "region", "--value", "amount", "--json", report.to_str().unwrap()]);
+    assert!(out.status.success(), "{}", norm(&out.stderr));
+    assert!(std::fs::read_to_string(&report).unwrap().contains("\"group\": \"Zürich\""));
+    if let Some(py) = python() {
+        let live = Command::new(py)
+            .arg("-I")
+            .arg(app_dir("csvtool").join("tests/mirror.py"))
+            .args(["data/sales.csv", "region", "amount", report.to_str().unwrap()])
+            .current_dir(app_dir("csvtool"))
+            .output()
+            .unwrap();
+        assert_eq!(norm(&live.stdout).trim(), "MATCH", "{}", norm(&live.stderr));
+    }
+}
+
+#[test]
+fn csvtool_exit_codes_and_messages() {
+    let code = |args: &[&str]| {
+        let o = run_app_main("csvtool", args);
+        (o.status.code(), norm(&o.stderr))
+    };
+    assert_eq!(code(&["describe", "data/sales.csv"]).0, Some(0));
+    assert_eq!(code(&["help"]).0, Some(0));
+    assert_eq!(code(&[]).0, Some(2));
+    assert_eq!(code(&["bogus", "x"]).0, Some(2));
+    assert_eq!(code(&["summary", "data/sales.csv"]).0, Some(2));
+    assert_eq!(code(&["summary", "data/sales.csv", "--bogus"]).0, Some(2));
+    let (c, e) = code(&["describe", "no_such.csv"]);
+    assert_eq!(c, Some(1));
+    assert!(e.contains("cannot read no_such.csv"), "{e}");
+    let (c, e) = code(&["summary", "data/sales.csv", "--group-by", "nope", "--value", "amount"]);
+    assert_eq!(c, Some(1));
+    assert!(e.contains("group-by column 'nope' not found (columns: id, region, product, units, amount)"), "{e}");
+    let (c, e) = code(&["summary", "data/bad.csv", "--group-by", "region", "--value", "amount"]);
+    assert_eq!(c, Some(1));
+    assert!(e.contains("line 3: value 'abc' in column 'amount' is not a number"), "{e}");
+    let (c, e) = code(&["describe", "data/empty.csv"]);
+    assert_eq!(c, Some(1));
+    assert!(e.contains("is empty"), "{e}");
+    assert_eq!(code(&["summary", "data/bad.csv", "--group-by", "region", "--value", "amount", "--skip-bad"]).0, Some(0));
+    // nothing but errors goes to stderr; stdout stays clean for data
+    let o = run_app_main("csvtool", &["describe", "no_such.csv"]);
+    assert!(norm(&o.stdout).is_empty());
+}
+
+#[test]
+fn csvtool_handles_a_large_file() {
+    let t = Tmp::new("csvbig");
+    let mut text = String::from("id,region,amount\n");
+    let mut sums = [0i64; 4];
+    for i in 0..6000i64 {
+        let r = (i * 7 + 3) % 4;
+        let cents = (i * 37) % 10000;
+        sums[r as usize] += cents;
+        text.push_str(&format!("{},{},{}.{:02}\n", i, ["A", "B", "C", "Zü"][r as usize], cents / 100, cents % 100));
+    }
+    let f = t.write("big.csv", &text);
+    let o = run_app_main("csvtool", &["summary", f.to_str().unwrap(), "--group-by", "region", "--value", "amount"]);
+    let out = norm(&o.stdout);
+    assert!(o.status.success(), "{}", norm(&o.stderr));
+    let total: i64 = sums.iter().sum();
+    assert!(out.contains(&format!("6,000 rows, 4 groups by region, total amount {}.{:02}", total / 100, total % 100)), "{out}");
+}
+
+#[test]
+fn sorted_with_list_keys_json_pretty_of_values_and_csv_columns() {
+    let src = r#"people = [{"n": "b", "a": 2}, {"n": "a", "a": 2}, {"n": "c", "a": 1}]
+byage = sorted(people, fn(p) { return [0 - p["a"], p["n"]] })
+for p in byage {
+  println(p["n"])
+}
+println(sorted([3n, 1, 2n ** 70, 2], fn(x) { return x }))
+println(sorted(["b", "a", "c"], fn(x) { return [x == "a", x] }))
+println(json_pretty({"a": [1, 2], "b": {"c": null}}))
+println(json_pretty("{\"x\":1}"))
+println(csv_columns("id,name\n"))
+println(csv_columns(""))
+"#;
+    assert_eq!(
+        run_src(src),
+        "b\na\nc\n[1, 2, 3, 1180591620717411303424]\n[b, c, a]\n{\n  \"a\": [\n    1,\n    2\n  ],\n  \"b\": {\n    \"c\": null\n  }\n}\n{\n  \"x\": 1\n}\n[id, name]\n[]"
+    );
+}
