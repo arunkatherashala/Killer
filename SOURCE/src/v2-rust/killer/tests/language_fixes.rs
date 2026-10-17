@@ -61,3 +61,9 @@ fn one_line_function_and_class_definitions() {
     let src = "fn f() { return 1 }\nfn g(x) { return x + 1 }\nprintln(f(), g(2))\nclass A { fn m() { return 7 } }\nprintln((new A()).m())\nclass B {\n  fn n() { return 8 }\n  fn o(a) { return a }\n}\nb = new B()\nprintln(b.n(), b.o(3))\nxs = filter([1, 2, 3], fn(v) { return v > 1 })\nprintln(xs)\n";
     assert_eq!(run(src), "1 3\n7\n8 3\n[2, 3]");
 }
+
+#[test]
+fn dict_literal_after_in_in_headers() {
+    let src = "for k, v in {\"a\": 1, \"b\": 2} {\n  println(k, v)\n}\nif \"a\" in {\"a\": 1} {\n  println(\"yes\")\n}\nfor x in [1, 2] { println(x) }\nfor a, b in [[1, 2], [3, 4]] { println(a + b) }\nif \"z\" in {\"a\": 1} { println(\"no\") } else { println(\"absent\") }\n";
+    assert_eq!(run(src), "a 1\nb 2\nyes\n1\n2\n3\n7\nabsent");
+}

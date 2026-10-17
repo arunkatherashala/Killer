@@ -510,7 +510,7 @@ and the caller unpacks it: `a, b = f()`.
 
 The condition is not parenthesised and the body uses braces. A body may be on separate lines or on
 the same line (`if c { stmt }`, also for `else`, `while`, `for` and `try`/`catch`): a brace after a
-control header opens a block, never a dict literal. Named one-line definitions work too: `fn f(x) { return x }`, `class A { fn m() { return 1 } }`.
+control header opens a block, never a dict literal. A dict literal may follow `in` (`for k, v in {"a": 1} {`, `if x in {"a": 1} {`). Named one-line definitions work too: `fn f(x) { return x }`, `class A { fn m() { return 1 } }`.
 
 ```killer
 x = 7
