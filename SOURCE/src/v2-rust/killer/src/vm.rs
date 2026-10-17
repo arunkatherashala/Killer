@@ -1501,13 +1501,18 @@ impl VirtualMachine {
                 Instruction::Load(name) => {
                     // `s[i]` / `len(s)` on a named string (global, parameter, top-level local):
                     // borrow it from its scope instead of copying the whole string per access.
-                    if Self::str_fusable(program, self.ip) && !self.is_special_load_name(name) {
+                    if !self.is_special_load_name(name) {
                         let mut fused = None;
                         let mut direct = None;
                         match self.lookup(name) {
-                            Some(Value::Str(s)) => fused = self.fused_str_op(program, s),
-                            Some(Value::Cell(_)) | None => {}
+                            Some(Value::Str(s)) => {
+                                if Self::str_fusable(program, self.ip) {
+                                    fused = self.fused_str_op(program, s);
+                                }
+                            }
+                            Some(Value::Cell(c)) => direct = Some(c.borrow().clone()),
                             Some(other) => direct = Some(other.clone()),
+                            None => {}
                         }
                         if let Some((r, advance)) = fused {
                             self.stack.push(r);

@@ -106,3 +106,24 @@ Status: both items below were re-checked on the current tree and work (`5 in d` 
 
 The optimizations were kept in a single commit because they share VM state fields; they are
 independent in effect.
+
+## Round 3: long strings and global reads in deep recursion (release, in-script `system_time_ms`, ms)
+
+Wall time of a process start-up on this loaded machine is about 5 s, so these use the in-script
+clock; base = tip bd2ec31, after = this branch; two runs each.
+
+| Benchmark | Base | After | What |
+|-----------|-----:|------:|------|
+| recursion_global | 1556 / 1563 | 18 / 14 | depth 20000, reads a global at each level (was quadratic; scope lookup now stops at the call frame, then the global scope) |
+| str_index_unicode | 383 / 397 | 200 / 263 | `s[i]` and `len(s)` per iteration over 53249 chars, one accented char first |
+| str_index_long | 1847 / 1654 | 1659 / 1594 | same over 212992 ASCII chars (not improved, see below) |
+| fib(32) | 51-129 | 46-56 | unchanged (noise) |
+| 5M-iteration loop | 641-822 | 672-827 | unchanged (noise) |
+
+Remaining limit: `len(s)` is one memory-speed pass over the string (about 4.5 us for 212 KB) and `s[i]`
+scans the prefix `s[..=i]` for non-ASCII bytes, so a loop that does both per iteration over a 200k
+ASCII string is still O(n^2) with a small constant (about 1.6 s). Making it O(1) needs a cached
+ASCII flag / char-offset table inside the value, i.e. changing `Value::Str(String)` to a newtype:
+about 1500 `Value::Str` construction/match sites across src/ and tests/, not done here. Strings are
+no longer copied on load for `len(s)` / `s[i]` (named, parameter, global and slot strings), and
+non-ASCII `s[i]`, `len`, `slice` and `charAt` use a vectorised lead-byte scan instead of decoding.
