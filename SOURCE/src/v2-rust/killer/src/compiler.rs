@@ -2086,6 +2086,43 @@ fn paren_depth_net(line: &str) -> i32 {
     depth
 }
 
+/// Running `(` / `[` depth of text that grows by appending (see [`paren_depth_net`]): each appended
+/// chunk is scanned once, so merging thousands of continuation lines stays linear.
+#[derive(Default)]
+struct BracketDepth {
+    paren: i32,
+    square: i32,
+    in_string: bool,
+    skip_next: bool,
+}
+
+impl BracketDepth {
+    fn feed(&mut self, text: &str) {
+        for ch in text.chars() {
+            if self.skip_next {
+                self.skip_next = false;
+                continue;
+            }
+            if self.in_string {
+                if ch == '\\' {
+                    self.skip_next = true;
+                } else if ch == '"' {
+                    self.in_string = false;
+                }
+                continue;
+            }
+            match ch {
+                '"' => self.in_string = true,
+                '(' => self.paren += 1,
+                ')' => self.paren -= 1,
+                '[' => self.square += 1,
+                ']' => self.square -= 1,
+                _ => {}
+            }
+        }
+    }
+}
+
 /// Merge continuation lines until `(` `)` and `[` `]` are both balanced (function signatures
 /// split across lines, including generic `[T]` before `(`).
 fn merge_multiline_signature_header(
@@ -2094,9 +2131,10 @@ fn merge_multiline_signature_header(
 ) -> Result<(String, usize), VmError> {
     let mut merged = lines[start].1.trim().to_string();
     let mut i = start;
+    let mut depth = BracketDepth::default();
+    depth.feed(&merged);
     loop {
-        let pd = paren_depth_net(&merged);
-        let bd = square_bracket_depth(&merged);
+        let (pd, bd) = (depth.paren, depth.square);
         if pd == 0 && bd == 0 {
             return Ok((merged, i));
         }
@@ -2121,6 +2159,8 @@ fn merge_multiline_signature_header(
         }
         merged.push(' ');
         merged.push_str(lines[i].1.trim());
+        depth.feed(" ");
+        depth.feed(lines[i].1.trim());
     }
 }
 
@@ -2163,12 +2203,23 @@ fn merge_multiline_control_header_until_brace(
     lines: &[(usize, String)],
     start: usize,
 ) -> Result<(String, usize), VmError> {
+    merge_multiline_control_header_from(lines, start, &lines[start].1)
+}
+
+/// Like [`merge_multiline_control_header_until_brace`] with the text of line `start` given
+/// separately (an `else if` header is compiled as `if ...` without copying the line table).
+fn merge_multiline_control_header_from(
+    lines: &[(usize, String)],
+    start: usize,
+    first: &str,
+) -> Result<(String, usize), VmError> {
     let line_no = lines[start].0;
-    let mut merged = lines[start].1.trim().to_string();
+    let mut merged = first.trim().to_string();
     let mut i = start;
+    let mut depth = BracketDepth::default();
+    depth.feed(&merged);
     loop {
-        let pd = paren_depth_net(&merged);
-        let bd = square_bracket_depth(&merged);
+        let (pd, bd) = (depth.paren, depth.square);
         if pd < 0 {
             return Err(VmError::parse_error_simple(format!(
                 "Line {line_no}: unmatched `)` in condition",
@@ -2193,6 +2244,8 @@ fn merge_multiline_control_header_until_brace(
                 i += 1;
                 merged.push(' ');
                 merged.push_str(lines[i].1.trim());
+                depth.feed(" ");
+                depth.feed(lines[i].1.trim());
                 continue;
             }
             let found = lines[i + 1].1.trim();
@@ -2209,6 +2262,8 @@ fn merge_multiline_control_header_until_brace(
         }
         merged.push(' ');
         merged.push_str(lines[i].1.trim());
+        depth.feed(" ");
+        depth.feed(lines[i].1.trim());
     }
 }
 
@@ -2844,61 +2899,67 @@ fn compile_if_statement(
     state: &mut CompilerState,
     context: &mut CompileContext,
 ) -> Result<(), VmError> {
-    let start = *cursor;
-    let line_no = lines[start].0;
-    let (line_merged, end_phys) = merge_multiline_control_header_until_brace(lines, start)?;
-    let condition = extract_keyword_condition(&line_merged, "if", line_no)?;
+    // An `else if` chain is compiled in a loop (not by recursion, and without copying the line
+    // table per link), so a chain of thousands of branches is linear and cannot overflow the stack.
+    let mut header_override: Option<String> = None;
+    let mut end_jumps: Vec<usize> = Vec::new();
+    let end_pending_false;
+    loop {
+        let start = *cursor;
+        let line_no = lines[start].0;
+        let (line_merged, end_phys) = match &header_override {
+            Some(h) => merge_multiline_control_header_from(lines, start, h)?,
+            None => merge_multiline_control_header_until_brace(lines, start)?,
+        };
+        let condition = extract_keyword_condition(&line_merged, "if", line_no)?;
 
-    *cursor = end_phys + 1;
-    expect_open_brace(lines, cursor, line_no, "if")?;
+        *cursor = end_phys + 1;
+        expect_open_brace(lines, cursor, line_no, "if")?;
 
-    // (also covers `else if`, which re-enters here: its condition has its own line)
-    state.line_marks.push((state.instructions.len(), line_no));
-    compile_expr_str(condition, line_no, state, context)?;
-    let jump_false_index = state.instructions.len();
-    state.instructions.push(Instruction::JumpIfFalse(usize::MAX));
+        state.line_marks.push((state.instructions.len(), line_no));
+        compile_expr_str(condition, line_no, state, context)?;
+        let jump_false_index = state.instructions.len();
+        state.instructions.push(Instruction::JumpIfFalse(usize::MAX));
 
-    compile_block(lines, cursor, state, context, true, true)?;
+        compile_block(lines, cursor, state, context, true, true)?;
 
-    let mut has_else = false;
-    let mut jump_end_index = 0usize;
-    if *cursor < lines.len() {
-        let (cur_lno, maybe_else) = &lines[*cursor];
-        let trimmed = maybe_else.trim();
-        if trimmed == "else" {
-            has_else = true;
-            *cursor += 1;
-            expect_open_brace(lines, cursor, line_no, "else")?;
+        if *cursor < lines.len() {
+            let trimmed = lines[*cursor].1.trim();
+            if trimmed == "else" {
+                *cursor += 1;
+                expect_open_brace(lines, cursor, line_no, "else")?;
 
-            jump_end_index = state.instructions.len();
-            state.instructions.push(Instruction::Jump(usize::MAX));
+                end_jumps.push(state.instructions.len());
+                state.instructions.push(Instruction::Jump(usize::MAX));
 
-            let else_target = state.instructions.len();
-            state.instructions[jump_false_index] = Instruction::JumpIfFalse(else_target);
+                let else_target = state.instructions.len();
+                state.instructions[jump_false_index] = Instruction::JumpIfFalse(else_target);
 
-            compile_block(lines, cursor, state, context, true, true)?;
-        } else if trimmed.starts_with("else if ") || trimmed.starts_with("else if(") {
-            // else if: rewrite as "if ..." and recurse
-            has_else = true;
-            jump_end_index = state.instructions.len();
-            state.instructions.push(Instruction::Jump(usize::MAX));
+                compile_block(lines, cursor, state, context, true, true)?;
+                end_pending_false = None;
+                break;
+            } else if trimmed.starts_with("else if ") || trimmed.starts_with("else if(") {
+                end_jumps.push(state.instructions.len());
+                state.instructions.push(Instruction::Jump(usize::MAX));
 
-            let else_target = state.instructions.len();
-            state.instructions[jump_false_index] = Instruction::JumpIfFalse(else_target);
+                let else_target = state.instructions.len();
+                state.instructions[jump_false_index] = Instruction::JumpIfFalse(else_target);
 
-            // Strip `else ` prefix → `if ...` / `if(...)`
-            let stripped = trimmed[5..].trim().to_string();
-            let mut patched: Vec<(usize, String)> = lines.to_vec();
-            patched[*cursor] = (*cur_lno, stripped);
-            compile_if_statement(&patched, cursor, state, context)?;
+                // Strip `else ` prefix: `if ...` / `if(...)`
+                header_override = Some(trimmed[5..].trim().to_string());
+                continue;
+            }
         }
+        end_pending_false = Some(jump_false_index);
+        break;
     }
 
     let end_target = state.instructions.len();
-    if has_else {
-        state.instructions[jump_end_index] = Instruction::Jump(end_target);
-    } else {
-        state.instructions[jump_false_index] = Instruction::JumpIfFalse(end_target);
+    for j in end_jumps {
+        state.instructions[j] = Instruction::Jump(end_target);
+    }
+    if let Some(j) = end_pending_false {
+        state.instructions[j] = Instruction::JumpIfFalse(end_target);
     }
     Ok(())
 }
@@ -5984,15 +6045,16 @@ fn compile_class_definition(
 
     // Inside the class body: `super.` becomes `__super_<Parent>.` and `static fn` loses its
     // prefix (the line numbers are remembered in `static_lines`).
-    let class_end = skip_braced_block(lines, *cursor - 1);
+    // Only the class body is copied (a copy of the whole program per class made thousands of
+    // classes quadratic); `cursor` is relative to that copy until the end of the function.
+    let outer_cursor = cursor;
+    let body_start = *outer_cursor;
+    let class_end = skip_braced_block(lines, body_start - 1).min(lines.len());
     let mut static_lines: std::collections::HashSet<usize> = std::collections::HashSet::new();
-    let patched: Vec<(usize, String)> = lines
+    let patched: Vec<(usize, String)> = lines[body_start..class_end]
         .iter()
         .enumerate()
         .map(|(idx, (n, l))| {
-            if idx < *cursor || idx >= class_end {
-                return (*n, l.clone());
-            }
             let mut text = l.clone();
             let trimmed = text.trim_start();
             if let Some(rest) = trimmed.strip_prefix("static ") {
@@ -6010,6 +6072,8 @@ fn compile_class_definition(
         })
         .collect();
     let lines: &[(usize, String)] = &patched;
+    let mut local_cursor = 0usize;
+    let cursor = &mut local_cursor;
 
     // Emit a Jump to skip over all method bytecode during linear execution
     let skip_jump_index = state.instructions.len();
@@ -6119,6 +6183,7 @@ fn compile_class_definition(
 
     // Store class metadata for Program
     state.class_defs.insert(class_name, (parent, method_info));
+    *outer_cursor = body_start + *cursor;
 
     Ok(())
 }
@@ -7845,8 +7910,11 @@ fn brace_opens_literal(before: &str) -> bool {
 fn join_multiline_literal(lines: &[&str], line_index: usize, line: &str, open: usize) -> Option<(String, usize)> {
     let mut text = line.to_string();
     let mut j = line_index;
+    // resumable scan: each appended line is scanned once (re-scanning the whole text per line made a
+    // 10,000-line literal quadratic)
+    let mut scan = CurlyScan { depth: 0, in_string: false, pos: open };
     loop {
-        if consume_balanced_curly_line(&text, open).is_some() {
+        if scan.advance(&text) {
             return Some((text, j));
         }
         j += 1;
@@ -7856,6 +7924,50 @@ fn join_multiline_literal(lines: &[&str], line_index: usize, line: &str, open: u
         }
         text.push(' ');
         text.push_str(strip_trailing_line_comment(next));
+    }
+}
+
+/// Incremental form of [`consume_balanced_curly_line`]: `advance` continues where the last call
+/// stopped and reports whether the braces opened at the start have balanced.
+struct CurlyScan {
+    depth: i32,
+    in_string: bool,
+    pos: usize,
+}
+
+impl CurlyScan {
+    fn advance(&mut self, s: &str) -> bool {
+        let bytes = s.as_bytes();
+        let mut i = self.pos;
+        while i < bytes.len() {
+            let c = bytes[i];
+            if self.in_string {
+                if c == b'\\' && i + 1 < bytes.len() {
+                    i += 2;
+                    continue;
+                }
+                if c == b'"' {
+                    self.in_string = false;
+                }
+                i += 1;
+                continue;
+            }
+            i += 1;
+            match c {
+                b'"' => self.in_string = true,
+                b'{' => self.depth += 1,
+                b'}' => {
+                    self.depth -= 1;
+                    if self.depth == 0 {
+                        self.pos = i;
+                        return true;
+                    }
+                }
+                _ => {}
+            }
+        }
+        self.pos = i;
+        false
     }
 }
 

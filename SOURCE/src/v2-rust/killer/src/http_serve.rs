@@ -26,7 +26,6 @@
 //! so it also works from a task on another thread (e.g. a watchdog started with `async_spawn`), and
 //! it interrupts reads and streams within about 200 ms.
 
-use std::cell::RefCell;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::time::{Duration, Instant};
@@ -45,8 +44,37 @@ struct Route {
     handler: Value,
 }
 
+// Safety: the handler values in `PUBLISHED` are private detached copies that are only touched while
+// the mutex is held (stored under the lock, copied out under the lock), so no `Rc` is ever used by
+// two threads at once.
+#[allow(unsafe_code)]
+unsafe impl Send for Route {}
+
 thread_local! {
-    static ROUTES: RefCell<Vec<Route>> = RefCell::new(Vec::new());
+    /// The routes this thread's server uses; handlers are shared with the registering code, so a
+    /// handler that updates a captured list or dict keeps its state between requests.
+    static ROUTES: std::cell::RefCell<Vec<Route>> = std::cell::RefCell::new(Vec::new());
+}
+
+/// Detached copies of every route registered by any thread. A server started in an `async_spawn`
+/// task has no routes of its own; it adopts these (a task works on copies of its data) instead of
+/// failing with "register routes first" while its client waits.
+static PUBLISHED: std::sync::Mutex<Vec<Route>> = std::sync::Mutex::new(Vec::new());
+
+fn published() -> std::sync::MutexGuard<'static, Vec<Route>> {
+    PUBLISHED.lock().unwrap_or_else(|p| p.into_inner())
+}
+
+/// On a thread that registered no routes, take over the published ones.
+fn adopt_published_routes() {
+    ROUTES.with(|r| {
+        let mut local = r.borrow_mut();
+        if local.is_empty() {
+            for route in published().iter() {
+                local.push(Route { method: route.method.clone(), segments: route.segments.clone(), handler: route.handler.detached() });
+            }
+        }
+    });
 }
 
 /// Set by `server_stop()`; process-wide so a task on another thread can stop the server too.
@@ -286,6 +314,27 @@ fn text_resp(status: u16, ctype: &str, body: String) -> Resp {
     Resp { status, headers: vec![("Content-Type".to_string(), ctype.to_string())], body }
 }
 
+/// A handler failure: the real error goes to the log (stderr, level error) with the request line;
+/// the client only sees a generic JSON body unless `opts.debug` is true.
+fn internal_error(req: &Req, e: &VmError, debug: bool) -> Resp {
+    let fields = SharedDict::from_pairs(vec![
+        ("method".to_string(), Value::Str(req.method.clone())),
+        ("path".to_string(), Value::Str(req.path.clone())),
+        ("error".to_string(), Value::Str(format!("{}", e))),
+    ]);
+    let _ = crate::log_builtins::call("log_error", &[Value::Str("handler error".to_string()), Value::Dict(fields)]);
+    let body = if debug {
+        let d = SharedDict::from_pairs(vec![
+            ("error".to_string(), Value::Str("internal server error".to_string())),
+            ("message".to_string(), Value::Str(format!("{}", e))),
+        ]);
+        crate::json_lang::stringify(&Value::Dict(d), 0).unwrap_or_else(|_| "{\"error\":\"internal server error\"}".to_string())
+    } else {
+        "{\"error\":\"internal server error\"}".to_string()
+    };
+    text_resp(500, "application/json", body)
+}
+
 fn display(v: &Value) -> String {
     match v {
         Value::Str(s) => s.clone(),
@@ -413,7 +462,9 @@ fn serve_loop(vm: &mut VirtualMachine, args: &[Value], program: &Program, once: 
     let read_limit = Duration::from_secs_f64(opt_num(opts.as_ref(), "read_timeout").unwrap_or(10.0).clamp(0.05, 3600.0));
     // wall-clock deadline for one handler call (checked on loop back-edges); 0 turns it off
     let request_ms = (opt_num(opts.as_ref(), "request_timeout").unwrap_or(60.0).clamp(0.0, 86400.0) * 1000.0) as u64;
+    let debug = matches!(opts.as_ref().and_then(|o| o.get("debug")), Some(Value::Bool(true)));
     let stream_limit = Duration::from_secs_f64(opt_num(opts.as_ref(), "stream_timeout").unwrap_or(300.0).clamp(0.1, 86400.0));
+    adopt_published_routes();
     if handler.is_none() && ROUTES.with(|r| r.borrow().is_empty()) {
         return err(format!("{}(): pass a handler function or register routes with route() first", who));
     }
@@ -457,9 +508,9 @@ fn serve_loop(vm: &mut VirtualMachine, args: &[Value], program: &Program, once: 
                             crate::http_sse::write_stream(&mut stream, vm, program, &reply, stream_limit);
                             continue;
                         }
-                        Ok(v) => value_to_resp(&v).unwrap_or_else(|e| text_resp(500, "text/plain; charset=utf-8", format!("Internal Server Error: {}", e))),
+                        Ok(v) => value_to_resp(&v).unwrap_or_else(|e| internal_error(&req, &e, debug)),
                         Err(VmError::SecurityError { ref message, .. }) if message.contains("time limit") => text_resp(503, "text/plain; charset=utf-8", format!("Service Unavailable: the handler exceeded the {} s request deadline", request_ms as f64 / 1000.0)),
-                        Err(e) => text_resp(500, "text/plain; charset=utf-8", format!("Internal Server Error: {}", e)),
+                        Err(e) => internal_error(&req, &e, debug),
                     },
                 };
                 write_resp(&mut stream, req.method == "HEAD", &resp);
@@ -496,9 +547,9 @@ pub fn call(name: &str, args: &[Value]) -> Option<Result<Value, VmError>> {
                     if !p.starts_with('/') {
                         return err("route(): path must start with /");
                     }
-                    ROUTES.with(|r| {
-                        r.borrow_mut().push(Route { method: m.to_ascii_uppercase(), segments: split_path(p), handler: f.clone() })
-                    });
+                    let (method, segments) = (m.to_ascii_uppercase(), split_path(p));
+                    published().push(Route { method: method.clone(), segments: segments.clone(), handler: f.detached() });
+                    ROUTES.with(|r| r.borrow_mut().push(Route { method, segments, handler: f.clone() }));
                     Ok(Value::Null)
                 }
                 _ => err("route(method, path, fn) expects two strings and a function"),
@@ -506,6 +557,7 @@ pub fn call(name: &str, args: &[Value]) -> Option<Result<Value, VmError>> {
         })()),
         "routes_clear" => Some({
             ROUTES.with(|r| r.borrow_mut().clear());
+            published().clear();
             Ok(Value::Null)
         }),
         "server_stop" => Some({

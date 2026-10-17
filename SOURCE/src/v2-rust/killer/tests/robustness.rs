@@ -601,3 +601,245 @@ fn wall_budget_stops_deep_recursion_that_reads_globals() {
     let msg = r.expect_err("must hit a limit");
     assert!(msg.contains("time limit") || msg.contains("recursion too deep"), "{msg}");
 }
+
+// ------------------------------------------------------------------------------------------------
+// GC over deep or cyclic dict structures
+// ------------------------------------------------------------------------------------------------
+
+#[test]
+fn gc_does_not_go_quadratic_on_a_deep_tree_held_by_every_frame() {
+    // a left-deep tree of 30000 dicts walked by a recursive function (one frame holds each node)
+    // while arrays are allocated, so collections run in the middle: the mark phase used to walk the
+    // shared tree again for every frame (minutes); it must be linear.
+    let src = r#"
+fn walk(node) {
+  if node == null {
+    return 0
+  }
+  junk = [1, 2]
+  more = [3]
+  return walk(node["l"]) + 1
+}
+x = null
+i = 0
+while i < 30000 {
+  x = {"l": x}
+  i = i + 1
+}
+total = 0
+rep = 0
+while rep < 4 {
+  total = total + walk(x)
+  rep = rep + 1
+}
+assert(total == 120000)
+"#;
+    let t = std::time::Instant::now();
+    expect_ok(src);
+    assert!(t.elapsed() < Duration::from_secs(60), "took {:?}", t.elapsed());
+}
+
+#[test]
+fn gc_terminates_with_cyclic_dicts_and_objects_and_closures() {
+    expect_ok(
+        r#"
+d = {}
+d["self"] = d
+class N {
+  fn init() {
+    this.me = this
+  }
+}
+n = new N()
+fn mk() {
+  c = 0
+  fn inc() {
+    c = c + 1
+    return c
+  }
+  return inc
+}
+f = mk()
+f()
+i = 0
+while i < 200000 {
+  a = [i]
+  i = i + 1
+}
+assert(f() == 2)
+"#,
+    );
+}
+
+// ------------------------------------------------------------------------------------------------
+// Compile time stays near-linear for huge but legal inputs
+// ------------------------------------------------------------------------------------------------
+
+fn expect_ok_within(label: &str, src: &str, secs: u64) {
+    let t = std::time::Instant::now();
+    expect_ok(src);
+    assert!(t.elapsed() < Duration::from_secs(secs), "{label}: took {:?}", t.elapsed());
+}
+
+#[test]
+fn twenty_thousand_statements_compile_quickly() {
+    let mut src = String::new();
+    for i in 0..20000 {
+        src.push_str(&format!("x{} = {} + 1\n", i % 50, i));
+    }
+    src.push_str("assert(x1 == 19952)\n");
+    expect_ok_within("20000 statements", &src, 60);
+}
+
+#[test]
+fn long_expressions_within_the_limit_compile_quickly() {
+    // 900 terms: under the 1000-operator limit, so it must compile (and fast)
+    let plus = vec!["1"; 900].join(" + ");
+    expect_ok_within("900-term sum", &format!("x = {plus}\nassert(x == 900)\n"), 30);
+    let logical = vec!["true"; 900].join(" and ");
+    expect_ok_within("900-term and chain", &format!("x = {logical}\nassert(x)\n"), 30);
+    // beyond the limit: a clear error, quickly, for every spelling
+    for join in [" + ", " and ", " or ", " == ", " ?? "] {
+        let t = std::time::Instant::now();
+        expect_err(&format!("x = {}\n", vec!["1"; 30000].join(join)), "expression is too long");
+        assert!(t.elapsed() < Duration::from_secs(30), "{join}: {:?}", t.elapsed());
+    }
+}
+
+#[test]
+fn very_long_else_if_chains_and_function_bodies_compile_linearly() {
+    let mut src = String::from("x = 77\nr = 0\nif x == 0 {\n  r = 0\n}");
+    for i in 1..20000 {
+        src.push_str(&format!(" else if x == {i} {{\n  r = {i}\n}}"));
+    }
+    src.push_str("\nassert(r == 77)\n");
+    expect_ok_within("20000 else-if branches", &src, 60);
+    // 3000 operators spread over the lines of one function body are not one expression
+    let mut f = String::from("fn f(a) {\n");
+    for i in 0..3000 {
+        f.push_str(&format!("  a = a + {i}\n"));
+    }
+    f.push_str("  return a\n}\nassert(f(0) == 4498500)\n");
+    expect_ok_within("3000-line function", &f, 60);
+    // many functions and long literals
+    let mut g = String::new();
+    for i in 0..5000 {
+        g.push_str(&format!("fn g{i}(a) {{\n  return a + {i}\n}}\n"));
+    }
+    g.push_str(&format!("xs = [{}]\nassert(len(xs) == 20000)\nassert(g4999(1) == 5000)\n", (0..20000).map(|i| i.to_string()).collect::<Vec<_>>().join(", ")));
+    expect_ok_within("5000 functions + 20000-element literal", &g, 60);
+}
+
+#[test]
+fn endless_postfix_chains_and_many_classes_and_lambdas_are_fast() {
+    for chain in [".a".repeat(30000), "[0]".repeat(30000), ".upper()".repeat(30000)] {
+        let t = std::time::Instant::now();
+        expect_err(&format!("d = [1]\nx = d{chain}\n"), "expression is too long");
+        assert!(t.elapsed() < Duration::from_secs(30), "{:?}", t.elapsed());
+    }
+    // a realistic chain still works
+    expect_ok("s = \"ab\"\nx = s.upper().lower().upper().lower().upper()\nassert(x == \"AB\")\n");
+    let mut classes = String::new();
+    for i in 0..3000 {
+        classes.push_str(&format!("class C{i} {{\n  fn init() {{\n    this.a = {i}\n  }}\n}}\n"));
+    }
+    classes.push_str("o = new C2999()\nassert(o.a == 2999)\n");
+    expect_ok_within("3000 classes", &classes, 60);
+    let mut lambdas = String::new();
+    for i in 0..4000 {
+        lambdas.push_str(&format!("f{i} = fn(a) {{ return a + {i} }}\n"));
+    }
+    lambdas.push_str("assert(f3999(1) == 4000)\nassert(f0(1) == 1)\n");
+    expect_ok_within("4000 lambdas", &lambdas, 60);
+    // a literal spread over 20000 lines, and a call with 20000 argument lines
+    let mut lit = String::from("x = [\n");
+    for i in 0..20000 {
+        lit.push_str(&format!("  {i},\n"));
+    }
+    lit.push_str("  0\n]\nassert(len(x) == 20001)\n");
+    expect_ok_within("20000-line array literal", &lit, 60);
+    let mut call = String::from("fn f(*a) {\n  return len(a)\n}\nn = f(\n");
+    for i in 0..20000 {
+        call.push_str(&format!("  {i},\n"));
+    }
+    call.push_str("  0\n)\nassert(n == 20001)\n");
+    expect_ok_within("20000-line call", &call, 60);
+}
+
+// ------------------------------------------------------------------------------------------------
+// Deeply nested user data: every walk over a value must be iterative or depth-limited
+// ------------------------------------------------------------------------------------------------
+
+/// Run `src` on a thread with a deliberately small native stack (8 MB, like an ordinary main
+/// thread); a recursive walk over a 100,000-deep value overflows it and kills the whole process.
+fn run_small_stack(src: &str) -> Outcome {
+    let (tx, rx) = channel::<Outcome>();
+    let src = src.to_string();
+    std::thread::Builder::new()
+        .name("small-stack".into())
+        .stack_size(8 * 1024 * 1024)
+        .spawn(move || {
+            let _ = tx.send(execute(&src, None));
+        })
+        .unwrap();
+    rx.recv_timeout(Duration::from_secs(300)).unwrap_or_else(|_| panic!("hang on a deep structure"))
+}
+
+fn deep_build(kind: &str, depth: usize) -> String {
+    match kind {
+        "list" => format!("a = []\nb = []\ni = 0\nwhile i < {depth} {{\n  a = [a]\n  b = [b]\n  i = i + 1\n}}\n"),
+        "dict" => format!("a = {{}}\nb = {{}}\ni = 0\nwhile i < {depth} {{\n  a = {{\"k\": a}}\n  b = {{\"k\": b}}\n  i = i + 1\n}}\n"),
+        _ => format!(
+            "class N {{\n  fn init(next) {{\n    this.next = next\n  }}\n}}\na = null\nb = null\ni = 0\nwhile i < {depth} {{\n  a = new N(a)\n  b = new N(b)\n  i = i + 1\n}}\n"
+        ),
+    }
+}
+
+#[test]
+fn deep_values_never_overflow_the_native_stack() {
+    // every operation either works or raises a catchable Killer error; the process must survive
+    let ops = [
+        "r = a == b\nassert(r)",
+        "r = a != b\nassert(not r)",
+        "r = [a] == [b]\nassert(r)",
+        "r = a in [b]\nassert(r)",
+        "r = contains([b], a)\nassert(r)",
+        "s = str(a)\nassert(len(s) > 0)",
+        "s = \"\" + str(b)\nassert(len(s) > 0)",
+        "println(\"\")",
+        "try { s = json_stringify(a) } catch e { assert(contains(str(e), \"nested too deeply\")) }",
+        "h = spawn_thread(a)",
+        "s = set()\nset_add(s, 1)",
+        "x = sorted([[a], [b]])",
+        "x = copy([a, b])",
+        "x = [a, b, a, b]\nx = null",
+        // enough allocation to run the collector with the deep values alive
+        "k = 0\nwhile k < 120000 {\n  t = [k]\n  k = k + 1\n}",
+        "a = null\nb = null",
+    ];
+    for kind in ["list", "dict", "obj"] {
+        let mut src = deep_build(kind, 100_000);
+        for op in ops {
+            if kind != "list" && op.contains("sorted") {
+                continue;
+            }
+            if kind == "obj" && op.contains("copy(") {
+                continue;
+            }
+            src.push_str(&format!("try {{\n{op}\n}} catch err {{\n  println(\"caught\", str(err)[0:60])\n}}\n"));
+        }
+        src.push_str("println(\"survived\")\n");
+        match run_small_stack(&src) {
+            Outcome::Ok => {}
+            other => panic!("{kind}: {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn cyclic_values_compare_without_hanging() {
+    expect_ok("a = []\npush(a, a)\nb = []\npush(b, b)\nassert(a == b)\nassert(a == a)\nx = [1]\npush(x, a)\ny = [1]\npush(y, b)\nassert(x == y)\n");
+    expect_ok("d = {}\nd[\"self\"] = d\ne = {}\ne[\"self\"] = e\nassert(d == e)\nassert(sorted([a_row(), a_row()]) != null)\nfn a_row() {\n  r = [1]\n  push(r, r)\n  return r\n}\n");
+    // exponentially shared structure: compared in linear time
+    expect_ok("x = []\ny = []\ni = 0\nwhile i < 60 {\n  x = [x, x]\n  y = [y, y]\n  i = i + 1\n}\nassert(x == y)\n");
+}

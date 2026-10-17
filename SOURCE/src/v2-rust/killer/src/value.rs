@@ -5,6 +5,32 @@ use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter, Result as FmtResult};
 use std::rc::Rc;
 
+thread_local! {
+    /// Nesting depth of the `Debug` call in progress on this thread.
+    static DEBUG_DEPTH: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+}
+
+/// Keeps `{:?}` of deeply nested or self-referencing containers finite and off the native stack.
+struct DebugGuard;
+
+impl DebugGuard {
+    fn enter() -> Option<DebugGuard> {
+        DEBUG_DEPTH.with(|c| {
+            if c.get() >= 64 {
+                return None;
+            }
+            c.set(c.get() + 1);
+            Some(DebugGuard)
+        })
+    }
+}
+
+impl Drop for DebugGuard {
+    fn drop(&mut self) {
+        DEBUG_DEPTH.with(|c| c.set(c.get().saturating_sub(1)));
+    }
+}
+
 /// Reference-counted, interior-mutable array. `Value::clone()` for arrays shares storage so
 /// `kfn` updates see the caller's array (Python-style list semantics).
 #[derive(Clone)]
@@ -12,7 +38,13 @@ pub struct SharedArray(Rc<RefCell<Vec<Value>>>);
 
 impl Debug for SharedArray {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        write!(f, "{:?}", *self.0.borrow())
+        let Some(_guard) = DebugGuard::enter() else {
+            return write!(f, "[..]");
+        };
+        match self.0.try_borrow() {
+            Ok(v) => write!(f, "{:?}", *v),
+            Err(_) => write!(f, "[..]"),
+        }
     }
 }
 
@@ -347,6 +379,9 @@ impl SharedDict {
 
 impl Debug for SharedDict {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        let Some(_guard) = DebugGuard::enter() else {
+            return write!(f, "{{..}}");
+        };
         match self.0.try_borrow() {
             Ok(m) => write!(f, "{:?}", *m),
             Err(_) => write!(f, "{{..}}"),
@@ -470,6 +505,9 @@ impl SharedObject {
 
 impl Debug for SharedObject {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        let Some(_guard) = DebugGuard::enter() else {
+            return write!(f, "<object>");
+        };
         match self.0.try_borrow() {
             Ok(o) => write!(f, "{:?}", *o),
             Err(_) => write!(f, "<object>"),
@@ -509,6 +547,11 @@ impl Captures {
     }
     pub fn is_empty(&self) -> bool {
         self.0.borrow().is_empty()
+    }
+    /// Address of the shared capture map (identity for the GC).
+    #[inline]
+    pub fn rc_ptr(&self) -> usize {
+        Rc::as_ptr(&self.0) as *const u8 as usize
     }
     pub fn snapshot(&self) -> Vec<(String, Value)> {
         self.0.borrow().iter().map(|(k, v)| (k.clone(), v.clone())).collect()
@@ -554,7 +597,7 @@ impl PartialEq for Captures {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum Value {
     Number(f64),
     Bool(bool),
@@ -611,6 +654,168 @@ pub enum Value {
     /// Arbitrary-precision integer (`123n`, `big(x)`, `factorial(n)`); see `bigint_ops` for the rules.
     BigInt(Rc<crate::bigint::BigInt>),
     Null,
+}
+
+// ---------------------------------------------------------------------------------------------
+// Structural equality without native recursion
+//
+// `==` on nested lists, dicts and objects used to be the derived, recursive `PartialEq`: two
+// distinct 100,000-deep lists overflowed the native stack, and two cyclic lists never finished.
+// Containers are now compared with an explicit work list. Once a comparison has visited many
+// container pairs, each pair of container identities is compared only once, so cycles end (a pair
+// met again is assumed equal, the usual co-inductive rule) and heavily shared structures
+// (`x = [x, x]` forty times) stay linear instead of exponential.
+// ---------------------------------------------------------------------------------------------
+
+impl PartialEq for Value {
+    #[inline]
+    fn eq(&self, other: &Value) -> bool {
+        match (self, other) {
+            (Value::Number(a), Value::Number(b)) => a == b,
+            (Value::Str(a), Value::Str(b)) => a == b,
+            (Value::Bool(a), Value::Bool(b)) => a == b,
+            (Value::Integer(a), Value::Integer(b)) => a == b,
+            (Value::Null, Value::Null) => true,
+            _ => deep_eq(self, other),
+        }
+    }
+}
+
+fn is_deep(v: &Value) -> bool {
+    matches!(
+        v,
+        Value::Array(_) | Value::Dict(_) | Value::Object(_) | Value::Signal { .. } | Value::TaskError(_) | Value::Cell(_)
+    )
+}
+
+/// Equality of two values that are not both plain scalars (see the section comment above).
+fn deep_eq(a: &Value, b: &Value) -> bool {
+    if !is_deep(a) || !is_deep(b) {
+        return leaf_eq(a, b);
+    }
+    let mut stack: Vec<(Value, Value)> = vec![(a.clone(), b.clone())];
+    let mut visited = 0usize;
+    let mut seen: std::collections::HashSet<(usize, usize)> = std::collections::HashSet::new();
+    while let Some((x, y)) = stack.pop() {
+        // false when this pair of container identities was already compared (after a warm-up)
+        let mut fresh = |p: usize, q: usize| -> bool {
+            visited += 1;
+            visited <= 4096 || seen.insert((p, q))
+        };
+        match (&x, &y) {
+            (Value::Array(p), Value::Array(q)) => {
+                if Rc::ptr_eq(&p.0, &q.0) || !fresh(p.rc_ptr(), q.rc_ptr()) {
+                    continue;
+                }
+                let (pb, qb) = (p.0.borrow(), q.0.borrow());
+                if pb.len() != qb.len() {
+                    return false;
+                }
+                for (i, j) in pb.iter().zip(qb.iter()) {
+                    if is_deep(i) && is_deep(j) {
+                        stack.push((i.clone(), j.clone()));
+                    } else if !i.eq(j) {
+                        return false;
+                    }
+                }
+            }
+            (Value::Dict(p), Value::Dict(q)) => {
+                if Rc::ptr_eq(&p.0, &q.0) || !fresh(p.rc_ptr(), q.rc_ptr()) {
+                    continue;
+                }
+                let (pb, qb) = (p.0.borrow(), q.0.borrow());
+                if pb.len() != qb.len() {
+                    return false;
+                }
+                for (k, i) in pb.iter() {
+                    match qb.get(k) {
+                        None => return false,
+                        Some(j) => {
+                            if is_deep(i) && is_deep(j) {
+                                stack.push((i.clone(), j.clone()));
+                            } else if !i.eq(j) {
+                                return false;
+                            }
+                        }
+                    }
+                }
+            }
+            (Value::Object(p), Value::Object(q)) => {
+                if Rc::ptr_eq(&p.0, &q.0) || !fresh(p.rc_ptr(), q.rc_ptr()) {
+                    continue;
+                }
+                let (pb, qb) = (p.0.borrow(), q.0.borrow());
+                if pb.class_name != qb.class_name || pb.fields.len() != qb.fields.len() {
+                    return false;
+                }
+                for (k, i) in pb.fields.iter() {
+                    match qb.fields.get(k) {
+                        None => return false,
+                        Some(j) => {
+                            if is_deep(i) && is_deep(j) {
+                                stack.push((i.clone(), j.clone()));
+                            } else if !i.eq(j) {
+                                return false;
+                            }
+                        }
+                    }
+                }
+            }
+            (Value::Signal { value: v1, confidence: c1, reason: r1 }, Value::Signal { value: v2, confidence: c2, reason: r2 }) => {
+                if c1 != c2 || r1 != r2 {
+                    return false;
+                }
+                stack.push(((**v1).clone(), (**v2).clone()));
+            }
+            (Value::TaskError(p), Value::TaskError(q)) => stack.push(((**p).clone(), (**q).clone())),
+            (Value::Cell(p), Value::Cell(q)) => {
+                if Rc::ptr_eq(p, q) {
+                    continue;
+                }
+                match (p.try_borrow(), q.try_borrow()) {
+                    (Ok(i), Ok(j)) => stack.push((i.clone(), j.clone())),
+                    _ => return false,
+                }
+            }
+            // a container paired with a different kind of value
+            _ => {
+                if !leaf_eq(&x, &y) {
+                    return false;
+                }
+            }
+        }
+    }
+    true
+}
+
+/// Equality of values that hold no nested container to descend into (a wrapper or container
+/// compared with a different kind of value is simply unequal).
+fn leaf_eq(a: &Value, b: &Value) -> bool {
+    match (a, b) {
+        (Value::Number(x), Value::Number(y)) => x == y,
+        (Value::Bool(x), Value::Bool(y)) => x == y,
+        (Value::Str(x), Value::Str(y)) => x == y,
+        (Value::Class(x), Value::Class(y)) => x == y,
+        (
+            Value::Function { params: p1, bytecode_start: s1, captured: c1 },
+            Value::Function { params: p2, bytecode_start: s2, captured: c2 },
+        ) => p1 == p2 && s1 == s2 && c1 == c2,
+        (Value::Generator(x), Value::Generator(y)) => x == y,
+        (Value::QualityWrapped(x), Value::QualityWrapped(y)) => x == y,
+        (Value::Trit(x), Value::Trit(y)) => x == y,
+        (Value::Qubit { alpha: a1, beta: b1 }, Value::Qubit { alpha: a2, beta: b2 }) => a1 == a2 && b1 == b2,
+        (Value::Tryte(x), Value::Tryte(y)) => x == y,
+        (Value::Future(x), Value::Future(y)) => x == y,
+        (Value::Integer(x), Value::Integer(y)) => x == y,
+        (Value::Bytes(x), Value::Bytes(y)) => x == y,
+        (Value::Pointer(x), Value::Pointer(y)) => x == y,
+        (Value::Uncertain { value: v1, margin: m1 }, Value::Uncertain { value: v2, margin: m2 }) => v1 == v2 && m1 == m2,
+        (Value::Gauss { mean: m1, sigma: s1 }, Value::Gauss { mean: m2, sigma: s2 }) => m1 == m2 && s1 == s2,
+        (Value::Set(x), Value::Set(y)) => x == y,
+        (Value::BigInt(x), Value::BigInt(y)) => x == y,
+        (Value::Null, Value::Null) => true,
+        _ => false,
+    }
 }
 
 /// Ordered key for Set — numbers stored as bits (NaN excluded), then strings, then bools
@@ -704,7 +909,15 @@ impl Display for Value {
             Value::Class(class) => write!(f, "<class {}>", class.name),
             Value::Function { params, .. } => write!(f, "<function({})>", params.join(", ")),
             Value::Generator(_) => write!(f, "<generator>"),
-            Value::Cell(c) => write!(f, "{}", c.borrow()),
+            Value::Cell(c) => {
+                let Some(_guard) = DisplayGuard::enter() else {
+                    return write!(f, "...");
+                };
+                match c.try_borrow() {
+                    Ok(v) => write!(f, "{}", v),
+                    Err(_) => write!(f, "..."),
+                }
+            }
             Value::BigInt(b) => write!(f, "{}", b),
             Value::QualityWrapped(quality) => write!(f, "<quality score={:.2}>", quality.get_trim_score()),
             Value::Trit(t) => match t {
@@ -714,6 +927,9 @@ impl Display for Value {
                 _  => write!(f, "T_UNKNOWN({})", t),
             },
             Value::Signal { value, confidence, reason } => {
+                let Some(_guard) = DisplayGuard::enter() else {
+                    return write!(f, "Signal(...)");
+                };
                 write!(f, "Signal({}, {:.2}, {})", value, confidence, reason)
             }
             Value::Qubit { alpha, beta } => {
@@ -729,7 +945,12 @@ impl Display for Value {
                 write!(f, "Tryte[{}]", parts.join(""))
             }
             Value::Future(_) => write!(f, "<future>"),
-            Value::TaskError(msg) => write!(f, "<task error: {}>", msg),
+            Value::TaskError(msg) => {
+                let Some(_guard) = DisplayGuard::enter() else {
+                    return write!(f, "<task error>");
+                };
+                write!(f, "<task error: {}>", msg)
+            }
             Value::Integer(n) => write!(f, "{}", n),
             Value::Bytes(b) => write!(f, "<bytes[{}]>", b.len()),
             Value::Pointer(p) => write!(f, "0x{:016x}", p),
@@ -745,6 +966,15 @@ impl Display for Value {
             Value::Null => write!(f, "null"),
         }
     }
+}
+
+/// Pending work of [`Value::detached`]: copy the contents of `.0` into the (empty) copy `.1`.
+enum DetachJob {
+    Array(SharedArray, SharedArray),
+    Dict(SharedDict, SharedDict),
+    Object(SharedObject, SharedObject),
+    Captures(Captures, Captures),
+    Cell(Rc<RefCell<Value>>, Rc<RefCell<Value>>),
 }
 
 impl Value {
@@ -793,19 +1023,56 @@ impl Value {
     /// A structurally independent copy that shares no `Rc` with the original. Values handed to
     /// another thread (spawn arguments, captured variables, task results) must be detached,
     /// otherwise two threads would update the same non-atomic reference counts.
+    ///
+    /// Preserves sharing and cycles *inside* the copy (an array that contains itself copies to an
+    /// array that contains its copy), so it terminates on any structure. The walk uses an explicit
+    /// work list, so a value nested a million levels deep is copied without touching the native
+    /// stack.
     pub fn detached(&self) -> Value {
         let mut memo: HashMap<usize, Value> = HashMap::new();
-        self.detached_in(&mut memo, 0)
+        let mut work: Vec<DetachJob> = Vec::new();
+        let root = self.detach_shell(&mut memo, &mut work, 0);
+        while let Some(job) = work.pop() {
+            match job {
+                DetachJob::Array(src, dst) => {
+                    let items: Vec<Value> = src.to_vec().iter().map(|v| v.detach_shell(&mut memo, &mut work, 0)).collect();
+                    dst.replace_all(items);
+                }
+                DetachJob::Dict(src, dst) => {
+                    for (k, v) in src.iter() {
+                        let c = v.detach_shell(&mut memo, &mut work, 0);
+                        dst.insert(k, c);
+                    }
+                }
+                DetachJob::Object(src, dst) => {
+                    let fields: Vec<(String, Value)> =
+                        src.0.borrow().fields.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+                    let fields: crate::fast_hash::FastMap<String, Value> = fields
+                        .into_iter()
+                        .map(|(k, v)| (k, v.detach_shell(&mut memo, &mut work, 0)))
+                        .collect();
+                    dst.0.borrow_mut().fields = fields;
+                }
+                DetachJob::Captures(src, dst) => {
+                    for (k, v) in src.snapshot() {
+                        let c = v.detach_shell(&mut memo, &mut work, 0);
+                        dst.set(&k, c);
+                    }
+                }
+                DetachJob::Cell(src, dst) => {
+                    let inner = src.borrow().clone();
+                    let c = inner.detach_shell(&mut memo, &mut work, 0);
+                    *dst.borrow_mut() = c;
+                }
+            }
+        }
+        root
     }
 
-    /// Deep copy that preserves sharing and cycles *inside* the copy (an array that contains
-    /// itself copies to an array that contains its copy), so it terminates on any structure.
-    /// Nesting beyond `MAX_DETACH_DEPTH` is cut off with `null` rather than overflowing the stack.
-    fn detached_in(&self, memo: &mut HashMap<usize, Value>, depth: usize) -> Value {
-        const MAX_DETACH_DEPTH: usize = 20_000;
-        if depth > MAX_DETACH_DEPTH {
-            return Value::Null;
-        }
+    /// The copy of `self` with containers left empty: each new container is queued in `work` to be
+    /// filled in later. Wrapper values (`Signal`, `TaskError`) nest at most 1000 deep (deeper is
+    /// cut with `null`), since they are copied on the way in.
+    fn detach_shell(&self, memo: &mut HashMap<usize, Value>, work: &mut Vec<DetachJob>, depth: usize) -> Value {
         match self {
             Value::Array(a) => {
                 let key = Rc::as_ptr(&a.0) as *const u8 as usize;
@@ -814,8 +1081,7 @@ impl Value {
                 }
                 let copy = SharedArray::new(Vec::new());
                 memo.insert(key, Value::Array(copy.clone()));
-                let items: Vec<Value> = a.to_vec().iter().map(|v| v.detached_in(memo, depth + 1)).collect();
-                copy.replace_all(items);
+                work.push(DetachJob::Array(a.clone(), copy.clone()));
                 Value::Array(copy)
             }
             Value::Dict(d) => {
@@ -825,9 +1091,7 @@ impl Value {
                 }
                 let copy = SharedDict::empty();
                 memo.insert(key, Value::Dict(copy.clone()));
-                for (k, v) in d.iter() {
-                    copy.insert(k, v.detached_in(memo, depth + 1));
-                }
+                work.push(DetachJob::Dict(d.clone(), copy.clone()));
                 Value::Dict(copy)
             }
             Value::Object(o) => {
@@ -838,11 +1102,7 @@ impl Value {
                 let class_name = o.0.borrow().class_name.clone();
                 let copy = SharedObject::new(ObjectInstance { class_name, fields: Default::default() });
                 memo.insert(key, Value::Object(copy.clone()));
-                let fields: Vec<(String, Value)> =
-                    o.0.borrow().fields.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
-                let fields: crate::fast_hash::FastMap<String, Value> =
-                    fields.into_iter().map(|(k, v)| (k, v.detached_in(memo, depth + 1))).collect();
-                copy.0.borrow_mut().fields = fields;
+                work.push(DetachJob::Object(o.clone(), copy.clone()));
                 Value::Object(copy)
             }
             Value::Function { params, bytecode_start, captured } => {
@@ -855,23 +1115,38 @@ impl Value {
                         key,
                         Value::Function { params: Vec::new(), bytecode_start: 0, captured: copy.clone() },
                     );
-                    let vars: Vec<(String, Value)> =
-                        captured.snapshot().into_iter().map(|(k, v)| (k, v.detached_in(memo, depth + 1))).collect();
-                    for (k, v) in vars {
-                        copy.set(&k, v);
-                    }
+                    work.push(DetachJob::Captures(captured.clone(), copy.clone()));
                     copy
                 };
                 Value::Function { params: params.clone(), bytecode_start: *bytecode_start, captured: copy }
             }
-            Value::Signal { value, confidence, reason } => Value::Signal {
-                value: Box::new(value.detached_in(memo, depth + 1)),
-                confidence: *confidence,
-                reason: reason.clone(),
-            },
-            Value::TaskError(inner) => Value::TaskError(Box::new(inner.detached_in(memo, depth + 1))),
+            Value::Signal { value, confidence, reason } => {
+                if depth >= 1000 {
+                    return Value::Null;
+                }
+                Value::Signal {
+                    value: Box::new(value.detach_shell(memo, work, depth + 1)),
+                    confidence: *confidence,
+                    reason: reason.clone(),
+                }
+            }
+            Value::TaskError(inner) => {
+                if depth >= 1000 {
+                    return Value::Null;
+                }
+                Value::TaskError(Box::new(inner.detach_shell(memo, work, depth + 1)))
+            }
             Value::Set(s) => Value::Set(s.copy()),
-            Value::Cell(c) => Value::Cell(Rc::new(RefCell::new(c.borrow().detached()))),
+            Value::Cell(c) => {
+                let key = Rc::as_ptr(c) as *const u8 as usize;
+                if let Some(done) = memo.get(&key) {
+                    return done.clone();
+                }
+                let copy = Rc::new(RefCell::new(Value::Null));
+                memo.insert(key, Value::Cell(copy.clone()));
+                work.push(DetachJob::Cell(c.clone(), copy.clone()));
+                Value::Cell(copy)
+            }
             other => other.clone(),
         }
     }

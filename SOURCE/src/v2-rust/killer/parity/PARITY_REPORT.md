@@ -210,6 +210,17 @@ runs a long one.
 | Operators in one expression | 1,000 | `expression is too long` |
 | `print` / `str` of a nested or self-referencing value | 64 levels, 2M containers | printed as `[...]` |
 
+Every walk over user data is iterative or depth-limited: `==` / `!=` / `in` / `contains` (explicit
+work list; cyclic and exponentially shared values terminate), `detached()`, the GC mark and sweep,
+dropping, row comparison in `sorted()`, `json_stringify` (depth limit, catchable error), `str` /
+`print` / `{:?}` (depth guard). `tests/robustness.rs` builds 100,000-deep lists, dicts and objects
+with a loop and runs each operation on an 8 MB stack. `serve` handler errors return the generic
+body `{"error":"internal server error"}` (the real error goes to stderr through `log_error` with the
+request method and path; `opts.debug: true` adds `message`). The compiler passes that were
+superlinear (`else if` chains, multi-line literals and calls, lambda lifting, class bodies, long
+`and`/`or`/`==` and postfix chains) are linear; the operator limit now also counts those chains and
+restarts per statement inside blocks.
+
 Depth 10,000 recursion keeps working. The checks are single integer comparisons on paths that
 already allocate or push a frame, so the interpreter hot loop is unchanged.
 
@@ -225,8 +236,8 @@ that crosses a thread boundary is deep-copied with `Value::detached()`:
   `async_timeout` copy again when they read a slot that other threads can also read).
 
 `detached()` keeps sharing and cycles *inside* the copy (an array that contains itself copies to an
-array that contains its copy) and cuts nesting beyond 20,000 levels with `null`, so it terminates on
-any value. Consequence, documented behaviour: a task works on **copies**; mutating an array, dict,
+array that contains its copy) and walks the value with an explicit work list, so it terminates on
+any value and a value nested a million levels deep does not touch the native stack. Consequence, documented behaviour: a task works on **copies**; mutating an array, dict,
 object or set inside a task is invisible to the parent, and the parent's later mutations are
 invisible to the task. Use `mutex_*` cells (store plain data as text) or channels to communicate.
 Pooled spawn VMs are fully reset between tasks, and task threads get a 128 MB (reserved, not
