@@ -46,7 +46,7 @@ test "Rng is deterministic and in range" {
     assert_true(v >= 0 and v < 100)
   }
   assert_eq(new Rng(0).state, 1)
-  assert_eq(new Rng(-9).state, 9)
+  assert_eq(new Rng(-9).state, 2147483638)
   assert_ne(new Rng(1).below(1000000), new Rng(2).below(1000000))
 }
 

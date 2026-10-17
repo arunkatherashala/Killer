@@ -149,7 +149,7 @@ fn fold_const_arithmetic(instructions: &[Instruction]) -> (Vec<Instruction>, Vec
                     Instruction::Sub => Some(a - b),
                     Instruction::Mul => Some(a * b),
                     Instruction::Div if b != 0.0 => Some(a / b),
-                    Instruction::Mod if b != 0.0 => Some(a % b),
+                    Instruction::Mod if b != 0.0 => Some(crate::bigint_ops::floor_mod(a, b)),
                     Instruction::IntDiv if b != 0.0 => Some((a / b).floor()),
                     _ => None,
                 };
@@ -338,7 +338,7 @@ fn fuse_slot_patterns(instructions: &[Instruction]) -> (Vec<Instruction>, Vec<us
                             None
                         }
                     }
-                    Instruction::Mod => Some(Instruction::ConstNum(a % b)),
+                    Instruction::Mod if *b != 0.0 => Some(Instruction::ConstNum(crate::bigint_ops::floor_mod(*a, *b))),
                     Instruction::Eq => Some(Instruction::ConstBool(a == b)),
                     Instruction::Ne => Some(Instruction::ConstBool(a != b)),
                     Instruction::Lt => Some(Instruction::ConstBool(a < b)),

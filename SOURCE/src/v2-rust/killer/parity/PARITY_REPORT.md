@@ -164,8 +164,7 @@ manager, the tooling suite, HTTP server, vector store and RAG helpers, resource 
 4. The debugger (`killer_dap`) shows one stack frame (innermost scope plus globals).
 5. Closures created before the enclosing function first assigns a captured variable keep the old
    copy semantics (the sharing decision is textual, see `closure_scan.rs`).
-6. Number `%` keeps C semantics (`-7 % 3 == -1`) while BigInt uses floor semantics (`-7n % 3n == 2`);
-   `bool(0n)` is `true` although `if 0n` is falsy; floats of 2^63 or more print saturated.
+6. `bool(0n)` is `true` although `if 0n` is falsy; floats of 2^63 or more print saturated.
 7. `count_tokens` is an approximation (about 10-20 percent off GPT-style tokenizers); the real tokenizer
    needs a GGUF model.
 8. 192 source files (88,289 lines) are never compiled: wire in, archive, or delete.

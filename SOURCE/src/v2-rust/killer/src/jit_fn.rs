@@ -877,7 +877,20 @@ fn compile_group(
                     asm.b(&[0xDD, 0x44, 0x24, 0x08]); // fld qword [rsp+8] (lhs)
                     asm.b(&[0xD9, 0xF8, 0xDF, 0xE0, 0xF6, 0xC4, 0x04, 0x75, 0xF7]); // fprem loop
                     asm.b(&[0xDD, 0xD9]); // fstp st(1)
-                    asm.b(&[0xDD, 0x5C, 0x24, 0x08]); // fstp qword [rsp+8]
+                    asm.b(&[0xDD, 0x5C, 0x24, 0x08]); // fstp qword [rsp+8]   (truncated remainder r)
+                    // floor modulo: r = r + 0.0 (-0 -> +0); if r != 0 and sign(r) != sign(b): r += b
+                    asm.b(&[0xF2, 0x0F, 0x10, 0x44, 0x24, 0x08]); // movsd xmm0,[rsp+8]
+                    asm.b(&[0xF2, 0x0F, 0x10, 0x0C, 0x24]); // movsd xmm1,[rsp]  (b)
+                    asm.b(&[0x66, 0x0F, 0x57, 0xD2]); // xorpd xmm2,xmm2
+                    asm.b(&[0xF2, 0x0F, 0x58, 0xC2]); // addsd xmm0,xmm2
+                    asm.b(&[0x66, 0x0F, 0x2E, 0xC2]); // ucomisd xmm0,xmm2
+                    asm.b(&[0x74, 0x13]); // je store (zero or NaN)
+                    asm.b(&[0x66, 0x48, 0x0F, 0x7E, 0xC0]); // movq rax,xmm0
+                    asm.b(&[0x66, 0x48, 0x0F, 0x7E, 0xC9]); // movq rcx,xmm1
+                    asm.b(&[0x48, 0x31, 0xC8]); // xor rax,rcx
+                    asm.b(&[0x79, 0x04]); // jns store (same sign)
+                    asm.b(&[0xF2, 0x0F, 0x58, 0xC1]); // addsd xmm0,xmm1
+                    asm.b(&[0xF2, 0x0F, 0x11, 0x44, 0x24, 0x08]); // store: movsd [rsp+8],xmm0
                     asm.b(&[0x48, 0x83, 0xC4, 0x08]); // add rsp,8
                 }
                 Instruction::Lt | Instruction::Le | Instruction::Eq | Instruction::Ne => {
@@ -1223,11 +1236,11 @@ mod tests {
 
     #[cfg(target_arch = "x86_64")]
     #[test]
-    fn mod_matches_rust_fmod() {
+    fn mod_matches_floor_modulo() {
         let src = "fn m(a, b) {\n  return a % b\n}\nprintln(m(7, 3))\n";
-        for (a, b) in [(7.0, 3.0), (-7.0, 3.0), (7.0, -3.0), (5.5, 2.0), (1e18, 7.0), (0.3, 0.1), (3.0, f64::INFINITY), (-0.0, 5.0)] {
+        for (a, b) in [(7.0, 3.0), (-7.0, 3.0), (7.0, -3.0), (5.5, 2.0), (1e18, 7.0), (0.3, 0.1), (3.0, f64::INFINITY), (-0.0, 5.0), (-5.5, 2.0), (-7.0, -3.0), (-6.0, 3.0), (6.0, -3.0), (-3.0, f64::INFINITY), (3.0, f64::NEG_INFINITY)] {
             let got = run_nums(src, 1, &[a, b]).unwrap();
-            let want = a % b;
+            let want = crate::bigint_ops::floor_mod(a, b);
             assert!(got == want || (got.is_nan() && want.is_nan()), "{} % {} = {} want {}", a, b, got, want);
         }
         assert!(run_nums(src, 1, &[f64::INFINITY, 3.0]).unwrap().is_nan());

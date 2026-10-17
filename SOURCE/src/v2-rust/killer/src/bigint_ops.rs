@@ -6,7 +6,8 @@
 //! * `BigInt` with a non-integral (or non-finite) `Number`: the `BigInt` becomes an `f64` and the
 //!   result is a `Number`.
 //! * `/`: exact `BigInt` when the division is exact, otherwise a `Number` (float) quotient.
-//! * `%` and `idiv`/`divmod` use floor semantics (the remainder has the sign of the divisor).
+//! * `%` (and `mod`) and `idiv`/`divmod` use floor semantics (the remainder has the sign of the divisor);
+//!   `rem` is the truncated remainder (sign of the dividend, like Rust `%` or C `fmod`).
 //! * `**`: a non-negative integral exponent gives an exact `BigInt` (guarded against absurd sizes);
 //!   a negative or fractional exponent gives a `Number`.
 //! * comparisons with a `Number` are exact.
@@ -23,6 +24,8 @@ pub enum Op {
     Mul,
     Div,
     Mod,
+    /// Truncated remainder (`rem` builtin): the sign of the dividend.
+    Rem,
     Pow,
 }
 
@@ -34,6 +37,7 @@ impl Op {
             Op::Mul => "*",
             Op::Div => "/",
             Op::Mod => "%",
+            Op::Rem => "rem",
             Op::Pow => "**",
         }
     }
@@ -132,6 +136,15 @@ pub fn arith(op: Op, lhs: &Value, rhs: &Value) -> Result<Value, String> {
             let (_, r) = x.divmod(y).ok_or_else(|| "Modulo by zero".to_string())?;
             big(r)
         }
+        Op::Rem => {
+            // divmod is floor (r has the sign of y); shift to the sign of x when they differ
+            let (_, r) = x.divmod(y).ok_or_else(|| "Modulo by zero".to_string())?;
+            if r.is_zero() || x.is_negative() == r.is_negative() {
+                big(r)
+            } else {
+                big(r.sub(y))
+            }
+        }
         Op::Pow => {
             if y.is_negative() {
                 Value::Number(x.to_f64().powf(y.to_f64()))
@@ -143,13 +156,37 @@ pub fn arith(op: Op, lhs: &Value, rhs: &Value) -> Result<Value, String> {
     })
 }
 
+/// Floor modulo on floats (Python `%`): the result has the sign of the divisor, so
+/// `-7 % 3 == 2`, `7 % -3 == -2`, `-5.5 % 2 == 0.5`.
+///
+/// Built from the truncated remainder `r` (Rust `%` / C `fmod`): when `r != 0` and its sign differs
+/// from the divisor's, `r += b`. Special values follow Python: `x % inf` is `x` for `x >= 0`,
+/// `-x % inf` is `inf` (and `x % -inf` is `-inf` for `x > 0`); `inf % x` and `x % NaN` are NaN. A zero
+/// result is always `+0.0` (never `-0.0`), so it prints as `0`. The caller handles a zero divisor.
+#[inline]
+pub fn floor_mod(a: f64, b: f64) -> f64 {
+    let r = a % b + 0.0; // + 0.0 turns -0.0 into +0.0 (NaN stays NaN)
+    if r != 0.0 && (r < 0.0) != (b < 0.0) {
+        r + b
+    } else {
+        r
+    }
+}
+
+/// Truncated remainder (`rem` builtin; C `fmod`, Rust `%`): the result has the sign of the dividend.
+#[inline]
+pub fn trunc_rem(a: f64, b: f64) -> f64 {
+    a % b
+}
+
 fn float_arith(op: Op, x: f64, y: f64) -> Value {
     Value::Number(match op {
         Op::Add => x + y,
         Op::Sub => x - y,
         Op::Mul => x * y,
         Op::Div => x / y,
-        Op::Mod => x - y * (x / y).floor(),
+        Op::Mod => floor_mod(x, y),
+        Op::Rem => trunc_rem(x, y),
         Op::Pow => x.powf(y),
     })
 }
@@ -227,6 +264,24 @@ pub fn call(name: &str, args: &[Value]) -> Result<Value, String> {
             let n = n.to_i64().ok_or_else(|| "factorial(): argument too large".to_string())? as u64;
             Ok(big(BigInt::factorial(n)?))
         }
+        "mod" | "rem" => {
+            arity(args, 2, &format!("{}(a, b)", name))?;
+            let op = if name == "mod" { Op::Mod } else { Op::Rem };
+            if any_big {
+                return arith(op, &args[0], &args[1]);
+            }
+            let num = |v: &Value| match v {
+                Value::Number(n) => Ok(*n),
+                Value::Integer(i) => Ok(*i as f64),
+                Value::Bool(b) => Ok(*b as i64 as f64),
+                other => Err(format!("{}(): expected numbers, got {}", name, other.type_name())),
+            };
+            let (x, y) = (num(&args[0])?, num(&args[1])?);
+            if y == 0.0 {
+                return Err("Modulo by zero".to_string());
+            }
+            Ok(Value::Number(if op == Op::Mod { floor_mod(x, y) } else { trunc_rem(x, y) }))
+        }
         "divmod" | "idiv" => {
             arity(args, 2, &format!("{}(a, b)", name))?;
             let (a, b) = (&args[0], &args[1]);
@@ -244,7 +299,7 @@ pub fn call(name: &str, args: &[Value]) -> Result<Value, String> {
                 return Ok(if name == "idiv" {
                     Value::Number(q)
                 } else {
-                    Value::from(vec![Value::Number(q), Value::Number(x - y * q)])
+                    Value::from(vec![Value::Number(q), Value::Number(floor_mod(x, y))])
                 });
             }
             let (x, y) = (to_big(a, name)?, to_big(b, name)?);

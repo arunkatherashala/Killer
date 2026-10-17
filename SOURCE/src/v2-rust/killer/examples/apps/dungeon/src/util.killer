@@ -64,8 +64,8 @@ DIRECTIONS = {
 # Park-Miller "minstd" generator: exact in double arithmetic (the product stays below 2^53).
 class Rng {
   fn init(seed) {
-    # abs() keeps the result portable: `%` of a negative number differs between languages
-    this.state = abs(seed) % 2147483647
+    # floor modulo (same as Python): a negative seed still lands in 0..2147483646
+    this.state = seed % 2147483647
     if this.state == 0 {
       this.state = 1
     }

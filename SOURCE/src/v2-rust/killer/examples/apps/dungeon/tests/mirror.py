@@ -7,7 +7,7 @@ import sys
 
 class Rng:
     def __init__(self, seed):
-        self.state = abs(seed) % 2147483647
+        self.state = seed % 2147483647
         if self.state == 0:
             self.state = 1
 
