@@ -2086,6 +2086,43 @@ fn paren_depth_net(line: &str) -> i32 {
     depth
 }
 
+/// Running `(` / `[` depth of text that grows by appending (see [`paren_depth_net`]): each appended
+/// chunk is scanned once, so merging thousands of continuation lines stays linear.
+#[derive(Default)]
+struct BracketDepth {
+    paren: i32,
+    square: i32,
+    in_string: bool,
+    skip_next: bool,
+}
+
+impl BracketDepth {
+    fn feed(&mut self, text: &str) {
+        for ch in text.chars() {
+            if self.skip_next {
+                self.skip_next = false;
+                continue;
+            }
+            if self.in_string {
+                if ch == '\\' {
+                    self.skip_next = true;
+                } else if ch == '"' {
+                    self.in_string = false;
+                }
+                continue;
+            }
+            match ch {
+                '"' => self.in_string = true,
+                '(' => self.paren += 1,
+                ')' => self.paren -= 1,
+                '[' => self.square += 1,
+                ']' => self.square -= 1,
+                _ => {}
+            }
+        }
+    }
+}
+
 /// Merge continuation lines until `(` `)` and `[` `]` are both balanced (function signatures
 /// split across lines, including generic `[T]` before `(`).
 fn merge_multiline_signature_header(
@@ -2094,9 +2131,10 @@ fn merge_multiline_signature_header(
 ) -> Result<(String, usize), VmError> {
     let mut merged = lines[start].1.trim().to_string();
     let mut i = start;
+    let mut depth = BracketDepth::default();
+    depth.feed(&merged);
     loop {
-        let pd = paren_depth_net(&merged);
-        let bd = square_bracket_depth(&merged);
+        let (pd, bd) = (depth.paren, depth.square);
         if pd == 0 && bd == 0 {
             return Ok((merged, i));
         }
@@ -2121,6 +2159,8 @@ fn merge_multiline_signature_header(
         }
         merged.push(' ');
         merged.push_str(lines[i].1.trim());
+        depth.feed(" ");
+        depth.feed(lines[i].1.trim());
     }
 }
 
@@ -2176,9 +2216,10 @@ fn merge_multiline_control_header_from(
     let line_no = lines[start].0;
     let mut merged = first.trim().to_string();
     let mut i = start;
+    let mut depth = BracketDepth::default();
+    depth.feed(&merged);
     loop {
-        let pd = paren_depth_net(&merged);
-        let bd = square_bracket_depth(&merged);
+        let (pd, bd) = (depth.paren, depth.square);
         if pd < 0 {
             return Err(VmError::parse_error_simple(format!(
                 "Line {line_no}: unmatched `)` in condition",
@@ -2203,6 +2244,8 @@ fn merge_multiline_control_header_from(
                 i += 1;
                 merged.push(' ');
                 merged.push_str(lines[i].1.trim());
+                depth.feed(" ");
+                depth.feed(lines[i].1.trim());
                 continue;
             }
             let found = lines[i + 1].1.trim();
@@ -2219,6 +2262,8 @@ fn merge_multiline_control_header_from(
         }
         merged.push(' ');
         merged.push_str(lines[i].1.trim());
+        depth.feed(" ");
+        depth.feed(lines[i].1.trim());
     }
 }
 
@@ -7795,8 +7840,11 @@ fn brace_opens_literal(before: &str) -> bool {
 fn join_multiline_literal(lines: &[&str], line_index: usize, line: &str, open: usize) -> Option<(String, usize)> {
     let mut text = line.to_string();
     let mut j = line_index;
+    // resumable scan: each appended line is scanned once (re-scanning the whole text per line made a
+    // 10,000-line literal quadratic)
+    let mut scan = CurlyScan { depth: 0, in_string: false, pos: open };
     loop {
-        if consume_balanced_curly_line(&text, open).is_some() {
+        if scan.advance(&text) {
             return Some((text, j));
         }
         j += 1;
@@ -7806,6 +7854,50 @@ fn join_multiline_literal(lines: &[&str], line_index: usize, line: &str, open: u
         }
         text.push(' ');
         text.push_str(strip_trailing_line_comment(next));
+    }
+}
+
+/// Incremental form of [`consume_balanced_curly_line`]: `advance` continues where the last call
+/// stopped and reports whether the braces opened at the start have balanced.
+struct CurlyScan {
+    depth: i32,
+    in_string: bool,
+    pos: usize,
+}
+
+impl CurlyScan {
+    fn advance(&mut self, s: &str) -> bool {
+        let bytes = s.as_bytes();
+        let mut i = self.pos;
+        while i < bytes.len() {
+            let c = bytes[i];
+            if self.in_string {
+                if c == b'\\' && i + 1 < bytes.len() {
+                    i += 2;
+                    continue;
+                }
+                if c == b'"' {
+                    self.in_string = false;
+                }
+                i += 1;
+                continue;
+            }
+            i += 1;
+            match c {
+                b'"' => self.in_string = true,
+                b'{' => self.depth += 1,
+                b'}' => {
+                    self.depth -= 1;
+                    if self.depth == 0 {
+                        self.pos = i;
+                        return true;
+                    }
+                }
+                _ => {}
+            }
+        }
+        self.pos = i;
+        false
     }
 }
 
