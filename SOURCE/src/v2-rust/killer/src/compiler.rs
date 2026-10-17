@@ -6045,15 +6045,16 @@ fn compile_class_definition(
 
     // Inside the class body: `super.` becomes `__super_<Parent>.` and `static fn` loses its
     // prefix (the line numbers are remembered in `static_lines`).
-    let class_end = skip_braced_block(lines, *cursor - 1);
+    // Only the class body is copied (a copy of the whole program per class made thousands of
+    // classes quadratic); `cursor` is relative to that copy until the end of the function.
+    let outer_cursor = cursor;
+    let body_start = *outer_cursor;
+    let class_end = skip_braced_block(lines, body_start - 1).min(lines.len());
     let mut static_lines: std::collections::HashSet<usize> = std::collections::HashSet::new();
-    let patched: Vec<(usize, String)> = lines
+    let patched: Vec<(usize, String)> = lines[body_start..class_end]
         .iter()
         .enumerate()
         .map(|(idx, (n, l))| {
-            if idx < *cursor || idx >= class_end {
-                return (*n, l.clone());
-            }
             let mut text = l.clone();
             let trimmed = text.trim_start();
             if let Some(rest) = trimmed.strip_prefix("static ") {
@@ -6071,6 +6072,8 @@ fn compile_class_definition(
         })
         .collect();
     let lines: &[(usize, String)] = &patched;
+    let mut local_cursor = 0usize;
+    let cursor = &mut local_cursor;
 
     // Emit a Jump to skip over all method bytecode during linear execution
     let skip_jump_index = state.instructions.len();
@@ -6180,6 +6183,7 @@ fn compile_class_definition(
 
     // Store class metadata for Program
     state.class_defs.insert(class_name, (parent, method_info));
+    *outer_cursor = body_start + *cursor;
 
     Ok(())
 }

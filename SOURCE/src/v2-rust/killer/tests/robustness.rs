@@ -729,3 +729,39 @@ fn very_long_else_if_chains_and_function_bodies_compile_linearly() {
     g.push_str(&format!("xs = [{}]\nassert(len(xs) == 20000)\nassert(g4999(1) == 5000)\n", (0..20000).map(|i| i.to_string()).collect::<Vec<_>>().join(", ")));
     expect_ok_within("5000 functions + 20000-element literal", &g, 60);
 }
+
+#[test]
+fn endless_postfix_chains_and_many_classes_and_lambdas_are_fast() {
+    for chain in [".a".repeat(30000), "[0]".repeat(30000), ".upper()".repeat(30000)] {
+        let t = std::time::Instant::now();
+        expect_err(&format!("d = [1]\nx = d{chain}\n"), "expression is too long");
+        assert!(t.elapsed() < Duration::from_secs(30), "{:?}", t.elapsed());
+    }
+    // a realistic chain still works
+    expect_ok("s = \"ab\"\nx = s.upper().lower().upper().lower().upper()\nassert(x == \"AB\")\n");
+    let mut classes = String::new();
+    for i in 0..3000 {
+        classes.push_str(&format!("class C{i} {{\n  fn init() {{\n    this.a = {i}\n  }}\n}}\n"));
+    }
+    classes.push_str("o = new C2999()\nassert(o.a == 2999)\n");
+    expect_ok_within("3000 classes", &classes, 60);
+    let mut lambdas = String::new();
+    for i in 0..4000 {
+        lambdas.push_str(&format!("f{i} = fn(a) {{ return a + {i} }}\n"));
+    }
+    lambdas.push_str("assert(f3999(1) == 4000)\nassert(f0(1) == 1)\n");
+    expect_ok_within("4000 lambdas", &lambdas, 60);
+    // a literal spread over 20000 lines, and a call with 20000 argument lines
+    let mut lit = String::from("x = [\n");
+    for i in 0..20000 {
+        lit.push_str(&format!("  {i},\n"));
+    }
+    lit.push_str("  0\n]\nassert(len(x) == 20001)\n");
+    expect_ok_within("20000-line array literal", &lit, 60);
+    let mut call = String::from("fn f(*a) {\n  return len(a)\n}\nn = f(\n");
+    for i in 0..20000 {
+        call.push_str(&format!("  {i},\n"));
+    }
+    call.push_str("  0\n)\nassert(n == 20001)\n");
+    expect_ok_within("20000-line call", &call, 60);
+}

@@ -80,6 +80,20 @@ pub fn check_source(source: &str) -> Result<(), VmError> {
                 }
             }
         }
+        // postfix chains (`a.b.c`, `x[0][1]`, `f(1)(2)`) are split one link at a time as well
+        let postfix_link = match c {
+            b'.' => prev.is_ascii_alphabetic() || matches!(prev, b')' | b']' | b'_'),
+            b'[' | b'(' => matches!(prev, b')' | b']'),
+            _ => false,
+        };
+        if postfix_link {
+            if let Some(last) = counts.last_mut() {
+                *last += 1;
+                if *last > MAX_OPERATORS {
+                    return Err(too_long(line));
+                }
+            }
+        }
         match c {
             b'(' | b'[' | b'{' => {
                 depth += 1;
@@ -166,6 +180,16 @@ mod tests {
 ", vec!["a"; 3000].join(join))).unwrap_err().to_string();
             assert!(e.contains("expression is too long"), "{join}: {e}");
         }
+        // postfix chains count too
+        assert!(check_source(&format!("x = d{}
+", ".a".repeat(3000))).is_err());
+        assert!(check_source(&format!("x = d{}
+", "[0]".repeat(3000))).is_err());
+        assert!(check_source(&format!("x = d{}
+", ".a".repeat(100))).is_ok());
+        assert!(check_source("x = 1.5 + 2.25
+y = a.b(c)[0].d
+").is_ok());
         // across lines, a continuation does not restart the count
         let chain: String = (0..3000).map(|_| "  a +
 ").collect();
