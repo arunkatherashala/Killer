@@ -360,7 +360,25 @@ unsafe fn unix_mmap(size: usize) -> Option<*mut u8> {
         -1,
         0,
     );
-    if ptr == libc::MAP_FAILED { None } else { Some(ptr as *mut u8) }
+    if ptr != libc::MAP_FAILED {
+        return Some(ptr as *mut u8);
+    }
+    // macOS: a hardened/signed process may only map RWX pages with MAP_JIT.
+    #[cfg(target_os = "macos")]
+    {
+        let ptr = libc::mmap(
+            std::ptr::null_mut(),
+            size,
+            libc::PROT_READ | libc::PROT_WRITE | libc::PROT_EXEC,
+            libc::MAP_PRIVATE | libc::MAP_ANON | libc::MAP_JIT,
+            -1,
+            0,
+        );
+        if ptr != libc::MAP_FAILED {
+            return Some(ptr as *mut u8);
+        }
+    }
+    None
 }
 
 #[cfg(not(target_os = "windows"))]

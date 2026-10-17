@@ -20,10 +20,11 @@ sys.path.insert(0, HERE)
 from probes import P  # noqa: E402
 
 CRATE = os.path.dirname(HERE)
-BIN = os.path.join(CRATE, "target", "release", "killer_super.exe")
-if not os.path.exists(BIN):
-    BIN = os.path.join(CRATE, "target", "release", "killer_super")
-BIN = os.environ.get("KILLER_BIN", BIN)  # e.g. target/debug/killer_super.exe for quick checks
+EXE = ".exe" if os.name == "nt" else ""  # killer_super.exe on Windows, killer_super elsewhere
+BIN = os.path.join(CRATE, "target", "release", "killer_super" + EXE)
+BIN = os.environ.get("KILLER_BIN") or BIN  # e.g. target/debug/killer_super for quick checks
+if os.path.exists(BIN):
+    BIN = os.path.abspath(BIN)  # probes run in a temp dir, so a relative path would break
 
 
 def norm(s):

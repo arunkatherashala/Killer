@@ -11471,7 +11471,7 @@ The fact that you shared this means something. What's underneath it  what are 
         let size = match &args[0] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("mmap_alloc: size must be numeric".to_string())) };
         if size > 1_073_741_824 { return Err(VmError::runtime_error("mmap_alloc: max 1GB".to_string())); }
         let ptr = unsafe {
-            libc_mmap(std::ptr::null_mut(), size, 0x3 /* PROT_READ|PROT_WRITE */, 0x22 /* MAP_PRIVATE|MAP_ANONYMOUS */, -1, 0)
+            libc_mmap(std::ptr::null_mut(), size, libc::PROT_READ | libc::PROT_WRITE, libc::MAP_PRIVATE | libc::MAP_ANON /* 0x22 on Linux, 0x1002 on macOS */, -1, 0)
         };
         if ptr == usize::MAX as *mut u8 { return Err(VmError::runtime_error("mmap_alloc: mmap failed".to_string())); }
         Ok(Value::Pointer(ptr as usize))
@@ -11543,7 +11543,7 @@ The fact that you shared this means something. What's underneath it  what are 
         let ptr = match &args[0] { Value::Pointer(p) => *p, _ => return Err(VmError::runtime_error("mmap_exec: first arg must be pointer".to_string())) };
         let size = match &args[1] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("mmap_exec: size must be numeric".to_string())) };
         // PROT_READ|PROT_WRITE|PROT_EXEC = 7
-        let ok = unsafe { libc_mprotect(ptr as *mut u8, size, 7) };
+        let ok = unsafe { libc_mprotect(ptr as *mut u8, size, libc::PROT_READ | libc::PROT_WRITE | libc::PROT_EXEC) };
         if ok != 0 { return Err(VmError::runtime_error("mmap_exec: mprotect failed".to_string())); }
         Ok(Value::Null)
     }

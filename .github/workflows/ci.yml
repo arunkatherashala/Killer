@@ -78,6 +78,30 @@ jobs:
         working-directory: SOURCE/src/v2-rust/killer
         run: python docs/check_links.py
 
+  cross-check:
+    name: Type-check ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - aarch64-unknown-linux-gnu
+          - x86_64-unknown-linux-musl
+          - x86_64-apple-darwin
+          - aarch64-apple-darwin
+          - x86_64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "SOURCE/src/v2-rust/killer"
+      - name: cargo check (type-check only, no linking)
+        working-directory: SOURCE/src/v2-rust/killer
+        run: cargo check --lib --bins --tests --target ${{ matrix.target }}
+
   bench-smoke:
     name: Benchmark smoke (no gating)
     runs-on: ubuntu-latest
