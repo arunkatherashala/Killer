@@ -44,19 +44,37 @@ struct Route {
     handler: Value,
 }
 
-// Safety: the handler values stored here are private detached copies that are only touched while
-// the ROUTES mutex is held (registered under the lock, copied out under the lock), so no `Rc` is
-// ever used by two threads at once.
+// Safety: the handler values in `PUBLISHED` are private detached copies that are only touched while
+// the mutex is held (stored under the lock, copied out under the lock), so no `Rc` is ever used by
+// two threads at once.
 #[allow(unsafe_code)]
 unsafe impl Send for Route {}
 
-/// Routes are process-wide so a server started in an `async_spawn` task sees the routes the
-/// program registered on the main thread (they used to be thread-local, so such a server failed
-/// with "register routes first" while its client waited).
-static ROUTES: std::sync::Mutex<Vec<Route>> = std::sync::Mutex::new(Vec::new());
+thread_local! {
+    /// The routes this thread's server uses; handlers are shared with the registering code, so a
+    /// handler that updates a captured list or dict keeps its state between requests.
+    static ROUTES: std::cell::RefCell<Vec<Route>> = std::cell::RefCell::new(Vec::new());
+}
 
-fn routes() -> std::sync::MutexGuard<'static, Vec<Route>> {
-    ROUTES.lock().unwrap_or_else(|p| p.into_inner())
+/// Detached copies of every route registered by any thread. A server started in an `async_spawn`
+/// task has no routes of its own; it adopts these (a task works on copies of its data) instead of
+/// failing with "register routes first" while its client waits.
+static PUBLISHED: std::sync::Mutex<Vec<Route>> = std::sync::Mutex::new(Vec::new());
+
+fn published() -> std::sync::MutexGuard<'static, Vec<Route>> {
+    PUBLISHED.lock().unwrap_or_else(|p| p.into_inner())
+}
+
+/// On a thread that registered no routes, take over the published ones.
+fn adopt_published_routes() {
+    ROUTES.with(|r| {
+        let mut local = r.borrow_mut();
+        if local.is_empty() {
+            for route in published().iter() {
+                local.push(Route { method: route.method.clone(), segments: route.segments.clone(), handler: route.handler.detached() });
+            }
+        }
+    });
 }
 
 /// Set by `server_stop()`; process-wide so a task on another thread can stop the server too.
@@ -244,15 +262,17 @@ pub fn match_path(pattern: &[String], path: &[String]) -> Option<Vec<(String, St
 
 fn find_route(method: &str, path: &str) -> Option<(Value, Vec<(String, String)>)> {
     let segs = split_path(path);
-    for route in routes().iter() {
-        if route.method != "*" && route.method != method {
-            continue;
+    ROUTES.with(|r| {
+        for route in r.borrow().iter() {
+            if route.method != "*" && route.method != method {
+                continue;
+            }
+            if let Some(p) = match_path(&route.segments, &segs) {
+                return Some((route.handler.clone(), p));
+            }
         }
-        if let Some(p) = match_path(&route.segments, &segs) {
-            return Some((route.handler.detached(), p));
-        }
-    }
-    None
+        None
+    })
 }
 
 // --- responses ----------------------------------------------------------------
@@ -444,7 +464,8 @@ fn serve_loop(vm: &mut VirtualMachine, args: &[Value], program: &Program, once: 
     let request_ms = (opt_num(opts.as_ref(), "request_timeout").unwrap_or(60.0).clamp(0.0, 86400.0) * 1000.0) as u64;
     let debug = matches!(opts.as_ref().and_then(|o| o.get("debug")), Some(Value::Bool(true)));
     let stream_limit = Duration::from_secs_f64(opt_num(opts.as_ref(), "stream_timeout").unwrap_or(300.0).clamp(0.1, 86400.0));
-    if handler.is_none() && routes().is_empty() {
+    adopt_published_routes();
+    if handler.is_none() && ROUTES.with(|r| r.borrow().is_empty()) {
         return err(format!("{}(): pass a handler function or register routes with route() first", who));
     }
     let listener = TcpListener::bind((host.as_str(), port)).map_err(|e| VmError::runtime_error(format!("{}: cannot bind {}:{}: {}", who, host, port, e)))?;
@@ -526,15 +547,17 @@ pub fn call(name: &str, args: &[Value]) -> Option<Result<Value, VmError>> {
                     if !p.starts_with('/') {
                         return err("route(): path must start with /");
                     }
-                    let route = Route { method: m.to_ascii_uppercase(), segments: split_path(p), handler: f.detached() };
-                    routes().push(route);
+                    let (method, segments) = (m.to_ascii_uppercase(), split_path(p));
+                    published().push(Route { method: method.clone(), segments: segments.clone(), handler: f.detached() });
+                    ROUTES.with(|r| r.borrow_mut().push(Route { method, segments, handler: f.clone() }));
                     Ok(Value::Null)
                 }
                 _ => err("route(method, path, fn) expects two strings and a function"),
             }
         })()),
         "routes_clear" => Some({
-            routes().clear();
+            ROUTES.with(|r| r.borrow_mut().clear());
+            published().clear();
             Ok(Value::Null)
         }),
         "server_stop" => Some({

@@ -2298,14 +2298,40 @@ impl BuiltinFunctions {
             (Value::Str(x), Value::Str(y)) => x.cmp(y),
             (Value::Bool(x), Value::Bool(y)) => x.cmp(y),
             (Value::Array(x), Value::Array(y)) => {
-                let (xs, ys) = (x.to_vec(), y.to_vec());
-                for (p, q) in xs.iter().zip(ys.iter()) {
-                    let o = Self::cmp_sortable(p, q);
-                    if o != Ordering::Equal {
-                        return o;
+                // explicit stack of (left, right, next index): nested or cyclic rows cannot overflow
+                // the native stack, and a comparison that runs for ten million steps (a cycle) is a tie
+                let mut stack: Vec<(Vec<Value>, Vec<Value>, usize)> = vec![(x.to_vec(), y.to_vec(), 0)];
+                let mut steps = 0usize;
+                while let Some((xs, ys, idx)) = stack.last_mut() {
+                    if *idx >= xs.len().min(ys.len()) {
+                        let o = xs.len().cmp(&ys.len());
+                        if o != Ordering::Equal {
+                            return o;
+                        }
+                        stack.pop();
+                        continue;
+                    }
+                    let (p, q) = (xs[*idx].clone(), ys[*idx].clone());
+                    *idx += 1;
+                    steps += 1;
+                    if steps > 10_000_000 {
+                        return Ordering::Equal;
+                    }
+                    match (&p, &q) {
+                        (Value::Array(pa), Value::Array(qa)) => {
+                            if pa.rc_ptr() != qa.rc_ptr() {
+                                stack.push((pa.to_vec(), qa.to_vec(), 0));
+                            }
+                        }
+                        _ => {
+                            let o = Self::cmp_sortable(&p, &q);
+                            if o != Ordering::Equal {
+                                return o;
+                            }
+                        }
                     }
                 }
-                xs.len().cmp(&ys.len())
+                Ordering::Equal
             }
             _ => Ordering::Equal,
         }

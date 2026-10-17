@@ -765,3 +765,81 @@ fn endless_postfix_chains_and_many_classes_and_lambdas_are_fast() {
     call.push_str("  0\n)\nassert(n == 20001)\n");
     expect_ok_within("20000-line call", &call, 60);
 }
+
+// ------------------------------------------------------------------------------------------------
+// Deeply nested user data: every walk over a value must be iterative or depth-limited
+// ------------------------------------------------------------------------------------------------
+
+/// Run `src` on a thread with a deliberately small native stack (8 MB, like an ordinary main
+/// thread); a recursive walk over a 100,000-deep value overflows it and kills the whole process.
+fn run_small_stack(src: &str) -> Outcome {
+    let (tx, rx) = channel::<Outcome>();
+    let src = src.to_string();
+    std::thread::Builder::new()
+        .name("small-stack".into())
+        .stack_size(8 * 1024 * 1024)
+        .spawn(move || {
+            let _ = tx.send(execute(&src, None));
+        })
+        .unwrap();
+    rx.recv_timeout(Duration::from_secs(300)).unwrap_or_else(|_| panic!("hang on a deep structure"))
+}
+
+fn deep_build(kind: &str, depth: usize) -> String {
+    match kind {
+        "list" => format!("a = []\nb = []\ni = 0\nwhile i < {depth} {{\n  a = [a]\n  b = [b]\n  i = i + 1\n}}\n"),
+        "dict" => format!("a = {{}}\nb = {{}}\ni = 0\nwhile i < {depth} {{\n  a = {{\"k\": a}}\n  b = {{\"k\": b}}\n  i = i + 1\n}}\n"),
+        _ => format!(
+            "class N {{\n  fn init(next) {{\n    this.next = next\n  }}\n}}\na = null\nb = null\ni = 0\nwhile i < {depth} {{\n  a = new N(a)\n  b = new N(b)\n  i = i + 1\n}}\n"
+        ),
+    }
+}
+
+#[test]
+fn deep_values_never_overflow_the_native_stack() {
+    // every operation either works or raises a catchable Killer error; the process must survive
+    let ops = [
+        "r = a == b\nassert(r)",
+        "r = a != b\nassert(not r)",
+        "r = [a] == [b]\nassert(r)",
+        "r = a in [b]\nassert(r)",
+        "r = contains([b], a)\nassert(r)",
+        "s = str(a)\nassert(len(s) > 0)",
+        "s = \"\" + str(b)\nassert(len(s) > 0)",
+        "println(\"\")",
+        "try { s = json_stringify(a) } catch e { assert(contains(str(e), \"nested too deeply\")) }",
+        "h = spawn_thread(a)",
+        "s = set()\nset_add(s, 1)",
+        "x = sorted([[a], [b]])",
+        "x = copy([a, b])",
+        "x = [a, b, a, b]\nx = null",
+        // enough allocation to run the collector with the deep values alive
+        "k = 0\nwhile k < 120000 {\n  t = [k]\n  k = k + 1\n}",
+        "a = null\nb = null",
+    ];
+    for kind in ["list", "dict", "obj"] {
+        let mut src = deep_build(kind, 100_000);
+        for op in ops {
+            if kind != "list" && op.contains("sorted") {
+                continue;
+            }
+            if kind == "obj" && op.contains("copy(") {
+                continue;
+            }
+            src.push_str(&format!("try {{\n{op}\n}} catch err {{\n  println(\"caught\", str(err)[0:60])\n}}\n"));
+        }
+        src.push_str("println(\"survived\")\n");
+        match run_small_stack(&src) {
+            Outcome::Ok => {}
+            other => panic!("{kind}: {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn cyclic_values_compare_without_hanging() {
+    expect_ok("a = []\npush(a, a)\nb = []\npush(b, b)\nassert(a == b)\nassert(a == a)\nx = [1]\npush(x, a)\ny = [1]\npush(y, b)\nassert(x == y)\n");
+    expect_ok("d = {}\nd[\"self\"] = d\ne = {}\ne[\"self\"] = e\nassert(d == e)\nassert(sorted([a_row(), a_row()]) != null)\nfn a_row() {\n  r = [1]\n  push(r, r)\n  return r\n}\n");
+    // exponentially shared structure: compared in linear time
+    expect_ok("x = []\ny = []\ni = 0\nwhile i < 60 {\n  x = [x, x]\n  y = [y, y]\n  i = i + 1\n}\nassert(x == y)\n");
+}
