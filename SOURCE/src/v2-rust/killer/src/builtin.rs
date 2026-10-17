@@ -1529,7 +1529,12 @@ impl BuiltinFunctions {
         }
         match &args[0] {
             Value::Number(n) => Ok(Value::Number(n.trunc())),
+            Value::Bool(b) => Ok(Value::Number(if *b { 1.0 } else { 0.0 })),
+            Value::BigInt(_) => Ok(args[0].clone()),
             Value::Str(s) => {
+                if let Some(big) = crate::bigint_ops::big_from_digits(s) {
+                    return Ok(big);
+                }
                 match s.parse::<f64>() {
                     Ok(n) => Ok(Value::Number(n.trunc())),
                     Err(_) => Err(VmError::runtime_error(
@@ -1819,7 +1824,7 @@ impl BuiltinFunctions {
             (Value::Array(arr), val) => {
                 let mut found_idx = -1.0;
                 for (i, item) in arr.iter_cloned().enumerate() {
-                    if &item == val {
+                    if item.loose_eq(val) {
                         found_idx = i as f64;
                         break;
                     }

@@ -231,6 +231,10 @@ Mixed arithmetic rules:
   keeps C semantics: `-7 % 3` is `-1`.
 - Truthiness is one rule everywhere (`if`, `while`, `not`, `&&`, `||`, ternary, `bool()`, `filter`, `all`,
   `any`): `0n` is falsy like `0`, as are `null`, `false`, `""`, `[]` and `{}`.
+- `int(b)` of a bigint returns the bigint unchanged (like Python); `int("123...")` with more than 15
+  digits and `json_parse` of such an integer also give a bigint. `float`, `str`, `abs`, `min`, `max`,
+  `sum`, `round`, `sorted`, `range` (small values), `chr` (small values) accept bigints; `5n in [5]` and
+  `[5].index_of(5n)` are true/0; a bigint dict key is its decimal string.
 - A bigint equals and orders exactly against a number (`2n ** 64 == 18446744073709551616n`).
 - `**` refuses absurd result sizes with an error; division by zero is a catchable error.
 

@@ -115,7 +115,7 @@ impl SharedArray {
     }
 
     pub fn contains(&self, x: &Value) -> bool {
-        self.0.borrow().contains(x)
+        self.0.borrow().iter().any(|e| e.loose_eq(x))
     }
 
     pub fn join_strings(&self, sep: &str) -> String {
@@ -748,6 +748,16 @@ impl Display for Value {
 }
 
 impl Value {
+    /// `==` as the language sees it: structural equality, except that a BigInt equals a
+    /// number (or integer) of the same exact value (`5n == 5`, `5n in [5]`).
+    pub fn loose_eq(&self, other: &Value) -> bool {
+        match (self, other) {
+            (Value::BigInt(_), Value::Number(_) | Value::Integer(_))
+            | (Value::Number(_) | Value::Integer(_), Value::BigInt(_)) => crate::bigint_ops::equals(self, other),
+            _ => self == other,
+        }
+    }
+
     /// THE truthiness rule of the language (if/while/not/&&/||/ternary/bool()/filter/all/any).
     /// Every other truthiness site delegates here.
     pub fn truthy(&self) -> bool {

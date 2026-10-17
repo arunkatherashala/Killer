@@ -3324,12 +3324,18 @@ impl VirtualMachine {
                             }
                             match &args[0] {
                                 Value::Number(n) => Value::Number(n.trunc()),
+                                Value::Bool(b) => Value::Number(if *b { 1.0 } else { 0.0 }),
+                                Value::BigInt(_) => args[0].clone(),
                                 Value::Str(s) => {
+                                    if let Some(big) = crate::bigint_ops::big_from_digits(s) {
+                                        big
+                                    } else {
                                     match s.parse::<f64>() {
                                         Ok(n) => Value::Number(n.trunc()),
                                         Err(_) => return Err(VmError::runtime_error(
                                             format!("int() cannot convert '{}' to number", s),
                                         )),
+                                    }
                                     }
                                 }
                                 _ => return Err(VmError::runtime_error(
