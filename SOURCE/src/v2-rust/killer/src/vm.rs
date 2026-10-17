@@ -1237,6 +1237,20 @@ impl VirtualMachine {
                             continue;
                         }
                         _ => {
+                            // `for x in obj`: `__iter__` / `__next__` / `__len__` + `__getitem__` turn the
+                            // object into a list or generator once; the instruction then runs again
+                            let obj = match self.locals_stack.last().and_then(|f| f.get(iter_i)) {
+                                Some(o @ Value::Object(_)) => Some(o.clone()),
+                                _ => None,
+                            };
+                            if let Some(o) = obj {
+                                if let Some(r) = self.object_dunder_call("__iter_obj", &[o], program)? {
+                                    if let Some(frame) = self.locals_stack.last_mut() {
+                                        frame[iter_i] = r;
+                                    }
+                                    continue;
+                                }
+                            }
                             // `for k in dict` walks the keys and `for x in set` the members (as Python does)
                             let as_list = match self.locals_stack.last().and_then(|f| f.get(iter_i)) {
                                 Some(Value::Dict(d)) => Some(d.keys().into_iter().map(Value::Str).collect::<Vec<_>>()),
@@ -7054,8 +7068,11 @@ impl VirtualMachine {
                     return Ok(true);
                 }
                 // an object operand and no method to run: say which one is missing
-                if let Some(obj) = [&lhs, &rhs].into_iter().find(|v| matches!(v, Value::Object(_))) {
-                    let hint = if op == "sub" && matches!(lhs, Value::Number(n) if n == 0.0) {
+                // (only for `%` and unary minus: `+` etc. keep their own fallbacks, e.g. string concatenation)
+                let is_neg = op == "sub" && matches!(lhs, Value::Number(n) if n == 0.0) && matches!(rhs, Value::Object(_));
+                let culprit = if op == "mod" || is_neg { [&lhs, &rhs].into_iter().find(|v| matches!(v, Value::Object(_))) } else { None };
+                if let Some(obj) = culprit {
+                    let hint = if is_neg {
                         "__neg__ (unary minus)".to_string()
                     } else {
                         format!("{direct} (or {reflected})")
