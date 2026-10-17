@@ -126,10 +126,33 @@ h = async_spawn(clients, base)
 n = serve(port, handler)
 r = async_await(h)
 println(n)
-println(r[0]["status"], contains(r[0]["body"], "kaboom"))
+println(r[0]["status"], contains(r[0]["body"], "kaboom"), r[0]["body"])
 println(r[1]["body"], r[2]["body"])
 "#);
-    assert_eq!(run(&src), "3\n500 true\nfine bye");
+    let out = run(&src);
+    assert!(out.contains("3\n500 false {\"error\":\"internal server error\"}\nfine bye"), "{out}");
+    // the real error is logged with the request line
+    assert!(out.contains("kaboom") && out.contains("/boom") && out.contains("GET"), "{out}");
+}
+
+#[test]
+fn handler_error_message_is_shown_only_with_debug_option() {
+    let src = format!("{}{}", client_prelude(), r#"
+port = free_port()
+base = "http://127.0.0.1:" + str(port)
+fn handler(req) {
+  throw "secret-internal-detail"
+}
+fn clients(base) {
+  sleep_ms(300)
+  return http_request({"url": base + "/x", "timeout": 10})
+}
+h = async_spawn(clients, base)
+serve(port, handler, {"max_requests": 1, "debug": true})
+r = async_await(h)
+println(r["status"], contains(r["body"], "secret-internal-detail"))
+"#);
+    assert!(run(&src).contains("500 true"));
 }
 
 #[test]
@@ -373,4 +396,62 @@ println(http_post_json(base + "/ask", "{{}}", 20))
     let _ = server.kill();
     let _ = server.wait();
     assert_eq!(out, "accounts#0\ntrue\n2\ntrue\nshipping#0\n{\"error\":\"missing question\"}");
+}
+
+/// Run a script with a watchdog: kills it and fails if it has not finished within `secs`.
+fn run_watchdog(src: &str, secs: u64) -> String {
+    let path = std::env::temp_dir().join(format!("killer_na_wd_{}_{}.killer", std::process::id(), NEXT.fetch_add(1, Ordering::SeqCst)));
+    std::fs::write(&path, src).unwrap();
+    let mut child = Command::new(env!("CARGO_BIN_EXE_killer_super"))
+        .arg(&path)
+        .arg("--run")
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let start = std::time::Instant::now();
+    loop {
+        if child.try_wait().unwrap().is_some() {
+            break;
+        }
+        if start.elapsed().as_secs() > secs {
+            let _ = child.kill();
+            let _ = std::fs::remove_file(&path);
+            panic!("script hung (watchdog {} s):\n{}", secs, src);
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    let out = child.wait_with_output().unwrap();
+    let _ = std::fs::remove_file(&path);
+    format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr)).replace("\r\n", "\n").trim().to_string()
+}
+
+#[test]
+fn server_started_in_a_spawned_task_without_arguments_sees_routes_and_globals() {
+    // the server runs in the task (no arguments, port from a global); routes were registered on
+    // the main thread; the main thread is the client
+    let out = run_watchdog(r#"
+port = free_port()
+route("GET", "/x", fn(req) { return "routed" })
+h = async_spawn(fn() { return serve_once(port) })
+r = http_request({"url": "http://127.0.0.1:" + str(port) + "/x", "timeout": 10, "retries": 6})
+println(r["status"], r["body"])
+println(async_await(h))
+"#, 90);
+    assert_eq!(out, "200 routed\n1");
+    // and the other direction: client task with no arguments, closure over a global port
+    let out = run_watchdog(r#"
+port = free_port()
+fn handler(req) {
+  return "hi"
+}
+fn client() {
+  return http_request({"url": "http://127.0.0.1:" + str(port) + "/x", "timeout": 10, "retries": 6})
+}
+h = async_spawn(client)
+serve(port, handler, {"max_requests": 1})
+r = async_await(h)
+println(r["status"], r["body"])
+"#, 90);
+    assert_eq!(out, "200 hi");
 }

@@ -26,7 +26,6 @@
 //! so it also works from a task on another thread (e.g. a watchdog started with `async_spawn`), and
 //! it interrupts reads and streams within about 200 ms.
 
-use std::cell::RefCell;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::time::{Duration, Instant};
@@ -45,8 +44,19 @@ struct Route {
     handler: Value,
 }
 
-thread_local! {
-    static ROUTES: RefCell<Vec<Route>> = RefCell::new(Vec::new());
+// Safety: the handler values stored here are private detached copies that are only touched while
+// the ROUTES mutex is held (registered under the lock, copied out under the lock), so no `Rc` is
+// ever used by two threads at once.
+#[allow(unsafe_code)]
+unsafe impl Send for Route {}
+
+/// Routes are process-wide so a server started in an `async_spawn` task sees the routes the
+/// program registered on the main thread (they used to be thread-local, so such a server failed
+/// with "register routes first" while its client waited).
+static ROUTES: std::sync::Mutex<Vec<Route>> = std::sync::Mutex::new(Vec::new());
+
+fn routes() -> std::sync::MutexGuard<'static, Vec<Route>> {
+    ROUTES.lock().unwrap_or_else(|p| p.into_inner())
 }
 
 /// Set by `server_stop()`; process-wide so a task on another thread can stop the server too.
@@ -234,17 +244,15 @@ pub fn match_path(pattern: &[String], path: &[String]) -> Option<Vec<(String, St
 
 fn find_route(method: &str, path: &str) -> Option<(Value, Vec<(String, String)>)> {
     let segs = split_path(path);
-    ROUTES.with(|r| {
-        for route in r.borrow().iter() {
-            if route.method != "*" && route.method != method {
-                continue;
-            }
-            if let Some(p) = match_path(&route.segments, &segs) {
-                return Some((route.handler.clone(), p));
-            }
+    for route in routes().iter() {
+        if route.method != "*" && route.method != method {
+            continue;
         }
-        None
-    })
+        if let Some(p) = match_path(&route.segments, &segs) {
+            return Some((route.handler.detached(), p));
+        }
+    }
+    None
 }
 
 // --- responses ----------------------------------------------------------------
@@ -284,6 +292,27 @@ struct Resp {
 
 fn text_resp(status: u16, ctype: &str, body: String) -> Resp {
     Resp { status, headers: vec![("Content-Type".to_string(), ctype.to_string())], body }
+}
+
+/// A handler failure: the real error goes to the log (stderr, level error) with the request line;
+/// the client only sees a generic JSON body unless `opts.debug` is true.
+fn internal_error(req: &Req, e: &VmError, debug: bool) -> Resp {
+    let fields = SharedDict::from_pairs(vec![
+        ("method".to_string(), Value::Str(req.method.clone())),
+        ("path".to_string(), Value::Str(req.path.clone())),
+        ("error".to_string(), Value::Str(format!("{}", e))),
+    ]);
+    let _ = crate::log_builtins::call("log_error", &[Value::Str("handler error".to_string()), Value::Dict(fields)]);
+    let body = if debug {
+        let d = SharedDict::from_pairs(vec![
+            ("error".to_string(), Value::Str("internal server error".to_string())),
+            ("message".to_string(), Value::Str(format!("{}", e))),
+        ]);
+        crate::json_lang::stringify(&Value::Dict(d), 0).unwrap_or_else(|_| "{\"error\":\"internal server error\"}".to_string())
+    } else {
+        "{\"error\":\"internal server error\"}".to_string()
+    };
+    text_resp(500, "application/json", body)
 }
 
 fn display(v: &Value) -> String {
@@ -413,8 +442,9 @@ fn serve_loop(vm: &mut VirtualMachine, args: &[Value], program: &Program, once: 
     let read_limit = Duration::from_secs_f64(opt_num(opts.as_ref(), "read_timeout").unwrap_or(10.0).clamp(0.05, 3600.0));
     // wall-clock deadline for one handler call (checked on loop back-edges); 0 turns it off
     let request_ms = (opt_num(opts.as_ref(), "request_timeout").unwrap_or(60.0).clamp(0.0, 86400.0) * 1000.0) as u64;
+    let debug = matches!(opts.as_ref().and_then(|o| o.get("debug")), Some(Value::Bool(true)));
     let stream_limit = Duration::from_secs_f64(opt_num(opts.as_ref(), "stream_timeout").unwrap_or(300.0).clamp(0.1, 86400.0));
-    if handler.is_none() && ROUTES.with(|r| r.borrow().is_empty()) {
+    if handler.is_none() && routes().is_empty() {
         return err(format!("{}(): pass a handler function or register routes with route() first", who));
     }
     let listener = TcpListener::bind((host.as_str(), port)).map_err(|e| VmError::runtime_error(format!("{}: cannot bind {}:{}: {}", who, host, port, e)))?;
@@ -457,9 +487,9 @@ fn serve_loop(vm: &mut VirtualMachine, args: &[Value], program: &Program, once: 
                             crate::http_sse::write_stream(&mut stream, vm, program, &reply, stream_limit);
                             continue;
                         }
-                        Ok(v) => value_to_resp(&v).unwrap_or_else(|e| text_resp(500, "text/plain; charset=utf-8", format!("Internal Server Error: {}", e))),
+                        Ok(v) => value_to_resp(&v).unwrap_or_else(|e| internal_error(&req, &e, debug)),
                         Err(VmError::SecurityError { ref message, .. }) if message.contains("time limit") => text_resp(503, "text/plain; charset=utf-8", format!("Service Unavailable: the handler exceeded the {} s request deadline", request_ms as f64 / 1000.0)),
-                        Err(e) => text_resp(500, "text/plain; charset=utf-8", format!("Internal Server Error: {}", e)),
+                        Err(e) => internal_error(&req, &e, debug),
                     },
                 };
                 write_resp(&mut stream, req.method == "HEAD", &resp);
@@ -496,16 +526,15 @@ pub fn call(name: &str, args: &[Value]) -> Option<Result<Value, VmError>> {
                     if !p.starts_with('/') {
                         return err("route(): path must start with /");
                     }
-                    ROUTES.with(|r| {
-                        r.borrow_mut().push(Route { method: m.to_ascii_uppercase(), segments: split_path(p), handler: f.clone() })
-                    });
+                    let route = Route { method: m.to_ascii_uppercase(), segments: split_path(p), handler: f.detached() };
+                    routes().push(route);
                     Ok(Value::Null)
                 }
                 _ => err("route(method, path, fn) expects two strings and a function"),
             }
         })()),
         "routes_clear" => Some({
-            ROUTES.with(|r| r.borrow_mut().clear());
+            routes().clear();
             Ok(Value::Null)
         }),
         "server_stop" => Some({
