@@ -154,7 +154,7 @@ println("big" if x > 2 else "small")
 # expect: big
 ```
 
-Assignment forms: `=`, `+=`, `-=`, `*=`, `/=`, `x++`, `x--`, and multiple assignment
+Assignment forms: `=`, `+=`, `-=`, `*=`, `/=`, `%=`, `x++`, `x--`, and multiple assignment
 `a, b = 1, 2` (so `a, b = b, a` swaps).
 
 ```killer
@@ -186,6 +186,51 @@ try {
   println("caught")
 }
 # expect: caught
+```
+
+### Remainder: `%`, `rem`, `mod`, `divmod`
+
+`%` is **floor modulo**, like Python, for numbers and bigints alike: the result has the sign of the
+divisor, and `a == floor(a / b) * b + a % b`.
+
+| Expression | Result |
+|------------|--------|
+| `-7 % 3` | `2` |
+| `7 % -3` | `-2` |
+| `-7 % -3` | `-1` |
+| `5.5 % 2` | `1.5` |
+| `-5.5 % 2` | `0.5` |
+
+- `rem(a, b)` is the C-style truncated remainder (the sign of the dividend, like Rust `%` or C `fmod`):
+  `rem(-7, 3)` is `-1`, `rem(7, -3)` is `1`. It accepts numbers and bigints.
+- `mod(a, b)` is a function form of `%` (identical results). A function you define yourself with the name
+  `mod` or `rem` takes precedence over the builtin.
+- `divmod(a, b)` returns `[floor(a / b), a % b]`.
+- A zero divisor is a catchable `Modulo by zero` error for `%`, `%=`, `rem` and `mod`.
+- Floats follow Python: `5 % inf` is `5`, `-5 % inf` is `inf`, `inf % 3` is `NaN`. A zero result is always
+  `0` (never `-0`).
+
+```killer
+println(-7 % 3)
+println(7 % -3)
+println(-7 % -3)
+println(-5.5 % 2)
+println(rem(-7, 3))
+println(rem(7, -3))
+println(mod(-7, 3))
+println(divmod(-7, 3))
+y = -10
+y %= 7
+println(y)
+# expect: 2
+# expect: -2
+# expect: -1
+# expect: 0.5
+# expect: -1
+# expect: 1
+# expect: 2
+# expect: [-3, 2]
+# expect: 4
 ```
 
 ## Big integers
@@ -227,8 +272,8 @@ Mixed arithmetic rules:
 - `+ - * **` with a bigint and an integral number give an exact bigint.
 - A bigint combined with a non-integral float gives a float (precision is lost).
 - `a / b` is an exact bigint when `b` divides `a`, otherwise a float.
-- `%`, `idiv` and `divmod` use **floor** semantics (like Python): `-7n % 3n` is `2`. Plain Number `%`
-  keeps C semantics: `-7 % 3` is `-1`.
+- `%`, `idiv` and `divmod` use **floor** semantics (like Python): `-7n % 3n` is `2`, and a plain Number
+  `-7 % 3` is `2` too. `rem(a, b)` gives the truncated remainder.
 - A bigint equals and orders exactly against a number (`2n ** 64 == 18446744073709551616n`).
 - `**` refuses absurd result sizes with an error; division by zero is a catchable error.
 
@@ -245,7 +290,7 @@ try {
   println("caught")
 }
 # expect: 2
-# expect: -1
+# expect: 2
 # expect: 3
 # expect: 1
 # expect: true
@@ -1487,7 +1532,7 @@ Observed, not hypothetical:
 - **Plain integers saturate**: `2 ** 63` and `9223372036854775807 + 1` give `9223372036854775807`, and a
   float of 2^63 or more prints saturated too; use `n` literals / `big()` for exact values. `int(5n)` is not
   supported, and `bool(0n)` returns `true` (an `if` on a zero bigint is falsy; compare with `== 0` instead).
-- **Number `%` keeps C semantics** (`-7 % 3` is `-1`) while bigints use floor semantics (`-7n % 3n` is `2`).
+- `%` is floor modulo everywhere (`-7 % 3` is `2`); use `rem(a, b)` for the C-style remainder (`-1`).
 - **Closures created before the enclosing function first assigns a captured variable** keep the old copy
   semantics instead of sharing it.
 - `//` is a comment, so there is no integer-division operator (use `floor(a / b)` or `idiv`).

@@ -4,7 +4,15 @@ All notable changes to `killer-native` are documented here.
 
 ## [Unreleased]
 
+### Changed
+- `%` is now **floor modulo** (Python) for plain numbers too: the result has the sign of the divisor, so
+  `-7 % 3` is `2` (was `-1`), `7 % -3` is `-2`, `-5.5 % 2` is `0.5`. BigInt `%` already behaved this way.
+  Applies to the VM, constant folding, the native function JIT, `%=`, and `divmod`'s remainder. Division by
+  zero errors are unchanged; `x % inf` and `inf % x` follow Python.
+
 ### Added
+- `rem(a, b)`: the C-style truncated remainder (sign of the dividend, like Rust `%` / C `fmod`) for numbers
+  and bigints; `mod(a, b)`: function form of `%`. A script-defined function of the same name wins.
 - `LICENSE` file (MIT)
 - `README.md` — user-facing documentation with quickstart, features, and binary reference
 - `.gitignore` to exclude build artifacts from version control

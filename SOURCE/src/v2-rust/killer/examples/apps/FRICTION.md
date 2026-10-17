@@ -75,9 +75,9 @@ entry). Entries are numbered in the order I hit them.
     sequence-consuming builtins are drained first (`src/iter_builtins.rs`).
 17. **`%` disagrees with itself**: `-7 % 3` is `-1` for plain numbers (C remainder) but `2` for
     bigints (`-7n % 3n`, Python floor semantics), and `floor(-7 / 2)` is `-4`. A seeded random
-    generator mirrored in Python gave different streams for negative seeds. NOT changed (the JIT,
-    constant folding and fused slot instructions all implement the C remainder, and the choice is a
-    language decision); the dungeon app takes `abs(seed)`. Listed in the report as a rough edge.
+    generator mirrored in Python gave different streams for negative seeds. FIXED later: `%` is now
+    floor modulo (Python) everywhere (VM, constant folding, function JIT), `rem(a, b)` is the C-style
+    remainder and `mod(a, b)` an alias of `%`; the dungeon app no longer needs `abs(seed)`.
 18. **A `return` inside `try` left its handler registered**, so a later error in a *different*
     function at the same or deeper call depth was routed into the stale `catch` block and its
     value came back as the result of an unrelated call. Found when the todo service answered an
