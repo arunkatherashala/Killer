@@ -1240,7 +1240,7 @@ mod tests {
         let src = "fn m(a, b) {\n  return a % b\n}\nprintln(m(7, 3))\n";
         for (a, b) in [(7.0, 3.0), (-7.0, 3.0), (7.0, -3.0), (5.5, 2.0), (1e18, 7.0), (0.3, 0.1), (3.0, f64::INFINITY), (-0.0, 5.0), (-5.5, 2.0), (-7.0, -3.0), (-6.0, 3.0), (6.0, -3.0), (-3.0, f64::INFINITY), (3.0, f64::NEG_INFINITY)] {
             let got = run_nums(src, 1, &[a, b]).unwrap();
-            let want = a % b;
+            let want = crate::bigint_ops::floor_mod(a, b);
             assert!(got == want || (got.is_nan() && want.is_nan()), "{} % {} = {} want {}", a, b, got, want);
         }
         assert!(run_nums(src, 1, &[f64::INFINITY, 3.0]).unwrap().is_nan());
