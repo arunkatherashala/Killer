@@ -1660,7 +1660,7 @@ fn compile_expr(
                     BinaryOp::Sub => Some(l - r),
                     BinaryOp::Mul => Some(l * r),
                     BinaryOp::Div if *r != 0.0 => Some(l / r),
-                    BinaryOp::Mod if *r != 0.0 => Some(l % r),
+                    BinaryOp::Mod if *r != 0.0 => Some(crate::bigint_ops::floor_mod(*l, *r)),
                     BinaryOp::Pow => Some(l.powf(*r)),
                     BinaryOp::IntDiv if *r != 0.0 => Some((l / r).floor()),
                     _ => None,
@@ -6790,7 +6790,7 @@ fn patch_pending_calls(state: &mut CompilerState) -> Result<(), VmError> {
         "ord", "chr", "pad_left", "pad_right", "repeat", "strip", "lstrip", "rstrip", "startsWith", "endsWith",
         "base64_encode", "base64_decode", "hmac_sha256", "float", "bool", "log", "log2", "log10", "exp", "cbrt",
         "trunc", "sign", "atan2", "hypot", "asin", "acos", "atan", "sinh", "cosh", "tanh", "degrees", "radians",
-        "__iter_pairs", "big", "factorial", "divmod", "idiv", "powmod", "isqrt", "bit_length", // arbitrary-precision integers
+        "__iter_pairs", "big", "factorial", "divmod", "idiv", "powmod", "isqrt", "bit_length", "mod", "rem", // arbitrary-precision integers
         "gcd", "lcm", "mean", "median", "variance", "stdev", "pvariance", "pstdev", "env", "args", "exit",
         "sleep", "assert", "set", "delete", "insert", "gc_stats", "jit_stats", "instanceof", "dict_from_pairs",
         "mutex_new", "mutex_get", "mutex_set", "mutex_add", "mutex_free",
@@ -7027,7 +7027,7 @@ fn patch_pending_calls(state: &mut CompilerState) -> Result<(), VmError> {
         // the bigint builtins use common names: a function of the same name in the script wins
         let user_override = matches!(
             pending.function_name.as_str(),
-            "big" | "factorial" | "divmod" | "idiv" | "powmod" | "isqrt" | "bit_length"
+            "big" | "factorial" | "divmod" | "idiv" | "powmod" | "isqrt" | "bit_length" | "mod" | "rem"
         ) && state.functions.contains_key(&pending.function_name);
         if (generator_builtin || pending.function_name == "__dl" || BUILTINS.contains(&pending.function_name.as_str()) || crate::net_ai::is_builtin(&pending.function_name)) && !user_override {
             // -- Nova Galaxy: emit native opcodes instead of CallBuiltin ------
@@ -7707,7 +7707,7 @@ fn try_ui_assign_sugar(raw_line: &str) -> Option<String> {
 /// not a builtin that can be used as a value.
 fn builtin_value_arity(name: &str) -> Option<usize> {
     const BINARY: &[&str] = &[
-        "pow", "push", "contains", "index_of", "join", "split", "concat", "gcd", "lcm", "divmod", "idiv", "atan2",
+        "pow", "push", "contains", "index_of", "join", "split", "concat", "gcd", "lcm", "divmod", "idiv", "mod", "rem", "atan2",
         "hypot", "min", "max", "starts_with", "ends_with", "repeat", "get", "powmod_2",
     ];
     const EXTRA: &[&str] = &[

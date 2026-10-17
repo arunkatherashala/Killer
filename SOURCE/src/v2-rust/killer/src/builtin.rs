@@ -450,7 +450,7 @@ impl BuiltinFunctions {
                 Some(other) => Ok(other.clone()),
                 None => Err(VmError::runtime_error("__iter_pairs() expects 1 argument".to_string())),
             },
-            "big" | "factorial" | "divmod" | "idiv" | "powmod" | "isqrt" | "bit_length" => {
+            "big" | "factorial" | "divmod" | "idiv" | "powmod" | "isqrt" | "bit_length" | "mod" | "rem" => {
                 crate::bigint_ops::call(name, args).map_err(VmError::runtime_error)
             }
             "gcd" if args.iter().any(|a| matches!(a, Value::BigInt(_))) => {

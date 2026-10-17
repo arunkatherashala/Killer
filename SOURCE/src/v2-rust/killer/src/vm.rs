@@ -1889,7 +1889,7 @@ impl VirtualMachine {
                         }
                     }
                     let lhs = self.pop_number()?;
-                    self.stack.push(Value::Number(lhs % rhs));
+                    self.stack.push(Value::Number(crate::bigint_ops::floor_mod(lhs, rhs)));
                 }
                 Instruction::And => {
                     let rhs = self.pop_value()?;
@@ -7252,7 +7252,7 @@ impl VirtualMachine {
                         Instruction::Mod => {
                             let rhs = self.pop_number()?;
                             let lhs = self.pop_number()?;
-                            self.stack.push(Value::Number(lhs % rhs));
+                            self.stack.push(Value::Number(crate::bigint_ops::floor_mod(lhs, rhs)));
                         }
                         Instruction::Eq => {
                             let rhs = self.pop_value()?;
