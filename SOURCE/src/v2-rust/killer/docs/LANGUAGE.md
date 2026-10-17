@@ -647,6 +647,8 @@ Killer follows Python's rule. A plain assignment `x = ...` creates a variable fo
 scope for it:
 
 ```killer
+ready = true
+items = ["a", "b", "c"]
 if ready {
   mode = "fast"
 } else {
@@ -658,6 +660,8 @@ for item in items {
   last = item
 }
 println(last)          // the loop variable and `last` keep their final values
+# expect: fast
+# expect: c
 ```
 
 - `let x = ...` is block-scoped: it shadows an outer `x` and is gone after the closing brace.
