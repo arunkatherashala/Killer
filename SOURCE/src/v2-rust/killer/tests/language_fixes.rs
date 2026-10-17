@@ -139,3 +139,146 @@ true
 done"
     );
 }
+
+#[test]
+fn dunder_methods_len_getitem_setitem_contains_iter_call_pow_neg_mod_bool() {
+    let src = r#"class Bag {
+  fn init() {
+    this.items = [10, 20, 30]
+  }
+  fn __len__() { return len(this.items) }
+  fn __getitem__(i) { return this.items[i] }
+  fn __setitem__(i, v) { this.items[i] = v }
+  fn __contains__(x) { return x in this.items }
+  fn __iter__() { return this.items }
+  fn __call__(k) { return k * len(this.items) }
+  fn __pow__(e) { return len(this.items) ** e }
+  fn __neg__() { return "negated" }
+  fn __mod__(m) { return len(this.items) % m }
+  fn __bool__() { return len(this.items) > 3 }
+}
+b = new Bag()
+b[1] = 25
+println(len(b), b[1], 25 in b, 99 in b)
+for x in b { println(x) }
+println(b(2), b ** 2, -b, b % 2, bool(b))
+if not b { println("small bag") }
+"#;
+    assert_eq!(run(src), "3 25 true false
+10
+25
+30
+6 9 negated 1 false
+small bag");
+}
+
+#[test]
+fn dunder_iteration_call_and_truthiness_protocols() {
+    let src = r#"class L {
+  fn init() { this.xs = [4, 5, 6] }
+  fn __iter__() { return this.xs }
+}
+for x in new L() { println(x) }
+class Cnt {
+  fn init(n) {
+    this.i = 0
+    this.n = n
+  }
+  fn __iter__() { return this }
+  fn __next__() {
+    if this.i >= this.n {
+      throw "StopIteration"
+    }
+    this.i = this.i + 1
+    return this.i * 10
+  }
+}
+for v in new Cnt(3) { println(v) }
+println([v + 1 for v in new Cnt(2)])
+fn gen3() {
+  yield 1
+  yield 2
+}
+class G {
+  fn __iter__() { return gen3() }
+}
+for g in new G() { println(g) }
+class Seq {
+  fn __len__() { return 3 }
+  fn __getitem__(i) { return i * i }
+}
+for s in new Seq() { println(s) }
+class Adder {
+  fn init(k) { this.k = k }
+  fn __call__(x) { return x + this.k }
+}
+add5 = new Adder(5)
+println(add5(1))
+println(map([1, 2], add5))
+class Plain {
+  fn init() { this.a = 1 }
+}
+p = new Plain()
+p.a = 3
+println(p.a)
+class Emp {
+  fn __len__() { return 0 }
+}
+e = new Emp()
+if e { println("t") } else { println("empty falsy") }
+println(7 in new Bag2())
+class Bag2 {
+  fn __contains__(x) { return x == 7 }
+}
+"#;
+    assert_eq!(run(src), "4
+5
+6
+10
+20
+30
+[11, 21]
+1
+2
+0
+1
+4
+6
+[6, 7]
+3
+empty falsy
+true");
+}
+
+#[test]
+fn objects_without_the_dunder_method_give_clear_errors() {
+    let cases = [
+        ("println(len(new P()))", "does not define __len__"),
+        ("println(new P()[1])", "does not define __getitem__"),
+        ("q = new P()
+q[1] = 2", "does not define __setitem__"),
+        ("println(1 in new P())", "does not define __contains__"),
+        ("for z in new P() { println(z) }", "define __iter__"),
+        ("println(new P()(1))", "does not define __call__"),
+        ("println(new P() ** 2)", "does not define __pow__"),
+        ("println(-new P())", "does not define __neg__"),
+        ("println(new P() % 2)", "does not define __mod__"),
+    ];
+    for (body, want) in cases {
+        let out = run(&format!("class P {{
+  fn init() {{ this.a = 1 }}
+}}
+{}
+", body));
+        assert!(out.contains(want) && out.contains("class P"), "{body}: {out}");
+    }
+    // plain field assignment and reads are untouched
+    assert_eq!(run("class P {
+  fn init() { this.a = 1 }
+}
+p = new P()
+p.a = 3
+p[\"a\"] = 4
+println(p.a, p[\"a\"])
+"), "4 4");
+}

@@ -907,6 +907,55 @@ println(new V(0).bump().bump().x)
 # expect: 2
 ```
 
+More dunder methods make objects behave like built-in values:
+
+| Method | Used by |
+|---|---|
+| `__len__()` | `len(obj)` (also the truthiness fallback) |
+| `__getitem__(i)` / `__setitem__(i, v)` | `obj[i]`, `obj[i] = v` for non-string keys; a string key reads or sets a field (a missing field on read goes to `__getitem__`) |
+| `__contains__(x)` | `x in obj`, `x not in obj` |
+| `__iter__()` | `for x in obj`, list comprehensions: returns a list, a generator, or an object with `__next__` |
+| `__next__()` | the iterator protocol: return the next value, `throw "StopIteration"` when done |
+| `__call__(...)` | `obj(args)`, and `map(xs, obj)` |
+| `__bool__()` | `if obj`, `not obj`, `&&`, `||`, `bool(obj)`; else `__len__` decides; else an object is truthy |
+| `__pow__(o)`, `__rpow__(o)` | `obj ** o`, `o ** obj` |
+| `__neg__()`, `__mod__(o)`, `__str__()` | `-obj`, `obj % o`, `str(obj)` / `println(obj)` (same as `toString`) |
+
+A class with only `__len__` and `__getitem__` is iterable too (the sequence protocol). The `__next__`
+protocol is drained eagerly when the loop starts (an endless iterator fails after 10 million items; use a
+generator for lazy sequences). Using an operation on an object whose class lacks the method is an error
+that names the class and the missing method.
+
+```killer
+class Bag {
+  fn init() {
+    this.items = [10, 20, 30]
+  }
+  fn __len__() { return len(this.items) }
+  fn __getitem__(i) { return this.items[i] }
+  fn __setitem__(i, v) { this.items[i] = v }
+  fn __contains__(x) { return x in this.items }
+  fn __iter__() { return this.items }
+  fn __call__(k) { return k * len(this.items) }
+  fn __pow__(e) { return len(this.items) ** e }
+  fn __neg__() { return "negated" }
+  fn __mod__(m) { return len(this.items) % m }
+  fn __bool__() { return len(this.items) > 3 }
+}
+b = new Bag()
+b[1] = 25
+println(len(b), b[1], 25 in b, 99 in b)
+for x in b { println(x) }
+println(b(2), b ** 2, -b, b % 2, bool(b))
+if not b { println("small bag") }
+# expect: 3 25 true false
+# expect: 10
+# expect: 25
+# expect: 30
+# expect: 6 9 negated 1 false
+# expect: small bag
+```
+
 ## Errors
 
 `throw` any value; `try { } catch e { }` binds it; `finally` runs on **every** exit of its `try`: normal

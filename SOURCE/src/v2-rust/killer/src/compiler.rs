@@ -2988,8 +2988,12 @@ fn compile_for_each_line_statement(
     let idx_slot = iter_slot.saturating_add(1);
     context.next_slot = idx_slot.saturating_add(1);
 
-    // Evaluate the iterable once and store it
+    // Evaluate the iterable once and store it. An object is turned into something iterable by the
+    // VM (`__iter__`, `__next__`, or `__len__` + `__getitem__`); `range(...)` is never an object.
     compile_expr_str(iter_expr, line_no, state, context)?;
+    if !iter_expr.starts_with("range(") {
+        state.instructions.push(Instruction::CallBuiltin("__iter_obj".to_string(), 1));
+    }
     state.instructions.push(Instruction::StoreSlot(iter_slot));
 
     // idx = 0
@@ -4579,6 +4583,9 @@ fn compile_list_comprehension(
             format!("__lcE_{}_{}", state.instructions.len(), level)
         };
         compile_expr_str(&clause.iterable, line_no, state, &scope)?;
+        if !clause.iterable.trim_start().starts_with("range(") {
+            state.instructions.push(Instruction::CallBuiltin("__iter_obj".to_string(), 1));
+        }
         state.instructions.push(Instruction::StoreSlot(iter_slot));
         state.instructions.push(Instruction::ConstNum(0.0));
         state.instructions.push(Instruction::StoreSlot(idx_slot));
@@ -6786,7 +6793,7 @@ const BUILTINS: &[&str] = &[
     "ord", "chr", "pad_left", "pad_right", "repeat", "strip", "lstrip", "rstrip", "startsWith", "endsWith",
     "base64_encode", "base64_decode", "hmac_sha256", "float", "bool", "log", "log2", "log10", "exp", "cbrt",
     "trunc", "sign", "atan2", "hypot", "asin", "acos", "atan", "sinh", "cosh", "tanh", "degrees", "radians",
-    "__iter_pairs", "big", "factorial", "divmod", "idiv", "powmod", "isqrt", "bit_length", // arbitrary-precision integers
+    "__iter_pairs", "__iter_obj", "big", "factorial", "divmod", "idiv", "powmod", "isqrt", "bit_length", // arbitrary-precision integers
     "gcd", "lcm", "mean", "median", "variance", "stdev", "pvariance", "pstdev", "env", "args", "exit",
     "sleep", "assert", "set", "delete", "insert", "gc_stats", "jit_stats", "instanceof", "dict_from_pairs",
     "mutex_new", "mutex_get", "mutex_set", "mutex_add", "mutex_free",

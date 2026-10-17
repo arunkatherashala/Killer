@@ -435,6 +435,8 @@ impl BuiltinFunctions {
             "sqrt" => Self::sqrt(args),
             "pow" => Self::pow(args),
             // `for k, v in d`: a dict becomes a list of [key, value] pairs, everything else is returned as is
+            // for-loop hook: objects are converted by the VM (`__iter__`); everything else is unchanged
+            "__iter_obj" => Ok(args.first().cloned().unwrap_or(Value::Null)),
             "__iter_pairs" => match args.first() {
                 Some(Value::Dict(d)) => Ok(Value::from(
                     d.iter().map(|(k, v)| Value::from(vec![Value::Str(k), v])).collect::<Vec<_>>(),

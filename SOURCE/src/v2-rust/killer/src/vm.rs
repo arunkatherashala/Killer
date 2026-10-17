@@ -1060,7 +1060,15 @@ impl VirtualMachine {
                     if matches!(program.instructions.get(self.ip + 1), Some(Instruction::IndexRead)) {
                         let found = match self.stack.last() {
                             Some(Value::Dict(d)) => Some(d.get(value).unwrap_or(Value::Null)),
-                            Some(Value::Object(o)) => Some(o.get_field(value).unwrap_or(Value::Null)),
+                            Some(Value::Object(o)) => {
+                                // `obj.name` and `obj["name"]` read a field; a missing one goes to
+                                // __getitem__ when the class has it
+                                match o.get_field(value) {
+                                    Some(v) => Some(v),
+                                    None if self.find_method_in_class(&o.class_name().clone(), "__getitem__", program).is_some() => None,
+                                    None => Some(Value::Null),
+                                }
+                            }
                             _ => None,
                         };
                         if let Some(v) = found {
@@ -1899,8 +1907,8 @@ impl VirtualMachine {
                         let (a, b) = (self.as_trit(&lhs), self.as_trit(&rhs));
                         self.stack.push(Value::Trit(a.min(b)));
                     } else {
-                        self.stack
-                            .push(Value::Bool(self.is_truthy(&lhs) && self.is_truthy(&rhs)));
+                        let r = self.truthy_obj(&lhs, program)? && self.truthy_obj(&rhs, program)?;
+                        self.stack.push(Value::Bool(r));
                     }
                 }
                 Instruction::Or => {
@@ -1910,13 +1918,13 @@ impl VirtualMachine {
                         let (a, b) = (self.as_trit(&lhs), self.as_trit(&rhs));
                         self.stack.push(Value::Trit(a.max(b)));
                     } else {
-                        self.stack
-                            .push(Value::Bool(self.is_truthy(&lhs) || self.is_truthy(&rhs)));
+                        let r = self.truthy_obj(&lhs, program)? || self.truthy_obj(&rhs, program)?;
+                        self.stack.push(Value::Bool(r));
                     }
                 }
                 Instruction::AndShort(target) => {
                     let lhs = self.stack.last().cloned().unwrap_or(Value::Null);
-                    if !matches!(lhs, Value::Trit(_)) && !self.is_truthy(&lhs) {
+                    if !matches!(lhs, Value::Trit(_)) && !self.truthy_obj(&lhs, program)? {
                         *self.stack.last_mut().unwrap() = Value::Bool(false);
                         self.ip = *target;
                         continue;
@@ -1924,7 +1932,7 @@ impl VirtualMachine {
                 }
                 Instruction::OrShort(target) => {
                     let lhs = self.stack.last().cloned().unwrap_or(Value::Null);
-                    if !matches!(lhs, Value::Trit(_)) && self.is_truthy(&lhs) {
+                    if !matches!(lhs, Value::Trit(_)) && self.truthy_obj(&lhs, program)? {
                         *self.stack.last_mut().unwrap() = Value::Bool(true);
                         self.ip = *target;
                         continue;
@@ -1943,7 +1951,8 @@ impl VirtualMachine {
                     if let Value::Trit(t) = val {
                         self.stack.push(Value::Trit(-t.clamp(-1, 1)));
                     } else {
-                        self.stack.push(Value::Bool(!self.is_truthy(&val)));
+                        let t = self.truthy_obj(&val, program)?;
+                        self.stack.push(Value::Bool(!t));
                     }
                 }
                 Instruction::Eq => {
@@ -2386,7 +2395,7 @@ impl VirtualMachine {
                     // PERF: fast path for Bool (comparison ops always return Bool)
                     let condition_false = match &condition {
                         Value::Bool(b) => !b,
-                        _ => !self.is_truthy(&condition),
+                        _ => !self.truthy_obj(&condition, program)?,
                     };
                     if condition_false {
                         self.ip = *target;
@@ -2842,6 +2851,24 @@ impl VirtualMachine {
                             self.ip = bytecode_start;
                             continue;
                         }
+                        Value::Object(_) => {
+                            // `obj(args)`: the class's __call__ method
+                            let start = self.dunder(&func_value, "__call__", program).ok_or_else(|| {
+                                VmError::runtime_error(format!(
+                                    "attempted to call an object: class {} does not define __call__",
+                                    Self::class_of(&func_value)
+                                ))
+                            })?;
+                            let mut args = Vec::with_capacity(*arg_count);
+                            for _ in 0..*arg_count {
+                                args.push(self.pop_value()?);
+                            }
+                            args.reverse();
+                            let r = self.call_method_nested(func_value.clone(), start, args, program)?;
+                            self.stack.push(r);
+                            self.ip += 1;
+                            continue;
+                        }
                         _ => {
                             return Err(VmError::runtime_error(
                                 format!("attempted to call non-function value: {}", func_value)
@@ -2952,6 +2979,24 @@ impl VirtualMachine {
                 Instruction::IndexRead => {
                     let index = self.pop_value()?;
                     let object = self.pop_value()?;
+                    let field_read = match (&object, &index) {
+                        (Value::Object(o), Value::Str(k)) => o.get_field(k).is_some(),
+                        _ => false,
+                    };
+                    if let (Value::Object(_), false) = (&object, field_read) {
+                        if let Some(start) = self.dunder(&object, "__getitem__", program) {
+                            let r = self.call_method_nested(object.clone(), start, vec![index], program)?;
+                            self.stack.push(r);
+                            self.ip += 1;
+                            continue;
+                        }
+                        if !matches!(index, Value::Str(_)) {
+                            return Err(VmError::runtime_error(format!(
+                                "obj[i] on an object: class {} does not define __getitem__",
+                                Self::class_of(&object)
+                            )));
+                        }
+                    }
                     let result = index_value(&object, &index)?;
                     self.stack.push(result);
                 }
@@ -2959,6 +3004,10 @@ impl VirtualMachine {
                     let value = self.pop_value()?;
                     let index = crate::bigint_ops::demote_index(self.pop_value()?);
                     let object = self.load_var(name)?;
+                    if self.object_setitem(&object, &index, &value, program)? {
+                        self.ip += 1;
+                        continue;
+                    }
                     // Arrays, dicts and objects are shared handles: mutating through the clone that
                     // `load_var` returned already updates the variable, so no write-back is needed.
                     // (The Math/Physics/Array singletons keep the old behaviour of binding a variable.)
@@ -3014,6 +3063,10 @@ impl VirtualMachine {
                         })?;
                         frame.get(si).cloned().unwrap_or(Value::Null)
                     };
+                    if self.object_setitem(&object, &index, &value, program)? {
+                        self.ip += 1;
+                        continue;
+                    }
                     match (object, &index) {
                         (Value::Array(arr), Value::Number(idx)) => {
                             let i = array_index(*idx, arr.len());
@@ -3079,6 +3132,14 @@ impl VirtualMachine {
                         args.push(self.pop_value()?);
                     }
                     args.reverse();
+
+                    if args.iter().any(|a| matches!(a, Value::Object(_))) {
+                        if let Some(r) = self.object_dunder_call(name, &args, program)? {
+                            self.stack.push(r);
+                            self.ip += 1;
+                            continue;
+                        }
+                    }
 
                     // generators given to list/sum/sorted/...: drain them into lists first
                     if args.iter().any(|a| matches!(a, Value::Generator(_))) && crate::iter_builtins::MATERIALIZE.contains(&name.as_str()) {
@@ -4277,6 +4338,13 @@ impl VirtualMachine {
                         self.drain_generators(std::slice::from_mut(&mut a), "builtin", program)?;
                     }
                     // `str(obj)` / `println(obj)` render objects through their toString method
+                    if *id == 0 && matches!(a, Value::Object(_)) {
+                        if let Some(r) = self.object_dunder_call("len", std::slice::from_ref(&a), program)? {
+                            self.stack.push(r);
+                            self.ip += 1;
+                            continue;
+                        }
+                    }
                     let a = if (*id == 1 || *id == 49) && matches!(a, Value::Object(_)) {
                         Value::Str(self.display_value(&a, program)?)
                     } else {
@@ -4290,6 +4358,14 @@ impl VirtualMachine {
                     let b = self.pop_value()?;
                     let a = self.pop_value()?;
                     let mut args = [a, b];
+                    if matches!(*id, 17 | 35) && args.iter().any(|v| matches!(v, Value::Object(_))) {
+                        let name = if *id == 17 { "pow" } else { "contains" };
+                        if let Some(r) = self.object_dunder_call(name, &args, program)? {
+                            self.stack.push(r);
+                            self.ip += 1;
+                            continue;
+                        }
+                    }
                     if args.iter().any(|v| matches!(v, Value::Generator(_))) && !matches!(*id, 0 | 1 | 3 | 49) {
                         self.drain_generators(&mut args, "builtin", program)?;
                     }
@@ -4300,7 +4376,7 @@ impl VirtualMachine {
                             }
                         }
                     }
-                    let result = if is_callback_builtin(*id) && args.iter().any(|v| matches!(v, Value::Function { .. })) {
+                    let result = if is_callback_builtin(*id) && args.iter().any(|v| matches!(v, Value::Function { .. } | Value::Object(_))) {
                         self.call_builtin_with_callbacks(*id, &args, program)
                     } else {
                         BuiltinFunctions::call_by_id(*id, &args)
@@ -4324,7 +4400,7 @@ impl VirtualMachine {
                             }
                         }
                     }
-                    let result = if is_callback_builtin(*id) && args.iter().any(|v| matches!(v, Value::Function { .. })) {
+                    let result = if is_callback_builtin(*id) && args.iter().any(|v| matches!(v, Value::Function { .. } | Value::Object(_))) {
                         self.call_builtin_with_callbacks(*id, &args, program)
                     } else {
                         BuiltinFunctions::call_by_id(*id, &args)
@@ -6423,6 +6499,16 @@ impl VirtualMachine {
     }
 
     fn call_value_nested_inner(&mut self, func: &Value, args: Vec<Value>, program: &Program) -> Result<Value, VmError> {
+        if let Value::Object(_) = func {
+            // a callable object (`map(xs, obj)`): its __call__ method
+            return match self.dunder(func, "__call__", program) {
+                Some(start) => self.call_method_nested(func.clone(), start, args, program),
+                None => Err(VmError::runtime_error(format!(
+                    "attempted to call an object: class {} does not define __call__",
+                    Self::class_of(func)
+                ))),
+            };
+        }
         let (params, start, captured) = match func {
             Value::Function { params, bytecode_start, captured } => (params, *bytecode_start, captured),
             Value::Str(name) => return BuiltinFunctions::call(name, &args),
@@ -6480,7 +6566,7 @@ impl VirtualMachine {
                 _ => Err(VmError::runtime_error(format!("{}() first argument must be an array", what))),
             }
         };
-        let is_fn = |v: &Value| matches!(v, Value::Function { .. });
+        let is_fn = |v: &Value| matches!(v, Value::Function { .. } | Value::Object(_));
         match id {
             42 => {
                 // map(array, f)
@@ -6967,11 +7053,160 @@ impl VirtualMachine {
                     self.stack.push(r);
                     return Ok(true);
                 }
+                // an object operand and no method to run: say which one is missing
+                if let Some(obj) = [&lhs, &rhs].into_iter().find(|v| matches!(v, Value::Object(_))) {
+                    let hint = if op == "sub" && matches!(lhs, Value::Number(n) if n == 0.0) {
+                        "__neg__ (unary minus)".to_string()
+                    } else {
+                        format!("{direct} (or {reflected})")
+                    };
+                    return Err(VmError::runtime_error(format!(
+                        "operator on an object: class {} does not define {}",
+                        Self::class_of(obj),
+                        hint
+                    )));
+                }
             }
         }
         self.stack.push(lhs);
         self.stack.push(rhs);
         Ok(false)
+    }
+
+    /// `obj[i] = v` on an object: calls `__setitem__` when the class has it (true: handled) for a non-string
+    /// key; string keys set fields. Without `__setitem__` other keys are a clear error.
+    fn object_setitem(&mut self, object: &Value, index: &Value, value: &Value, program: &Program) -> Result<bool, VmError> {
+        if let Value::Object(_) = object {
+            // `obj.name = v` and `obj["name"] = v` share the instruction: a string key always sets a field
+            if matches!(index, Value::Str(_)) {
+                return Ok(false);
+            }
+            if let Some(start) = self.dunder(object, "__setitem__", program) {
+                self.call_method_nested(object.clone(), start, vec![index.clone(), value.clone()], program)?;
+                return Ok(true);
+            }
+            {
+                return Err(VmError::runtime_error(format!(
+                    "obj[i] = v on an object: class {} does not define __setitem__",
+                    Self::class_of(object)
+                )));
+            }
+        }
+        Ok(false)
+    }
+
+    /// Start of the method `name` on the class of object `v` (None for non-objects / no such method).
+    fn dunder(&self, v: &Value, name: &str, program: &Program) -> Option<usize> {
+        match v {
+            Value::Object(o) => self.find_method_in_class(&o.class_name().clone(), name, program).map(|(s, _)| s),
+            _ => None,
+        }
+    }
+
+    fn class_of(v: &Value) -> String {
+        match v {
+            Value::Object(o) => o.class_name().clone(),
+            other => other.type_name().to_string(),
+        }
+    }
+
+    /// Truthiness that honours `__bool__` (then `__len__`) on objects; everything else is
+    /// [`Value::truthy`].
+    fn truthy_obj(&mut self, v: &Value, program: &Program) -> Result<bool, VmError> {
+        if let Value::Object(_) = v {
+            for hook in ["__bool__", "__len__"] {
+                if let Some(start) = self.dunder(v, hook, program) {
+                    let r = self.call_method_nested(v.clone(), start, Vec::new(), program)?;
+                    return Ok(r.truthy());
+                }
+            }
+        }
+        Ok(v.truthy())
+    }
+
+    /// Builtins that mean something else on an object whose class defines the matching dunder
+    /// method: `len` (`__len__`), `bool` (`__bool__`), `pow`/`**` (`__pow__`, `__rpow__`),
+    /// `x in obj` (`__contains__`) and the for-loop hook `__iter_obj` (`__iter__` / `__next__`, or
+    /// `__len__` + `__getitem__`). `Ok(None)`: not an object case, run the builtin normally.
+    fn object_dunder_call(&mut self, name: &str, args: &[Value], program: &Program) -> Result<Option<Value>, VmError> {
+        let missing = |what: &str, v: &Value, why: &str| {
+            VmError::runtime_error(format!("{}: class {} does not define {}", why, Self::class_of(v), what))
+        };
+        match (name, args) {
+            ("len" | "length", [o @ Value::Object(_)]) => match self.dunder(o, "__len__", program) {
+                Some(s) => self.call_method_nested(o.clone(), s, Vec::new(), program).map(Some),
+                None => Err(missing("__len__", o, "len() of an object")),
+            },
+            ("bool" | "Boolean", [o @ Value::Object(_)]) => Ok(Some(Value::Bool(self.truthy_obj(o, program)?))),
+            ("pow", [a, b]) if matches!(a, Value::Object(_)) || matches!(b, Value::Object(_)) => {
+                if let Some(s) = self.dunder(a, "__pow__", program) {
+                    return self.call_method_nested(a.clone(), s, vec![b.clone()], program).map(Some);
+                }
+                if !matches!(a, Value::Object(_)) {
+                    if let Some(s) = self.dunder(b, "__rpow__", program) {
+                        return self.call_method_nested(b.clone(), s, vec![a.clone()], program).map(Some);
+                    }
+                }
+                let culprit = if matches!(a, Value::Object(_)) { a } else { b };
+                Err(missing("__pow__ (or __rpow__)", culprit, "`**` on an object"))
+            }
+            ("contains", [o @ Value::Object(_), x]) => match self.dunder(o, "__contains__", program) {
+                Some(s) => {
+                    let r = self.call_method_nested(o.clone(), s, vec![x.clone()], program)?;
+                    Ok(Some(Value::Bool(r.truthy())))
+                }
+                None => Err(missing("__contains__", o, "`in` on an object")),
+            },
+            ("__iter_obj", [o @ Value::Object(_)]) => {
+                let mut cur = o.clone();
+                if let Some(s) = self.dunder(o, "__iter__", program) {
+                    cur = self.call_method_nested(o.clone(), s, Vec::new(), program)?;
+                }
+                match &cur {
+                    Value::Array(_) | Value::Generator(_) => return Ok(Some(cur)),
+                    Value::Object(_) => {}
+                    other => {
+                        return Err(VmError::runtime_error(format!(
+                            "{}.__iter__ must return a list, a generator or an iterator object, not {}",
+                            Self::class_of(o),
+                            other.type_name()
+                        )))
+                    }
+                }
+                if let Some(next) = self.dunder(&cur, "__next__", program) {
+                    // iterator protocol: call __next__ until it throws StopIteration
+                    let mut out = Vec::new();
+                    loop {
+                        if out.len() >= 10_000_000 {
+                            return Err(VmError::runtime_error("iterator produced more than 10000000 items (an endless __next__?)".to_string()));
+                        }
+                        match self.call_method_nested(cur.clone(), next, Vec::new(), program) {
+                            Ok(v) => out.push(v),
+                            Err(e) if e.to_string().contains("StopIteration") => break,
+                            Err(e) => return Err(e),
+                        }
+                    }
+                    return Ok(Some(Value::from(out)));
+                }
+                if let (Some(len), Some(get)) = (self.dunder(&cur, "__len__", program), self.dunder(&cur, "__getitem__", program)) {
+                    // sequence protocol
+                    let n = match self.call_method_nested(cur.clone(), len, Vec::new(), program)? {
+                        Value::Number(n) if n >= 0.0 => n as usize,
+                        other => return Err(VmError::runtime_error(format!("__len__ must return a non-negative number, got {}", other))),
+                    };
+                    let mut out = Vec::with_capacity(n.min(1 << 20));
+                    for i in 0..n {
+                        out.push(self.call_method_nested(cur.clone(), get, vec![Value::Number(i as f64)], program)?);
+                    }
+                    return Ok(Some(Value::from(out)));
+                }
+                Err(VmError::runtime_error(format!(
+                    "class {} is not iterable: define __iter__ (returning a list, a generator or an object with __next__)",
+                    Self::class_of(o)
+                )))
+            }
+            _ => Ok(None),
+        }
     }
 
     fn try_call_operator_method(
