@@ -2163,8 +2163,18 @@ fn merge_multiline_control_header_until_brace(
     lines: &[(usize, String)],
     start: usize,
 ) -> Result<(String, usize), VmError> {
+    merge_multiline_control_header_from(lines, start, &lines[start].1)
+}
+
+/// Like [`merge_multiline_control_header_until_brace`] with the text of line `start` given
+/// separately (an `else if` header is compiled as `if ...` without copying the line table).
+fn merge_multiline_control_header_from(
+    lines: &[(usize, String)],
+    start: usize,
+    first: &str,
+) -> Result<(String, usize), VmError> {
     let line_no = lines[start].0;
-    let mut merged = lines[start].1.trim().to_string();
+    let mut merged = first.trim().to_string();
     let mut i = start;
     loop {
         let pd = paren_depth_net(&merged);
@@ -2844,61 +2854,67 @@ fn compile_if_statement(
     state: &mut CompilerState,
     context: &mut CompileContext,
 ) -> Result<(), VmError> {
-    let start = *cursor;
-    let line_no = lines[start].0;
-    let (line_merged, end_phys) = merge_multiline_control_header_until_brace(lines, start)?;
-    let condition = extract_keyword_condition(&line_merged, "if", line_no)?;
+    // An `else if` chain is compiled in a loop (not by recursion, and without copying the line
+    // table per link), so a chain of thousands of branches is linear and cannot overflow the stack.
+    let mut header_override: Option<String> = None;
+    let mut end_jumps: Vec<usize> = Vec::new();
+    let end_pending_false;
+    loop {
+        let start = *cursor;
+        let line_no = lines[start].0;
+        let (line_merged, end_phys) = match &header_override {
+            Some(h) => merge_multiline_control_header_from(lines, start, h)?,
+            None => merge_multiline_control_header_until_brace(lines, start)?,
+        };
+        let condition = extract_keyword_condition(&line_merged, "if", line_no)?;
 
-    *cursor = end_phys + 1;
-    expect_open_brace(lines, cursor, line_no, "if")?;
+        *cursor = end_phys + 1;
+        expect_open_brace(lines, cursor, line_no, "if")?;
 
-    // (also covers `else if`, which re-enters here: its condition has its own line)
-    state.line_marks.push((state.instructions.len(), line_no));
-    compile_expr_str(condition, line_no, state, context)?;
-    let jump_false_index = state.instructions.len();
-    state.instructions.push(Instruction::JumpIfFalse(usize::MAX));
+        state.line_marks.push((state.instructions.len(), line_no));
+        compile_expr_str(condition, line_no, state, context)?;
+        let jump_false_index = state.instructions.len();
+        state.instructions.push(Instruction::JumpIfFalse(usize::MAX));
 
-    compile_block(lines, cursor, state, context, true, true)?;
+        compile_block(lines, cursor, state, context, true, true)?;
 
-    let mut has_else = false;
-    let mut jump_end_index = 0usize;
-    if *cursor < lines.len() {
-        let (cur_lno, maybe_else) = &lines[*cursor];
-        let trimmed = maybe_else.trim();
-        if trimmed == "else" {
-            has_else = true;
-            *cursor += 1;
-            expect_open_brace(lines, cursor, line_no, "else")?;
+        if *cursor < lines.len() {
+            let trimmed = lines[*cursor].1.trim();
+            if trimmed == "else" {
+                *cursor += 1;
+                expect_open_brace(lines, cursor, line_no, "else")?;
 
-            jump_end_index = state.instructions.len();
-            state.instructions.push(Instruction::Jump(usize::MAX));
+                end_jumps.push(state.instructions.len());
+                state.instructions.push(Instruction::Jump(usize::MAX));
 
-            let else_target = state.instructions.len();
-            state.instructions[jump_false_index] = Instruction::JumpIfFalse(else_target);
+                let else_target = state.instructions.len();
+                state.instructions[jump_false_index] = Instruction::JumpIfFalse(else_target);
 
-            compile_block(lines, cursor, state, context, true, true)?;
-        } else if trimmed.starts_with("else if ") || trimmed.starts_with("else if(") {
-            // else if: rewrite as "if ..." and recurse
-            has_else = true;
-            jump_end_index = state.instructions.len();
-            state.instructions.push(Instruction::Jump(usize::MAX));
+                compile_block(lines, cursor, state, context, true, true)?;
+                end_pending_false = None;
+                break;
+            } else if trimmed.starts_with("else if ") || trimmed.starts_with("else if(") {
+                end_jumps.push(state.instructions.len());
+                state.instructions.push(Instruction::Jump(usize::MAX));
 
-            let else_target = state.instructions.len();
-            state.instructions[jump_false_index] = Instruction::JumpIfFalse(else_target);
+                let else_target = state.instructions.len();
+                state.instructions[jump_false_index] = Instruction::JumpIfFalse(else_target);
 
-            // Strip `else ` prefix → `if ...` / `if(...)`
-            let stripped = trimmed[5..].trim().to_string();
-            let mut patched: Vec<(usize, String)> = lines.to_vec();
-            patched[*cursor] = (*cur_lno, stripped);
-            compile_if_statement(&patched, cursor, state, context)?;
+                // Strip `else ` prefix: `if ...` / `if(...)`
+                header_override = Some(trimmed[5..].trim().to_string());
+                continue;
+            }
         }
+        end_pending_false = Some(jump_false_index);
+        break;
     }
 
     let end_target = state.instructions.len();
-    if has_else {
-        state.instructions[jump_end_index] = Instruction::Jump(end_target);
-    } else {
-        state.instructions[jump_false_index] = Instruction::JumpIfFalse(end_target);
+    for j in end_jumps {
+        state.instructions[j] = Instruction::Jump(end_target);
+    }
+    if let Some(j) = end_pending_false {
+        state.instructions[j] = Instruction::JumpIfFalse(end_target);
     }
     Ok(())
 }

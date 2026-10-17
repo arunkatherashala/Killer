@@ -670,3 +670,62 @@ assert(f() == 2)
 "#,
     );
 }
+
+// ------------------------------------------------------------------------------------------------
+// Compile time stays near-linear for huge but legal inputs
+// ------------------------------------------------------------------------------------------------
+
+fn expect_ok_within(label: &str, src: &str, secs: u64) {
+    let t = std::time::Instant::now();
+    expect_ok(src);
+    assert!(t.elapsed() < Duration::from_secs(secs), "{label}: took {:?}", t.elapsed());
+}
+
+#[test]
+fn twenty_thousand_statements_compile_quickly() {
+    let mut src = String::new();
+    for i in 0..20000 {
+        src.push_str(&format!("x{} = {} + 1\n", i % 50, i));
+    }
+    src.push_str("assert(x1 == 19952)\n");
+    expect_ok_within("20000 statements", &src, 60);
+}
+
+#[test]
+fn long_expressions_within_the_limit_compile_quickly() {
+    // 900 terms: under the 1000-operator limit, so it must compile (and fast)
+    let plus = vec!["1"; 900].join(" + ");
+    expect_ok_within("900-term sum", &format!("x = {plus}\nassert(x == 900)\n"), 30);
+    let logical = vec!["true"; 900].join(" and ");
+    expect_ok_within("900-term and chain", &format!("x = {logical}\nassert(x)\n"), 30);
+    // beyond the limit: a clear error, quickly, for every spelling
+    for join in [" + ", " and ", " or ", " == ", " ?? "] {
+        let t = std::time::Instant::now();
+        expect_err(&format!("x = {}\n", vec!["1"; 30000].join(join)), "expression is too long");
+        assert!(t.elapsed() < Duration::from_secs(30), "{join}: {:?}", t.elapsed());
+    }
+}
+
+#[test]
+fn very_long_else_if_chains_and_function_bodies_compile_linearly() {
+    let mut src = String::from("x = 77\nr = 0\nif x == 0 {\n  r = 0\n}");
+    for i in 1..20000 {
+        src.push_str(&format!(" else if x == {i} {{\n  r = {i}\n}}"));
+    }
+    src.push_str("\nassert(r == 77)\n");
+    expect_ok_within("20000 else-if branches", &src, 60);
+    // 3000 operators spread over the lines of one function body are not one expression
+    let mut f = String::from("fn f(a) {\n");
+    for i in 0..3000 {
+        f.push_str(&format!("  a = a + {i}\n"));
+    }
+    f.push_str("  return a\n}\nassert(f(0) == 4498500)\n");
+    expect_ok_within("3000-line function", &f, 60);
+    // many functions and long literals
+    let mut g = String::new();
+    for i in 0..5000 {
+        g.push_str(&format!("fn g{i}(a) {{\n  return a + {i}\n}}\n"));
+    }
+    g.push_str(&format!("xs = [{}]\nassert(len(xs) == 20000)\nassert(g4999(1) == 5000)\n", (0..20000).map(|i| i.to_string()).collect::<Vec<_>>().join(", ")));
+    expect_ok_within("5000 functions + 20000-element literal", &g, 60);
+}
