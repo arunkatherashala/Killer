@@ -55,3 +55,9 @@ println(int(true))
         "5\nbigint\n12345678901234567890\nbigint\n-12345678901234567890\n42\n5\n12345678901234567890\n3\n12345678901234567890\n12345678901234567895\n5\n[2.5, 3, 5, 12345678901234567890]\n[0, 1, 2, 3, 4]\nA\ntrue\ntrue\ntrue\n1\ntrue\ntrue\nv\ntrue\n[12345678901234567890]\nbigint\n[12345678901234567890, 7, 1.5]\n1"
     );
 }
+
+#[test]
+fn one_line_function_and_class_definitions() {
+    let src = "fn f() { return 1 }\nfn g(x) { return x + 1 }\nprintln(f(), g(2))\nclass A { fn m() { return 7 } }\nprintln((new A()).m())\nclass B {\n  fn n() { return 8 }\n  fn o(a) { return a }\n}\nb = new B()\nprintln(b.n(), b.o(3))\nxs = filter([1, 2, 3], fn(v) { return v > 1 })\nprintln(xs)\n";
+    assert_eq!(run(src), "1 3\n7\n8 3\n[2, 3]");
+}

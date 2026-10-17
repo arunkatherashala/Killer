@@ -7755,6 +7755,27 @@ fn brace_opens_control_block(before: &str) -> bool {
     if brace_opens_literal(b) || b.ends_with(" in") || b.ends_with(" of") {
         return false;
     }
+    // `fn name(...)`, `async fn name(...)`, `static fn name(...)`, `class Name`: a definition body,
+    // even when the whole definition sits on one line (`fn f(x) { return x }`).
+    let mut head = b;
+    for m in ["async ", "static ", "pub "] {
+        if let Some(r) = head.strip_prefix(m) {
+            head = r.trim_start();
+        }
+    }
+    for kw in ["fn ", "kfn ", "function "] {
+        if let Some(r) = head.strip_prefix(kw) {
+            let r = r.trim_start();
+            if r.starts_with(|c: char| c.is_alphabetic() || c == '_') {
+                return true;
+            }
+        }
+    }
+    if let Some(r) = head.strip_prefix("class ") {
+        if r.trim_start().starts_with(|c: char| c.is_alphabetic() || c == '_') {
+            return true;
+        }
+    }
     let word: String = b.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
     let rest = &b[word.len()..];
     match word.as_str() {

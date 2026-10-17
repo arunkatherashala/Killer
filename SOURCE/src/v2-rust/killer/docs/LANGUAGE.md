@@ -510,7 +510,7 @@ and the caller unpacks it: `a, b = f()`.
 
 The condition is not parenthesised and the body uses braces. A body may be on separate lines or on
 the same line (`if c { stmt }`, also for `else`, `while`, `for` and `try`/`catch`): a brace after a
-control header opens a block, never a dict literal. (`fn name() { ... }` on one line is not supported.)
+control header opens a block, never a dict literal. Named one-line definitions work too: `fn f(x) { return x }`, `class A { fn m() { return 1 } }`.
 
 ```killer
 x = 7
@@ -1496,7 +1496,6 @@ Observed, not hypothetical:
 - **Closures created before the enclosing function first assigns a captured variable** keep the old copy
   semantics instead of sharing it.
 - `//` is a comment, so there is no integer-division operator (use `floor(a / b)` or `idiv`).
-- `fn name() { ... }` on one line is not parsed (control statements are).
 - **Builtins as values** work for names in the compiler's builtin table; names owned only by the net/AI
   modules (for example `vec_new`, `llm_embed_batch`) can be called but not passed around; wrap them in a `fn`.
 - `len(s)` and `s[i]` on very long strings are O(n) per call.
