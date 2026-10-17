@@ -175,6 +175,32 @@ fn index_value(object: &Value, index: &Value) -> Result<Value, VmError> {
     }
 }
 
+/// One variable scope: a name table plus a flag saying whether it is the outermost scope of a
+/// function call. Name lookup inside a call stops at the call's own frame scope and then goes
+/// straight to the global scope (`scopes[0]`), so it costs O(call-local scopes), not O(call
+/// depth), and a function never sees (or assigns) its caller's local variables.
+#[derive(Default, Debug)]
+pub struct Scope {
+    map: crate::fast_hash::FastMap<String, Value>,
+    /// True for the scope pushed by a call (`push_call_scope`), false for block scopes.
+    frame: bool,
+}
+
+impl std::ops::Deref for Scope {
+    type Target = crate::fast_hash::FastMap<String, Value>;
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        &self.map
+    }
+}
+
+impl std::ops::DerefMut for Scope {
+    #[inline]
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.map
+    }
+}
+
 /// One active `try` region (see `Instruction::TryBegin`).
 pub(crate) struct TryHandler {
     pub(crate) catch_ip: usize,
@@ -309,7 +335,7 @@ struct ClassInfo {
 #[allow(dead_code)]
 pub struct VirtualMachine {
     pub stack: Vec<Value>,
-    pub scopes: Vec<crate::fast_hash::FastMap<String, Value>>,
+    pub scopes: Vec<Scope>,
     pub call_stack: Vec<usize>,
     pub ip: usize,
     // Integer-indexed local variable frames for fast O(1) slot access.
@@ -386,7 +412,7 @@ pub struct VirtualMachine {
     /// Inline cache for `CallMethodDynamic`, keyed by instruction index: (class, method start, arity).
     method_ic: crate::fast_hash::FastMap<usize, (String, usize, usize)>,
     /// Emptied scope tables kept for reuse by `push_scope` (one is created per call).
-    scope_pool: Vec<crate::fast_hash::FastMap<String, Value>>,
+    scope_pool: Vec<Scope>,
     /// GC: allocation counter — triggers gc_collect every GC_INTERVAL array allocs.
     gc_alloc_epoch: u64,
     /// When true, `run()` preserves scopes and classes across calls (REPL mode).
@@ -507,7 +533,7 @@ fn run_spawned_task(
         child.current_program = Some(std::sync::Arc::clone(&task.program));
         child.classes = task.classes.clone();
         child.method_names = task.method_names.clone();
-        let mut root: crate::fast_hash::FastMap<String, Value> = Default::default();
+        let mut root = Scope::default();
         root.extend(task.globals.iter().cloned());
         child.scopes.push(root);
         let result = match child.call_value_nested(&func, args, &task.program) {
@@ -622,7 +648,7 @@ impl VirtualMachine {
     pub fn repl_vars(&self) -> Vec<(String, String)> {
         let mut vars = Vec::new();
         for scope in &self.scopes {
-            for (k, v) in scope {
+            for (k, v) in scope.iter() {
                 vars.push((k.clone(), format!("{}", v)));
             }
         }
@@ -1172,13 +1198,10 @@ impl VirtualMachine {
                     self.stack.push(value);
                 }
                 Instruction::BoxVar(name) => {
-                    for scope in self.scopes.iter_mut().rev() {
-                        if let Some(slot) = scope.get_mut(name.as_str()) {
-                            if !matches!(slot, Value::Cell(_)) {
-                                let v = std::mem::replace(slot, Value::Null);
-                                *slot = Value::Cell(std::rc::Rc::new(std::cell::RefCell::new(v)));
-                            }
-                            break;
+                    if let Some(slot) = self.lookup_mut(name.as_str()) {
+                        if !matches!(slot, Value::Cell(_)) {
+                            let v = std::mem::replace(slot, Value::Null);
+                            *slot = Value::Cell(std::rc::Rc::new(std::cell::RefCell::new(v)));
                         }
                     }
                 }
@@ -1315,23 +1338,13 @@ impl VirtualMachine {
                             // `s[i]` / `len(s)` on a string slot: read it in place instead of
                             // copying the whole string just to look at one character (the
                             // instructions that follow are left intact, so jumps stay valid).
-                            match (program.instructions.get(self.ip + 1), program.instructions.get(self.ip + 2)) {
-                                (Some(Instruction::LoadSlot(b)), Some(Instruction::IndexRead)) => {
-                                    if let Some(Value::Number(n)) = frame.get(*b as usize) {
-                                        let r = index_str(s, *n);
-                                        self.stack.push(r);
-                                        self.ip += 3;
-                                        continue;
-                                    }
-                                    Value::Str(s.clone())
-                                }
-                                (Some(Instruction::CallBuiltinId(0, 1)), _) => {
-                                    let n = crate::lang_builtins::char_len(s);
-                                    self.stack.push(Value::Number(n as f64));
-                                    self.ip += 2;
+                            match self.fused_str_op(program, s) {
+                                Some((r, advance)) => {
+                                    self.stack.push(r);
+                                    self.ip += advance;
                                     continue;
                                 }
-                                _ => Value::Str(s.clone()),
+                                None => Value::Str(s.clone()),
                             }
                         }
                         Some(other) => other.clone(),
@@ -1486,6 +1499,32 @@ impl VirtualMachine {
                     self.store_local(name, value);
                 }
                 Instruction::Load(name) => {
+                    // `s[i]` / `len(s)` on a named string (global, parameter, top-level local):
+                    // borrow it from its scope instead of copying the whole string per access.
+                    if !self.is_special_load_name(name) {
+                        let mut fused = None;
+                        let mut direct = None;
+                        match self.lookup(name) {
+                            Some(Value::Str(s)) => {
+                                if Self::str_fusable(program, self.ip) {
+                                    fused = self.fused_str_op(program, s);
+                                }
+                            }
+                            Some(Value::Cell(c)) => direct = Some(c.borrow().clone()),
+                            Some(other) => direct = Some(other.clone()),
+                            None => {}
+                        }
+                        if let Some((r, advance)) = fused {
+                            self.stack.push(r);
+                            self.ip += advance;
+                            continue;
+                        }
+                        if let Some(v) = direct {
+                            self.stack.push(v);
+                            self.ip += 1;
+                            continue;
+                        }
+                    }
                     let value = self.load_var(name)?;
                     self.stack.push(value);
                 }
@@ -2767,7 +2806,7 @@ impl VirtualMachine {
                             &self.stack[base..],
                             &|name: &str| {
                                 self.variable_cache.cache.get_index(name).is_some()
-                                    || self.scopes.iter().any(|sc| sc.contains_key(name))
+                                    || Self::lookup_in(&self.scopes, name).is_some()
                             },
                         ) {
                             self.stack.truncate(base);
@@ -2784,7 +2823,7 @@ impl VirtualMachine {
 
                     self.check_call_depth()?;
                     self.call_stack.push(self.ip + 1);
-                    self.push_scope();
+                    self.push_call_scope();
                     self.locals_stack.push(Vec::new());  // new locals frame for this call
                     self.bind_call_args(*arg_count, expected_arity, self.uses_args);
                     self.ip = *target;
@@ -2806,7 +2845,7 @@ impl VirtualMachine {
                     if self.locals_stack.len() > 1 {
                         self.locals_stack.pop();
                     }
-                    self.push_scope();
+                    self.push_call_scope();
                     self.locals_stack.push(Vec::new());
                     self.bind_call_args(*arg_count, expected_arity, self.uses_args);
                     self.ip = *target;
@@ -2829,7 +2868,7 @@ impl VirtualMachine {
 
                             self.check_call_depth()?;
                             self.call_stack.push(self.ip + 1);
-                            self.push_scope();
+                            self.push_call_scope();
                             self.locals_stack.push(Vec::new());  // new locals frame
 
                             // Restore captured variables from closure; written back at `Ret`
@@ -4398,7 +4437,7 @@ impl VirtualMachine {
                             let arity = program.function_arities.get(&start).copied().unwrap_or(*arg_count);
                             self.check_call_depth()?;
                             self.call_stack.push(self.ip + 1);
-                            self.push_scope();
+                            self.push_call_scope();
                             self.locals_stack.push(Vec::new());
                             self.store_local("this", object);
                             self.bind_call_args(*arg_count, arity, false);
@@ -4455,7 +4494,7 @@ impl VirtualMachine {
                         let bytecode_start = program.method_bytecode[&init_key];
                         self.check_call_depth()?;
                         self.call_stack.push(self.ip + 1);
-                        self.push_scope();
+                        self.push_call_scope();
                         self.locals_stack.push(Vec::new());
                         self.store_local("this", Value::Object(crate::value::SharedObject::new(instance)));
                         for (idx, arg) in ctor_args.into_iter().enumerate() {
@@ -4521,7 +4560,7 @@ impl VirtualMachine {
                             let object = self.stack.remove(obj_at);
                             self.check_call_depth()?;
                             self.call_stack.push(self.ip + 1);
-                            self.push_scope();
+                            self.push_call_scope();
                             self.locals_stack.push(Vec::new());
                             self.store_local("this", object);
                             self.bind_call_args(*arg_count, arity, false);
@@ -4627,7 +4666,7 @@ impl VirtualMachine {
                                 self.ensure_jump_target(program, bytecode_start)?;
                                 self.check_call_depth()?;
                                 self.call_stack.push(self.ip + 1);
-                                self.push_scope();
+                                self.push_call_scope();
                                 self.locals_stack.push(Vec::new());
                                 captured.each(|var_name, var_value| self.store_local(var_name, var_value.clone()));
                                 if !captured.is_empty() {
@@ -4648,7 +4687,7 @@ impl VirtualMachine {
                                 // Save current state and prepare for method call
                                 self.check_call_depth()?;
                                 self.call_stack.push(self.ip + 1);
-                                self.push_scope();
+                                self.push_call_scope();
                                 self.locals_stack.push(Vec::new());  // new locals frame for method
 
                                 // Store "this" in the scope
@@ -4984,7 +5023,7 @@ impl VirtualMachine {
                             if let Some(bytecode_start) = program.method_bytecode.get(&method_key).copied() {
                                 self.check_call_depth()?;
                                 self.call_stack.push(self.ip + 1);
-                                self.push_scope();
+                                self.push_call_scope();
                                 self.locals_stack.push(Vec::new());  // new locals frame for static method
 
                                 let n_passed = args.len();
@@ -5812,7 +5851,7 @@ impl VirtualMachine {
                         Some((start, _)) => {
                             self.check_call_depth()?;
                             self.call_stack.push(self.ip + 1);
-                            self.push_scope();
+                            self.push_call_scope();
                             self.locals_stack.push(Vec::new());
                             self.store_local("this", this);
                             let n_passed = args.len();
@@ -6435,7 +6474,7 @@ impl VirtualMachine {
             (self.stack.len(), self.call_stack.len(), self.scopes.len(), self.locals_stack.len());
 
         self.call_stack.push(NESTED_RETURN);
-        self.push_scope();
+        self.push_call_scope();
         self.locals_stack.push(Vec::new());
         for (name, value) in captured.snapshot() {
             self.store_local(&name, value.clone());
@@ -6759,6 +6798,56 @@ impl VirtualMachine {
         self.scopes.push(scope);
     }
 
+    /// The binding a name resolves to from the running code: the innermost scopes of the current
+    /// call (down to its frame scope), then the global scope. O(call-local scopes).
+    #[inline]
+    fn lookup(&self, name: &str) -> Option<&Value> {
+        Self::lookup_in(&self.scopes, name)
+    }
+
+    #[inline]
+    fn lookup_in<'a>(scopes: &'a [Scope], name: &str) -> Option<&'a Value> {
+        for (i, scope) in scopes.iter().enumerate().rev() {
+            if let Some(v) = scope.get(name) {
+                return Some(v);
+            }
+            if scope.frame {
+                return if i > 0 { scopes[0].get(name) } else { None };
+            }
+        }
+        None
+    }
+
+    #[inline]
+    fn lookup_mut(&mut self, name: &str) -> Option<&mut Value> {
+        let mut found = None;
+        let mut global = false;
+        for (i, scope) in self.scopes.iter().enumerate().rev() {
+            if scope.contains_key(name) {
+                found = Some(i);
+                break;
+            }
+            if scope.frame {
+                global = i > 0;
+                break;
+            }
+        }
+        let i = match found {
+            Some(i) => i,
+            None if global => 0,
+            None => return None,
+        };
+        self.scopes[i].get_mut(name)
+    }
+
+    /// The scope of a new call frame: lookups made inside the call stop here (then the global
+    /// scope), they never reach the caller's scopes.
+    fn push_call_scope(&mut self) {
+        let mut scope = self.scope_pool.pop().unwrap_or_default();
+        scope.frame = true;
+        self.scopes.push(scope);
+    }
+
     /// Store a variable directly into the current (topmost) scope without
     /// searching parent scopes.  Used for setting up function parameters so
     /// that a callee's `arg0` does not overwrite the caller's `arg0`.
@@ -6806,6 +6895,7 @@ impl VirtualMachine {
             // recycle the table (keeps its capacity) for the next call
             if self.scope_pool.len() < 64 {
                 scope.clear();
+                scope.frame = false;
                 self.scope_pool.push(scope);
             }
         }
@@ -6821,15 +6911,13 @@ impl VirtualMachine {
         
         // Search existing scopes from top to bottom — update in place if found.
         // This allows inner scopes (functions) to mutate outer variables.
-        for scope in self.scopes.iter_mut().rev() {
-            if let Some(slot) = scope.get_mut(name) {
-                match slot {
-                    // a shared closure variable: write through the cell
-                    Value::Cell(cell) => *cell.borrow_mut() = value,
-                    _ => *slot = value,
-                }
-                return Ok(());
+        if let Some(slot) = self.lookup_mut(name) {
+            match slot {
+                // a shared closure variable: write through the cell
+                Value::Cell(cell) => *cell.borrow_mut() = value,
+                _ => *slot = value,
             }
+            return Ok(());
         }
         // Not found in any scope — create in the topmost scope (current local).
         let scope = self.scopes.last_mut().ok_or_else(|| {
@@ -6849,11 +6937,9 @@ impl VirtualMachine {
             }
         }
         // Search existing scopes from top to bottom — update in place if found.
-        for scope in self.scopes.iter_mut().rev() {
-            if scope.contains_key(name.as_str()) {
-                scope.insert(name, value);
-                return Ok(());
-            }
+        if let Some(slot) = self.lookup_mut(name.as_str()) {
+            *slot = value;
+            return Ok(());
         }
         let scope = self.scopes.last_mut().ok_or_else(|| {
             VmError::runtime_error("No active scope available".to_string())
@@ -6865,15 +6951,72 @@ impl VirtualMachine {
     /// Like `load_var`, but a shared closure variable is returned as its cell (to be captured),
     /// not as the value inside it.
     fn load_var_raw(&self, name: &str) -> Result<Value, VmError> {
-        for scope in self.scopes.iter().rev() {
-            if let Some(value @ Value::Cell(_)) = scope.get(name) {
-                return Ok(value.clone());
-            }
-            if scope.contains_key(name) {
-                break;
-            }
+        if let Some(value @ Value::Cell(_)) = self.lookup(name) {
+            return Ok(value.clone());
         }
         self.load_var(name)
+    }
+
+    /// Names `load_var` answers without consulting the scopes (cached loop numbers, singletons).
+    #[inline]
+    fn is_special_load_name(&self, name: &str) -> bool {
+        matches!(name, "Math" | "Physics" | "Array")
+            || self
+                .variable_cache
+                .cache
+                .get_index(name)
+                .map_or(false, |i| self.variable_cache.cache.get(i).is_some())
+    }
+
+    /// True when the string load at `ip` is followed by `len(..)` or by `<index> IndexRead`.
+    #[inline]
+    fn str_fusable(program: &Program, ip: usize) -> bool {
+        matches!(program.instructions.get(ip + 1), Some(Instruction::CallBuiltinId(0, 1)))
+            || matches!(program.instructions.get(ip + 2), Some(Instruction::IndexRead))
+    }
+
+    /// A number operand that is cheap to read without touching the stack (slot, constant or name).
+    #[inline]
+    fn peek_number(&self, ins: &Instruction) -> Option<f64> {
+        match ins {
+            Instruction::ConstNum(k) => Some(*k),
+            Instruction::LoadSlot(b) => match self.locals_stack.last()?.get(*b as usize) {
+                Some(Value::Number(n)) => Some(*n),
+                _ => None,
+            },
+            Instruction::Load(name) => {
+                if let Some(i) = self.variable_cache.cache.get_index(name) {
+                    if let Some(v) = self.variable_cache.cache.get(i) {
+                        return Some(v);
+                    }
+                }
+                if matches!(name.as_str(), "Math" | "Physics" | "Array") {
+                    return None;
+                }
+                match self.lookup(name) {
+                    Some(Value::Number(n)) => Some(*n),
+                    _ => None,
+                }
+            }
+            _ => None,
+        }
+    }
+
+    /// The string `s` was just "loaded" by the instruction at `self.ip`. When the following
+    /// instructions are `len(..)` or `<number operand> IndexRead`, compute the result straight
+    /// from the borrowed string. Returns the result and how far to advance `ip` (the skipped
+    /// instructions stay in the program, so jumps into them remain valid). `None` = not a
+    /// fusable shape: load the value normally.
+    #[inline]
+    fn fused_str_op(&self, program: &Program, s: &str) -> Option<(Value, usize)> {
+        if let Some(Instruction::CallBuiltinId(0, 1)) = program.instructions.get(self.ip + 1) {
+            return Some((Value::Number(crate::lang_builtins::char_len(s) as f64), 2));
+        }
+        if let Some(Instruction::IndexRead) = program.instructions.get(self.ip + 2) {
+            let n = self.peek_number(program.instructions.get(self.ip + 1)?)?;
+            return Some((index_str(s, n), 3));
+        }
+        None
     }
 
     fn load_var(&self, name: &str) -> Result<Value, VmError> {
@@ -6893,13 +7036,11 @@ impl VirtualMachine {
             _ => {}
         }
 
-        for scope in self.scopes.iter().rev() {
-            if let Some(value) = scope.get(name) {
-                return Ok(match value {
-                    Value::Cell(cell) => cell.borrow().clone(),
-                    other => other.clone(),
-                });
-            }
+        if let Some(value) = self.lookup(name) {
+            return Ok(match value {
+                Value::Cell(cell) => cell.borrow().clone(),
+                other => other.clone(),
+            });
         }
         // Suggest similar names from the current scope to help debugging.
         let similar: Vec<&str> = self.scopes.iter().rev()
@@ -7045,7 +7186,7 @@ impl VirtualMachine {
             (self.stack.len(), self.call_stack.len(), self.scopes.len(), self.locals_stack.len());
 
         self.call_stack.push(NESTED_RETURN);
-        self.push_scope();
+        self.push_call_scope();
         self.locals_stack.push(Vec::new());
         self.store_local("this", this);
         let arity = program.function_arities.get(&start).copied().unwrap_or(args.len());
@@ -7162,7 +7303,7 @@ impl VirtualMachine {
                let _saved_scopes_len = self.scopes.len();
                 
                 // Set up function call - new scope
-                self.push_scope();
+                self.push_call_scope();
                 
                 // Restore captured variables
                 for (name, val) in captured.snapshot() {

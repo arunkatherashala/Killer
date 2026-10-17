@@ -9,7 +9,6 @@
 //! the frame again) or `Ret` (the generator is finished and removed). An id that is no longer
 //! present therefore means "exhausted".
 
-use crate::fast_hash::FastMap;
 use crate::value::{Captures, Value};
 use crate::vm::TryHandler;
 use std::collections::HashMap;
@@ -18,7 +17,7 @@ use std::collections::HashMap;
 /// bases (operand stack, scopes, locals) so the frame can be resumed at any VM depth.
 pub struct GenFrame {
     /// The frame's scope plus any block scopes opened inside it.
-    pub scopes: Vec<FastMap<String, Value>>,
+    pub scopes: Vec<crate::vm::Scope>,
     pub locals: Vec<Value>,
     pub stack: Vec<Value>,
     pub(crate) handlers: Vec<TryHandler>,
