@@ -9,13 +9,15 @@ real binary or analysing the real source; nothing is estimated. All of it is rep
 | Language parity (166 probe programs) | `python parity/run_parity.py --md` | `LANGUAGE_PARITY.md` |
 | Every source file: compiled, tested, stubbed? | `python parity/inventory.py` | `FILE_INVENTORY.csv` |
 | README function table vs reality | `python parity/claims.py` | printed |
-| All Rust tests (lib, binaries, integration) | `cargo test --tests` | 3,253 passed, 0 failed, 9 ignored |
+| All Rust tests (lib, binaries, integration) | `cargo test --tests --no-fail-fast` | 3,402 passed, 0 failed |
 | Documentation examples and links | `python docs/check_examples.py`, `python docs/check_links.py` | printed |
 | Benchmarks vs CPython | `python bench/run.py` | `bench/RESULTS.md` (the only source of performance claims) |
 
-Last refreshed at the merge of the seven workstreams (`5486e55` plus the documentation commits):
-parity **166/166**, **3,253** tests passed in 118 test binaries (`cargo test --tests`, debug build,
-9 `#[ignore]`d long-running tests not included).
+Last refreshed at the merge of the third wave (after the hardening, language-fix, modulo, performance
+and cross-platform branches): parity **166/166**, **3,402** tests passed with 0 failures
+(`cargo test --tests --no-fail-fast`, debug build, `#[ignore]`d long-running tests not included),
+58 of 58 documentation examples run, 67 relative links and 0 broken. See `docs/STATUS.md` for a
+plain-language summary of what is verified and what is not.
 
 ## 1. What is genuinely strong (verified)
 

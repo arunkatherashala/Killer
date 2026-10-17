@@ -94,6 +94,38 @@ Everything below is from `git log 40336af..HEAD` (about 50 commits); measured nu
 - Language reference, tutorial (14 lessons), generated stdlib index, contributor architecture guide; `docs/check_examples.py` runs every example and `docs/check_links.py` checks relative links, both in CI.
 - Eight more real-world programs in `parity/realworld/` (matrix, mini language, text wrapping, LRU cache, events, heap, dates, test runner).
 
+### Waves 2 and 3 (streaming, profiler, scoping, real applications, one remainder rule, dunder methods, hardening, platforms)
+
+Everything below was merged after the section above; counts and timings come from the work that
+produced each item (`parity/PARITY_REPORT.md`, `bench/RESULTS.md`, `docs/PLATFORMS.md`).
+
+**Language**
+- Python-style scope: a plain assignment is function-scoped (file-scoped at top level), so a variable first assigned inside an `if`/`else`/loop/`try` body is visible after the block; `let` stays block-scoped. A name never assigned on the path taken reads as `null`.
+- `%` is **floor modulo everywhere** (`-7 % 3` is `2` for numbers and big integers). `rem(a, b)` gives the C-style truncated remainder and `mod(a, b)` is the floor version. Constant folding, the interpreter and the native function JIT agree (579 Python-generated cases in `tests/modulo.rs`).
+- One truthiness rule for the whole language (`bool(0n)` is false like `0`); `5 in [5n]` and `index_of` compare numbers and big integers exactly; `int("123...")` and `json_parse` of integers above 2^53 give big integers.
+- One-line definitions (`fn f() { return 1 }`, `class A { fn m() { return 7 } }`), a dict literal directly after `in` (`for k, v in {"a": 1} {`).
+- Every registered builtin is a first-class value (`f = vec_new`, `map(xs, mock_embed)`): non-core builtins get a wrapper that forwards the arguments actually passed.
+- Dunder methods: `__len__`, `__getitem__`, `__setitem__` (non-string keys), `__contains__`, `__iter__` / `__next__`, `__pow__`, `__neg__`, `__mod__`, `__call__`, `__bool__`, `__str__`, with clear errors when a class lacks the method.
+- Operator overloading gaps closed (`3 * v`, `-v`, `v % k`, comparisons from `__lt__` alone); `return` inside `try` no longer leaves a stale handler; a bare `return` pushes `null`; `1e-7` parses; `print(a, b)` works; `eprintln`, `stdout_write`, `isDir`, `isFile`, `list()`, lossless CSV (`csv_columns`, multi-line quoted fields) and generators accepted by `sum`, `sorted`, `min`, `max`, `join`.
+
+**AI and network**
+- Streaming LLM output: `llm_stream(opts, prompt)` returns a lazy generator of text chunks (OpenAI-compatible SSE, Anthropic SSE, Ollama NDJSON, plus an offline `mock` provider), `llm_stream_cb`, `gen_close`; a server handler may return a generator or array and the server sends `text/event-stream`. Incremental SSE parser in `src/sse.rs`.
+- HTTP server limits: read and per-request deadlines (408 / 503), `server_stop()` works from any thread; a handler error returns a generic JSON 500 (the real error goes to the log; `opts.debug: true` includes it); routes registered before `serve` are visible to a server started in a spawned task.
+- Profiler: `killer profile script.killer [--html out.html]`, `killer_super --profile`, builtins `profile_start/stop/report`; text table by self time plus a self-contained HTML flame graph.
+
+**Performance**
+- Variable lookup inside a function searches only that call's scopes and then the globals (O(1)); reading a global at recursion depth 20,000 went from about 1,560 ms to about 15 ms. A function no longer sees its caller's local variables.
+- `len(s)` and `s[i]` no longer copy the string on load; character scans use a vectorised lead-byte count (non-ASCII indexing about 1.5 to 2x faster). Indexing a very long ASCII string is still linear per call (see the open items in `parity/PARITY_REPORT.md`).
+- Garbage collector marks dicts, objects and closure captures once (a 30,000-term expression program went from over 300 s to 9 s in debug); list comprehensions, scope tables, FNV object fields and literal dict keys: see `bench/RESULTS.md` rounds 2 and 3.
+
+**Safety and robustness**
+- Comparison, copy, GC and display of deeply nested or cyclic values are iterative or depth-limited; a 100k-deep structure no longer overflows the native stack.
+- Linear-time compiler passes for else-if chains, multi-line literals, lambda lifting and class bodies; operator limits per statement; a fuzz-found infinite loop on an unterminated string in a chained comparison is a compile error; long fuzz runs (20,000 cases, several seeds) are clean.
+
+**Real-application trial.** Five applications under `examples/apps/` (todo REST service, document Q&A with RAG, CSV tool, text-adventure engine, expression interpreter), each with `killer.toml`, modules and `test "..." { }` files, run by `tests/apps.rs`; 22 friction points found while writing them are logged in `examples/apps/FRICTION.md` and fixed.
+
+**Platforms.** The library, binaries and tests type-check for x86_64 and aarch64 Linux (gnu), x86_64 Linux (musl), x86_64 and aarch64 macOS and Windows; the unix `mmap` flags use `libc` constants and macOS retries the JIT mapping with `MAP_JIT`. Only Windows x86-64 has actually been run; CI has a cross-check job. Test fixtures under `examples/apps`, `tests/data` and `parity/realworld` are pinned to LF in `.gitattributes`. See `docs/PLATFORMS.md`.
+
 ### Earlier unreleased notes
 
 ### Runtime (`killer-native`)
