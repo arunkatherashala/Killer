@@ -87,9 +87,43 @@ fn indent_of(src: &str, pos: usize) -> String {
 }
 
 /// The `{` that opens the block whose header starts at `from`: the first top-level `{`.
+/// True when the `{` at `open` starts a dict literal (it follows an operator, `(`, `[`, `,` or
+/// `in`/`of`/`and`/`or`/`not`) instead of a block: `for k, v in {"a": 1} {`.
+fn brace_is_literal(m: &[u8], from: usize, open: usize) -> bool {
+    let mut j = open;
+    while j > from && matches!(m[j - 1], b' ' | b'\t') {
+        j -= 1;
+    }
+    if j == from {
+        return false;
+    }
+    let last = m[j - 1];
+    // `i++ {` / `i-- {` end a header, they are not binary operators
+    if (last == b'+' || last == b'-') && j - 1 > from && m[j - 2] == last {
+        return false;
+    }
+    if b",=([:+-*/%<>!&|?".contains(&last) {
+        return true;
+    }
+    let end = j;
+    while j > from && (m[j - 1].is_ascii_alphanumeric() || m[j - 1] == b'_') {
+        j -= 1;
+    }
+    let word = &m[j..end];
+    let boundary = j == from || matches!(m[j - 1], b' ' | b'\t');
+    boundary && matches!(word, b"in" | b"of" | b"and" | b"or" | b"not" | b"return")
+}
+
 fn find_block_open(m: &[u8], from: usize) -> Option<usize> {
     let mut depth = 0i32;
-    for i in from..m.len() {
+    let mut i = from;
+    while i < m.len() {
+        if m[i] == b'{' && depth == 0 && brace_is_literal(m, from, i) {
+            if let Some(close) = matching(m, i) {
+                i = close + 1;
+                continue;
+            }
+        }
         match m[i] {
             b'(' | b'[' => depth += 1,
             b')' | b']' => depth -= 1,
@@ -104,6 +138,7 @@ fn find_block_open(m: &[u8], from: usize) -> Option<usize> {
             }
             _ => {}
         }
+        i += 1;
     }
     None
 }

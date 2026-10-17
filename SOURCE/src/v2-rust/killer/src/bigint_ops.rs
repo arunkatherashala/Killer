@@ -77,6 +77,22 @@ pub fn demote_index(v: Value) -> Value {
     }
 }
 
+/// A whole-number text (`[+-]digits`) too large for an exact f64 (|n| > 2^53) as a `BigInt`
+/// value; `None` for anything else (callers then use the float path). Used by `int("...")` and
+/// JSON parsing so big integers keep every digit.
+pub fn big_from_digits(text: &str) -> Option<Value> {
+    let t = text.trim();
+    let digits = t.strip_prefix(|c| c == '-' || c == '+').unwrap_or(t);
+    if digits.len() < 16 || !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    let b = BigInt::parse(t.strip_prefix('+').unwrap_or(t)).ok()?;
+    match b.to_i64() {
+        Some(i) if i.unsigned_abs() <= (1u64 << 53) => None,
+        _ => Some(big(b)),
+    }
+}
+
 pub fn big(v: BigInt) -> Value {
     Value::BigInt(Rc::new(v))
 }

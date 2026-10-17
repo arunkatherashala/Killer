@@ -105,6 +105,9 @@ impl<'a> Parser<'a> {
                 return self.fail("expected digits in the exponent");
             }
         }
+        if let Some(v) = crate::bigint_ops::big_from_digits(&self.src[start..self.pos]) {
+            return Ok(v);
+        }
         self.src[start..self.pos]
             .parse::<f64>()
             .map(Value::Number)

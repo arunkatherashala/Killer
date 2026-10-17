@@ -274,6 +274,12 @@ Mixed arithmetic rules:
 - `a / b` is an exact bigint when `b` divides `a`, otherwise a float.
 - `%`, `idiv` and `divmod` use **floor** semantics (like Python): `-7n % 3n` is `2`, and a plain Number
   `-7 % 3` is `2` too. `rem(a, b)` gives the truncated remainder.
+- Truthiness is one rule everywhere (`if`, `while`, `not`, `&&`, `||`, ternary, `bool()`, `filter`, `all`,
+  `any`): `0n` is falsy like `0`, as are `null`, `false`, `""`, `[]` and `{}`.
+- `int(b)` of a bigint returns the bigint unchanged (like Python); `int("123...")` with more than 15
+  digits and `json_parse` of such an integer also give a bigint. `float`, `str`, `abs`, `min`, `max`,
+  `sum`, `round`, `sorted`, `range` (small values), `chr` (small values) accept bigints; `5n in [5]` and
+  `[5].index_of(5n)` are true/0; a bigint dict key is its decimal string.
 - A bigint equals and orders exactly against a number (`2n ** 64 == 18446744073709551616n`).
 - `**` refuses absurd result sizes with an error; division by zero is a catchable error.
 
@@ -549,7 +555,7 @@ and the caller unpacks it: `a, b = f()`.
 
 The condition is not parenthesised and the body uses braces. A body may be on separate lines or on
 the same line (`if c { stmt }`, also for `else`, `while`, `for` and `try`/`catch`): a brace after a
-control header opens a block, never a dict literal. (`fn name() { ... }` on one line is not supported.)
+control header opens a block, never a dict literal. A dict literal may follow `in` (`for k, v in {"a": 1} {`, `if x in {"a": 1} {`). Named one-line definitions work too: `fn f(x) { return x }`, `class A { fn m() { return 1 } }`.
 
 ```killer
 x = 7
@@ -817,7 +823,11 @@ println(depth(5000))
 
 Built-in functions are first-class values: `f = print`, `map(xs, str)`, `sorted(xs, abs)` work. A bare
 builtin name compiles to a lookup that prefers a variable of that name and falls back to a callable
-wrapper around the builtin. (Only names in the compiler's builtin table qualify; see limitations.)
+wrapper around the builtin. Every registered builtin qualifies, including the library ones (`vec_new`, `mock_embed`, `llm_embed_batch`,
+`log_info`, `serve`, `chunk_text`, `isDir`, ...). The original core builtins have a fixed arity; every other
+builtin value forwards the arguments actually passed (up to 6), and trailing `null` arguments count as
+"not passed", so `f = log_info; f("x")` keeps the optional parameters at their defaults (an explicit trailing
+`null` cannot be passed through such a value; wrap the call in a `fn` when you need one).
 
 ```killer
 f = len
@@ -944,6 +954,55 @@ println(new V(0).bump().bump().x)
 # expect: V(3)
 # expect: 8
 # expect: 2
+```
+
+More dunder methods make objects behave like built-in values:
+
+| Method | Used by |
+|---|---|
+| `__len__()` | `len(obj)` (also the truthiness fallback) |
+| `__getitem__(i)` / `__setitem__(i, v)` | `obj[i]`, `obj[i] = v` for non-string keys; a string key reads or sets a field (a missing field on read goes to `__getitem__`) |
+| `__contains__(x)` | `x in obj`, `x not in obj` |
+| `__iter__()` | `for x in obj`, list comprehensions: returns a list, a generator, or an object with `__next__` |
+| `__next__()` | the iterator protocol: return the next value, `throw "StopIteration"` when done |
+| `__call__(...)` | `obj(args)`, and `map(xs, obj)` |
+| `__bool__()` | `if obj`, `not obj`, `&&`, `||`, `bool(obj)`; else `__len__` decides; else an object is truthy |
+| `__pow__(o)`, `__rpow__(o)` | `obj ** o`, `o ** obj` |
+| `__neg__()`, `__mod__(o)`, `__str__()` | `-obj`, `obj % o`, `str(obj)` / `println(obj)` (same as `toString`) |
+
+A class with only `__len__` and `__getitem__` is iterable too (the sequence protocol). The `__next__`
+protocol is drained eagerly when the loop starts (an endless iterator fails after 10 million items; use a
+generator for lazy sequences). Using an operation on an object whose class lacks the method is an error
+that names the class and the missing method.
+
+```killer
+class Bag {
+  fn init() {
+    this.items = [10, 20, 30]
+  }
+  fn __len__() { return len(this.items) }
+  fn __getitem__(i) { return this.items[i] }
+  fn __setitem__(i, v) { this.items[i] = v }
+  fn __contains__(x) { return x in this.items }
+  fn __iter__() { return this.items }
+  fn __call__(k) { return k * len(this.items) }
+  fn __pow__(e) { return len(this.items) ** e }
+  fn __neg__() { return "negated" }
+  fn __mod__(m) { return len(this.items) % m }
+  fn __bool__() { return len(this.items) > 3 }
+}
+b = new Bag()
+b[1] = 25
+println(len(b), b[1], 25 in b, 99 in b)
+for x in b { println(x) }
+println(b(2), b ** 2, -b, b % 2, bool(b))
+if not b { println("small bag") }
+# expect: 3 25 true false
+# expect: 10
+# expect: 25
+# expect: 30
+# expect: 6 9 negated 1 false
+# expect: small bag
 ```
 
 ## Errors
@@ -1534,15 +1593,11 @@ Observed, not hypothetical:
 - **Block scoping**: a variable first assigned inside an `if`, `while` or `for` body is not visible after
   the block (`Undefined variable`). Assign it before the block. A fix is in progress.
 - **Plain integers saturate**: `2 ** 63` and `9223372036854775807 + 1` give `9223372036854775807`, and a
-  float of 2^63 or more prints saturated too; use `n` literals / `big()` for exact values. `int(5n)` is not
-  supported, and `bool(0n)` returns `true` (an `if` on a zero bigint is falsy; compare with `== 0` instead).
+  float of 2^63 or more prints saturated too; use `n` literals / `big()` for exact values.
 - `%` is floor modulo everywhere (`-7 % 3` is `2`); use `rem(a, b)` for the C-style remainder (`-1`).
 - **Closures created before the enclosing function first assigns a captured variable** keep the old copy
   semantics instead of sharing it.
 - `//` is a comment, so there is no integer-division operator (use `floor(a / b)` or `idiv`).
-- `fn name() { ... }` on one line is not parsed (control statements are).
-- **Builtins as values** work for names in the compiler's builtin table; names owned only by the net/AI
-  modules (for example `vec_new`, `llm_embed_batch`) can be called but not passed around; wrap them in a `fn`.
 - `len(s)` and `s[i]` on very long strings are O(n) per call.
 - `count_tokens` is an approximation, not a model tokenizer.
 - The HTTP server has no TLS and serves one request at a time; the HTTP client needs `curl` for HTTPS.
