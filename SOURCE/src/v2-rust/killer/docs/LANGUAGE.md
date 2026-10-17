@@ -774,7 +774,11 @@ println(depth(5000))
 
 Built-in functions are first-class values: `f = print`, `map(xs, str)`, `sorted(xs, abs)` work. A bare
 builtin name compiles to a lookup that prefers a variable of that name and falls back to a callable
-wrapper around the builtin. (Only names in the compiler's builtin table qualify; see limitations.)
+wrapper around the builtin. Every registered builtin qualifies, including the library ones (`vec_new`, `mock_embed`, `llm_embed_batch`,
+`log_info`, `serve`, `chunk_text`, `isDir`, ...). The original core builtins have a fixed arity; every other
+builtin value forwards the arguments actually passed (up to 6), and trailing `null` arguments count as
+"not passed", so `f = log_info; f("x")` keeps the optional parameters at their defaults (an explicit trailing
+`null` cannot be passed through such a value; wrap the call in a `fn` when you need one).
 
 ```killer
 f = len
@@ -1496,8 +1500,6 @@ Observed, not hypothetical:
 - **Closures created before the enclosing function first assigns a captured variable** keep the old copy
   semantics instead of sharing it.
 - `//` is a comment, so there is no integer-division operator (use `floor(a / b)` or `idiv`).
-- **Builtins as values** work for names in the compiler's builtin table; names owned only by the net/AI
-  modules (for example `vec_new`, `llm_embed_batch`) can be called but not passed around; wrap them in a `fn`.
 - `len(s)` and `s[i]` on very long strings are O(n) per call.
 - `count_tokens` is an approximation, not a model tokenizer.
 - The HTTP server has no TLS and serves one request at a time; the HTTP client needs `curl` for HTTPS.

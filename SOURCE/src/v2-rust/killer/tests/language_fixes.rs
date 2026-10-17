@@ -67,3 +67,75 @@ fn dict_literal_after_in_in_headers() {
     let src = "for k, v in {\"a\": 1, \"b\": 2} {\n  println(k, v)\n}\nif \"a\" in {\"a\": 1} {\n  println(\"yes\")\n}\nfor x in [1, 2] { println(x) }\nfor a, b in [[1, 2], [3, 4]] { println(a + b) }\nif \"z\" in {\"a\": 1} { println(\"no\") } else { println(\"absent\") }\n";
     assert_eq!(run(src), "a 1\nb 2\nyes\n1\n2\n3\n7\nabsent");
 }
+
+#[test]
+fn every_library_builtin_is_a_first_class_value() {
+    let src = r#"f = vec_new
+s = f(3)
+vec_add(s, "a", [1, 0, 0])
+vl = vec_len
+println(vl(s))
+mk = mock_embed
+println(len(mk("hello", 4)))
+println(len(map(["x", "y"], fn(t) { return mk(t, 3) })))
+ch = chunk_text
+println(len(ch("one two three four five six", 10, 2)))
+ct = count_tokens
+println(map(["hello world", "a"], ct))
+n = norm
+println(n([3, 4]))
+println(map([[3, 4], [0, 2]], norm))
+d = dot
+println(d([1, 2], [3, 4]))
+cs = cosine
+println(cs([1, 0], [1, 0]))
+k = top_k
+println(k([0.1, 0.9], 1))
+fp = free_port
+println(fp() > 0)
+li = list
+println(li(range(3)))
+bp = build_rag_prompt
+println(len(bp("q", ["c"])) > 0)
+cb = chunk_by_sentence
+println(cb("Hi there. Yo.", 20))
+isd = isDir
+println(isd("."))
+println(filter(["a", ".", "zzz_not_there"], isDir))
+println(map(["abc", "de"], base64_encode))
+println(map([4, 9], sqrt))
+pl = pad_left
+println(pl("a", 3) + "|" + pl("a", 3, "-"))
+g = gcd
+println(g(12, 18))
+log_set_level("off")
+l = log_info
+l("hidden")
+l("hidden", {"k": 1})
+println("done")
+"#;
+    assert_eq!(
+        run(src),
+        "1
+4
+2
+4
+[4, 1]
+5
+[5, 2]
+11
+1
+[1]
+true
+[0, 1, 2]
+true
+[Hi there. Yo.]
+true
+[.]
+[YWJj, ZGU=]
+[2, 3]
+  a|--a
+6
+done"
+    );
+}

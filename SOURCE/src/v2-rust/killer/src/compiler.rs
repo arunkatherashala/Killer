@@ -4228,7 +4228,7 @@ fn compile_expr_str(
         // PERF: emit slot load for known locals, fallback to named load otherwise
         if let Some(&slot) = context.slot_map.get(expr) {
             state.instructions.push(Instruction::LoadSlot(slot));
-        } else if builtin_value_arity(expr).is_some()
+        } else if (builtin_value_arity(expr).is_some() || is_registered_builtin(expr))
             && !context.outer_vars.contains(expr)
             && !state.known_top_level_vars.contains(expr)
             && !state.functions.contains_key(expr)
@@ -6716,308 +6716,318 @@ fn emit_spawn_call(
     Ok(())
 }
 
+const BUILTINS: &[&str] = &[
+    "print", "println", "len", "length", "push", "pop", "contains", "index_of",
+    "get", "setdefault", "copy", "reversed",
+    "range", "type_of", "to_string", "to_int", "to_float", "keys", "values",
+    "sort", "reverse", "join", "split", "trim", "replace", "upper", "lower",
+    "starts_with", "ends_with", "substr", "format", "parse_int", "parse_float",
+    "abs", "floor", "ceil", "round", "sqrt", "pow",
+    "sin", "cos", "tan", "random",
+    "bit_and", "bit_or", "bit_xor", "bit_shl", "bit_shr",
+    "min", "max",
+    "math_eval", "math_eval_subst",
+    "time_now", "sleep",
+    "time_ms", "sleep_ms",
+    "concat", "iterKeys",
+    // insert (dict insert, alias for hash_map_insert)
+    "insert",
+    "hash_map_new",
+    "hash_map_insert",
+    "hash_map_get",
+    "hash_map_contains",
+    "hash_map_remove",
+    "hash_map_size",
+    "hash_map_keys",
+    "hash_map_values",
+    // assert builtins
+    "assert_eq", "assert_ne", "assert_true", "assert_false", "assert_contains", "assert_nil",
+    // Phase 1: Trit — balanced ternary
+    "T_NEG", "T_ZERO", "T_POS",
+    "trit_and", "trit_or", "trit_not", "trit_add", "trit_mul",
+    "trit_to_int", "trit_from_int", "int_to_trit", "trit_to_str",
+    "trit_word", "trit_word_to_int",
+    // Phase 2: Fuzzy logic
+    "fuzzy_and", "fuzzy_or", "fuzzy_not", "fuzzy_threshold", "fuzzy_combine",
+    // Phase 3: Cognitive Signal
+    "signal_create", "signal_value", "signal_confidence", "signal_reason",
+    "signal_and", "signal_or", "signal_confident", "signal_uncertain", "signal_to_str",
+    // Phase 4: Qubit — quantum simulation
+    "qubit_create", "qubit_hadamard", "qubit_pauli_x", "qubit_pauli_z",
+    "qubit_measure", "qubit_prob0", "qubit_prob1", "qubit_phase",
+    "qubit_to_str", "qubit_entangle",
+    // Phase 5: Tryte — 6-trit balanced ternary word
+    "tryte_create", "tryte_from_int", "tryte_to_int", "tryte_to_str",
+    "tryte_get", "tryte_set", "tryte_and", "tryte_or", "tryte_not",
+    "tryte_add", "tryte_eq", "tryte_zero", "tryte_type",
+    // type / conversion builtins
+    "str", "int", "type", "String", "Number", "Boolean", "parseInt", "parseFloat",
+    "isNaN", "isFinite",
+    // string builtins
+    "substring", "indexOf", "repeat", "charAt", "charCodeAt",
+    // array builtins
+    "slice", "includes",
+    // Python-style: sorted, sum, enumerate, all, any, zip
+    "sorted", "sum", "enumerate", "all", "any", "zip",
+    // I/O
+    "readFile", "writeFile",
+    // time / network
+    "system_time_ms", "thread_sleep_ms",
+    "http_get", "http_post", "parse_json", "json_stringify", "json_pretty",
+    "parse_csv", "to_csv", "to_yaml",
+    "now", "parse_datetime", "format_datetime",
+    // AI functions
+    "ai_generate", "ai_embed", "ai_classify", "ai_extract",
+    "ai_local_infer", "ai_provider_set", "ai_provider_get",
+    "ai_cache_enable", "ai_cache_clear",
+    // Native GGUF inference
+    "llm_chat", "llm_ask", "llm_info", "llm_complete", "llm_embed",
+    "ffi_open", "ffi_call", "ffi_close", "ffi_alloc", "ffi_free", "ffi_poke", "ffi_peek",
+    "ord", "chr", "pad_left", "pad_right", "repeat", "strip", "lstrip", "rstrip", "startsWith", "endsWith",
+    "base64_encode", "base64_decode", "hmac_sha256", "float", "bool", "log", "log2", "log10", "exp", "cbrt",
+    "trunc", "sign", "atan2", "hypot", "asin", "acos", "atan", "sinh", "cosh", "tanh", "degrees", "radians",
+    "__iter_pairs", "big", "factorial", "divmod", "idiv", "powmod", "isqrt", "bit_length", // arbitrary-precision integers
+    "gcd", "lcm", "mean", "median", "variance", "stdev", "pvariance", "pstdev", "env", "args", "exit",
+    "sleep", "assert", "set", "delete", "insert", "gc_stats", "jit_stats", "instanceof", "dict_from_pairs",
+    "mutex_new", "mutex_get", "mutex_set", "mutex_add", "mutex_free",
+    "uncertain", "unc_value", "unc_margin", "unc_lo", "unc_hi", "gauss", "unc_sigma", "prob_gt", "prob_lt",
+    // Ghost Agent (web search + local LLM)
+    "ghost_ask",
+    "ghost_smart_solve",
+    // RLM — Reasoning Language Models (DeepSeek-R1, QwQ)
+    "rlm_think", "rlm_answer", "rlm_thinking",
+    // Native Think Engine — 100% Killer-native reasoning
+    "native_think",
+    // Ghost-108 — parallel multi-agent search, fastest wins
+    "ghost_108",
+    // KhLM — Killer Hybrid Language Model unified router
+    "khlm_ask", "khlm_ask_model",
+    // KhLM prefetch — background pre-warm cache for instant khlm_ask returns
+    "khlm_prefetch",
+    // LLM-as-RLM — any LLM becomes a reasoning model via chain-of-thought prompt
+    "llm_reason", "llm_reason_answer",
+    // User-composable building blocks — create your own LLM/RLM/KhLM in Killer code
+    "khlm_classify",     // classify question: "math" | "factual" | "reasoning"
+    "khlm_run",          // custom pipeline: "web" | "rlm" | "web+rlm" | "auto"
+    "llm_parallel",      // run N questions in parallel → List<String>
+    "rlm_synthesize",    // give RLM your own context → synthesized answer
+    // KORE — Killer Optimized Record Exchange file format
+    "kore_write",        // kore_write(path, schema, data) → String
+    "kore_read",         // kore_read(path) → String (JSON)
+    "kore_read_col",     // kore_read_col(path, col_name) → String (JSON array)
+    "kore_info",         // kore_info(path) → String (metadata)
+    // Nova — KORE-B columnar + LZ77 (smallest + fastest, pure Rust stdlib)
+    "nova_write",        // nova_write(csv_path, out_path) → Bool
+    "nova_info",         // nova_info(path) → String (metadata)
+    "nova_read_col",     // nova_read_col(path, col_name) → Array
+    "nova_read_all",     // nova_read_all(path) → Map {col→Array}
+    "nova_stats",        // nova_stats(path, col_name) → Map {count,min,max,sum,mean,nulls,unique}
+    "nova_filter",       // nova_filter(path, col_name, value) → Array of matching row indices
+    "nova_to_csv",       // nova_to_csv(kore, csv)   → Bool
+    "nova_to_json",      // nova_to_json(kore, json) → Bool
+    "nova_to_tsv",       // nova_to_tsv(kore, tsv)   → Bool
+    "nova_from_json",    // nova_from_json(json, kore) → Bool
+    "nova_from_tsv",     // nova_from_tsv(tsv, kore)   → Bool
+    "nova_from_xml",     // nova_from_xml(xml, kore)         → Bool
+    "nova_to_xml",       // nova_to_xml(kore, xml)           → Bool
+    "nova_to_ndjson",    // nova_to_ndjson(kore, ndjson)     → Bool
+    "nova_from_ndjson",  // nova_from_ndjson(ndjson, kore)   → Bool
+    "nova_to_avro",      // nova_to_avro(kore, avro)         → Bool
+    "nova_from_avro",    // nova_from_avro(avro, kore)       → Bool
+    "nova_to_parquet",   // nova_to_parquet(kore, parquet)   → Bool
+    "nova_from_parquet", // nova_from_parquet(parquet, kore) → Bool
+    "nova_auto_convert", // nova_auto_convert(src, dst)      → Bool  (dot-to-dot syntax)
+    "nova_compress",     // nova_compress(src, dst)          → Bool  (.compress. syntax)
+    "nova_decompress",   // nova_decompress(src, dst)        → Bool  (.decompress. syntax)
+    // Nova Galaxy Engine v1 — Polyglot @lang{} runtime
+    "polyglot_exec",     // polyglot_exec(lang, code)        → String
+    "polyglot_list",     // polyglot_list()                  → String (detected runtimes)
+    "polyglot_check",    // polyglot_check(lang)             → Bool
+    // AI Assassin Assist Layer
+    "nova_assist_log",        "nova_assist_status",     "nova_assist_debug",
+    "nova_assist_optimize",   "nova_assist_enable",     "nova_assist_disable",
+    "nova_assist_set_budget", "nova_assist_set_log",    "nova_assist_clear",
+    // E: HTTP Client builtins
+    "http_get",          // http_get(url)                    → String
+    "http_post",         // http_post(url, body)             → String
+    "http_post_json",    // http_post_json(url, json)        → String
+    "http_head",         // http_head(url)                   → String (headers)
+    "http_status",       // http_status(url)                 → Number (200/404/etc)
+    "http_download",     // http_download(url, path)         → String
+    // A: Streaming polyglot output
+    "polyglot_stream",   // polyglot_stream(lang, code)      → String (streams+returns)
+    // B: Vector Memory
+    "vmem_store",        // vmem_store(key, text)            → String
+    "vmem_recall",       // vmem_recall(key)                 → String
+    "vmem_search",       // vmem_search(query, topk?)        → String
+    "vmem_forget",       // vmem_forget(key)                 → String
+    "vmem_list",         // vmem_list()                      → String
+    "vmem_stats",        // vmem_stats()                     → String
+    "vmem_clear",        // vmem_clear()                     → String
+    "vmem_set_threshold",// vmem_set_threshold(f)            → String
+    // C: KhLM Tool Calling
+    "tool_register",     // tool_register(name, desc)        → String
+    "tool_call",         // tool_call(name, args...)         → String
+    "tool_list",         // tool_list()                      → String
+    "khlm_with_tools",   // khlm_with_tools(prompt)         → String
+    "khlm_tool_status",  // khlm_tool_status()              → String
+    "khlm_tool_clear",   // khlm_tool_clear()               → String
+    // KhLM-Polyglot: 5-tier AI router (CAG → LLM → RLM → Ghost-108)
+    "khlm_debug",        // khlm_debug(code, lang, error?)   → String
+    "khlm_suggest",      // khlm_suggest(code, lang)         → String
+    "khlm_explain",      // khlm_explain(code, lang)         → String
+    "khlm_fix",          // khlm_fix(code, error, lang)      → String
+    "khlm_translate",    // khlm_translate(code, from, to)   → String
+    "khlm_status",       // khlm_status()                    → String
+    "khlm_set_llm",      // khlm_set_llm(provider, key, mdl) → String
+    "khlm_set_rlm",      // khlm_set_rlm(model_path)         → String
+    "khlm_cache_clear",  // khlm_cache_clear()               → String
+    // File system
+    "nova_file_read",    "nova_file_write",   "nova_file_append",
+    "nova_file_exists",  "nova_file_delete",  "nova_file_size",
+    "nova_dir_list",     "nova_dir_exists",   "nova_dir_create",
+    // KORE data operations
+    "nova_select",       "nova_drop_col",     "nova_rename_col",
+    "nova_add_col",      "nova_head",         "nova_tail",
+    "nova_sort",         "nova_merge",        "nova_join",
+    "nova_group_by",     "nova_distinct",     "nova_sample",
+    "nova_filter_op",    "nova_fill",         "nova_read_lines",
+    "nova_multi_filter", "nova_cast",         "nova_concat",
+    "nova_show",
+    // Excel and ORC formats
+    "nova_to_xlsx",      "nova_from_xlsx",
+    "nova_to_orc",       "nova_from_orc",
+    // ── IMAGINATION ENGINE — think beyond, counterfactual, conceptual bridges ──
+    "imagine",           "imagine_what_if",   "imagine_connect",
+    "imagine_beyond",    "imagine_self",
+    // ── AFFECT ENGINE — emotional state, feelings, colored responses ──────────
+    "affect_sense",      "affect_state",      "affect_color",
+    "affect_reset",      "affect_set",
+    // ── GUARDIAN ENGINE — Human Protection Principle (Sai Arun Kumar Katherashala)
+    "guardian_check",    "guardian_principles",  "guardian_status",
+    // Prose Engine
+    "khlm_write",
+    // Vision Engine
+    "image_load",        "image_describe",       "khlm_vision",
+    // ── KALA (काल) — Brand aliases (thin wrappers over KhLM engine) ──────────
+    "kala_ask",          "kala_think",
+    "kala_write",        "kala_vision",          "kala_describe",
+    "kala_debug",        "kala_suggest",         "kala_explain",
+    "kala_fix",          "kala_translate",
+    "kala_imagine",      "kala_what_if",
+    "kala_feel",         "kala_guard",
+    "kala_status",       "kala_set_llm",         "kala_prefetch",
+    // Kala Chat UI server
+    "kala_serve",
+    // Kala Generator — image & video generation
+    "kala_generate_image",
+    "kala_generate_video",
+    // ── Compression builtins ──
+    "compress",          // compress(text, algo) → String     algo: "rle"|"lz77"|"nova"
+    "decompress",        // decompress(data, algo) → String
+    "b64_encode",        // b64_encode(text) → String
+    "b64_decode",        // b64_decode(b64) → String
+    "hex_encode",        // hex_encode(text) → String
+    "hex_decode",        // hex_decode(hex) → String
+    "compress_ratio",    // compress_ratio(orig, comp) → Number
+    "compress_info",     // compress_info(text) → Dict
+    // ── Debug Intelligence builtins ──
+    "debug_check",       // debug_check(code) → Array of issues
+    "auto_fix",          // auto_fix(code) → Array of fix candidates
+    "explain_error",     // explain_error(msg, ctx?) → String
+    "suggest_refactor",  // suggest_refactor(code) → Array
+    "auto_test",         // auto_test(code) → String
+    "perf_profile",      // perf_profile(code) → Array of hints
+    "ai_pair",           // ai_pair(task) → String
+    "killer_debug_agent", // killer_debug_agent(code) → Dict
+    "watch_value",       // watch_value(expr, val) → Null (debug intelligence)
+    "watch_report",      // watch_report() → String
+    // ── Linter builtins ──
+    "lint",              // lint(code) → String report
+    // ── Production Module (regex, help, db, fmt, lint) ──
+    "regex_match", "regex_find", "regex_find_all", "regex_replace", "regex_split", "regex_test",
+    "help", "help_search", "help_list",
+    "db_open", "db_get", "db_set", "db_delete", "db_keys", "db_keys_prefix",
+    "db_count", "db_close", "db_drop",
+    "fmt", "fmt_file", "lint_code", "lint_file",
+    // ── 10x Module (package manager, LSP, DAP, docs) ──
+    "pkg_init", "pkg_add", "pkg_remove", "pkg_list", "pkg_resolve",
+    "pkg_install", "pkg_info", "pkg_search", "pkg_publish", "pkg_version",
+    "lsp_start", "lsp_stop", "lsp_analyze", "lsp_complete", "lsp_hover", "lsp_format",
+    "dap_start", "dap_break", "dap_remove_break", "dap_step", "dap_next",
+    "dap_continue", "dap_vars", "dap_stack", "dap_eval", "dap_stop", "dap_list_breaks",
+    "docs_generate", "docs_serve", "docs_search", "docs_api", "docs_export",
+    // ── Improve Module (errors, imports, watch, stack, REPL, perf, doc comments) ──
+    "error_enhance", "suggest",
+    "import", "import_list", "import_clear",
+    "watch", "watch_dir",
+    "stack_push", "stack_pop", "stack_trace", "stack_clear",
+    "repl_complete", "repl_complete_sig",
+    "bench_run", "bench_all", "bench_save", "bench_compare",
+    "doc_parse", "doc_check",
+    "ui_core_version", "ui_headless_tick", "ui_headless_snapshot_json", "ui_health", "ui_help", "ui_native_window",
+    // ── Android Modules ──
+    "mic_status", "service_is_running",
+    "secure_encrypt", "secure_decrypt", "secure_hash", "secure_hash_file",
+    "secure_random_bytes", "secure_pin_set", "secure_pin_verify", "secure_pin_is_set",
+    "secure_lock", "secure_is_locked", "secure_unlock",
+    "secure_check_integrity", "evidence_hash", "secure_wipe_recordings",
+    // ── File I/O aliases ──
+    "file_read", "file_write", "file_exists", "file_delete", "file_append",
+    "readFile", "writeFile",
+    // Interactive I/O
+    "readline", "readline_prompt",
+    // ── v2.3: OS-Level Primitives ──
+    "bit_not", "bit_rotl", "bit_rotr",
+    "to_integer", "to_bytes", "to_pointer",
+    "bytes_new", "bytes_len", "bytes_get", "bytes_set",
+    "bytes_slice", "bytes_from_str", "bytes_to_str", "bytes_concat", "bytes_fill",
+    "ptr_new", "ptr_to_int", "ptr_offset",
+    "mem_read_u8", "mem_read_u16", "mem_read_u32", "mem_read_u64",
+    "mem_write_u8", "mem_write_u16", "mem_write_u32", "mem_write_u64",
+    "volatile_read_u8", "volatile_read_u16", "volatile_read_u32", "volatile_read_u64",
+    "volatile_write_u8", "volatile_write_u16", "volatile_write_u32", "volatile_write_u64",
+    "io_port_in_u8", "io_port_in_u16", "io_port_out_u8", "io_port_out_u16",
+    "sha256", "sha256_bytes",
+    "mmap_alloc", "mmap_free", "mmap_write", "mmap_read", "mmap_exec",
+    "int_to_bytes_le", "int_to_bytes_be", "bytes_to_int_le", "bytes_to_int_be",
+    "cli_args", "env_get", "env_set", "process_exit", "errno",
+    "sizeof", "alignof",
+    "atomic_load", "atomic_store", "atomic_cas", "atomic_add",
+    "interrupts_disable", "interrupts_enable", "wfi", "fence",
+    "disk_read_block", "disk_write_block",
+    "page_alloc", "page_free", "page_map",
+    // v2.3: OS-level hardware primitives
+    "cpuid", "rdtsc", "gdt_encode", "idt_encode", "call_native",
+    // Standard-library builtins that were implemented in builtin.rs but not callable from scripts
+    "appendFile", "async_all", "async_await", "async_chain", "async_map", "async_race",
+    "async_reject", "async_resolve", "async_sleep", "async_spawn", "async_timeout", "await_future",
+    "chan_close", "chan_new", "chan_recv", "chan_send", "chan_try_recv", "date_add",
+    "date_day", "date_diff", "date_format", "date_month", "date_now", "date_parse", "date_year",
+    "deleteFile", "entries", "fileCopy", "fileExists", "fileSize", "filter", "http_delete",
+    "http_get_json", "http_patch", "http_put", "http_with_headers", "join_thread", "json_encode",
+    "json_parse", "listDir", "map", "mkdir", "pathBasename", "pathDirname", "pathExtension",
+    "pathJoin", "readBytes", "reduce", "renameFile", "set_add", "set_clear", "set_difference",
+    "set_from_array", "set_has", "set_intersection", "set_new", "set_remove", "set_size",
+    "set_to_array", "set_union", "spawn_thread", "timestamp", "writeBytes",
+    // text helpers (src/text_methods.rs)
+    "capitalize", "title", "swapcase", "center", "zfill", "isdigit", "isalpha", "isalnum", "isspace",
+    "isupper", "islower", "splitlines", "find", "rfind", "count",
+];
+
+/// Every name the compiler turns into a `CallBuiltin`: the core list, the library modules
+/// (`net_ai::is_builtin`: vec, rag, embed, log, iter, stdio, serve, ...) and the id table.
+fn is_registered_builtin(name: &str) -> bool {
+    BUILTINS.contains(&name)
+        || crate::net_ai::is_builtin(name)
+        || crate::builtin::BUILTIN_ID_TABLE.iter().any(|(n, _)| *n == name)
+}
+
 fn patch_pending_calls(state: &mut CompilerState) -> Result<(), VmError> {
     // All built-in function names recognised by BuiltinFunctions::call()
     // AI functions, stdlib, and core built-ins are all listed here so that
     // patch_pending_calls emits CallBuiltin instead of failing.
-    const BUILTINS: &[&str] = &[
-        "print", "println", "len", "length", "push", "pop", "contains", "index_of",
-        "get", "setdefault", "copy", "reversed",
-        "range", "type_of", "to_string", "to_int", "to_float", "keys", "values",
-        "sort", "reverse", "join", "split", "trim", "replace", "upper", "lower",
-        "starts_with", "ends_with", "substr", "format", "parse_int", "parse_float",
-        "abs", "floor", "ceil", "round", "sqrt", "pow",
-        "sin", "cos", "tan", "random",
-        "bit_and", "bit_or", "bit_xor", "bit_shl", "bit_shr",
-        "min", "max",
-        "math_eval", "math_eval_subst",
-        "time_now", "sleep",
-        "time_ms", "sleep_ms",
-        "concat", "iterKeys",
-        // insert (dict insert, alias for hash_map_insert)
-        "insert",
-        "hash_map_new",
-        "hash_map_insert",
-        "hash_map_get",
-        "hash_map_contains",
-        "hash_map_remove",
-        "hash_map_size",
-        "hash_map_keys",
-        "hash_map_values",
-        // assert builtins
-        "assert_eq", "assert_ne", "assert_true", "assert_false", "assert_contains", "assert_nil",
-        // Phase 1: Trit — balanced ternary
-        "T_NEG", "T_ZERO", "T_POS",
-        "trit_and", "trit_or", "trit_not", "trit_add", "trit_mul",
-        "trit_to_int", "trit_from_int", "int_to_trit", "trit_to_str",
-        "trit_word", "trit_word_to_int",
-        // Phase 2: Fuzzy logic
-        "fuzzy_and", "fuzzy_or", "fuzzy_not", "fuzzy_threshold", "fuzzy_combine",
-        // Phase 3: Cognitive Signal
-        "signal_create", "signal_value", "signal_confidence", "signal_reason",
-        "signal_and", "signal_or", "signal_confident", "signal_uncertain", "signal_to_str",
-        // Phase 4: Qubit — quantum simulation
-        "qubit_create", "qubit_hadamard", "qubit_pauli_x", "qubit_pauli_z",
-        "qubit_measure", "qubit_prob0", "qubit_prob1", "qubit_phase",
-        "qubit_to_str", "qubit_entangle",
-        // Phase 5: Tryte — 6-trit balanced ternary word
-        "tryte_create", "tryte_from_int", "tryte_to_int", "tryte_to_str",
-        "tryte_get", "tryte_set", "tryte_and", "tryte_or", "tryte_not",
-        "tryte_add", "tryte_eq", "tryte_zero", "tryte_type",
-        // type / conversion builtins
-        "str", "int", "type", "String", "Number", "Boolean", "parseInt", "parseFloat",
-        "isNaN", "isFinite",
-        // string builtins
-        "substring", "indexOf", "repeat", "charAt", "charCodeAt",
-        // array builtins
-        "slice", "includes",
-        // Python-style: sorted, sum, enumerate, all, any, zip
-        "sorted", "sum", "enumerate", "all", "any", "zip",
-        // I/O
-        "readFile", "writeFile",
-        // time / network
-        "system_time_ms", "thread_sleep_ms",
-        "http_get", "http_post", "parse_json", "json_stringify", "json_pretty",
-        "parse_csv", "to_csv", "to_yaml",
-        "now", "parse_datetime", "format_datetime",
-        // AI functions
-        "ai_generate", "ai_embed", "ai_classify", "ai_extract",
-        "ai_local_infer", "ai_provider_set", "ai_provider_get",
-        "ai_cache_enable", "ai_cache_clear",
-        // Native GGUF inference
-        "llm_chat", "llm_ask", "llm_info", "llm_complete", "llm_embed",
-        "ffi_open", "ffi_call", "ffi_close", "ffi_alloc", "ffi_free", "ffi_poke", "ffi_peek",
-        "ord", "chr", "pad_left", "pad_right", "repeat", "strip", "lstrip", "rstrip", "startsWith", "endsWith",
-        "base64_encode", "base64_decode", "hmac_sha256", "float", "bool", "log", "log2", "log10", "exp", "cbrt",
-        "trunc", "sign", "atan2", "hypot", "asin", "acos", "atan", "sinh", "cosh", "tanh", "degrees", "radians",
-        "__iter_pairs", "big", "factorial", "divmod", "idiv", "powmod", "isqrt", "bit_length", // arbitrary-precision integers
-        "gcd", "lcm", "mean", "median", "variance", "stdev", "pvariance", "pstdev", "env", "args", "exit",
-        "sleep", "assert", "set", "delete", "insert", "gc_stats", "jit_stats", "instanceof", "dict_from_pairs",
-        "mutex_new", "mutex_get", "mutex_set", "mutex_add", "mutex_free",
-        "uncertain", "unc_value", "unc_margin", "unc_lo", "unc_hi", "gauss", "unc_sigma", "prob_gt", "prob_lt",
-        // Ghost Agent (web search + local LLM)
-        "ghost_ask",
-        "ghost_smart_solve",
-        // RLM — Reasoning Language Models (DeepSeek-R1, QwQ)
-        "rlm_think", "rlm_answer", "rlm_thinking",
-        // Native Think Engine — 100% Killer-native reasoning
-        "native_think",
-        // Ghost-108 — parallel multi-agent search, fastest wins
-        "ghost_108",
-        // KhLM — Killer Hybrid Language Model unified router
-        "khlm_ask", "khlm_ask_model",
-        // KhLM prefetch — background pre-warm cache for instant khlm_ask returns
-        "khlm_prefetch",
-        // LLM-as-RLM — any LLM becomes a reasoning model via chain-of-thought prompt
-        "llm_reason", "llm_reason_answer",
-        // User-composable building blocks — create your own LLM/RLM/KhLM in Killer code
-        "khlm_classify",     // classify question: "math" | "factual" | "reasoning"
-        "khlm_run",          // custom pipeline: "web" | "rlm" | "web+rlm" | "auto"
-        "llm_parallel",      // run N questions in parallel → List<String>
-        "rlm_synthesize",    // give RLM your own context → synthesized answer
-        // KORE — Killer Optimized Record Exchange file format
-        "kore_write",        // kore_write(path, schema, data) → String
-        "kore_read",         // kore_read(path) → String (JSON)
-        "kore_read_col",     // kore_read_col(path, col_name) → String (JSON array)
-        "kore_info",         // kore_info(path) → String (metadata)
-        // Nova — KORE-B columnar + LZ77 (smallest + fastest, pure Rust stdlib)
-        "nova_write",        // nova_write(csv_path, out_path) → Bool
-        "nova_info",         // nova_info(path) → String (metadata)
-        "nova_read_col",     // nova_read_col(path, col_name) → Array
-        "nova_read_all",     // nova_read_all(path) → Map {col→Array}
-        "nova_stats",        // nova_stats(path, col_name) → Map {count,min,max,sum,mean,nulls,unique}
-        "nova_filter",       // nova_filter(path, col_name, value) → Array of matching row indices
-        "nova_to_csv",       // nova_to_csv(kore, csv)   → Bool
-        "nova_to_json",      // nova_to_json(kore, json) → Bool
-        "nova_to_tsv",       // nova_to_tsv(kore, tsv)   → Bool
-        "nova_from_json",    // nova_from_json(json, kore) → Bool
-        "nova_from_tsv",     // nova_from_tsv(tsv, kore)   → Bool
-        "nova_from_xml",     // nova_from_xml(xml, kore)         → Bool
-        "nova_to_xml",       // nova_to_xml(kore, xml)           → Bool
-        "nova_to_ndjson",    // nova_to_ndjson(kore, ndjson)     → Bool
-        "nova_from_ndjson",  // nova_from_ndjson(ndjson, kore)   → Bool
-        "nova_to_avro",      // nova_to_avro(kore, avro)         → Bool
-        "nova_from_avro",    // nova_from_avro(avro, kore)       → Bool
-        "nova_to_parquet",   // nova_to_parquet(kore, parquet)   → Bool
-        "nova_from_parquet", // nova_from_parquet(parquet, kore) → Bool
-        "nova_auto_convert", // nova_auto_convert(src, dst)      → Bool  (dot-to-dot syntax)
-        "nova_compress",     // nova_compress(src, dst)          → Bool  (.compress. syntax)
-        "nova_decompress",   // nova_decompress(src, dst)        → Bool  (.decompress. syntax)
-        // Nova Galaxy Engine v1 — Polyglot @lang{} runtime
-        "polyglot_exec",     // polyglot_exec(lang, code)        → String
-        "polyglot_list",     // polyglot_list()                  → String (detected runtimes)
-        "polyglot_check",    // polyglot_check(lang)             → Bool
-        // AI Assassin Assist Layer
-        "nova_assist_log",        "nova_assist_status",     "nova_assist_debug",
-        "nova_assist_optimize",   "nova_assist_enable",     "nova_assist_disable",
-        "nova_assist_set_budget", "nova_assist_set_log",    "nova_assist_clear",
-        // E: HTTP Client builtins
-        "http_get",          // http_get(url)                    → String
-        "http_post",         // http_post(url, body)             → String
-        "http_post_json",    // http_post_json(url, json)        → String
-        "http_head",         // http_head(url)                   → String (headers)
-        "http_status",       // http_status(url)                 → Number (200/404/etc)
-        "http_download",     // http_download(url, path)         → String
-        // A: Streaming polyglot output
-        "polyglot_stream",   // polyglot_stream(lang, code)      → String (streams+returns)
-        // B: Vector Memory
-        "vmem_store",        // vmem_store(key, text)            → String
-        "vmem_recall",       // vmem_recall(key)                 → String
-        "vmem_search",       // vmem_search(query, topk?)        → String
-        "vmem_forget",       // vmem_forget(key)                 → String
-        "vmem_list",         // vmem_list()                      → String
-        "vmem_stats",        // vmem_stats()                     → String
-        "vmem_clear",        // vmem_clear()                     → String
-        "vmem_set_threshold",// vmem_set_threshold(f)            → String
-        // C: KhLM Tool Calling
-        "tool_register",     // tool_register(name, desc)        → String
-        "tool_call",         // tool_call(name, args...)         → String
-        "tool_list",         // tool_list()                      → String
-        "khlm_with_tools",   // khlm_with_tools(prompt)         → String
-        "khlm_tool_status",  // khlm_tool_status()              → String
-        "khlm_tool_clear",   // khlm_tool_clear()               → String
-        // KhLM-Polyglot: 5-tier AI router (CAG → LLM → RLM → Ghost-108)
-        "khlm_debug",        // khlm_debug(code, lang, error?)   → String
-        "khlm_suggest",      // khlm_suggest(code, lang)         → String
-        "khlm_explain",      // khlm_explain(code, lang)         → String
-        "khlm_fix",          // khlm_fix(code, error, lang)      → String
-        "khlm_translate",    // khlm_translate(code, from, to)   → String
-        "khlm_status",       // khlm_status()                    → String
-        "khlm_set_llm",      // khlm_set_llm(provider, key, mdl) → String
-        "khlm_set_rlm",      // khlm_set_rlm(model_path)         → String
-        "khlm_cache_clear",  // khlm_cache_clear()               → String
-        // File system
-        "nova_file_read",    "nova_file_write",   "nova_file_append",
-        "nova_file_exists",  "nova_file_delete",  "nova_file_size",
-        "nova_dir_list",     "nova_dir_exists",   "nova_dir_create",
-        // KORE data operations
-        "nova_select",       "nova_drop_col",     "nova_rename_col",
-        "nova_add_col",      "nova_head",         "nova_tail",
-        "nova_sort",         "nova_merge",        "nova_join",
-        "nova_group_by",     "nova_distinct",     "nova_sample",
-        "nova_filter_op",    "nova_fill",         "nova_read_lines",
-        "nova_multi_filter", "nova_cast",         "nova_concat",
-        "nova_show",
-        // Excel and ORC formats
-        "nova_to_xlsx",      "nova_from_xlsx",
-        "nova_to_orc",       "nova_from_orc",
-        // ── IMAGINATION ENGINE — think beyond, counterfactual, conceptual bridges ──
-        "imagine",           "imagine_what_if",   "imagine_connect",
-        "imagine_beyond",    "imagine_self",
-        // ── AFFECT ENGINE — emotional state, feelings, colored responses ──────────
-        "affect_sense",      "affect_state",      "affect_color",
-        "affect_reset",      "affect_set",
-        // ── GUARDIAN ENGINE — Human Protection Principle (Sai Arun Kumar Katherashala)
-        "guardian_check",    "guardian_principles",  "guardian_status",
-        // Prose Engine
-        "khlm_write",
-        // Vision Engine
-        "image_load",        "image_describe",       "khlm_vision",
-        // ── KALA (काल) — Brand aliases (thin wrappers over KhLM engine) ──────────
-        "kala_ask",          "kala_think",
-        "kala_write",        "kala_vision",          "kala_describe",
-        "kala_debug",        "kala_suggest",         "kala_explain",
-        "kala_fix",          "kala_translate",
-        "kala_imagine",      "kala_what_if",
-        "kala_feel",         "kala_guard",
-        "kala_status",       "kala_set_llm",         "kala_prefetch",
-        // Kala Chat UI server
-        "kala_serve",
-        // Kala Generator — image & video generation
-        "kala_generate_image",
-        "kala_generate_video",
-        // ── Compression builtins ──
-        "compress",          // compress(text, algo) → String     algo: "rle"|"lz77"|"nova"
-        "decompress",        // decompress(data, algo) → String
-        "b64_encode",        // b64_encode(text) → String
-        "b64_decode",        // b64_decode(b64) → String
-        "hex_encode",        // hex_encode(text) → String
-        "hex_decode",        // hex_decode(hex) → String
-        "compress_ratio",    // compress_ratio(orig, comp) → Number
-        "compress_info",     // compress_info(text) → Dict
-        // ── Debug Intelligence builtins ──
-        "debug_check",       // debug_check(code) → Array of issues
-        "auto_fix",          // auto_fix(code) → Array of fix candidates
-        "explain_error",     // explain_error(msg, ctx?) → String
-        "suggest_refactor",  // suggest_refactor(code) → Array
-        "auto_test",         // auto_test(code) → String
-        "perf_profile",      // perf_profile(code) → Array of hints
-        "ai_pair",           // ai_pair(task) → String
-        "killer_debug_agent", // killer_debug_agent(code) → Dict
-        "watch_value",       // watch_value(expr, val) → Null (debug intelligence)
-        "watch_report",      // watch_report() → String
-        // ── Linter builtins ──
-        "lint",              // lint(code) → String report
-        // ── Production Module (regex, help, db, fmt, lint) ──
-        "regex_match", "regex_find", "regex_find_all", "regex_replace", "regex_split", "regex_test",
-        "help", "help_search", "help_list",
-        "db_open", "db_get", "db_set", "db_delete", "db_keys", "db_keys_prefix",
-        "db_count", "db_close", "db_drop",
-        "fmt", "fmt_file", "lint_code", "lint_file",
-        // ── 10x Module (package manager, LSP, DAP, docs) ──
-        "pkg_init", "pkg_add", "pkg_remove", "pkg_list", "pkg_resolve",
-        "pkg_install", "pkg_info", "pkg_search", "pkg_publish", "pkg_version",
-        "lsp_start", "lsp_stop", "lsp_analyze", "lsp_complete", "lsp_hover", "lsp_format",
-        "dap_start", "dap_break", "dap_remove_break", "dap_step", "dap_next",
-        "dap_continue", "dap_vars", "dap_stack", "dap_eval", "dap_stop", "dap_list_breaks",
-        "docs_generate", "docs_serve", "docs_search", "docs_api", "docs_export",
-        // ── Improve Module (errors, imports, watch, stack, REPL, perf, doc comments) ──
-        "error_enhance", "suggest",
-        "import", "import_list", "import_clear",
-        "watch", "watch_dir",
-        "stack_push", "stack_pop", "stack_trace", "stack_clear",
-        "repl_complete", "repl_complete_sig",
-        "bench_run", "bench_all", "bench_save", "bench_compare",
-        "doc_parse", "doc_check",
-        "ui_core_version", "ui_headless_tick", "ui_headless_snapshot_json", "ui_health", "ui_help", "ui_native_window",
-        // ── Android Modules ──
-        "mic_status", "service_is_running",
-        "secure_encrypt", "secure_decrypt", "secure_hash", "secure_hash_file",
-        "secure_random_bytes", "secure_pin_set", "secure_pin_verify", "secure_pin_is_set",
-        "secure_lock", "secure_is_locked", "secure_unlock",
-        "secure_check_integrity", "evidence_hash", "secure_wipe_recordings",
-        // ── File I/O aliases ──
-        "file_read", "file_write", "file_exists", "file_delete", "file_append",
-        "readFile", "writeFile",
-        // Interactive I/O
-        "readline", "readline_prompt",
-        // ── v2.3: OS-Level Primitives ──
-        "bit_not", "bit_rotl", "bit_rotr",
-        "to_integer", "to_bytes", "to_pointer",
-        "bytes_new", "bytes_len", "bytes_get", "bytes_set",
-        "bytes_slice", "bytes_from_str", "bytes_to_str", "bytes_concat", "bytes_fill",
-        "ptr_new", "ptr_to_int", "ptr_offset",
-        "mem_read_u8", "mem_read_u16", "mem_read_u32", "mem_read_u64",
-        "mem_write_u8", "mem_write_u16", "mem_write_u32", "mem_write_u64",
-        "volatile_read_u8", "volatile_read_u16", "volatile_read_u32", "volatile_read_u64",
-        "volatile_write_u8", "volatile_write_u16", "volatile_write_u32", "volatile_write_u64",
-        "io_port_in_u8", "io_port_in_u16", "io_port_out_u8", "io_port_out_u16",
-        "sha256", "sha256_bytes",
-        "mmap_alloc", "mmap_free", "mmap_write", "mmap_read", "mmap_exec",
-        "int_to_bytes_le", "int_to_bytes_be", "bytes_to_int_le", "bytes_to_int_be",
-        "cli_args", "env_get", "env_set", "process_exit", "errno",
-        "sizeof", "alignof",
-        "atomic_load", "atomic_store", "atomic_cas", "atomic_add",
-        "interrupts_disable", "interrupts_enable", "wfi", "fence",
-        "disk_read_block", "disk_write_block",
-        "page_alloc", "page_free", "page_map",
-        // v2.3: OS-level hardware primitives
-        "cpuid", "rdtsc", "gdt_encode", "idt_encode", "call_native",
-        // Standard-library builtins that were implemented in builtin.rs but not callable from scripts
-        "appendFile", "async_all", "async_await", "async_chain", "async_map", "async_race",
-        "async_reject", "async_resolve", "async_sleep", "async_spawn", "async_timeout", "await_future",
-        "chan_close", "chan_new", "chan_recv", "chan_send", "chan_try_recv", "date_add",
-        "date_day", "date_diff", "date_format", "date_month", "date_now", "date_parse", "date_year",
-        "deleteFile", "entries", "fileCopy", "fileExists", "fileSize", "filter", "http_delete",
-        "http_get_json", "http_patch", "http_put", "http_with_headers", "join_thread", "json_encode",
-        "json_parse", "listDir", "map", "mkdir", "pathBasename", "pathDirname", "pathExtension",
-        "pathJoin", "readBytes", "reduce", "renameFile", "set_add", "set_clear", "set_difference",
-        "set_from_array", "set_has", "set_intersection", "set_new", "set_remove", "set_size",
-        "set_to_array", "set_union", "spawn_thread", "timestamp", "writeBytes",
-        // text helpers (src/text_methods.rs)
-        "capitalize", "title", "swapcase", "center", "zfill", "isdigit", "isalpha", "isalnum", "isspace",
-        "isupper", "islower", "splitlines", "find", "rfind", "count",
-    ];
+
 
     for pending in &state.pending_calls {
         // `next`/`has_next` are generator builtins, but only when the script has no function of
@@ -7706,6 +7716,8 @@ fn try_ui_assign_sugar(raw_line: &str) -> Option<String> {
 /// How many arguments the function value wrapping builtin `name` takes, or `None` when the name is
 /// not a builtin that can be used as a value.
 fn builtin_value_arity(name: &str) -> Option<usize> {
+    // ... exact arity of the original builtins; every other registered builtin is wrapped by
+    // `emit_variadic_builtin_wrapper` (see `emit_builtin_value`)
     const BINARY: &[&str] = &[
         "pow", "push", "contains", "index_of", "join", "split", "concat", "gcd", "lcm", "divmod", "idiv", "atan2",
         "hypot", "min", "max", "starts_with", "ends_with", "repeat", "get", "powmod_2",
@@ -7723,10 +7735,38 @@ fn builtin_value_arity(name: &str) -> Option<usize> {
     None
 }
 
+/// Most arguments a first-class library builtin (`f = vec_search`) can be called with.
+const VARIADIC_WRAPPER_MAX: usize = 6;
+
+/// Body of the function value wrapping a library builtin whose arity is not fixed: calls it with
+/// the arguments actually passed (trailing `null`s are treated as "not passed", so optional
+/// parameters keep their defaults: `log_info("x")` does not become `log_info("x", null)`).
+fn emit_variadic_builtin_wrapper(name: &str, state: &mut CompilerState) {
+    for j in (1..=VARIADIC_WRAPPER_MAX).rev() {
+        // if type(arg{j-1}) != "null" { return name(arg0 .. arg{j-1}) }
+        state.instructions.push(Instruction::Load(format!("arg{}", j - 1)));
+        state.instructions.push(Instruction::CallBuiltin("type".to_string(), 1));
+        state.instructions.push(Instruction::ConstStr("null".to_string()));
+        state.instructions.push(Instruction::Ne);
+        let jf = state.instructions.len();
+        state.instructions.push(Instruction::JumpIfFalse(usize::MAX));
+        for i in 0..j {
+            state.instructions.push(Instruction::Load(format!("arg{}", i)));
+        }
+        state.instructions.push(Instruction::CallBuiltin(name.to_string(), j));
+        state.instructions.push(Instruction::Ret);
+        let next = state.instructions.len();
+        state.instructions[jf] = Instruction::JumpIfFalse(next);
+    }
+    state.instructions.push(Instruction::CallBuiltin(name.to_string(), 0));
+    state.instructions.push(Instruction::Ret);
+}
+
 /// Push the value of builtin `name`: a script variable of that name if there is one at run time,
 /// else a function value wrapping the builtin (the wrapper is emitted once per program).
 fn emit_builtin_value(name: &str, state: &mut CompilerState) {
-    let arity = builtin_value_arity(name).unwrap_or(1);
+    let exact = builtin_value_arity(name);
+    let arity = exact.unwrap_or(VARIADIC_WRAPPER_MAX);
     let start = match state.builtin_wrappers.get(name) {
         Some(&start) => start,
         None => {
@@ -7734,11 +7774,15 @@ fn emit_builtin_value(name: &str, state: &mut CompilerState) {
             state.instructions.push(Instruction::Jump(usize::MAX));
             let start = state.instructions.len();
             state.function_arities.insert(start, arity);
-            for i in 0..arity {
-                state.instructions.push(Instruction::Load(format!("arg{}", i)));
+            if exact.is_some() {
+                for i in 0..arity {
+                    state.instructions.push(Instruction::Load(format!("arg{}", i)));
+                }
+                state.instructions.push(Instruction::CallBuiltin(name.to_string(), arity));
+                state.instructions.push(Instruction::Ret);
+            } else {
+                emit_variadic_builtin_wrapper(name, state);
             }
-            state.instructions.push(Instruction::CallBuiltin(name.to_string(), arity));
-            state.instructions.push(Instruction::Ret);
             let after = state.instructions.len();
             state.instructions[skip] = Instruction::Jump(after);
             state.builtin_wrappers.insert(name.to_string(), start);
