@@ -57,22 +57,71 @@ pub fn truthy(v: &Value) -> bool {
     }
 }
 
-/// Number of characters (not bytes). ASCII strings take the O(1) path.
+/// Number of UTF-8 lead bytes (bytes that are not continuation bytes `10xxxxxx`) in a block of at
+/// most 255 bytes. Counting in `u8` lanes lets the compiler vectorise it.
+#[inline]
+fn lead_bytes(block: &[u8]) -> usize {
+    block.iter().fold(0u8, |a, b| a.wrapping_add(((*b as i8) >= -0x40) as u8)) as usize
+}
+
+/// Number of characters (not bytes): one vectorised pass over the bytes, no decoding.
 pub fn char_len(s: &str) -> usize {
-    if s.is_ascii() {
-        s.len()
-    } else {
-        s.chars().count()
+    let bytes = s.as_bytes();
+    if bytes.is_ascii() {
+        return bytes.len();
     }
+    let mut chunks = bytes.chunks_exact(64);
+    let mut n = 0usize;
+    for c in &mut chunks {
+        n += lead_bytes(c);
+    }
+    n + chunks.remainder().iter().filter(|b| (**b as i8) >= -0x40).count()
+}
+
+/// Byte offset at which the `i`-th character starts (`None` when `i >= char_len`). Skips whole
+/// 64-byte blocks by counting lead bytes, so a lookup is a cheap memory-speed scan, not a decode.
+pub fn char_byte_offset(s: &str, i: usize) -> Option<usize> {
+    let b = s.as_bytes();
+    let mut count = 0usize; // characters that start before `pos`
+    let mut pos = 0usize;
+    while pos + 64 <= b.len() {
+        let starts = lead_bytes(&b[pos..pos + 64]);
+        if count + starts > i {
+            break;
+        }
+        count += starts;
+        pos += 64;
+    }
+    while pos < b.len() {
+        if (b[pos] as i8) >= -0x40 {
+            if count == i {
+                return Some(pos);
+            }
+            count += 1;
+        }
+        pos += 1;
+    }
+    None
 }
 
 /// The `i`-th character as a string; `None` when out of range.
 pub fn char_at(s: &str, i: usize) -> Option<String> {
-    if s.is_ascii() {
-        s.as_bytes().get(i).map(|b| (*b as char).to_string())
-    } else {
-        s.chars().nth(i).map(|c| c.to_string())
+    let off = char_byte_offset(s, i)?;
+    s[off..].chars().next().map(|c| c.to_string())
+}
+
+/// The characters `start..end` (already clamped to `0..=char_len`, `start <= end`) as a new string.
+pub fn char_slice(s: &str, start: usize, end: usize) -> String {
+    if start >= end {
+        return String::new();
     }
+    let from = match char_byte_offset(s, start) {
+        Some(o) => o,
+        None => return String::new(),
+    };
+    // continue from `from`, counting `end - start` characters; past the last one = end of text
+    let to = char_byte_offset(&s[from..], end - start).map(|o| from + o).unwrap_or(s.len());
+    s[from..to].to_string()
 }
 
 /// Resolve slice bounds like Python: negatives count from the end, `null` means open, and

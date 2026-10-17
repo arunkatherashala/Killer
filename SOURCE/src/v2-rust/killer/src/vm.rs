@@ -1338,23 +1338,13 @@ impl VirtualMachine {
                             // `s[i]` / `len(s)` on a string slot: read it in place instead of
                             // copying the whole string just to look at one character (the
                             // instructions that follow are left intact, so jumps stay valid).
-                            match (program.instructions.get(self.ip + 1), program.instructions.get(self.ip + 2)) {
-                                (Some(Instruction::LoadSlot(b)), Some(Instruction::IndexRead)) => {
-                                    if let Some(Value::Number(n)) = frame.get(*b as usize) {
-                                        let r = index_str(s, *n);
-                                        self.stack.push(r);
-                                        self.ip += 3;
-                                        continue;
-                                    }
-                                    Value::Str(s.clone())
-                                }
-                                (Some(Instruction::CallBuiltinId(0, 1)), _) => {
-                                    let n = crate::lang_builtins::char_len(s);
-                                    self.stack.push(Value::Number(n as f64));
-                                    self.ip += 2;
+                            match self.fused_str_op(program, s) {
+                                Some((r, advance)) => {
+                                    self.stack.push(r);
+                                    self.ip += advance;
                                     continue;
                                 }
-                                _ => Value::Str(s.clone()),
+                                None => Value::Str(s.clone()),
                             }
                         }
                         Some(other) => other.clone(),
@@ -1509,6 +1499,27 @@ impl VirtualMachine {
                     self.store_local(name, value);
                 }
                 Instruction::Load(name) => {
+                    // `s[i]` / `len(s)` on a named string (global, parameter, top-level local):
+                    // borrow it from its scope instead of copying the whole string per access.
+                    if Self::str_fusable(program, self.ip) && !self.is_special_load_name(name) {
+                        let mut fused = None;
+                        let mut direct = None;
+                        match self.lookup(name) {
+                            Some(Value::Str(s)) => fused = self.fused_str_op(program, s),
+                            Some(Value::Cell(_)) | None => {}
+                            Some(other) => direct = Some(other.clone()),
+                        }
+                        if let Some((r, advance)) = fused {
+                            self.stack.push(r);
+                            self.ip += advance;
+                            continue;
+                        }
+                        if let Some(v) = direct {
+                            self.stack.push(v);
+                            self.ip += 1;
+                            continue;
+                        }
+                    }
                     let value = self.load_var(name)?;
                     self.stack.push(value);
                 }
@@ -6939,6 +6950,68 @@ impl VirtualMachine {
             return Ok(value.clone());
         }
         self.load_var(name)
+    }
+
+    /// Names `load_var` answers without consulting the scopes (cached loop numbers, singletons).
+    #[inline]
+    fn is_special_load_name(&self, name: &str) -> bool {
+        matches!(name, "Math" | "Physics" | "Array")
+            || self
+                .variable_cache
+                .cache
+                .get_index(name)
+                .map_or(false, |i| self.variable_cache.cache.get(i).is_some())
+    }
+
+    /// True when the string load at `ip` is followed by `len(..)` or by `<index> IndexRead`.
+    #[inline]
+    fn str_fusable(program: &Program, ip: usize) -> bool {
+        matches!(program.instructions.get(ip + 1), Some(Instruction::CallBuiltinId(0, 1)))
+            || matches!(program.instructions.get(ip + 2), Some(Instruction::IndexRead))
+    }
+
+    /// A number operand that is cheap to read without touching the stack (slot, constant or name).
+    #[inline]
+    fn peek_number(&self, ins: &Instruction) -> Option<f64> {
+        match ins {
+            Instruction::ConstNum(k) => Some(*k),
+            Instruction::LoadSlot(b) => match self.locals_stack.last()?.get(*b as usize) {
+                Some(Value::Number(n)) => Some(*n),
+                _ => None,
+            },
+            Instruction::Load(name) => {
+                if let Some(i) = self.variable_cache.cache.get_index(name) {
+                    if let Some(v) = self.variable_cache.cache.get(i) {
+                        return Some(v);
+                    }
+                }
+                if matches!(name.as_str(), "Math" | "Physics" | "Array") {
+                    return None;
+                }
+                match self.lookup(name) {
+                    Some(Value::Number(n)) => Some(*n),
+                    _ => None,
+                }
+            }
+            _ => None,
+        }
+    }
+
+    /// The string `s` was just "loaded" by the instruction at `self.ip`. When the following
+    /// instructions are `len(..)` or `<number operand> IndexRead`, compute the result straight
+    /// from the borrowed string. Returns the result and how far to advance `ip` (the skipped
+    /// instructions stay in the program, so jumps into them remain valid). `None` = not a
+    /// fusable shape: load the value normally.
+    #[inline]
+    fn fused_str_op(&self, program: &Program, s: &str) -> Option<(Value, usize)> {
+        if let Some(Instruction::CallBuiltinId(0, 1)) = program.instructions.get(self.ip + 1) {
+            return Some((Value::Number(crate::lang_builtins::char_len(s) as f64), 2));
+        }
+        if let Some(Instruction::IndexRead) = program.instructions.get(self.ip + 2) {
+            let n = self.peek_number(program.instructions.get(self.ip + 1)?)?;
+            return Some((index_str(s, n), 3));
+        }
+        None
     }
 
     fn load_var(&self, name: &str) -> Result<Value, VmError> {

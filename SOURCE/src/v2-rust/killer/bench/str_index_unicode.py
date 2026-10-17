@@ -1,0 +1,15 @@
+base = "abcdefghijklmnopqrstuvwxyz"
+u = base
+for k in range(11):
+    u = u + u
+t = "é" + u
+c = 0
+i = 0
+while i < len(t):
+    if t[i] == "e":
+        c = c + 1
+    i = i + 1
+print(len(t))
+print(c)
+print(t[0])
+print(t[-1])

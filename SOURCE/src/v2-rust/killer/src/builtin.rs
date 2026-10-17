@@ -1977,9 +1977,8 @@ impl BuiltinFunctions {
                 Ok(Value::from(if s < e { arr.slice_to_vec(s, e) } else { Vec::new() }))
             }
             Value::Str(text) => {
-                let chars: Vec<char> = text.chars().collect();
-                let (s, e) = crate::lang_builtins::slice_bounds(&args[1], end, chars.len())?;
-                Ok(Value::Str(if s < e { chars[s..e].iter().collect() } else { String::new() }))
+                let (s, e) = crate::lang_builtins::slice_bounds(&args[1], end, crate::lang_builtins::char_len(text))?;
+                Ok(Value::Str(crate::lang_builtins::char_slice(text, s, e)))
             }
             _ => Err(VmError::runtime_error(
                 "slice() expects an array or string".to_string(),
@@ -2031,16 +2030,7 @@ impl BuiltinFunctions {
         match (&args[0], &args[1]) {
             (Value::Str(s), Value::Number(idx)) => {
                 let i = *idx as usize;
-                let char_count = s.chars().count();
-                if i < char_count {
-                    if let Some(ch) = s.chars().nth(i) {
-                        Ok(Value::Str(ch.to_string()))
-                    } else {
-                        Ok(Value::Str(String::new()))
-                    }
-                } else {
-                    Ok(Value::Str(String::new()))
-                }
+                Ok(Value::Str(crate::lang_builtins::char_at(s, i).unwrap_or_default()))
             }
             _ => Err(VmError::runtime_error(
                 "charAt() expects string and number".to_string(),
