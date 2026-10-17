@@ -229,19 +229,113 @@ pub fn lift(src: &str) -> String {
 /// Like [`lift`], also returning for every output line the index of the input line it came from.
 /// A lifted function's lines point at the lines of the lambda they were cut from; the statement
 /// that held the lambda keeps pointing at its own first line.
+///
+/// Every lifted lambda used to re-mask and re-scan the whole program, so a file with thousands of
+/// lambdas was quadratic. The source is now cut into top-level segments (at lines where no bracket
+/// or string is open): a lambda never spans two segments and its definition goes in front of its own
+/// line, so segments are lifted independently, last to first, which numbers the lambdas exactly as
+/// one global rightmost-first pass would.
 pub fn lift_mapped(src: &str) -> (String, Vec<usize>) {
-    let mut map: Vec<usize> = (0..crate::sourcemap::line_count(src)).collect();
+    let total_lines = crate::sourcemap::line_count(src);
     if !src.contains("=>") && !contains_anonymous_fn(src) {
-        return (src.to_string(), map);
+        return (src.to_string(), (0..total_lines).collect());
     }
-    let mut text = src.to_string();
+    let cuts = segment_starts(src);
     let mut counter = 0usize;
+    let mut pieces: Vec<(String, Vec<usize>)> = Vec::with_capacity(cuts.len());
+    for (k, &(byte_start, line_start)) in cuts.iter().enumerate().rev() {
+        let (byte_end, line_end) = cuts.get(k + 1).copied().unwrap_or((src.len(), total_lines));
+        let segment = &src[byte_start..byte_end];
+        // one entry per line of the segment text, which ends in an empty line after its last '\n'
+        let map: Vec<usize> = if k + 1 < cuts.len() { (line_start..line_end + 1).collect() } else { (line_start..total_lines).collect() };
+        if !segment.contains("=>") && !contains_anonymous_fn(segment) {
+            // keep the line count of the text exactly: a segment ending in '\n' owns its lines only
+            pieces.push((segment.to_string(), map));
+            continue;
+        }
+        pieces.push(lift_segment(segment, map, &mut counter));
+    }
+    pieces.reverse();
+    let mut text = String::with_capacity(src.len());
+    let mut map: Vec<usize> = Vec::new();
+    // segments end right after a '\n', so the last line of one is the first line of the next
+    // only through the trailing newline: a segment's map has one entry per '\n' plus one.
+    for (i, (t, m)) in pieces.into_iter().enumerate() {
+        text.push_str(&t);
+        if i + 1 < cuts.len() {
+            // drop the entry for the (empty) line after the segment's final newline
+            map.extend_from_slice(&m[..m.len().saturating_sub(1)]);
+        } else {
+            map.extend(m);
+        }
+    }
+    (text, map)
+}
+
+/// Byte offsets and line indexes where a segment may start: line starts (other than the first) at
+/// which no bracket and no string/backtick is open.
+fn segment_starts(src: &str) -> Vec<(usize, usize)> {
+    let m = mask(src);
+    let b = src.as_bytes();
+    let mut starts = vec![(0usize, 0usize)];
+    let mut depth = 0i64;
+    let mut quote: Option<u8> = None;
+    let mut line = 0usize;
+    let mut i = 0usize;
+    while i < b.len() {
+        let c = b[i];
+        match quote {
+            Some(q) => {
+                if c == b'\\' && i + 1 < b.len() {
+                    if b[i + 1] == b'\n' {
+                        line += 1;
+                        if depth == 0 {
+                            // inside a string: not a cut point
+                        }
+                    }
+                    i += 2;
+                    continue;
+                }
+                if c == q {
+                    quote = None;
+                }
+                if c == b'\n' {
+                    line += 1;
+                }
+                i += 1;
+            }
+            None => {
+                if c == b'"' || c == b'`' {
+                    quote = Some(c);
+                } else {
+                    match m[i] {
+                        b'(' | b'[' | b'{' => depth += 1,
+                        b')' | b']' | b'}' => depth = (depth - 1).max(0),
+                        _ => {}
+                    }
+                    if c == b'\n' {
+                        line += 1;
+                        if depth == 0 && i + 1 < b.len() {
+                            starts.push((i + 1, line));
+                        }
+                    }
+                }
+                i += 1;
+            }
+        }
+    }
+    starts
+}
+
+/// Lift the lambdas of one segment (see [`lift_mapped`]); `map` has the source line of each line.
+fn lift_segment(segment: &str, mut map: Vec<usize>, counter: &mut usize) -> (String, Vec<usize>) {
+    let mut text = segment.to_string();
     // guard against pathological input
     for _ in 0..10_000 {
         let m = mask(&text);
         let Some(found) = find_last(&text, &m) else { break };
-        let name = format!("__lambda_{}", counter);
-        counter += 1;
+        let name = format!("__lambda_{}", *counter);
+        *counter += 1;
         // the line that holds the start of the lambda
         let line_start = text[..found.start].rfind('\n').map_or(0, |p| p + 1);
         let indent: String = text[line_start..].chars().take_while(|c| *c == ' ' || *c == '\t').collect();
@@ -316,6 +410,31 @@ mod tests {
         // untouched source maps to itself
         let (_, map) = lift_mapped("a = 1\nb = 2\n");
         assert_eq!(map, vec![0, 1, 2]);
+    }
+
+    #[test]
+    fn segments_number_lambdas_rightmost_first_and_keep_the_line_map() {
+        let src = "a = fn(x) { return x + 1 }
+b = fn(y) { return y * 2 }
+c = z => z - 1
+println(a(1))
+";
+        let (out, map) = lift_mapped(src);
+        assert!(out.contains("fn __lambda_0(z)"), "{out}");
+        assert!(out.contains("fn __lambda_1(y)"), "{out}");
+        assert!(out.contains("fn __lambda_2(x)"), "{out}");
+        assert_eq!(map.len(), crate::sourcemap::line_count(&out));
+        // the statement `b = __lambda_1` still points at source line 1 (0-based)
+        let line = out.lines().position(|l| l == "b = __lambda_1").unwrap();
+        assert_eq!(map[line], 1);
+        // many lambdas stay linear (this took seconds in debug builds before segmenting)
+        let many: String = (0..3000).map(|i| format!("f{i} = fn(a) {{ return a + {i} }}
+")).collect();
+        let t = std::time::Instant::now();
+        let (out, map) = lift_mapped(&many);
+        assert_eq!(out.matches("fn __lambda_").count(), 3000);
+        assert_eq!(map.len(), crate::sourcemap::line_count(&out));
+        assert!(t.elapsed().as_secs() < 20, "{:?}", t.elapsed());
     }
 
     #[test]
