@@ -1,0 +1,8 @@
+step = 1
+fn deep(n) {
+  if n == 0 {
+    return 0
+  }
+  return step + deep(n - 1)
+}
+println(deep(20000))
