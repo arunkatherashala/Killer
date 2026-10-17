@@ -49,7 +49,10 @@ pub fn should_collect() -> bool {
 
 // ── Mark phase ────────────────────────────────────────────────────────────────
 
-/// Walk `val` and all Values reachable from it, recording array Rc addresses.
+/// Walk `val` and all Values reachable from it, recording the Rc address of every container.
+/// Dicts, objects and closure captures are recorded too: without that a shared (or cyclic) dict
+/// was walked again for every holder, which made a deep tree held by one frame per level (a
+/// recursive evaluator) quadratic per collection and a dict cycle an endless loop.
 fn mark_value(val: &Value, seen: &mut HashSet<usize>, queue: &mut Vec<Value>) {
     match val {
         Value::Array(arr) => {
@@ -60,21 +63,26 @@ fn mark_value(val: &Value, seen: &mut HashSet<usize>, queue: &mut Vec<Value>) {
             }
         }
         Value::Dict(dict) => {
-            for v in dict.values() {
-                queue.push(v);
+            if seen.insert(dict.rc_ptr()) {
+                queue.extend(dict.values());
             }
         }
         Value::Function { captured, .. } => {
-            for v in captured.values().iter() {
-                queue.push(v.clone());
+            if seen.insert(captured.rc_ptr()) {
+                queue.extend(captured.values());
             }
         }
         Value::Signal { value, .. } => {
             queue.push((**value).clone());
         }
         Value::Object(obj) => {
-            for v in obj.fields().into_values() {
-                queue.push(v);
+            if seen.insert(obj.rc_ptr()) {
+                queue.extend(obj.fields().into_values());
+            }
+        }
+        Value::Cell(c) => {
+            if let Ok(inner) = c.try_borrow() {
+                queue.push(inner.clone());
             }
         }
         _ => {}
@@ -111,6 +119,7 @@ where
 
         // References held inside candidate arrays.
         let mut internal: HashMap<usize, usize> = HashMap::new();
+        let mut seen_captures: HashSet<usize> = HashSet::new();
         let mut live: Vec<bool> = candidate.iter().map(|c| !*c).collect();
         for (i, rc) in strongs.iter().enumerate() {
             if !candidate[i] {
@@ -119,7 +128,7 @@ where
             match rc.try_borrow() {
                 Ok(elems) => {
                     for v in elems.iter() {
-                        count_array_refs(v, &mut internal);
+                        count_array_refs(v, &mut internal, &mut seen_captures);
                     }
                 }
                 Err(_) => live[i] = true, // being mutated right now: leave it alone
@@ -142,11 +151,12 @@ where
         }
         // Everything reachable from a live candidate is live.
         let mut found: Vec<usize> = Vec::new();
+        let mut seen_nodes: HashSet<usize> = HashSet::new();
         while let Some(i) = work.pop() {
             if let Ok(elems) = strongs[i].try_borrow() {
                 found.clear();
                 for v in elems.iter() {
-                    collect_array_ptrs(v, &mut found);
+                    collect_array_ptrs(v, &mut found, &mut seen_nodes);
                 }
                 for ptr in found.iter() {
                     if let Some(&j) = index.get(ptr) {
@@ -173,23 +183,49 @@ where
 /// Count references held directly by a candidate array. Dicts and objects are shared handles that
 /// other holders may also reference, so arrays reachable only through them are deliberately NOT
 /// counted as "internal": that keeps them live (a cycle through a dict is leaked, never freed).
-fn count_array_refs(v: &Value, internal: &mut HashMap<usize, usize>) {
-    match v {
-        Value::Array(a) => *internal.entry(a.rc_ptr()).or_insert(0) += 1,
-        Value::Function { captured, .. } => captured.values().iter().for_each(|x| count_array_refs(x, internal)),
-        Value::Signal { value, .. } => count_array_refs(value, internal),
-        _ => {}
+/// Closure captures are one holder however many function values share them, so each is visited once
+/// (`seen`); the walk uses an explicit stack, so deeply nested values cannot overflow the native one.
+fn count_array_refs(v: &Value, internal: &mut HashMap<usize, usize>, seen: &mut HashSet<usize>) {
+    let mut stack: Vec<Value> = vec![v.clone()];
+    while let Some(v) = stack.pop() {
+        match v {
+            Value::Array(a) => *internal.entry(a.rc_ptr()).or_insert(0) += 1,
+            Value::Function { captured, .. } => {
+                if seen.insert(captured.rc_ptr()) {
+                    stack.extend(captured.values());
+                }
+            }
+            Value::Signal { value, .. } => stack.push(*value),
+            _ => {}
+        }
     }
 }
 
-fn collect_array_ptrs(v: &Value, out: &mut Vec<usize>) {
-    match v {
-        Value::Array(a) => out.push(a.rc_ptr()),
-        Value::Dict(d) => d.values().iter().for_each(|x| collect_array_ptrs(x, out)),
-        Value::Object(o) => o.fields().values().for_each(|x| collect_array_ptrs(x, out)),
-        Value::Function { captured, .. } => captured.values().iter().for_each(|x| collect_array_ptrs(x, out)),
-        Value::Signal { value, .. } => collect_array_ptrs(value, out),
-        _ => {}
+/// Pointers of the arrays held by `v`, looking through dicts, objects, captures and signals
+/// (explicit stack; `seen` keeps shared or cyclic containers from being walked twice).
+fn collect_array_ptrs(v: &Value, out: &mut Vec<usize>, seen: &mut HashSet<usize>) {
+    let mut stack: Vec<Value> = vec![v.clone()];
+    while let Some(v) = stack.pop() {
+        match v {
+            Value::Array(a) => out.push(a.rc_ptr()),
+            Value::Dict(d) => {
+                if seen.insert(d.rc_ptr()) {
+                    stack.extend(d.values());
+                }
+            }
+            Value::Object(o) => {
+                if seen.insert(o.rc_ptr()) {
+                    stack.extend(o.fields().into_values());
+                }
+            }
+            Value::Function { captured, .. } => {
+                if seen.insert(captured.rc_ptr()) {
+                    stack.extend(captured.values());
+                }
+            }
+            Value::Signal { value, .. } => stack.push(*value),
+            _ => {}
+        }
     }
 }
 

@@ -510,6 +510,11 @@ impl Captures {
     pub fn is_empty(&self) -> bool {
         self.0.borrow().is_empty()
     }
+    /// Address of the shared capture map (identity for the GC).
+    #[inline]
+    pub fn rc_ptr(&self) -> usize {
+        Rc::as_ptr(&self.0) as *const u8 as usize
+    }
     pub fn snapshot(&self) -> Vec<(String, Value)> {
         self.0.borrow().iter().map(|(k, v)| (k.clone(), v.clone())).collect()
     }

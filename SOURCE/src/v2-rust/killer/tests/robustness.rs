@@ -601,3 +601,72 @@ fn wall_budget_stops_deep_recursion_that_reads_globals() {
     let msg = r.expect_err("must hit a limit");
     assert!(msg.contains("time limit") || msg.contains("recursion too deep"), "{msg}");
 }
+
+// ------------------------------------------------------------------------------------------------
+// GC over deep or cyclic dict structures
+// ------------------------------------------------------------------------------------------------
+
+#[test]
+fn gc_does_not_go_quadratic_on_a_deep_tree_held_by_every_frame() {
+    // a left-deep tree of 30000 dicts walked by a recursive function (one frame holds each node)
+    // while arrays are allocated, so collections run in the middle: the mark phase used to walk the
+    // shared tree again for every frame (minutes); it must be linear.
+    let src = r#"
+fn walk(node) {
+  if node == null {
+    return 0
+  }
+  junk = [1, 2]
+  more = [3]
+  return walk(node["l"]) + 1
+}
+x = null
+i = 0
+while i < 30000 {
+  x = {"l": x}
+  i = i + 1
+}
+total = 0
+rep = 0
+while rep < 4 {
+  total = total + walk(x)
+  rep = rep + 1
+}
+assert(total == 120000)
+"#;
+    let t = std::time::Instant::now();
+    expect_ok(src);
+    assert!(t.elapsed() < Duration::from_secs(60), "took {:?}", t.elapsed());
+}
+
+#[test]
+fn gc_terminates_with_cyclic_dicts_and_objects_and_closures() {
+    expect_ok(
+        r#"
+d = {}
+d["self"] = d
+class N {
+  fn init() {
+    this.me = this
+  }
+}
+n = new N()
+fn mk() {
+  c = 0
+  fn inc() {
+    c = c + 1
+    return c
+  }
+  return inc
+}
+f = mk()
+f()
+i = 0
+while i < 200000 {
+  a = [i]
+  i = i + 1
+}
+assert(f() == 2)
+"#,
+    );
+}
