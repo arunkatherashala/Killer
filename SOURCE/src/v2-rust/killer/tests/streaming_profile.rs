@@ -512,7 +512,8 @@ fn connect_retry(port: u16) -> TcpStream {
     loop {
         match TcpStream::connect(("127.0.0.1", port)) {
             Ok(s) => return s,
-            Err(_) if start.elapsed() < Duration::from_secs(20) => std::thread::sleep(Duration::from_millis(50)),
+            // generous: the server is a debug build starting while the rest of the suite runs
+            Err(_) if start.elapsed() < Duration::from_secs(90) => std::thread::sleep(Duration::from_millis(50)),
             Err(e) => panic!("cannot connect: {}", e),
         }
     }

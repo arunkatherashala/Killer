@@ -182,18 +182,30 @@ impl Default for RustCompiler {
 
 /// Write content to a temporary file
 fn write_temp_file(content: &str, prefix: &str, suffix: &str) -> std::io::Result<String> {
+    // The name must be unique per call: the clock alone is not (two threads can read the same
+    // nanosecond value on a coarse clock such as Windows', and would then overwrite each other's
+    // source), so add the process id and a process-wide counter, and never overwrite a file.
+    static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let temp_dir = std::env::temp_dir();
-    let filename = format!("{}_{}{}", prefix, std::time::SystemTime::now()
+    let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
-        .as_nanos(), suffix);
-    let path = temp_dir.join(&filename);
-    
-    let mut file = fs::File::create(&path)?;
-    file.write_all(content.as_bytes())?;
-    file.flush()?;
-    
-    Ok(path.to_string_lossy().to_string())
+        .as_nanos();
+    for _ in 0..16 {
+        let n = COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let filename = format!("{}_{}_{}_{}{}", prefix, std::process::id(), nanos, n, suffix);
+        let path = temp_dir.join(&filename);
+        match fs::OpenOptions::new().write(true).create_new(true).open(&path) {
+            Ok(mut file) => {
+                file.write_all(content.as_bytes())?;
+                file.flush()?;
+                return Ok(path.to_string_lossy().to_string());
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(e),
+        }
+    }
+    Err(std::io::Error::new(std::io::ErrorKind::AlreadyExists, "could not pick an unused temp file name"))
 }
 
 /// Extract relevant error message from rustc stderr
@@ -234,6 +246,32 @@ mod tests {
         assert!(!compiler.optimize);
     }
     
+    #[test]
+    fn temp_files_are_unique_and_keep_their_own_content_under_contention() {
+        let handles: Vec<_> = (0..8)
+            .map(|t| {
+                std::thread::spawn(move || {
+                    (0..60)
+                        .map(|i| {
+                            let text = format!("// thread {} item {}\n", t, i);
+                            let path = write_temp_file(&text, "killer_jit_test_", ".rs").expect("temp file");
+                            (path, text)
+                        })
+                        .collect::<Vec<_>>()
+                })
+            })
+            .collect();
+        let mut seen = std::collections::HashSet::new();
+        for h in handles {
+            for (path, text) in h.join().unwrap() {
+                assert!(seen.insert(path.clone()), "two calls returned the same file: {}", path);
+                assert_eq!(std::fs::read_to_string(&path).unwrap(), text, "file {} was overwritten", path);
+                let _ = std::fs::remove_file(&path);
+            }
+        }
+        assert_eq!(seen.len(), 8 * 60);
+    }
+
     #[test]
     fn test_set_target() {
         let mut compiler = RustCompiler::new();

@@ -617,10 +617,12 @@ mod tests {
     fn calls_self_and_total_time_nest_correctly() {
         let p = prog();
         let mut pr = Profiler::new(&p, 0);
+        // The sleeps are far apart on purpose: a loaded CI machine (macOS runners especially) can
+        // oversleep by tens of milliseconds, and the ordering below must survive that.
         pr.enter(10, 1); // alpha
-        std::thread::sleep(std::time::Duration::from_millis(15));
+        std::thread::sleep(std::time::Duration::from_millis(2));
         pr.enter(20, 2); // beta inside alpha
-        std::thread::sleep(std::time::Duration::from_millis(30));
+        std::thread::sleep(std::time::Duration::from_millis(150));
         pr.exit(2);
         pr.exit(1);
         pr.enter(20, 1); // beta from main
@@ -629,8 +631,8 @@ mod tests {
         let get = |n: &str| rows.iter().find(|r| r.name == n).unwrap().clone();
         assert_eq!(get("alpha").calls, 1);
         assert_eq!(get("beta").calls, 2);
-        assert!(get("beta").self_ms >= 25.0, "{:?}", rows);
-        assert!(get("alpha").total_ms >= get("alpha").self_ms + 25.0, "{:?}", rows);
+        assert!(get("beta").self_ms >= 100.0, "{:?}", rows);
+        assert!(get("alpha").total_ms >= get("alpha").self_ms + 100.0, "{:?}", rows);
         assert_eq!(rows[0].name, "beta");
         let t = pr.tree();
         assert_eq!(t.name, MAIN);
