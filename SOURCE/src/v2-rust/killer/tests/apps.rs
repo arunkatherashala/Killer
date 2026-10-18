@@ -1,11 +1,17 @@
 //! Real-application trial: the five example apps under examples/apps/ run through the `killer`
 //! driver (`killer test`, `killer run`), plus regression tests for every bug the trial found
 //! (see examples/apps/FRICTION.md).
+use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+use std::process::{Command, Output, Stdio};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::{Duration, Instant};
 
 static NEXT: AtomicUsize = AtomicUsize::new(0);
+
+/// Longest any single spawned process may run before the harness kills it (a hung server or client
+/// must fail one test in minutes, not hang the whole CI job for hours).
+const PROCESS_LIMIT_SECS: u64 = 240;
 
 fn crate_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -15,12 +21,60 @@ fn norm(b: &[u8]) -> String {
     String::from_utf8_lossy(b).replace("\r\n", "\n")
 }
 
+/// Wait for `child` (whose stdout/stderr are piped) for at most `secs` seconds, reading both pipes on
+/// threads so a chatty child cannot block on a full pipe. On timeout the child is killed and a marker
+/// line is appended to stderr so the failing assertion shows what happened.
+fn finish(mut child: std::process::Child, secs: u64) -> Output {
+    let mut out_pipe = child.stdout.take();
+    let mut err_pipe = child.stderr.take();
+    let read_all = |p: Option<Box<dyn Read + Send>>| {
+        std::thread::spawn(move || {
+            let mut v = Vec::new();
+            if let Some(mut p) = p {
+                let _ = p.read_to_end(&mut v);
+            }
+            v
+        })
+    };
+    let t_out = read_all(out_pipe.take().map(|p| Box::new(p) as Box<dyn Read + Send>));
+    let t_err = read_all(err_pipe.take().map(|p| Box::new(p) as Box<dyn Read + Send>));
+    let deadline = Instant::now() + Duration::from_secs(secs);
+    let mut timed_out = false;
+    let status = loop {
+        match child.try_wait().unwrap() {
+            Some(s) => break s,
+            None if Instant::now() >= deadline => {
+                timed_out = true;
+                let _ = child.kill();
+                break child.wait().unwrap();
+            }
+            None => std::thread::sleep(Duration::from_millis(25)),
+        }
+    };
+    let stdout = t_out.join().unwrap();
+    let mut stderr = t_err.join().unwrap();
+    if timed_out {
+        stderr.extend_from_slice(format!("\n[test harness: process killed after {secs} s]\n").as_bytes());
+    }
+    Output { status, stdout, stderr }
+}
+
+/// Run a command to completion with captured output, no stdin and a time limit.
+fn run_limited(mut cmd: Command, secs: u64) -> Output {
+    cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    finish(cmd.spawn().unwrap(), secs)
+}
+
 fn killer(cwd: &Path, args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_killer")).current_dir(cwd).args(args).output().unwrap()
+    let mut c = Command::new(env!("CARGO_BIN_EXE_killer"));
+    c.current_dir(cwd).args(args);
+    run_limited(c, PROCESS_LIMIT_SECS)
 }
 
 fn killer_pkg(cwd: &Path, args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_killer_pkg")).current_dir(cwd).args(args).output().unwrap()
+    let mut c = Command::new(env!("CARGO_BIN_EXE_killer_pkg"));
+    c.current_dir(cwd).args(args);
+    run_limited(c, PROCESS_LIMIT_SECS)
 }
 
 struct Tmp(PathBuf);
@@ -640,6 +694,7 @@ fn start_todo_server(port: u16, data: &Path, max_requests: u32) -> std::process:
     Command::new(env!("CARGO_BIN_EXE_killer"))
         .current_dir(app_dir("todo"))
         .args(["run", "src/main.killer", "--port", &port.to_string(), "--data", data.to_str().unwrap(), "--max-requests", &max_requests.to_string()])
+        .stdin(Stdio::null())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
@@ -660,7 +715,7 @@ fn todo_client_script_against_the_server_matches_the_golden_transcript_and_persi
     let port = free_port();
     let server = start_todo_server(port, &data, 22);
     let client = killer(&app_dir("todo"), &["run", "src/client.killer", &port.to_string()]);
-    let out = server.wait_with_output().unwrap();
+    let out = finish(server, PROCESS_LIMIT_SECS);
     assert!(client.status.success(), "{}", norm(&client.stderr));
     let expected = norm(&std::fs::read(app_dir("todo").join("tests/client.expected")).unwrap());
     assert_eq!(norm(&client.stdout), expected);
@@ -687,7 +742,7 @@ fn todo_client_script_against_the_server_matches_the_golden_transcript_and_persi
     assert_eq!(probe("GET", "/health", None).trim(), "200 {\"status\":\"ok\",\"todos\":2}");
     let created = probe("POST", "/todos", Some("{\"title\": \"after restart\"}"));
     assert!(created.starts_with("201 {\"id\":4,\"title\":\"after restart\""), "{created}");
-    let out2 = server2.wait_with_output().unwrap();
+    let out2 = finish(server2, PROCESS_LIMIT_SECS);
     assert!(norm(&out2.stdout).contains("(2 todos loaded)"), "{}", norm(&out2.stdout));
 }
 
@@ -711,15 +766,17 @@ fn todo_server_startup_errors_and_storage_failures() {
     // an unwritable data file: the POST gets a JSON 500 and nothing is half-stored
     let port = free_port();
     let bad_path = t.0.join("no_such_dir").join("todos.json");
-    let server = start_todo_server(port, &bad_path, 2);
+    // 3 requests: a readiness probe (retried until the server is listening, so a slow start on a
+    // loaded machine cannot make the unretried POST below fail), the POST, and the final health check
+    let server = start_todo_server(port, &bad_path, 3);
     let src = format!(
-        "a = http_request({{\"method\": \"POST\", \"url\": \"http://127.0.0.1:{p}/todos\", \"body\": \"{{\\\"title\\\": \\\"x\\\"}}\", \"timeout\": 10, \"retries\": 0}})\nprintln(a[\"status\"], contains(a[\"body\"], \"internal error\"))\nb = http_request({{\"url\": \"http://127.0.0.1:{p}/health\", \"timeout\": 10, \"retries\": 6}})\nprintln(b[\"body\"])\n",
+        "w = http_request({{\"url\": \"http://127.0.0.1:{p}/health\", \"timeout\": 10, \"retries\": 8}})\na = http_request({{\"method\": \"POST\", \"url\": \"http://127.0.0.1:{p}/todos\", \"body\": \"{{\\\"title\\\": \\\"x\\\"}}\", \"timeout\": 10, \"retries\": 0}})\nprintln(a[\"status\"], contains(a[\"body\"], \"internal error\"))\nb = http_request({{\"url\": \"http://127.0.0.1:{p}/health\", \"timeout\": 10, \"retries\": 6}})\nprintln(b[\"body\"])\n",
         p = port
     );
     let f = t.write("probe2.killer", &src);
     let out = norm(&killer(&t.0, &["run", f.to_str().unwrap()]).stdout);
-    let _ = server.wait_with_output();
-    assert_eq!(out.trim(), "500 true\n{\"status\":\"ok\",\"todos\":0}");
+    let s = finish(server, PROCESS_LIMIT_SECS);
+    assert_eq!(out.trim(), "500 true\n{\"status\":\"ok\",\"todos\":0}", "server: {}{}", norm(&s.stdout), norm(&s.stderr));
 }
 
 #[test]
@@ -826,6 +883,7 @@ fn rag_service_answers_http_requests() {
     let server = Command::new(env!("CARGO_BIN_EXE_killer"))
         .current_dir(app_dir("rag"))
         .args(["run", "src/main.killer", "serve", "--index", index.to_str().unwrap(), "--port", &port.to_string(), "--max-requests", "5"])
+        .stdin(Stdio::null())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
@@ -853,7 +911,7 @@ println(f["status"])
     );
     let f = t.write("client.killer", &src);
     let out = norm(&killer(&t.0, &["run", f.to_str().unwrap()]).stdout);
-    let s = server.wait_with_output().unwrap();
+    let s = finish(server, PROCESS_LIMIT_SECS);
     assert_eq!(
         out.trim(),
         "200 shipping.txt 2 true\n400\n422 question must be a non-empty string\n200 27\n404",

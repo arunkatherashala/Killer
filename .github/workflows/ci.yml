@@ -2,7 +2,7 @@ name: Killer CI
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, develop, feature/assistant-ki ]
   pull_request:
     branches: [ main ]
 
@@ -13,6 +13,7 @@ jobs:
   check:
     name: Check & Lint
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -39,7 +40,9 @@ jobs:
   test:
     name: Tests
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
@@ -51,8 +54,8 @@ jobs:
 
       - name: Run tests (lib + all integration tests)
         working-directory: SOURCE/src/v2-rust/killer
-        run: cargo test --tests
-        timeout-minutes: 45
+        run: cargo test --tests --no-fail-fast
+        timeout-minutes: 40
 
       - name: Build debug binary for parity / docs checks
         working-directory: SOURCE/src/v2-rust/killer
@@ -81,6 +84,7 @@ jobs:
   cross-check:
     name: Type-check ${{ matrix.target }}
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -105,6 +109,7 @@ jobs:
   bench-smoke:
     name: Benchmark smoke (no gating)
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     needs: [check]
     steps:
       - uses: actions/checkout@v4

@@ -19,6 +19,7 @@ env:
 jobs:
   test:
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -32,7 +33,8 @@ jobs:
       - name: Build
         run: cargo build
       - name: All tests (lib + integration)
-        run: cargo test --tests
+        run: cargo test --tests --no-fail-fast
+        timeout-minutes: 40
       - name: Pipeline conformance
         run: cargo test --test pipeline_conformance
       - name: Trit / three-valued semantics

@@ -377,6 +377,11 @@ impl StreamSource {
     }
 
     fn push_delta(&mut self, d: Delta) {
+        // Once the stream is finished (`[DONE]`, `done: true`, an error) nothing after it counts, even
+        // when the provider's later events arrived in the same network read.
+        if self.done {
+            return;
+        }
         match d {
             Delta::Text(t) => self.queue.push_back(Ok(t)),
             Delta::Done => self.done = true,
@@ -606,6 +611,66 @@ pub fn vm_call(vm: &mut VirtualMachine, name: &str, args: &[Value], program: &Pr
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn closed_source(wire: Wire) -> StreamSource {
+        StreamSource {
+            inner: Inner::Closed,
+            wire,
+            sse: SseParser::new(),
+            lines: LineParser::new(),
+            queue: VecDeque::new(),
+            done: false,
+            saw_event: false,
+            raw_head: Vec::new(),
+        }
+    }
+
+    fn drain(s: &mut StreamSource) -> Vec<String> {
+        let mut out = Vec::new();
+        while let Ok(Some(c)) = s.next_chunk() {
+            out.push(c);
+        }
+        out
+    }
+
+    #[test]
+    fn nothing_after_done_is_delivered_even_in_one_read() {
+        let mut s = closed_source(Wire::OpenAi);
+        let one_read = "data: {\"choices\":[{\"delta\":{\"content\":\"Hel\"}}]}\n\n\
+                        data: {\"choices\":[{\"delta\":{\"content\":\"lo\"}}]}\n\n\
+                        data: [DONE]\n\n\
+                        data: {\"choices\":[{\"delta\":{\"content\":\"AFTER DONE\"}}]}\n\n";
+        s.feed(one_read.as_bytes());
+        assert_eq!(drain(&mut s), vec!["Hel".to_string(), "lo".to_string()]);
+    }
+
+    #[test]
+    fn same_result_when_the_bytes_arrive_one_at_a_time() {
+        let mut s = closed_source(Wire::OpenAi);
+        let text = "data: {\"choices\":[{\"delta\":{\"content\":\"a\"}}]}\n\ndata: [DONE]\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"late\"}}]}\n\n";
+        for b in text.as_bytes() {
+            s.feed(std::slice::from_ref(b));
+        }
+        assert_eq!(drain(&mut s), vec!["a".to_string()]);
+    }
+
+    #[test]
+    fn ollama_stops_at_done_true_within_one_read() {
+        let mut s = closed_source(Wire::Ollama);
+        let one_read = "{\"message\":{\"content\":\"Yo\"},\"done\":false}\n{\"message\":{\"content\":\"\"},\"done\":true}\n{\"message\":{\"content\":\"late\"},\"done\":false}\n";
+        s.feed(one_read.as_bytes());
+        assert_eq!(drain(&mut s), vec!["Yo".to_string()]);
+    }
+
+    #[test]
+    fn an_error_event_ends_the_stream_in_one_read() {
+        let mut s = closed_source(Wire::OpenAi);
+        let one_read = "data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\ndata: {\"error\":{\"message\":\"boom\"}}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"late\"}}]}\n\n";
+        s.feed(one_read.as_bytes());
+        assert_eq!(s.next_chunk(), Ok(Some("ok".to_string())));
+        assert_eq!(s.next_chunk(), Err("provider error: boom".to_string()));
+        assert_eq!(s.next_chunk(), Ok(None));
+    }
 
     #[test]
     fn openai_deltas() {
