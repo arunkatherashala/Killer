@@ -124,7 +124,9 @@ produced each item (`parity/PARITY_REPORT.md`, `bench/RESULTS.md`, `docs/PLATFOR
 
 **Real-application trial.** Five applications under `examples/apps/` (todo REST service, document Q&A with RAG, CSV tool, text-adventure engine, expression interpreter), each with `killer.toml`, modules and `test "..." { }` files, run by `tests/apps.rs`; 22 friction points found while writing them are logged in `examples/apps/FRICTION.md` and fixed.
 
-**Platforms.** The library, binaries and tests type-check for x86_64 and aarch64 Linux (gnu), x86_64 Linux (musl), x86_64 and aarch64 macOS and Windows; the unix `mmap` flags use `libc` constants and macOS retries the JIT mapping with `MAP_JIT`. Only Windows x86-64 has actually been run; CI has a cross-check job. Test fixtures under `examples/apps`, `tests/data` and `parity/realworld` are pinned to LF in `.gitattributes`. See `docs/PLATFORMS.md`.
+**Platforms.** The library, binaries and tests type-check for x86_64 and aarch64 Linux (gnu), x86_64 Linux (musl), x86_64 and aarch64 macOS and Windows; the unix `mmap` flags use `libc` constants and macOS retries the JIT mapping with `MAP_JIT`. Tests, parity probes and documentation examples pass on GitHub's Linux (x86-64), macOS (Apple Silicon) and Windows runners (verified at `b3de537`); the other targets are type-checked in CI. Test fixtures under `examples/apps`, `tests/data` and `parity/realworld` are pinned to LF in `.gitattributes`. See `docs/PLATFORMS.md`.
+
+**CI findings, fixed.** The first runs on GitHub's clean machines found what local runs could not: a todo-server test that raced server start-up and hung Linux and macOS for 6 hours (every spawned process in the app tests now has a time limit, and CI jobs have time limits and `--no-fail-fast`); the streaming client delivering events that followed `[DONE]` when they arrived in the same network read (real bug, now ignored once the stream is finished); a JIT compiler temp-file name collision on Windows (names now carry the process id and a counter); two timing-sensitive tests (profiler sleeps, connect retry window).
 
 ### Earlier unreleased notes
 

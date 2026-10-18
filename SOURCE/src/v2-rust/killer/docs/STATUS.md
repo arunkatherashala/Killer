@@ -6,7 +6,9 @@ verified, and what is still open. It is the short version; the evidence is in
 
 ## Does it work?
 
-Yes, on Windows x86-64, where everything below was run:
+Yes. The checks below were run locally on Windows x86-64, and the test suite, parity probes and
+documentation examples also pass on GitHub's Linux (x86-64), macOS (Apple Silicon) and Windows runners
+(commit `b3de537`, see [`PLATFORMS.md`](PLATFORMS.md)):
 
 | Check | Result |
 |-------|--------|
@@ -40,10 +42,12 @@ Yes, on Windows x86-64, where everything below was run:
 
 ## What has not been verified
 
-- **Other platforms.** Linux and macOS (x86-64 and ARM) code type-checks, but nobody has run it
-  there; CI is where that gets proven ([`PLATFORMS.md`](PLATFORMS.md)).
-- **GitHub workflows, install scripts, release packaging, VS Code client script:** checked by reading
-  and syntax checks only; they have never run on GitHub or in an editor.
+- **Other platforms.** Linux ARM, Linux musl and Intel macOS are type-checked in CI but not run;
+  Linux and macOS are only covered by what the CI runners exercise (no manual testing there).
+- **Release workflow, install scripts, release packaging, VS Code client script:** the release
+  workflow (it runs on version tags) and `install.sh` / `install.ps1` have never been executed, and
+  the VS Code client script has never run in an editor. The test, parity, documentation and
+  cross-check workflows do run on GitHub and pass.
 - **Real providers:** calls to OpenAI, Anthropic, Ollama and others were only tested against local
   fake servers.
 - **Quiet-machine timings:** the benchmarks were measured on a loaded machine; use CPU-time numbers in
