@@ -28,3 +28,6 @@ bench_spawn.ghst
 
 # test fixtures are tracked even when their name matches an ignore pattern above (e.g. b*.killer)
 !tests/data/*.killer
+
+# Rewritten by every test run
+test_results.txt
