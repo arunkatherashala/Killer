@@ -681,6 +681,24 @@ impl Asm {
     }
 }
 
+/// After an add/sub/mul whose result is in xmm0: jump to bail when |result| >= 2^53. Beyond that a whole
+/// number may no longer be exact as a float, and the interpreter computes it exactly as a big integer
+/// (`bigint_ops::add/sub/mul`); bailing makes it re-run the call. NaN never bails. Clobbers rax, xmm2, xmm3.
+#[cfg(target_arch = "x86_64")]
+fn emit_big_check(asm: &mut Asm, bail_fixups: &mut Vec<usize>) {
+    asm.b(&[0x48, 0xB8]);
+    asm.b(&0x7FFF_FFFF_FFFF_FFFFu64.to_le_bytes()); // mov rax, abs mask
+    asm.b(&[0x66, 0x48, 0x0F, 0x6E, 0xD0]); // movq xmm2,rax
+    asm.b(&[0x66, 0x0F, 0x28, 0xD8]); // movapd xmm3,xmm0
+    asm.b(&[0x66, 0x0F, 0x54, 0xDA]); // andpd xmm3,xmm2   (|result|)
+    asm.b(&[0x48, 0xB8]);
+    asm.b(&crate::bigint_ops::EXACT_LIMIT.to_bits().to_le_bytes()); // mov rax, 2^53
+    asm.b(&[0x66, 0x48, 0x0F, 0x6E, 0xD0]); // movq xmm2,rax
+    asm.b(&[0x66, 0x0F, 0x2E, 0xDA]); // ucomisd xmm3,xmm2
+    asm.b(&[0x0F, 0x83]); // jae bail
+    bail_fixups.push(asm.rel32_placeholder());
+}
+
 /// Emit the integer-index + bounds check. Expects the index in xmm0 and the array pointer in rcx;
 /// leaves the validated index in rax. Jumps to bail on non-integral / out-of-range indices.
 #[cfg(target_arch = "x86_64")]
@@ -808,6 +826,7 @@ fn compile_group(
                     asm.b(&[0x66, 0x48, 0x0F, 0x6E, 0xC8]); // movq xmm1,rax
                     let op = if matches!(&instrs[ip], Instruction::AddSlotConst(..)) { 0x58 } else { 0x5C };
                     asm.b(&[0xF2, 0x0F, op, 0xC1]);
+                    emit_big_check(&mut asm, &mut bail_fixups);
                     asm.b(&[0xF2, 0x0F, 0x11, 0x85]); // movsd [slot],xmm0
                     asm.b(&slot_disp(*s));
                 }
@@ -865,6 +884,9 @@ fn compile_group(
                         }
                     };
                     asm.b(&[0xF2, 0x0F, op, 0xC1]);
+                    if op != 0x5E {
+                        emit_big_check(&mut asm, &mut bail_fixups);
+                    }
                     asm.b(&[0x48, 0x83, 0xC4, 0x08]); // add rsp,8
                     asm.b(&[0xF2, 0x0F, 0x11, 0x04, 0x24]); // movsd [rsp],xmm0
                 }

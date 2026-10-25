@@ -66,8 +66,10 @@ println(type(s))
 
 Integers and floats are both reported as `number`; integers print without a decimal point and
 `10 / 5` is `2`, `10 / 4` is `2.5`. Hex literals (`0xFF`) are supported. Plain numbers are 64-bit
-and **saturate** instead of overflowing (`2 ** 63` is `9223372036854775807`); for exact large
-integers use [big integers](#big-integers) (`123n`).
+floats, exact for whole numbers up to 2^53. When `+`, `-`, `*` or `**` is applied to whole numbers and
+the exact result reaches 2^53, Killer computes it exactly as a [big integer](#big-integers) instead
+(`2 ** 100` has all 31 digits). Anything involving a fraction stays a float. An integer literal above
+2^53 is read as a float before any arithmetic, so write it with an `n` suffix (`9007199254740993n`).
 
 `type_of(x)` is the same as `type(x)`. Conversions: `str`, `int`, `float`, `bool`.
 
@@ -1309,6 +1311,41 @@ println(build_rag_prompt("What is Killer?", ["Killer is a scripting language."])
 
 `examples/rag_demo.killer` combines all of this with `serve` into a small question-answering service.
 
+## Number conversion and text formatting
+
+`round(x, digits)` rounds to that many decimals (negative digits round to tens, hundreds, ...; halves
+round away from zero). `int(text, base)` parses digits in base 2 to 36 (a `0x`, `0o` or `0b` prefix is
+accepted). `hex`, `bin` and `oct` give `"0xff"`, `"0b101"`, `"0o10"`. `uuid()` returns a random version 4
+identifier.
+
+```killer
+println(round(2.567, 2), round(1234.5678, -2))
+println(int("ff", 16), int("-101", 2))
+println(hex(255), bin(5), oct(8))
+println(len(uuid()))
+# expect: 2.57 1200
+# expect: 255 -5
+# expect: 0xff 0b101 0o10
+# expect: 36
+```
+
+`format(template, args...)` fills `{}` (next argument) or `{N}` (argument N); after a colon comes a
+Python-style spec `[[fill]align][sign][#][0][width][,][.precision][type]` with align `<` `>` `^` `=` and
+type `d f e x X o b s %`. A string followed by `%` is printf-style formatting with `%d %i %s %f %e %x %X
+%o %c %%`, flags `- + 0 space #`, a width and a precision; the right side is one value or a list. A
+wrong type, too few or too many arguments is an error.
+
+```killer
+println(format("{:>8.2f}|{:<6}|{:05d}|{:x}", 3.14159, "ab", 42, 255))
+println(format("{:,}|{:.1%}", 1234567, 0.256))
+println("%s is %5.1f%% done, id %04d" % ["job", 42.567, 7])
+println("%d items" % 3)
+# expect:     3.14|ab    |00042|ff
+# expect: 1,234,567|25.6%
+# expect: job is  42.6% done, id 0007
+# expect: 3 items
+```
+
 ## Logging and environment
 
 `log_debug`, `log_info`, `log_warn` and `log_error(message[, fields])` write one line to stderr. The
@@ -1592,8 +1629,10 @@ Observed, not hypothetical:
 
 - **Block scoping**: a variable first assigned inside an `if`, `while` or `for` body is not visible after
   the block (`Undefined variable`). Assign it before the block. A fix is in progress.
-- **Plain integers saturate**: `2 ** 63` and `9223372036854775807 + 1` give `9223372036854775807`, and a
-  float of 2^63 or more prints saturated too; use `n` literals / `big()` for exact values.
+- **Big literals**: an integer literal above 2^53 is read as a float (`9007199254740993` is
+  `9007199254740992`); write `9007199254740993n`. Arithmetic on whole numbers is promoted to an exact big
+  integer once it passes 2^53, but whole floats beyond about 9.3e18 are treated as plain floats, and
+  `type(2 ** 70)` is `bigint`, not `number`.
 - `%` is floor modulo everywhere (`-7 % 3` is `2`); use `rem(a, b)` for the C-style remainder (`-1`).
 - **Closures created before the enclosing function first assigns a captured variable** keep the old copy
   semantics instead of sharing it.

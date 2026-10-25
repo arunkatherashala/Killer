@@ -68,17 +68,21 @@ println(2 ** 70n)
 }
 
 #[test]
-fn number_arithmetic_is_not_promoted() {
-    // f64 stays f64: no silent switch to bigints (9007199254740993 is not representable)
+fn whole_number_results_beyond_2_pow_53_are_promoted() {
+    // a plain integer literal above 2^53 is read as a float (9007199254740993 is not representable), but
+    // arithmetic that would lose precision is done exactly: `2 ** 70` is a bigint, and so is `+ - *`
+    // on whole numbers whose result passes 2^53. Fractions and identity operations stay plain numbers.
     let src = "println(9007199254740993 + 0)
 println(type(2 ** 70))
 println(type(2n ** 70))
 println(2 ** 70 == 2n ** 70)
+println(type(0.5 * 4), type(-9007199254740993), type(2 ** 40))
 ";
     assert_eq!(run(src), "9007199254740992
-number
 bigint
-true");
+bigint
+true
+number number number");
 }
 
 #[test]

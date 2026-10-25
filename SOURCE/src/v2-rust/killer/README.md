@@ -233,7 +233,7 @@ The constants `T_POS`, `T_ZERO` and `T_NEG` are plain names. Use `x == T_ZERO` t
 
 - Block scoping: a variable first assigned inside an `if` or loop body is not visible after the block
   (fix in progress); assign it before the block.
-- Plain 64-bit numbers saturate on overflow; use `n` literals / `big()` for exact large integers.
+- Whole-number `+ - * **` results beyond 2^53 become exact big integers automatically; integer literals above 2^53 need an `n` suffix.
 - The JIT is x86-64 only and covers pure numeric code; everything else is interpreted.
 - The HTTP server has no TLS and serves one request at a time; the HTTP client needs `curl` (HTTPS).
 - `len(s)` and `s[i]` are O(n) on very long strings; `count_tokens` is an approximation.

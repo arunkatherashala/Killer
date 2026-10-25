@@ -596,6 +596,12 @@ impl JitEngine {
     /// Called each time the VM hits a backward jump (potential loop header).
     /// Returns Some((fn_ptr, kind)) if this ip is JIT-compiled and ready to run.
     /// Both return types are Copy — no borrow of self escapes.
+    /// Stop using native code for the loop at `ip` (the interpreter runs it from now on).
+    pub fn blacklist(&mut self, ip: usize) {
+        self.cache.remove(&ip);
+        self.hit_counts.insert(ip, usize::MAX);
+    }
+
     pub fn on_loop_back(
         &mut self,
         ip: usize,

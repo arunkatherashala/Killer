@@ -1665,7 +1665,15 @@ fn compile_expr(
                     BinaryOp::IntDiv if *r != 0.0 => Some((l / r).floor()),
                     _ => None,
                 };
-                if let Some(result) = folded {
+                // a whole-number result too big for an exact float is left to run time (exact big integer)
+                let promotes = match op {
+                    BinaryOp::Add => crate::bigint_ops::would_promote('+', *l, *r),
+                    BinaryOp::Sub => crate::bigint_ops::would_promote('-', *l, *r),
+                    BinaryOp::Mul => crate::bigint_ops::would_promote('*', *l, *r),
+                    BinaryOp::Pow => matches!(crate::bigint_ops::pow(*l, *r), crate::value::Value::BigInt(_)),
+                    _ => false,
+                };
+                if let (Some(result), false) = (folded, promotes) {
                     state.instructions.push(Instruction::ConstNum(result));
                     return Ok(());
                 }
@@ -6848,6 +6856,7 @@ const BUILTINS: &[&str] = &[
     // Native GGUF inference
     "llm_chat", "llm_ask", "llm_info", "llm_complete", "llm_embed",
     "ffi_open", "ffi_call", "ffi_close", "ffi_alloc", "ffi_free", "ffi_poke", "ffi_peek",
+    "hex", "bin", "oct", "uuid",
     "ord", "chr", "pad_left", "pad_right", "repeat", "strip", "lstrip", "rstrip", "startsWith", "endsWith",
     "base64_encode", "base64_decode", "hmac_sha256", "float", "bool", "log", "log2", "log10", "exp", "cbrt",
     "trunc", "sign", "atan2", "hypot", "asin", "acos", "atan", "sinh", "cosh", "tanh", "degrees", "radians",

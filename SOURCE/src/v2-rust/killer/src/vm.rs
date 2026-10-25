@@ -1383,7 +1383,7 @@ impl VirtualMachine {
                         frame.resize(idx + 1, Value::Null);
                     }
                     if let Value::Number(v) = &frame[idx] {
-                        frame[idx] = Value::Number(v + n);
+                        frame[idx] = crate::bigint_ops::add(*v, *n);
                     } else {
                         self.slot_const_arith_fallback(idx, *n, crate::uncertain::BinOp::Add, "AddSlotConst")?;
                     }
@@ -1406,7 +1406,7 @@ impl VirtualMachine {
                     let idx = *slot as usize;
                     let frame = self.locals_stack.last_mut().ok_or_else(|| VmError::runtime_error("No locals frame".to_string()))?;
                     if idx >= frame.len() { frame.resize(idx + 1, Value::Null); }
-                    if let Value::Number(v) = &frame[idx] { frame[idx] = Value::Number(v - n); }
+                    if let Value::Number(v) = &frame[idx] { frame[idx] = crate::bigint_ops::sub(*v, *n); }
                     else { self.slot_const_arith_fallback(idx, *n, crate::uncertain::BinOp::Sub, "SubSlotConst")?; }
                 }
                 // Fused comparisons: LoadSlot(s) + ConstNum(n) + CMP
@@ -1568,7 +1568,7 @@ impl VirtualMachine {
                         }
                     }
                     if let (Value::Number(l), Value::Number(r)) = (&lhs, &rhs) {
-                        self.stack.push(Value::Number(l + r));
+                        self.stack.push(crate::bigint_ops::add(*l, *r));
                     } else if let (Value::Integer(l), Value::Integer(r)) = (&lhs, &rhs) {
                         self.stack.push(Value::Integer(l.wrapping_add(*r)));
                     } else if let (Value::Integer(l), Value::Number(r)) = (&lhs, &rhs) {
@@ -1727,7 +1727,7 @@ impl VirtualMachine {
                                     "Type error in '-': right operand must be a number, got {}", other.type_name()
                                 ))),
                             };
-                            self.stack.push(Value::Number(lhs_num - rhs_num));
+                            self.stack.push(crate::bigint_ops::sub(lhs_num, rhs_num));
                         }
                     }
                     } // close else block for Integer/Pointer fast path
@@ -1792,7 +1792,7 @@ impl VirtualMachine {
                                     "Type error in '*': right operand must be a number, got {}", other.type_name()
                                 ))),
                             };
-                            self.stack.push(Value::Number(lhs_num * rhs_num));
+                            self.stack.push(crate::bigint_ops::mul(lhs_num, rhs_num));
                             }
                         }
                     }
@@ -1917,6 +1917,16 @@ impl VirtualMachine {
                             self.ip += 1;
                             continue;
                         }
+                    }
+                    // "%d items" % 3, "%s=%.2f" % [name, x]: printf-style formatting when the left side is text
+                    if self.stack.len() >= 2 && matches!(self.stack[self.stack.len() - 2], Value::Str(_)) {
+                        let rhs = self.pop_value()?;
+                        let lhs = self.pop_value()?;
+                        let Value::Str(fmt) = &lhs else { unreachable!() };
+                        let text = crate::lang_builtins::percent_format(fmt, &rhs).map_err(VmError::runtime_error)?;
+                        self.stack.push(Value::Str(text));
+                        self.ip += 1;
+                        continue;
                     }
                     if matches!(self.stack.last(), Some(Value::BigInt(_)))
                         || (self.stack.len() >= 2 && matches!(self.stack[self.stack.len() - 2], Value::BigInt(_)))
@@ -2398,6 +2408,14 @@ impl VirtualMachine {
                                         let acc_result = unsafe { jit_fn(start, limit, 1.0) };
                                         let frame = self.locals_stack.last_mut().ok_or_else(|| VmError::runtime_error("No frame".to_string()))?;
                                         let existing_acc = match frame.get(acc_slot) { Some(Value::Number(n)) => *n, _ => 0.0 };
+                                        // a total at or beyond 2^53 is no longer exact as a float: nothing has been
+                                        // written yet, so drop native code for this loop and let the interpreter run
+                                        // it, promoting to an exact big integer where needed
+                                        if !((existing_acc + acc_result).abs() < crate::bigint_ops::EXACT_LIMIT) {
+                                            self.jit_engine.blacklist(dest);
+                                            self.ip = dest;
+                                            continue;
+                                        }
                                         if acc_slot >= frame.len() { frame.resize(acc_slot + 1, Value::Null); }
                                         frame[acc_slot] = Value::Number(existing_acc + acc_result);
                                         if i_slot >= frame.len() { frame.resize(i_slot + 1, Value::Null); }
@@ -4019,7 +4037,7 @@ impl VirtualMachine {
                             }
                             match (&args[0], &args[1]) {
                                 (Value::Number(base), Value::Number(exp)) => {
-                                    Value::Number(base.powf(*exp))
+                                    crate::bigint_ops::pow(*base, *exp)
                                 }
                                 _ => return Err(VmError::runtime_error(
                                     "Math.pow() expects numbers".to_string(),
@@ -4855,7 +4873,7 @@ impl VirtualMachine {
                                             "pow() requires numeric arguments".to_string()
                                         )),
                                     };
-                                    Value::Number(base.powf(exp))
+                                    crate::bigint_ops::pow(base, exp)
                                 }
                                 "abs" => {
                                     let n = match args.get(0) {
@@ -7581,7 +7599,7 @@ impl VirtualMachine {
                             let rhs = self.pop_value()?;
                             let lhs = self.pop_value()?;
                             match (&lhs, &rhs) {
-                                (Value::Number(l), Value::Number(r)) => self.stack.push(Value::Number(l + r)),
+                                (Value::Number(l), Value::Number(r)) => self.stack.push(crate::bigint_ops::add(*l, *r)),
                                 (Value::Str(l), _) => self.stack.push(Value::Str(format!("{}{}", l, rhs))),
                                 (_, Value::Str(r)) => self.stack.push(Value::Str(format!("{}{}", lhs, r))),
                                 _ => return Err(VmError::runtime_error(format!(
@@ -7593,12 +7611,12 @@ impl VirtualMachine {
                         Instruction::Sub => {
                             let rhs = self.pop_number()?;
                             let lhs = self.pop_number()?;
-                            self.stack.push(Value::Number(lhs - rhs));
+                            self.stack.push(crate::bigint_ops::sub(lhs, rhs));
                         }
                         Instruction::Mul => {
                             let rhs = self.pop_number()?;
                             let lhs = self.pop_number()?;
-                            self.stack.push(Value::Number(lhs * rhs));
+                            self.stack.push(crate::bigint_ops::mul(lhs, rhs));
                         }
                         Instruction::Div => {
                             let rhs = self.pop_number()?;

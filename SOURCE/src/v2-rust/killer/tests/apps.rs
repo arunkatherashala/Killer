@@ -220,7 +220,8 @@ fn large_floats_print_exactly_and_exponent_literals_parse() {
     let src = "println(1e21)\nprintln(-1e25)\nprintln(2.0 ** 70)\nprintln(1e-7)\nprintln(2.5E+3 + 1)\nprintln(3e-2 * 2)\ne = 5\nprintln(e-1)\nprintln(123456789012345678.0)\n";
     assert_eq!(
         run_src(src),
-        "1000000000000000000000\n-10000000000000000000000000\n1180591620717411300000\n0.0000001\n2501\n0.06\n4\n123456789012345680"
+        // 2.0 ** 70 is a whole-number power, so it is computed exactly (a plain `2 ** 70` prints the same)
+        "1000000000000000000000\n-10000000000000000000000000\n1180591620717411303424\n0.0000001\n2501\n0.06\n4\n123456789012345680"
     );
 }
 

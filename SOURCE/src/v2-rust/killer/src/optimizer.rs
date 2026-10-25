@@ -153,7 +153,15 @@ fn fold_const_arithmetic(instructions: &[Instruction]) -> (Vec<Instruction>, Vec
                     Instruction::IntDiv if b != 0.0 => Some((a / b).floor()),
                     _ => None,
                 };
-                if let Some(result) = folded {
+                // a whole-number result too big for an exact float is left to run time, where it
+                // becomes an exact big integer (see bigint_ops::add / sub / mul)
+                let promotes = match &instructions[i + 2] {
+                    Instruction::Add => crate::bigint_ops::would_promote('+', a, b),
+                    Instruction::Sub => crate::bigint_ops::would_promote('-', a, b),
+                    Instruction::Mul => crate::bigint_ops::would_promote('*', a, b),
+                    _ => false,
+                };
+                if let (Some(result), false) = (folded, promotes) {
                     let at = out.len();
                     out.push(Instruction::ConstNum(result));
                     old_to_new[i + 1] = at;
@@ -348,10 +356,17 @@ fn fuse_slot_patterns(instructions: &[Instruction]) -> (Vec<Instruction>, Vec<us
                     _ => None,
                 };
                 if let Some(instr) = folded {
-                    let ok = match &instr {
-                        Instruction::ConstNum(v) => v.is_finite(),
-                        _ => true,
+                    let promotes = match op {
+                        Instruction::Add => crate::bigint_ops::would_promote('+', *a, *b),
+                        Instruction::Sub => crate::bigint_ops::would_promote('-', *a, *b),
+                        Instruction::Mul => crate::bigint_ops::would_promote('*', *a, *b),
+                        _ => false,
                     };
+                    let ok = !promotes
+                        && match &instr {
+                            Instruction::ConstNum(v) => v.is_finite(),
+                            _ => true,
+                        };
                     if ok {
                         old_to_new[i + 1] = new_idx;
                         old_to_new[i + 2] = new_idx;

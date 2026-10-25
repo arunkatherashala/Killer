@@ -309,9 +309,396 @@ fn mutex_call(name: &str, args: &[Value]) -> Result<Value, VmError> {
     }
 }
 
+// ---- text formatting: `format("{:>8.2f}", x)` and `"%5.1f" % x` -------------------------------
+
+/// A number's value as a float, for the numeric format types.
+fn spec_float(v: &Value) -> Option<f64> {
+    match v {
+        Value::Number(n) => Some(*n),
+        Value::Integer(i) => Some(*i as f64),
+        Value::BigInt(b) => Some(b.to_f64()),
+        Value::Bool(b) => Some(*b as i64 as f64),
+        _ => None,
+    }
+}
+
+/// A whole number's digits in a radix (2..=16), without sign.
+fn radix_digits(mut n: u128, radix: u32, upper: bool) -> String {
+    if n == 0 {
+        return "0".to_string();
+    }
+    let digits: &[u8] = if upper { b"0123456789ABCDEF" } else { b"0123456789abcdef" };
+    let mut out = Vec::new();
+    while n > 0 {
+        out.push(digits[(n % radix as u128) as usize]);
+        n /= radix as u128;
+    }
+    out.reverse();
+    String::from_utf8(out).unwrap()
+}
+
+/// Python-style scientific notation: `1.500000e+03`.
+fn sci(n: f64, prec: usize, upper: bool) -> String {
+    let s = format!("{:.*e}", prec, n);
+    let (mant, exp) = s.split_once('e').unwrap_or((s.as_str(), "0"));
+    let exp: i32 = exp.parse().unwrap_or(0);
+    let e = if upper { 'E' } else { 'e' };
+    format!("{}{}{}{:02}", mant, e, if exp < 0 { '-' } else { '+' }, exp.abs())
+}
+
+fn group_thousands(int_part: &str) -> String {
+    let n = int_part.len();
+    let mut out = String::new();
+    for (i, ch) in int_part.chars().enumerate() {
+        if i > 0 && (n - i) % 3 == 0 {
+            out.push(',');
+        }
+        out.push(ch);
+    }
+    out
+}
+
+/// Format one value with a Python-style spec: `[[fill]align][sign][#][0][width][,][.precision][type]`
+/// where align is `<` `>` `^` `=`, sign is `+` `-` or a space, and type is one of
+/// `d f F e E g x X o b s %`. An empty spec is plain `to_string`. A precision with no type on a number
+/// means that many decimal places (`{:.2}`), as `format` always did.
+pub fn format_spec(value: &Value, spec: &str) -> Result<String, String> {
+    let c: Vec<char> = spec.chars().collect();
+    let mut i = 0;
+    let is_align = |ch: char| matches!(ch, '<' | '>' | '^' | '=');
+    let (mut fill, mut align) = (' ', None);
+    if c.len() >= 2 && is_align(c[1]) {
+        fill = c[0];
+        align = Some(c[1]);
+        i = 2;
+    } else if !c.is_empty() && is_align(c[0]) {
+        align = Some(c[0]);
+        i = 1;
+    }
+    let mut sign = '-';
+    if i < c.len() && matches!(c[i], '+' | '-' | ' ') {
+        sign = c[i];
+        i += 1;
+    }
+    let mut alt = false;
+    if i < c.len() && c[i] == '#' {
+        alt = true;
+        i += 1;
+    }
+    let mut zero = false;
+    if i < c.len() && c[i] == '0' {
+        zero = true;
+        i += 1;
+    }
+    let mut width = 0usize;
+    while i < c.len() && c[i].is_ascii_digit() {
+        width = width.saturating_mul(10).saturating_add(c[i] as usize - '0' as usize);
+        i += 1;
+    }
+    if width > 10_000 {
+        return Err("format width is too large".to_string());
+    }
+    let mut thousands = false;
+    if i < c.len() && c[i] == ',' {
+        thousands = true;
+        i += 1;
+    }
+    let mut prec: Option<usize> = None;
+    if i < c.len() && c[i] == '.' {
+        i += 1;
+        let mut p = 0usize;
+        let start = i;
+        while i < c.len() && c[i].is_ascii_digit() {
+            p = p.saturating_mul(10).saturating_add(c[i] as usize - '0' as usize);
+            i += 1;
+        }
+        if i == start || p > 1000 {
+            return Err(format!("bad precision in format spec `{}`", spec));
+        }
+        prec = Some(p);
+    }
+    let ty = if i < c.len() { Some(c[i]) } else { None };
+    if ty.is_some() {
+        i += 1;
+    }
+    if i != c.len() {
+        return Err(format!("bad format spec `{}`", spec));
+    }
+    if zero && align.is_none() {
+        fill = '0';
+        align = Some('=');
+    }
+
+    // body = digits/text after the sign; numeric = whether it is a number (right-aligned by default)
+    let (neg, body, numeric): (bool, String, bool) = match ty {
+        Some('d') | Some('x') | Some('X') | Some('o') | Some('b') => {
+            let (neg, mag): (bool, String) = match value {
+                Value::BigInt(b) => {
+                    let t = b.to_string();
+                    if ty != Some('d') {
+                        return Err("bigint supports only the d format type".to_string());
+                    }
+                    match t.strip_prefix('-') {
+                        Some(r) => (true, r.to_string()),
+                        None => (false, t),
+                    }
+                }
+                other => {
+                    let f = spec_float(other).ok_or_else(|| format!("format type `{}` needs a number, got {}", ty.unwrap(), other.type_name()))?;
+                    if f.fract() != 0.0 || !f.is_finite() {
+                        return Err(format!("format type `{}` needs a whole number, got {}", ty.unwrap(), f));
+                    }
+                    let m = f.abs() as u128;
+                    let (radix, upper, prefix) = match ty {
+                        Some('x') => (16, false, "0x"),
+                        Some('X') => (16, true, "0X"),
+                        Some('o') => (8, false, "0o"),
+                        Some('b') => (2, false, "0b"),
+                        _ => (10, false, ""),
+                    };
+                    let digits = radix_digits(m, radix, upper);
+                    (f < 0.0, if alt { format!("{}{}", prefix, digits) } else { digits })
+                }
+            };
+            (neg, mag, true)
+        }
+        Some('f') | Some('F') | Some('e') | Some('E') | Some('g') | Some('%') => {
+            let f = spec_float(value).ok_or_else(|| format!("format type `{}` needs a number, got {}", ty.unwrap(), value.type_name()))?;
+            let p = prec.unwrap_or(6);
+            let neg = f.is_sign_negative() && f != 0.0;
+            let a = f.abs();
+            let s = match ty {
+                Some('e') => sci(a, p, false),
+                Some('E') => sci(a, p, true),
+                Some('g') => format!("{}", a),
+                Some('%') => format!("{:.*}%", p, a * 100.0),
+                _ => format!("{:.*}", p, a),
+            };
+            (neg, s, true)
+        }
+        Some('s') | None => {
+            if ty.is_none() {
+                if let (Some(p), Some(f)) = (prec, spec_float(value)) {
+                    if !matches!(value, Value::BigInt(_) | Value::Bool(_)) {
+                        let neg = f < 0.0;
+                        return Ok(pad_spec(neg, format!("{:.*}", p, f.abs()), true, fill, align, width, sign, thousands));
+                    }
+                }
+            }
+            let mut s = format!("{}", value);
+            if let Some(p) = prec {
+                s = s.chars().take(p).collect();
+            }
+            let numeric = ty.is_none() && matches!(value, Value::Number(_) | Value::Integer(_) | Value::BigInt(_));
+            let (neg, body) = match (numeric, s.strip_prefix('-')) {
+                (true, Some(r)) => (true, r.to_string()),
+                _ => (false, s),
+            };
+            (neg, body, numeric)
+        }
+        Some(other) => return Err(format!("unknown format type `{}`", other)),
+    };
+    Ok(pad_spec(neg, body, numeric, fill, align, width, sign, thousands))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn pad_spec(neg: bool, mut body: String, numeric: bool, fill: char, align: Option<char>, width: usize, sign: char, thousands: bool) -> String {
+    if thousands && numeric {
+        let (int_part, rest) = match body.find(|ch: char| !ch.is_ascii_digit()) {
+            Some(p) => body.split_at(p),
+            None => (body.as_str(), ""),
+        };
+        body = format!("{}{}", group_thousands(int_part), rest);
+    }
+    let sign_text = if !numeric {
+        ""
+    } else if neg {
+        "-"
+    } else if sign == '+' {
+        "+"
+    } else if sign == ' ' {
+        " "
+    } else {
+        ""
+    };
+    let len = sign_text.chars().count() + body.chars().count();
+    if len >= width {
+        return format!("{}{}", sign_text, body);
+    }
+    let pad = width - len;
+    let fillers = |n: usize| std::iter::repeat(fill).take(n).collect::<String>();
+    match align.unwrap_or(if numeric { '>' } else { '<' }) {
+        '<' => format!("{}{}{}", sign_text, body, fillers(pad)),
+        '^' => format!("{}{}{}{}", fillers(pad / 2), sign_text, body, fillers(pad - pad / 2)),
+        '=' => format!("{}{}{}", sign_text, fillers(pad), body),
+        _ => format!("{}{}{}", fillers(pad), sign_text, body),
+    }
+}
+
+/// `"..." % args` (printf style): `%d %i %s %f %e %x %X %o %c %%` with flags `- + 0 space #`, a width and
+/// a precision. `args` is a list of values, or a single value.
+pub fn percent_format(fmt: &str, args: &Value) -> Result<String, String> {
+    let list: Vec<Value> = match args {
+        Value::Array(a) => a.to_vec(),
+        other => vec![other.clone()],
+    };
+    let chars: Vec<char> = fmt.chars().collect();
+    let (mut out, mut next, mut i) = (String::new(), 0usize, 0usize);
+    while i < chars.len() {
+        if chars[i] != '%' {
+            out.push(chars[i]);
+            i += 1;
+            continue;
+        }
+        i += 1;
+        if chars.get(i) == Some(&'%') {
+            out.push('%');
+            i += 1;
+            continue;
+        }
+        let (mut left, mut zero, mut plus, mut space, mut alt) = (false, false, false, false, false);
+        while let Some(&f) = chars.get(i) {
+            match f {
+                '-' => left = true,
+                '0' => zero = true,
+                '+' => plus = true,
+                ' ' => space = true,
+                '#' => alt = true,
+                _ => break,
+            }
+            i += 1;
+        }
+        let mut width = String::new();
+        while let Some(&d) = chars.get(i).filter(|d| d.is_ascii_digit()) {
+            width.push(d);
+            i += 1;
+        }
+        let mut prec = String::new();
+        if chars.get(i) == Some(&'.') {
+            i += 1;
+            prec.push('.');
+            while let Some(&d) = chars.get(i).filter(|d| d.is_ascii_digit()) {
+                prec.push(d);
+                i += 1;
+            }
+            if prec == "." {
+                prec.push('0');
+            }
+        }
+        let Some(&ty) = chars.get(i) else {
+            return Err("incomplete format: a `%` at the end of the string".to_string());
+        };
+        i += 1;
+        let Some(value) = list.get(next) else {
+            return Err("not enough arguments for the % format string".to_string());
+        };
+        next += 1;
+        let spec_ty = match ty {
+            'd' | 'i' | 'u' => "d",
+            's' => "s",
+            'f' | 'F' => "f",
+            'e' => "e",
+            'E' => "E",
+            'g' | 'G' => "g",
+            'x' => "x",
+            'X' => "X",
+            'o' => "o",
+            'c' => "c",
+            other => return Err(format!("unsupported % format character `{}`", other)),
+        };
+        if spec_ty == "c" {
+            let ch = match value {
+                Value::Str(s) if s.chars().count() == 1 => s.clone(),
+                Value::Str(_) => return Err("%c needs a single character or a number".to_string()),
+                other => {
+                    let n = spec_float(other).ok_or("%c needs a single character or a number")?;
+                    char::from_u32(n as u32).ok_or("%c: not a valid character code")?.to_string()
+                }
+            };
+            out.push_str(&format_spec(&Value::Str(ch), &format!("{}{}", if left { "<" } else { ">" }, width))?);
+            continue;
+        }
+        let mut spec = String::new();
+        if left {
+            spec.push('<');
+        } else if spec_ty == "s" {
+            spec.push('>'); // %6s right-aligns text (format()'s default for text is left)
+        }
+        if plus {
+            spec.push('+');
+        } else if space {
+            spec.push(' ');
+        }
+        if alt && matches!(spec_ty, "x" | "X" | "o") {
+            spec.push('#');
+        }
+        if zero && !left {
+            spec.push('0');
+        }
+        spec.push_str(&width);
+        // a precision on %d/%x/%o is a minimum digit count in C; not supported, so reject it clearly
+        if matches!(spec_ty, "d" | "x" | "X" | "o") && !prec.is_empty() {
+            return Err("a precision is not supported with %d, %x or %o".to_string());
+        }
+        spec.push_str(&prec);
+        spec.push_str(spec_ty);
+        // %d of a float truncates like Python; %s of anything is its text
+        let shown;
+        let arg: &Value = if spec_ty == "d" {
+            match value {
+                Value::Number(n) if n.is_finite() => {
+                    shown = Value::Number(n.trunc());
+                    &shown
+                }
+                v => v,
+            }
+        } else {
+            value
+        };
+        out.push_str(&format_spec(arg, &spec)?);
+    }
+    if next < list.len() {
+        return Err("not all arguments were converted during % formatting".to_string());
+    }
+    Ok(out)
+}
+
 /// Dispatch a builtin implemented in this module. `None` means "not mine".
 pub fn call(name: &str, args: &[Value]) -> Option<Result<Value, VmError>> {
     Some(match name {
+        // hex(255) is "0xff", bin(5) is "0b101", oct(8) is "0o10"; negative numbers get a leading "-"
+        "hex" | "bin" | "oct" => (|| {
+            let a = arity(name, args, 1, 1)?;
+            let (radix, prefix) = match name {
+                "hex" => (16, "0x"),
+                "bin" => (2, "0b"),
+                _ => (8, "0o"),
+            };
+            let n = match &a[0] {
+                Value::BigInt(_) => return err(format!("{}() does not take a bigint", name)),
+                other => num(other, name)?,
+            };
+            if n.fract() != 0.0 || !n.is_finite() || n.abs() >= 3.4e38 {
+                return err(format!("{}() expects a whole number, got {}", name, n));
+            }
+            Ok(Value::Str(format!("{}{}{}", if n < 0.0 { "-" } else { "" }, prefix, radix_digits(n.abs() as u128, radix, false))))
+        })(),
+        // uuid(): a random (version 4) UUID such as "3f2b8c1e-9a4d-4e0b-8c53-1d2f7a9b6e04"
+        "uuid" => (|| {
+            use std::hash::{BuildHasher, Hasher};
+            arity("uuid", args, 0, 0)?;
+            // RandomState is seeded from the operating system's random source for every instance
+            let mut bytes = [0u8; 16];
+            for (k, chunk) in bytes.chunks_mut(8).enumerate() {
+                let mut h = std::collections::hash_map::RandomState::new().build_hasher();
+                h.write_u64(k as u64);
+                chunk.copy_from_slice(&h.finish().to_le_bytes());
+            }
+            bytes[6] = (bytes[6] & 0x0f) | 0x40;
+            bytes[8] = (bytes[8] & 0x3f) | 0x80;
+            let hex: String = bytes.iter().map(|b| format!("{:02x}", b)).collect();
+            Ok(Value::Str(format!("{}-{}-{}-{}-{}", &hex[0..8], &hex[8..12], &hex[12..16], &hex[16..20], &hex[20..32])))
+        })(),
         // ---- characters and strings ----
         "ord" => (|| {
             let a = arity("ord", args, 1, 1)?;
@@ -610,8 +997,8 @@ pub fn call(name: &str, args: &[Value]) -> Option<Result<Value, VmError>> {
                 _ => err("insert() expects (array, index, value)"),
             }
         })(),
-        // format("{} is {:.2}", name, x): `{}` next argument, `{N}` argument N, `{:.2}` precision,
-        // `{{` / `}}` literal braces
+        // format("{} is {:>8.2f}", name, x): `{}` next argument, `{N}` argument N, then a Python-style
+        // spec after the colon (see `format_spec`), `{{` / `}}` literal braces
         "format" => (|| {
             if args.is_empty() {
                 return err("format() expects a format string");
@@ -651,10 +1038,7 @@ pub fn call(name: &str, args: &[Value]) -> Option<Result<Value, VmError>> {
                     let Some(value) = rest.get(index) else {
                         return err(format!("format(): placeholder {} has no argument", index));
                     };
-                    let text = match (style.strip_prefix('.').and_then(|p| p.trim_end_matches('f').parse::<usize>().ok()), value) {
-                        (Some(places), Value::Number(n)) => format!("{:.*}", places, n),
-                        _ => format!("{}", value),
-                    };
+                    let text = format_spec(value, style).map_err(|e| VmError::runtime_error(format!("format(): {}", e)))?;
                     out.push_str(&text);
                     i += close + 1;
                 } else {

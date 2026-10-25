@@ -1522,9 +1522,48 @@ impl BuiltinFunctions {
     }
 
     fn int(args: &[Value]) -> Result<Value, VmError> {
+        // int(text, base): digits in base 2..36, optional sign and 0x / 0o / 0b prefix, like Python
+        if args.len() == 2 {
+            let (Value::Str(text), Value::Number(b)) = (&args[0], &args[1]) else {
+                return Err(VmError::runtime_error("int(text, base) expects a string and a base".to_string()));
+            };
+            if b.fract() != 0.0 || !(*b == 0.0 || (2.0..=36.0).contains(b)) {
+                return Err(VmError::runtime_error("int() base must be 0 or between 2 and 36".to_string()));
+            }
+            let mut base = *b as u32;
+            let t = text.trim();
+            let (neg, t) = match t.strip_prefix('-') {
+                Some(r) => (true, r),
+                None => (false, t.strip_prefix('+').unwrap_or(t)),
+            };
+            let lower = t.to_ascii_lowercase();
+            let (prefix_base, digits) = if let Some(r) = lower.strip_prefix("0x") {
+                (16, r.to_string())
+            } else if let Some(r) = lower.strip_prefix("0o") {
+                (8, r.to_string())
+            } else if let Some(r) = lower.strip_prefix("0b") {
+                (2, r.to_string())
+            } else {
+                (0, lower.clone())
+            };
+            let digits = if prefix_base != 0 && (base == 0 || base == prefix_base) {
+                base = prefix_base;
+                digits
+            } else {
+                lower
+            };
+            if base == 0 {
+                base = 10;
+            }
+            return match i128::from_str_radix(&digits, base) {
+                Ok(n) if n.abs() < (1i128 << 53) => Ok(Value::Number(if neg { -(n as f64) } else { n as f64 })),
+                Ok(_) => Err(VmError::runtime_error("int(): the number is too large for a plain number; use big()".to_string())),
+                Err(_) => Err(VmError::runtime_error(format!("int() cannot convert '{}' to a number in base {}", text, base))),
+            };
+        }
         if args.len() != 1 {
             return Err(VmError::runtime_error(
-                "int() expects 1 argument".to_string(),
+                "int() expects 1 argument, or int(text, base)".to_string(),
             ));
         }
         match &args[0] {
@@ -2091,7 +2130,7 @@ impl BuiltinFunctions {
         }
         match (&args[0], &args[1]) {
             (Value::Number(base), Value::Number(exp)) => {
-                Ok(Value::Number(base.powf(*exp)))
+                Ok(crate::bigint_ops::pow(*base, *exp))
             }
             (a, b) if crate::bigint_ops::involves(a, b) => {
                 crate::bigint_ops::arith(crate::bigint_ops::Op::Pow, a, b).map_err(VmError::runtime_error)
@@ -2222,10 +2261,33 @@ impl BuiltinFunctions {
     }
 
     fn round(args: &[Value]) -> Result<Value, VmError> {
-        if args.len() != 1 {
+        if args.is_empty() || args.len() > 2 {
             return Err(VmError::runtime_error(
-                "round() expects 1 argument".to_string(),
+                "round() expects 1 or 2 arguments: round(x[, digits])".to_string(),
             ));
+        }
+        // round(x, digits): halves round away from zero; negative digits round to tens, hundreds, ...
+        if let Some(d) = args.get(1) {
+            let digits = match d {
+                Value::Number(n) if n.fract() == 0.0 && n.abs() <= 300.0 => *n as i32,
+                _ => return Err(VmError::runtime_error("round() digits must be a whole number".to_string())),
+            };
+            return match &args[0] {
+                Value::BigInt(_) if digits >= 0 => Ok(args[0].clone()),
+                Value::Number(n) if !n.is_finite() => Ok(Value::Number(*n)),
+                Value::Number(n) => {
+                    let scale = 10f64.powi(digits.abs());
+                    let r = if digits >= 0 {
+                        // scaling can overflow for huge x; such values have no fraction to round anyway
+                        let s = n * scale;
+                        if s.is_finite() { s.round() / scale } else { *n }
+                    } else {
+                        (n / scale).round() * scale
+                    };
+                    Ok(Value::Number(r))
+                }
+                _ => Err(VmError::runtime_error("round() expects a number".to_string())),
+            };
         }
         match &args[0] {
             Value::Number(n) => Ok(Value::Number(n.round())),

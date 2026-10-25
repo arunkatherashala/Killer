@@ -97,6 +97,95 @@ pub fn big(v: BigInt) -> Value {
     Value::BigInt(Rc::new(v))
 }
 
+// ---- automatic promotion of whole-number results -------------------------------------------------
+//
+// A plain number is an f64, exact for whole numbers only up to 2^53. When both operands of `+ - * **`
+// are whole numbers and the float result reaches 2^53 (so it may be rounded), the exact result is
+// computed as a BigInt instead, like Python's int. Anything else (a fractional operand, an operand
+// beyond +-2^63, infinities, results below 2^53) stays a plain float, exactly as before.
+
+/// 2^53: whole floats at or above this may already be rounded.
+pub const EXACT_LIMIT: f64 = 9_007_199_254_740_992.0;
+/// Operands up to about 2^63 take part in promotion (larger floats are treated as floats).
+const OPERAND_LIMIT: f64 = 9.3e18;
+
+#[inline(always)]
+fn whole_operands(x: f64, y: f64) -> bool {
+    x.fract() == 0.0 && y.fract() == 0.0 && x.abs() < OPERAND_LIMIT && y.abs() < OPERAND_LIMIT
+}
+
+/// `x + 0`, `x - 0`, `0 - x`, `x * 1` and `x * -1` (negation) never lose precision, so they never promote:
+/// `-9223372036854775807` stays a plain number.
+#[inline(always)]
+fn identity_op(op: Op, x: f64, y: f64) -> bool {
+    match op {
+        Op::Add | Op::Sub => x == 0.0 || y == 0.0,
+        _ => x.abs() == 1.0 || y.abs() == 1.0,
+    }
+}
+
+#[cold]
+fn exact(op: Op, x: f64, y: f64, fallback: f64) -> Value {
+    arith(op, &Value::Number(x), &Value::Number(y)).unwrap_or(Value::Number(fallback))
+}
+
+/// `x + y` for two plain numbers.
+#[inline(always)]
+pub fn add(x: f64, y: f64) -> Value {
+    let r = x + y;
+    if r.abs() >= EXACT_LIMIT && r.is_finite() && whole_operands(x, y) && !identity_op(Op::Add, x, y) {
+        return exact(Op::Add, x, y, r);
+    }
+    Value::Number(r)
+}
+
+/// `x - y` for two plain numbers.
+#[inline(always)]
+pub fn sub(x: f64, y: f64) -> Value {
+    let r = x - y;
+    if r.abs() >= EXACT_LIMIT && r.is_finite() && whole_operands(x, y) && !identity_op(Op::Sub, x, y) {
+        return exact(Op::Sub, x, y, r);
+    }
+    Value::Number(r)
+}
+
+/// `x * y` for two plain numbers.
+#[inline(always)]
+pub fn mul(x: f64, y: f64) -> Value {
+    let r = x * y;
+    if r.abs() >= EXACT_LIMIT && r.is_finite() && whole_operands(x, y) && !identity_op(Op::Mul, x, y) {
+        return exact(Op::Mul, x, y, r);
+    }
+    Value::Number(r)
+}
+
+/// `base ** exp` / `pow(base, exp)` for two plain numbers. A whole base with a whole exponent from 0 to
+/// 4096 whose float result reaches 2^53 (including results too large for a float) is computed exactly.
+#[inline]
+pub fn pow(base: f64, exp: f64) -> Value {
+    let r = base.powf(exp);
+    if r.abs() >= EXACT_LIMIT
+        && exp >= 0.0
+        && exp <= 4096.0
+        && base.abs() < OPERAND_LIMIT
+        && whole_operands(base, exp)
+    {
+        return exact(Op::Pow, base, exp, r);
+    }
+    Value::Number(r)
+}
+
+/// Would `x op y` be promoted? Used by constant folding to leave such operations to run time.
+pub fn would_promote(op_char: char, x: f64, y: f64) -> bool {
+    let (r, op) = match op_char {
+        '+' => (x + y, Op::Add),
+        '-' => (x - y, Op::Sub),
+        '*' => (x * y, Op::Mul),
+        _ => return false,
+    };
+    r.abs() >= EXACT_LIMIT && r.is_finite() && whole_operands(x, y) && !identity_op(op, x, y)
+}
+
 /// An operand reduced to what the arithmetic needs.
 enum Operand {
     Int(BigInt),
