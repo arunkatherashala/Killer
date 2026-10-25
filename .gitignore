@@ -30,3 +30,8 @@ _TOOLS/
 # OS Files
 .DS_Store
 Thumbs.db
+
+# Native build artifacts
+*.pdb
+*.dll.exp
+*.dll.lib
