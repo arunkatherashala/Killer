@@ -17,6 +17,7 @@ jobs:
   build:
     name: Build ${{ matrix.target-name }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -29,7 +30,9 @@ jobs:
             target-name: windows-x64
             rust-target: x86_64-pc-windows-msvc
             archive: zip
-          - os: macos-13
+          # Intel macOS is cross-compiled on the Apple Silicon runner (the macos-13 image is retired);
+          # it cannot be run there, so it is built but not tested.
+          - os: macos-latest
             target-name: macos-x64
             rust-target: x86_64-apple-darwin
             archive: tar.gz
@@ -92,6 +95,7 @@ jobs:
     name: Publish release
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/download-artifact@v4
         with:

@@ -23,7 +23,14 @@ $target = "windows-x64"
 if ($Version -eq "latest") {
   if ($DryRun) { $Tag = "<latest tag>" }
   else {
-    $rel = Invoke-RestMethod "https://api.github.com/repos/$Repo/releases/latest"
+    try {
+      $rel = Invoke-RestMethod "https://api.github.com/repos/$Repo/releases/latest"
+    } catch {
+      # GitHub's "latest" skips pre-releases; fall back to the newest release of any kind.
+      Write-Host "no full release yet; using the newest pre-release (pass -Version vX.Y.Z to choose)"
+      $rel = (Invoke-RestMethod "https://api.github.com/repos/$Repo/releases?per_page=1") | Select-Object -First 1
+    }
+    if (-not $rel -or -not $rel.tag_name) { throw "could not determine a release tag (pass -Version vX.Y.Z)" }
     $Tag = $rel.tag_name
   }
 } else { $Tag = $Version }

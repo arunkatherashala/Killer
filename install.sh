@@ -84,9 +84,13 @@ if [ "$VERSION" = "latest" ]; then
   else
     tmp_json="$(mktemp)"
     if ! download "https://api.github.com/repos/$REPO/releases/latest" "$tmp_json"; then
-      echo "could not query the latest release (pre-releases are not 'latest'; pass --version vX.Y.Z)" >&2
-      rm -f "$tmp_json"
-      exit 1
+      # GitHub's "latest" skips pre-releases; fall back to the newest release of any kind.
+      echo "no full release yet; using the newest pre-release (pass --version vX.Y.Z to choose)" >&2
+      if ! download "https://api.github.com/repos/$REPO/releases?per_page=1" "$tmp_json"; then
+        echo "could not query releases (pass --version vX.Y.Z)" >&2
+        rm -f "$tmp_json"
+        exit 1
+      fi
     fi
     TAG="$(sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' "$tmp_json" | head -n 1)"
     rm -f "$tmp_json"
