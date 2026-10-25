@@ -1,23 +1,22 @@
 # Killer compared with Python
 
 Measured on 2026-10-25 by running small Python-style programs through `killer run` (debug build, Windows).
-99 probes: **95 behave like Python, 4 differ.** Only what a probe ran is claimed here; anything not
+99 probes: **97 behave like Python, 2 differ.** Only what a probe ran is claimed here; anything not
 probed is listed at the bottom as unknown. Re-run with `python parity/python_gap/probe.py` and
 `probe2.py` (set `KILLER_BIN` to the `killer` binary). The first measurement on 2026-10-24 found 12
-differences; eight were fixed the next day (see "Closed since the first measurement").
+differences; ten were fixed the next day (see "Closed since the first measurement").
 
 ## Where Killer still differs from Python
 
 | # | Python feature | What Killer does | Workaround |
 |---|----------------|------------------|------------|
-| 1 | reading an unassigned variable is an error | reads `null` (slots start as `null`; telling "never assigned" from "assigned null" needs a new value kind) | check for `null` |
-| 2 | `open(path)` returns a file object | no file objects; `with` works on any class that defines `__enter__` / `__exit__` | `file_read`, `file_write`, `file_append` |
-| 3 | `sqlite3` | no SQL database | none built in |
-| 4 | assigning in a nested function creates a local | assigns the enclosing variable (JavaScript-like closure sharing) | by design; use a different name for a local |
+| 1 | `sqlite3` | no SQL database (an SQL engine is a project of its own) | none built in |
+| 2 | assigning in a nested function creates a local | assigns the enclosing variable (JavaScript-like closure sharing; changing it would break closure counters) | by design; use a different name for a local |
 
 Also: an integer literal above 2^53 is read as a float before any arithmetic (`9007199254740993` is
-`9007199254740992`); write `9007199254740993n`. Python has no such limit. `__exit__` cannot swallow an
-exception (Python's can by returning true).
+`9007199254740992`); write `9007199254740993n`. `__exit__` cannot swallow an exception (Python's can by
+returning true). File objects are text-only (`"r"`, `"w"`, `"a"`); there is no `"rb"`, `"r+"` or iteration with
+`for line in f` (use `f.readlines()`).
 
 ## Closed since the first measurement
 
@@ -32,6 +31,8 @@ exception (Python's can by returning true).
 | `@property` getters and setters | `get name() { }` and `set name(v) { }` in a class; inherited; a real field of the same name wins |
 | `with ... as x:` | `with expr as x { }` calls `__enter__` / `__exit__` on every path (end, `return`, `break`, `continue`, error) |
 | type hints `x: int` | `int`, `integer`, `float`, `double`, `str`, `boolean`, `list` are aliases of Killer's names and are still checked |
+| reading an unassigned variable is an error | a local not assigned on the path taken is an error ("used before it was assigned"); explicit `null` still works |
+| `open(path, mode)` file objects | `open` returns an object with `read`, `readline`, `readlines`, `write`, `writelines`, `flush`, `close`; works with `with` |
 
 ## Same name, different spelling (not gaps)
 
@@ -44,7 +45,7 @@ exception (Python's can by returning true).
 | exceptions: `try/except` | `try/catch`, `throw` |
 | `round(2.5)` is `2` (banker's rounding) | `3` (halves round away from zero) |
 
-## What matched Python (95 probes)
+## What matched Python (97 probes)
 
 Numbers: float arithmetic prints identically, floor modulo, exact big integers (automatic past 2^53, or
 with `n` / `big()`), factorial, min/max/sum/abs, sqrt/pow/floor/ceil/log, bit operations, `round` with digits,
@@ -57,10 +58,11 @@ push/pop, dict get with default, keys/values, element assignment.
 Functions: default and keyword arguments, `...rest`, closures, generators, decorators, recursion 5000
 deep, `match`, ternary, chained comparison, lambdas, `global`, `??` default, type hints.
 Classes: inheritance and `super`, operator overloading, static methods, properties, `toString`, records.
-Errors: try/catch/finally, throw, catchable division by zero, custom error classes, `assert`, `with`.
+Errors: try/catch/finally, throw, catchable division by zero, custom error classes, `assert`, `with`,
+reading an unassigned variable.
 Standard library: regex (text first, pattern second), JSON round trip, date and time, random, `uuid`,
-SHA-256, base64, file read/write, command-line arguments, environment variables, CSV (returns a list of
-dicts keyed by the header), compression, running an external command, `sleep`, `exit` codes.
+SHA-256, base64, file read/write and `open`, command-line arguments, environment variables, CSV (returns a
+list of dicts keyed by the header), compression, running an external command, `sleep`, `exit` codes.
 Concurrency: `async` / `await`, channels. Network: `http_request`, `serve`, `route` exist.
 
 ## Not probed (unknown)

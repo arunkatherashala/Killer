@@ -569,9 +569,12 @@ fn server_stop_from_another_thread_ends_an_idle_server() {
 
 #[test]
 fn server_stop_interrupts_a_connection_that_is_mid_request() {
+    // The stop timer starts when the script starts and the connection below must arrive before it fires, so
+    // the delay is generous: a loaded CI runner can take seconds to get this far (the server's own read timeout
+    // is 600 s, so waiting longer only costs test time).
     let port = free_port();
     let src = format!(
-        "fn h(req) {{\n  return \"x\"\n}}\nfn stopper() {{\n  sleep_ms(500)\n  server_stop()\n  return 1\n}}\nt = async_spawn(stopper)\nn = serve({port}, h, {{\"read_timeout\": 600}})\nprintln(\"stopped\", n)\nasync_await(t)\n"
+        "fn h(req) {{\n  return \"x\"\n}}\nfn stopper() {{\n  sleep_ms(5000)\n  server_stop()\n  return 1\n}}\nt = async_spawn(stopper)\nn = serve({port}, h, {{\"read_timeout\": 600}})\nprintln(\"stopped\", n)\nasync_await(t)\n"
     );
     let (child, path) = spawn_script(&src);
     let mut half = connect_retry(port);
@@ -630,7 +633,7 @@ fn client(port) {{
   return http_request({{"url": base + "/slow", "timeout": 30}})["status"]
 }}
 fn stopper() {{
-  sleep_ms(1500)
+  sleep_ms(5000)
   server_stop()
   return 1
 }}

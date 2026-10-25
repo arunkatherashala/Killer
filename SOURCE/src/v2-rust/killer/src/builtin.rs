@@ -1483,6 +1483,7 @@ impl BuiltinFunctions {
             ));
         }
         let type_name = match &args[0] {
+            Value::Unbound => "unassigned",
             Value::Number(_) => "number",
             Value::Bool(_) => "bool",
             Value::Str(_) => "string",

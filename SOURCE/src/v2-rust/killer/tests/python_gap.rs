@@ -311,3 +311,88 @@ fn a_real_field_wins_over_a_getter_and_plain_objects_are_unaffected() {
 fn get_and_set_stay_usable_as_names() {
     assert_eq!(out("d = {\"a\": 1}\nprintln(get(d, \"b\", 7))\nget = 3\nset = 4\nprintln(get + set)"), "7\n7");
 }
+
+// ---- reading a local variable that was never assigned --------------------------------------------
+
+#[test]
+fn reading_a_local_that_was_not_assigned_on_the_path_taken_is_an_error() {
+    fails("fn f() {\n  if false {\n    x = 1\n  }\n  return x\n}\nprintln(f())\n", "before it was assigned");
+    fails("fn f() {\n  n += 1\n  return n\n}\nprintln(f())\n", "`n`");
+    fails("fn f() {\n  z = z + 1\n  return z\n}\nprintln(f())\n", "z");
+}
+
+#[test]
+fn locals_assigned_on_every_path_or_set_to_null_still_work() {
+    assert_eq!(out("fn f(c) {\n  if c {\n    x = 1\n  } else {\n    x = 2\n  }\n  return x\n}\nprintln(f(true), f(false))"), "1 2");
+    assert_eq!(out("fn f() {\n  x = null\n  return x\n}\nprintln(f())"), "null");
+    assert_eq!(out("fn f() {\n  total = 0\n  for k in range(3) {\n    last = k\n    total += k\n  }\n  return total\n}\nprintln(f())"), "3");
+    assert_eq!(out("fn f() {\n  try {\n    a = 1\n  } catch e {\n    a = 2\n  }\n  return a\n}\nprintln(f())"), "1");
+}
+
+// ---- open() file objects -------------------------------------------------------------------------
+
+fn tmp_file(tag: &str) -> String {
+    let p = std::env::temp_dir().join(format!("killer_open_{}_{}_{}.txt", std::process::id(), tag, NEXT.fetch_add(1, Ordering::SeqCst)));
+    let _ = std::fs::remove_file(&p);
+    p.to_string_lossy().replace('\\', "/")
+}
+
+#[test]
+fn open_writes_appends_and_reads_text() {
+    let f = tmp_file("rw");
+    let src = format!(
+        "f = open(\"{f}\", \"w\")\nprintln(f.write(\"alpha\\n\"))\nf.write(\"beta\\n\")\nf.close()\ng = open(\"{f}\", \"a\")\ng.write(\"gamma\")\ng.close()\nh = open(\"{f}\")\nprintln(len(h.read()))\nprintln(h.read() == \"\")\nh.close()\nprintln(open(\"{f}\").readlines())\n"
+    );
+    assert_eq!(out(&src), "6\n16\ntrue\n[alpha\n, beta\n, gamma]");
+    assert_eq!(std::fs::read_to_string(&f).unwrap(), "alpha\nbeta\ngamma");
+    let _ = std::fs::remove_file(&f);
+}
+
+#[test]
+fn readline_walks_the_lines_and_returns_empty_at_the_end() {
+    let f = tmp_file("rl");
+    std::fs::write(&f, "one\ntwo\nthree").unwrap();
+    let src = format!("f = open(\"{f}\")\nprintln(trim(f.readline()), trim(f.readline()), f.readline(), f.readline() == \"\")\n");
+    assert_eq!(out(&src), "one two three true");
+    let _ = std::fs::remove_file(&f);
+}
+
+#[test]
+fn open_works_with_the_with_statement_and_closes_the_file() {
+    let f = tmp_file("with");
+    let src = format!(
+        "with open(\"{f}\", \"w\") as w {{\n  w.write(\"hello\")\n}}\nprintln(w.closed)\nwith open(\"{f}\") as r {{\n  println(r.read())\n}}\ntry {{\n  r.read()\n}} catch e {{\n  println(contains(e, \"closed file\"))\n}}\n"
+    );
+    assert_eq!(out(&src), "true\nhello\ntrue");
+    let _ = std::fs::remove_file(&f);
+}
+
+#[test]
+fn open_reports_clear_errors() {
+    let f = tmp_file("missing");
+    fails(&format!("open(\"{f}\")\n"), "");
+    fails("open(\"x.txt\", \"rb\")\n", "mode must be");
+    let g = tmp_file("modes");
+    std::fs::write(&g, "x").unwrap();
+    fails(&format!("f = open(\"{g}\")\nf.write(\"y\")\n"), "not open for writing");
+    fails(&format!("f = open(\"{g}\", \"w\")\nf.read()\n"), "not open for reading");
+    let _ = std::fs::remove_file(&g);
+}
+
+#[test]
+fn error_lines_in_the_script_are_not_shifted_by_the_file_library() {
+    let f = tmp_file("lines");
+    let src = format!("f = open(\"{f}\", \"w\")\nf.close()\nx = 1\ny = missing_function(x)\n");
+    let (ok, _, stderr) = run(&src);
+    assert!(!ok);
+    assert!(stderr.contains("Line 4"), "stderr was: {stderr}");
+    let _ = std::fs::remove_file(&f);
+}
+
+#[test]
+fn a_script_that_defines_its_own_open_or_file_is_left_alone() {
+    assert_eq!(out("fn open(x) {\n  return x * 2\n}\nprintln(open(4))"), "8");
+    assert_eq!(out("class File {\n  fn init() {\n    this.n = 3\n  }\n}\nprintln((new File()).n)"), "3");
+    // a method called open, a longer name, and text inside strings and comments do not pull the library in
+    assert_eq!(out("class D {\n  fn open() {\n    return 1\n  }\n}\nfn reopen(a) {\n  return a\n}\nprintln((new D()).open(), reopen(2), \"open(x)\")\n# open(path)\n"), "1 2 open(x)");
+}

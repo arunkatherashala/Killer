@@ -223,10 +223,34 @@ pub fn resolve(source: &str) -> Result<String, String> {
     resolve_mapped(source).map(|(text, _)| text)
 }
 
+/// The Python-style `open()` / `File` written in Killer, included when a script uses `open(`.
+const FILE_PRELUDE: &str = include_str!("std/file.killer");
+
+/// Name shown in diagnostics for the embedded file library.
+const FILE_PRELUDE_NAME: &str = "<std>/file.killer";
+
+/// True when `source` calls the builtin-style `open(...)` (not a method `x.open(`, a longer name such as
+/// `reopen(`, or text inside a string or comment) and defines neither its own `open` nor a class `File`.
+fn needs_file_prelude(source: &str) -> bool {
+    if !source.contains("open(") {
+        return false;
+    }
+    let m = crate::lambda::mask(source);
+    let text = String::from_utf8_lossy(&m);
+    if text.contains("fn open") || text.contains("class File") {
+        return false;
+    }
+    let b = text.as_bytes();
+    text.match_indices("open(").any(|(i, _)| {
+        i == 0 || !(b[i - 1].is_ascii_alphanumeric() || b[i - 1] == b'_' || b[i - 1] == b'.')
+    })
+}
+
 /// Like [`resolve`], also returning the origin (file, line) of every line of the result.
 pub fn resolve_mapped(source: &str) -> Result<(String, SourceMap), String> {
     let main = main_file();
-    if !source.contains("import") {
+    let prelude = needs_file_prelude(source);
+    if !prelude && !source.contains("import") {
         return Ok((source.to_string(), SourceMap::identity(&main, source)));
     }
     let dir = base_dir();
@@ -234,6 +258,17 @@ pub fn resolve_mapped(source: &str) -> Result<(String, SourceMap), String> {
     let project = crate::pkg_manifest::find_root(&dir).map(|p| p.canonicalize().unwrap_or(p));
     let mut ex = Expander { seen: HashSet::new(), total: 0, base: canonical_base, raw_base: dir.clone(), project, files: vec![main], sources: vec![String::new()], locs: Vec::new() };
     let mut out = String::with_capacity(source.len());
+    if prelude {
+        // the embedded file library goes first, as a file of its own, so error lines in the script stay right
+        ex.files.push(FILE_PRELUDE_NAME.to_string());
+        ex.sources.push(FILE_PRELUDE.to_string());
+        let idx = (ex.files.len() - 1) as u32;
+        ex.expand(FILE_PRELUDE, idx, &dir, 1, &mut out)?;
+        if !out.ends_with('\n') {
+            out.push('\n');
+            ex.locs.push(Loc { file: idx, line: FILE_PRELUDE.split('\n').count() as u32 });
+        }
+    }
     ex.expand(source, 0, &dir, 0, &mut out)?;
     // the (possibly empty) text after the last newline is the last line
     ex.locs.push(Loc { file: 0, line: source.split('\n').count() as u32 });

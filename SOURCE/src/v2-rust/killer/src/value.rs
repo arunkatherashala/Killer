@@ -653,6 +653,8 @@ pub enum Value {
     Cell(Rc<RefCell<Value>>),
     /// Arbitrary-precision integer (`123n`, `big(x)`, `factorial(n)`); see `bigint_ops` for the rules.
     BigInt(Rc<crate::bigint::BigInt>),
+    /// A local variable that has not been assigned yet. Never visible to scripts: reading it is an error.
+    Unbound,
     Null,
 }
 
@@ -880,6 +882,7 @@ impl Drop for DisplayGuard {
 impl Display for Value {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
+            Value::Unbound => write!(f, "<unassigned>"),
             Value::Number(n) => {
                 if n.fract() == 0.0 && n.abs() < 9.0e18 {
                     write!(f, "{}", *n as i64)
@@ -993,7 +996,7 @@ impl Value {
     pub fn truthy(&self) -> bool {
         match self {
             Value::Bool(v) => *v,
-            Value::Null => false,
+            Value::Null | Value::Unbound => false,
             Value::Number(v) => *v != 0.0,
             Value::Str(v) => !v.is_empty(),
             Value::Array(a) => !a.is_empty(),
@@ -1154,6 +1157,7 @@ impl Value {
     /// Human-readable type name for error messages.
     pub fn type_name(&self) -> &'static str {
         match self {
+            Value::Unbound => "unassigned",
             Value::Number(_) => "number",
             Value::Bool(_) => "bool",
             Value::Str(_) => "string",

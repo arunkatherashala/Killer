@@ -1230,7 +1230,7 @@ impl VirtualMachine {
                         VmError::runtime_error("No locals frame".to_string())
                     })?;
                     if idx >= frame.len() {
-                        frame.resize(idx + 1, Value::Null);
+                        frame.resize(idx + 1, Value::Unbound);
                     }
                     frame[idx] = value;
                 }
@@ -1361,7 +1361,8 @@ impl VirtualMachine {
                     let value = match frame.get(idx) {
                         Some(Value::Number(n)) => Value::Number(*n),
                         Some(Value::Bool(b)) => Value::Bool(*b),
-                        Some(Value::Null) | None => Value::Null,
+                        Some(Value::Null) => Value::Null,
+                        Some(Value::Unbound) | None => return Err(VmError::runtime_error("a local variable was used before it was assigned (assign it on every path before reading it)".to_string())),
                         Some(Value::Str(s)) => {
                             // `s[i]` / `len(s)` on a string slot: read it in place instead of
                             // copying the whole string just to look at one character (the
@@ -1386,7 +1387,7 @@ impl VirtualMachine {
                         VmError::runtime_error("No locals frame".to_string())
                     })?;
                     if idx >= frame.len() {
-                        frame.resize(idx + 1, Value::Null);
+                        frame.resize(idx + 1, Value::Unbound);
                     }
                     if let Value::Number(v) = &frame[idx] {
                         frame[idx] = crate::bigint_ops::add(*v, *n);
@@ -1411,7 +1412,7 @@ impl VirtualMachine {
                 Instruction::SubSlotConst(slot, n) => {
                     let idx = *slot as usize;
                     let frame = self.locals_stack.last_mut().ok_or_else(|| VmError::runtime_error("No locals frame".to_string()))?;
-                    if idx >= frame.len() { frame.resize(idx + 1, Value::Null); }
+                    if idx >= frame.len() { frame.resize(idx + 1, Value::Unbound); }
                     if let Value::Number(v) = &frame[idx] { frame[idx] = crate::bigint_ops::sub(*v, *n); }
                     else { self.slot_const_arith_fallback(idx, *n, crate::uncertain::BinOp::Sub, "SubSlotConst")?; }
                 }
@@ -2385,7 +2386,7 @@ impl VirtualMachine {
                                         };
                                         let final_val = unsafe { jit_fn(start, limit, step) };
                                         let frame = self.locals_stack.last_mut().ok_or_else(|| VmError::runtime_error("No frame".to_string()))?;
-                                        if slot >= frame.len() { frame.resize(slot + 1, Value::Null); }
+                                        if slot >= frame.len() { frame.resize(slot + 1, Value::Unbound); }
                                         frame[slot] = Value::Number(final_val);
                                         self.ip = exit_ip;
                                         continue;
@@ -2422,9 +2423,9 @@ impl VirtualMachine {
                                             self.ip = dest;
                                             continue;
                                         }
-                                        if acc_slot >= frame.len() { frame.resize(acc_slot + 1, Value::Null); }
+                                        if acc_slot >= frame.len() { frame.resize(acc_slot + 1, Value::Unbound); }
                                         frame[acc_slot] = Value::Number(existing_acc + acc_result);
-                                        if i_slot >= frame.len() { frame.resize(i_slot + 1, Value::Null); }
+                                        if i_slot >= frame.len() { frame.resize(i_slot + 1, Value::Unbound); }
                                         frame[i_slot] = Value::Number(limit);
                                         self.ip = exit_ip;
                                         continue;
@@ -2454,7 +2455,7 @@ impl VirtualMachine {
                                         // JIT countdown: xmm0=start(counter), xmm1=bound, xmm2=step
                                         let final_val = unsafe { jit_fn(start, bound, step) };
                                         let frame = self.locals_stack.last_mut().ok_or_else(|| VmError::runtime_error("No frame".to_string()))?;
-                                        if slot >= frame.len() { frame.resize(slot + 1, Value::Null); }
+                                        if slot >= frame.len() { frame.resize(slot + 1, Value::Unbound); }
                                         frame[slot] = Value::Number(final_val);
                                         self.ip = exit_ip;
                                         continue;
@@ -2580,7 +2581,7 @@ impl VirtualMachine {
                     };
                     let d = *dst as usize;
                     let frame = self.locals_stack.last_mut().ok_or_else(|| VmError::runtime_error("No locals frame".to_string()))?;
-                    if d >= frame.len() { frame.resize(d + 1, Value::Null); }
+                    if d >= frame.len() { frame.resize(d + 1, Value::Unbound); }
                     frame[d] = Value::Trit(ta.min(tb));
                 }
                 Instruction::TritOrSlots { dst, s1, s2 } => {
@@ -2592,7 +2593,7 @@ impl VirtualMachine {
                     };
                     let d = *dst as usize;
                     let frame = self.locals_stack.last_mut().ok_or_else(|| VmError::runtime_error("No locals frame".to_string()))?;
-                    if d >= frame.len() { frame.resize(d + 1, Value::Null); }
+                    if d >= frame.len() { frame.resize(d + 1, Value::Unbound); }
                     frame[d] = Value::Trit(ta.max(tb));
                 }
                 Instruction::TritNotSlot { dst, src } => {
@@ -2602,7 +2603,7 @@ impl VirtualMachine {
                     };
                     let d = *dst as usize;
                     let frame = self.locals_stack.last_mut().ok_or_else(|| VmError::runtime_error("No locals frame".to_string()))?;
-                    if d >= frame.len() { frame.resize(d + 1, Value::Null); }
+                    if d >= frame.len() { frame.resize(d + 1, Value::Unbound); }
                     frame[d] = Value::Trit(-ta);
                 }
                 Instruction::TritAddSlots { dst, s1, s2 } => {
@@ -2614,7 +2615,7 @@ impl VirtualMachine {
                     };
                     let d = *dst as usize;
                     let frame = self.locals_stack.last_mut().ok_or_else(|| VmError::runtime_error("No locals frame".to_string()))?;
-                    if d >= frame.len() { frame.resize(d + 1, Value::Null); }
+                    if d >= frame.len() { frame.resize(d + 1, Value::Unbound); }
                     frame[d] = Value::Trit(ta.wrapping_add(tb).clamp(-1, 1) as i8);
                 }
                 Instruction::TritMulSlots { dst, s1, s2 } => {
@@ -2626,7 +2627,7 @@ impl VirtualMachine {
                     };
                     let d = *dst as usize;
                     let frame = self.locals_stack.last_mut().ok_or_else(|| VmError::runtime_error("No locals frame".to_string()))?;
-                    if d >= frame.len() { frame.resize(d + 1, Value::Null); }
+                    if d >= frame.len() { frame.resize(d + 1, Value::Unbound); }
                     frame[d] = Value::Trit((ta * tb).clamp(-1, 1) as i8);
                 }
                 // PERF: Slotted fuzzy ops — LoadSlot+FuzzyAnd+StoreSlot fused
@@ -2639,7 +2640,7 @@ impl VirtualMachine {
                     };
                     let d = *dst as usize;
                     let frame = self.locals_stack.last_mut().ok_or_else(|| VmError::runtime_error("No locals frame".to_string()))?;
-                    if d >= frame.len() { frame.resize(d + 1, Value::Null); }
+                    if d >= frame.len() { frame.resize(d + 1, Value::Unbound); }
                     frame[d] = Value::Number(fa.min(fb));
                 }
                 Instruction::FuzzyOrSlots { dst, s1, s2 } => {
@@ -2651,7 +2652,7 @@ impl VirtualMachine {
                     };
                     let d = *dst as usize;
                     let frame = self.locals_stack.last_mut().ok_or_else(|| VmError::runtime_error("No locals frame".to_string()))?;
-                    if d >= frame.len() { frame.resize(d + 1, Value::Null); }
+                    if d >= frame.len() { frame.resize(d + 1, Value::Unbound); }
                     frame[d] = Value::Number(fa.max(fb));
                 }
                 Instruction::FuzzyNotSlot { dst, src } => {
@@ -2661,7 +2662,7 @@ impl VirtualMachine {
                     };
                     let d = *dst as usize;
                     let frame = self.locals_stack.last_mut().ok_or_else(|| VmError::runtime_error("No locals frame".to_string()))?;
-                    if d >= frame.len() { frame.resize(d + 1, Value::Null); }
+                    if d >= frame.len() { frame.resize(d + 1, Value::Unbound); }
                     frame[d] = Value::Number(1.0 - fa);
                 }
                 // -- Nova Galaxy Phase B: Signal fast-path opcodes -----------------
@@ -3162,7 +3163,7 @@ impl VirtualMachine {
                                     VmError::runtime_error("No locals frame".to_string())
                                 })?;
                                 if si >= frame.len() {
-                                    frame.resize(si + 1, Value::Null);
+                                    frame.resize(si + 1, Value::Unbound);
                                 }
                                 frame[si] = Value::Array(arr);
                             }
@@ -3173,7 +3174,7 @@ impl VirtualMachine {
                                 VmError::runtime_error("No locals frame".to_string())
                             })?;
                             if si >= frame.len() {
-                                frame.resize(si + 1, Value::Null);
+                                frame.resize(si + 1, Value::Unbound);
                             }
                             frame[si] = Value::Dict(dict);
                         }
@@ -3190,7 +3191,7 @@ impl VirtualMachine {
                                 VmError::runtime_error("No locals frame".to_string())
                             })?;
                             if si >= frame.len() {
-                                frame.resize(si + 1, Value::Null);
+                                frame.resize(si + 1, Value::Unbound);
                             }
                             frame[si] = Value::Dict(dict);
                         }
@@ -3200,7 +3201,7 @@ impl VirtualMachine {
                                 VmError::runtime_error("No locals frame".to_string())
                             })?;
                             if si >= frame.len() {
-                                frame.resize(si + 1, Value::Null);
+                                frame.resize(si + 1, Value::Unbound);
                             }
                             frame[si] = Value::Object(obj);
                         }
@@ -3427,6 +3428,7 @@ impl VirtualMachine {
                                 ));
                             }
                             let type_name = match &args[0] {
+                                Value::Unbound => "unassigned",
                                 Value::Number(_) => "number",
                                 Value::Bool(_) => "bool",
                                 Value::Str(_) => "string",
@@ -6734,7 +6736,10 @@ impl VirtualMachine {
     /// Fused `slot <cmp> const` on a slot that is not a plain number: uncertain values compare
     /// three-valued (pushes a Trit); anything else is a type error.
     fn slot_const_cmp_fallback(&mut self, idx: usize, n: f64, op: crate::uncertain::CmpOp, what: &str) -> Result<(), VmError> {
-        let val = self.locals_stack.last().and_then(|f| f.get(idx)).cloned().unwrap_or(Value::Null);
+        let val = self.locals_stack.last().and_then(|f| f.get(idx)).cloned().unwrap_or(Value::Unbound);
+        if matches!(val, Value::Unbound) {
+            return Err(VmError::runtime_error("a local variable was used before it was assigned (assign it on every path before reading it)".to_string()));
+        }
         if let Value::BigInt(_) = val {
             use std::cmp::Ordering::*;
             let ord = crate::bigint_ops::compare(&val, &Value::Number(n));
@@ -6772,7 +6777,10 @@ impl VirtualMachine {
 
     /// Fused `slot = slot +/- const` on a slot that is not a plain number (uncertain values).
     fn slot_const_arith_fallback(&mut self, idx: usize, n: f64, op: crate::uncertain::BinOp, what: &str) -> Result<(), VmError> {
-        let val = self.locals_stack.last().and_then(|f| f.get(idx)).cloned().unwrap_or(Value::Null);
+        let val = self.locals_stack.last().and_then(|f| f.get(idx)).cloned().unwrap_or(Value::Unbound);
+        if matches!(val, Value::Unbound) {
+            return Err(VmError::runtime_error("a local variable was used before it was assigned (assign it on every path before reading it)".to_string()));
+        }
         if let Value::BigInt(_) = val {
             let bop = match op {
                 crate::uncertain::BinOp::Add => crate::bigint_ops::Op::Add,
@@ -7801,7 +7809,7 @@ impl VirtualMachine {
                                         arr.set(i, val);
                                         if let Some(frame) = self.locals_stack.last_mut() {
                                             if si >= frame.len() {
-                                                frame.resize(si + 1, Value::Null);
+                                                frame.resize(si + 1, Value::Unbound);
                                             }
                                             frame[si] = Value::Array(arr);
                                         }
@@ -7811,7 +7819,7 @@ impl VirtualMachine {
                                     dict.set(key, val);
                                     if let Some(frame) = self.locals_stack.last_mut() {
                                         if si >= frame.len() {
-                                            frame.resize(si + 1, Value::Null);
+                                            frame.resize(si + 1, Value::Unbound);
                                         }
                                         frame[si] = Value::Dict(dict);
                                     }
@@ -7955,7 +7963,7 @@ impl VirtualMachine {
                             let val = self.pop_value()?;
                             if let Some(frame) = self.locals_stack.last_mut() {
                                 let slot = *slot as usize;
-                                if frame.len() <= slot { frame.resize(slot + 1, Value::Null); }
+                                if frame.len() <= slot { frame.resize(slot + 1, Value::Unbound); }
                                 frame[slot] = val;
                             }
                         }

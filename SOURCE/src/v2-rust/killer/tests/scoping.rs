@@ -75,7 +75,11 @@ fn params_and_globals_behave_as_before() {
 }
 
 #[test]
-fn variable_assigned_only_on_the_untaken_path_reads_as_null() {
-    // documented: a name that was never assigned on this path reads as null (no per-read check)
-    assert_eq!(run("fn f(c) {\n  if c { x = 1 }\n  return x\n}\nprintln(f(true))\nprintln(f(false))\n"), "1\nnull");
+fn variable_assigned_only_on_the_untaken_path_is_an_error() {
+    // a name that was never assigned on the path taken is an error when read (it used to read as null);
+    // the error is an ordinary runtime error, so it can be caught
+    assert_eq!(
+        run("fn f(c) {\n  if c { x = 1 }\n  return x\n}\nprintln(f(true))\ntry {\n  println(f(false))\n} catch e {\n  println(contains(e, \"before it was assigned\"))\n}\n"),
+        "1\ntrue"
+    );
 }

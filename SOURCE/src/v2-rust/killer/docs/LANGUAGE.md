@@ -677,8 +677,9 @@ println(last)          // the loop variable and `last` keep their final values
   a plain assigned variable is one variable per call.
 - Comprehension variables never overwrite an outer variable of the same name.
 - Parameters are local; assigning a top-level variable inside a function needs `global x`.
-- A variable that was not assigned on the path actually taken reads as `null` (there is no
-  "used before assignment" error; initialise it before the block if `null` would be a surprise).
+- Reading a local variable that was not assigned on the path actually taken is an error ("a local variable
+  was used before it was assigned"), as in Python; assign it on every path first, or set it to `null`
+  explicitly. (A name that is not assigned anywhere in the function is "Undefined variable".)
 
 ## Functions
 
@@ -1082,6 +1083,32 @@ try {
 # expect: open b
 # expect: close b boom
 # expect: caught boom
+```
+
+### File objects: `open`
+
+`open(path, mode)` returns a file object with `read()`, `readline()`, `readlines()`, `write(text)`,
+`writelines(list)`, `flush()`, `close()` and a `closed` field, and it works with `with`. Modes: `"r"` read
+(default; the file must exist), `"w"` write (truncates), `"a"` append. Text only: `"rb"`, `"wb"` and update
+modes are errors. Reading a closed file, reading a write-only file or writing a read-only one is an error.
+The library is written in Killer and is included automatically when a script calls `open(` and does not
+define its own `open` or `File`. File access is subject to the same capability checks as `file_read` and
+`file_write`.
+
+```killer
+with open("open_demo.txt", "w") as f {
+  f.write("first\n")
+  f.write("second\n")
+}
+with open("open_demo.txt") as f {
+  println(trim(f.readline()))
+  println(len(f.readlines()))
+}
+println(f.closed)
+file_delete("open_demo.txt")
+# expect: first
+# expect: 1
+# expect: true
 ```
 
 ## Errors

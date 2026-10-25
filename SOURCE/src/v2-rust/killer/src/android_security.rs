@@ -1,5 +1,5 @@
 // android_security.rs — Native security module for Killer Call Recorder
-// AES-256-GCM encryption, PIN/biometric auth, tamper detection, secure storage
+// ChaCha20-Poly1305 encryption (RFC 8439), PIN/biometric auth, tamper detection, secure storage
 //
 // Provides builtin functions:
 //   secure_encrypt(data, password)    → encrypted base64 string
@@ -17,8 +17,10 @@
 //   secure_check_integrity()          → dict {rooted, debuggable, tampered}
 //   evidence_hash(recording_data)     → dict {sha256, timestamp, chain}
 //
-// Built on top of killer-native's existing encryption.rs module
-// Zero external crates — pure std Rust crypto
+// Zero external crates — pure std Rust crypto. Encryption: key = PBKDF2-HMAC-SHA256(password, random salt,
+// 100,000 iterations), then ChaCha20-Poly1305 (src/aead.rs, checked against the RFC 8439 vectors) with a fresh
+// random nonce. Output format 2: "KSE2" | salt(16) | nonce(12) | ciphertext | tag(16). Data written by the
+// older, unreviewed scheme (no "KSE2" prefix) can still be decrypted but is never produced again.
 
 #![allow(unsafe_code)]
 
@@ -107,9 +109,11 @@ fn hex_encode(bytes: &[u8]) -> String {
     s
 }
 
-// ── AES-256-GCM (pure Rust) ──────────────────────────────────
-// Simplified AES-256 in counter mode with GMAC authentication tag
-// Key derivation: PBKDF2-SHA256 with 100,000 iterations
+/// First bytes of data written by the current `secure_encrypt` (also authenticated as associated data).
+const FORMAT_MAGIC: &[u8] = b"KSE2";
+
+// ── Key derivation ───────────────────────────────────────────
+// PBKDF2-HMAC-SHA256 (checked against Python's hashlib.pbkdf2_hmac in the tests)
 
 fn pbkdf2_sha256(password: &[u8], salt: &[u8], iterations: u32) -> [u8; 32] {
     // HMAC-SHA256
@@ -163,49 +167,9 @@ fn secure_random(buf: &mut [u8]) -> Result<(), VmError> {
     crate::os_random::fill(buf).map_err(|e| VmError::runtime_error(format!("secure random: {}", e)))
 }
 
-/// Simple AES-256-CTR encryption (XOR keystream)
-/// Returns: nonce(12) + ciphertext + tag(32 = HMAC-SHA256 of nonce+ciphertext)
-fn aes256_encrypt(plaintext: &[u8], key: &[u8; 32]) -> Result<Vec<u8>, VmError> {
-    let mut nonce = [0u8; 12];
-    secure_random(&mut nonce)?;
-
-    // Generate keystream using SHA-256 in counter mode
-    let mut ciphertext = Vec::with_capacity(plaintext.len());
-    let mut counter: u64 = 0;
-    let mut pos = 0;
-
-    while pos < plaintext.len() {
-        let mut block_input = Vec::with_capacity(32 + 12 + 8);
-        block_input.extend_from_slice(key);
-        block_input.extend_from_slice(&nonce);
-        block_input.extend_from_slice(&counter.to_le_bytes());
-        let keystream = sha256(&block_input);
-
-        let chunk_end = (pos + 32).min(plaintext.len());
-        for i in pos..chunk_end {
-            ciphertext.push(plaintext[i] ^ keystream[i - pos]);
-        }
-        pos = chunk_end;
-        counter += 1;
-    }
-
-    // Authentication tag: HMAC-like tag over nonce + ciphertext
-    let mut tag_input = Vec::with_capacity(12 + ciphertext.len() + 32);
-    tag_input.extend_from_slice(&nonce);
-    tag_input.extend_from_slice(&ciphertext);
-    tag_input.extend_from_slice(key);
-    let tag = sha256(&tag_input);
-
-    // Output: nonce(12) + ciphertext + tag(32)
-    let mut output = Vec::with_capacity(12 + ciphertext.len() + 32);
-    output.extend_from_slice(&nonce);
-    output.extend_from_slice(&ciphertext);
-    output.extend_from_slice(&tag);
-    Ok(output)
-}
-
-/// Decrypt AES-256-CTR with authentication
-fn aes256_decrypt(encrypted: &[u8], key: &[u8; 32]) -> Result<Vec<u8>, String> {
+/// Decrypt data written by the OLD scheme (SHA-256 keystream with a SHA-256 tag; not AES, never reviewed).
+/// Kept only so existing data stays readable; `secure_encrypt` no longer produces this format.
+fn legacy_decrypt(encrypted: &[u8], key: &[u8; 32]) -> Result<Vec<u8>, String> {
     if encrypted.len() < 44 { // 12 nonce + 0 data + 32 tag minimum
         return Err("encrypted data too short".to_string());
     }
@@ -341,18 +305,20 @@ pub fn builtin_secure_encrypt(args: &[Value]) -> Result<Value, VmError> {
         _ => return Err(VmError::runtime_error("secure_encrypt: password must be string")),
     };
 
-    // Derive key from password
+    // Derive the key from the password with a fresh random salt, then seal with a fresh random nonce
     let mut salt = [0u8; 16];
     secure_random(&mut salt)?;
+    let mut nonce = [0u8; 12];
+    secure_random(&mut nonce)?;
     let key = pbkdf2_sha256(password.as_bytes(), &salt, 100_000);
+    let sealed = crate::aead::seal(&key, &nonce, FORMAT_MAGIC, &data);
 
-    // Encrypt
-    let encrypted = aes256_encrypt(&data, &key)?;
-
-    // Output: salt(16) + encrypted
-    let mut output = Vec::with_capacity(16 + encrypted.len());
+    // Output: "KSE2" | salt(16) | nonce(12) | ciphertext | tag(16)
+    let mut output = Vec::with_capacity(FORMAT_MAGIC.len() + 16 + 12 + sealed.len());
+    output.extend_from_slice(FORMAT_MAGIC);
     output.extend_from_slice(&salt);
-    output.extend_from_slice(&encrypted);
+    output.extend_from_slice(&nonce);
+    output.extend_from_slice(&sealed);
 
     Ok(Value::Str(base64_encode(&output)))
 }
@@ -378,12 +344,19 @@ pub fn builtin_secure_decrypt(args: &[Value]) -> Result<Value, VmError> {
         return Err(VmError::runtime_error("secure_decrypt: data too short"));
     }
 
-    let salt = &raw[..16];
-    let encrypted = &raw[16..];
-
-    let key = pbkdf2_sha256(password.as_bytes(), salt, 100_000);
-    let plaintext = aes256_decrypt(encrypted, &key)
-        .map_err(|e| VmError::runtime_error(format!("secure_decrypt: {}", e)))?;
+    let plaintext = if raw.starts_with(FORMAT_MAGIC) && raw.len() >= FORMAT_MAGIC.len() + 16 + 12 + 16 {
+        let h = FORMAT_MAGIC.len();
+        let salt = &raw[h..h + 16];
+        let mut nonce = [0u8; 12];
+        nonce.copy_from_slice(&raw[h + 16..h + 28]);
+        let key = pbkdf2_sha256(password.as_bytes(), salt, 100_000);
+        crate::aead::open(&key, &nonce, FORMAT_MAGIC, &raw[h + 28..])
+            .ok_or_else(|| VmError::runtime_error("secure_decrypt: wrong password, or the data was changed"))?
+    } else {
+        // data from the older scheme
+        let key = pbkdf2_sha256(password.as_bytes(), &raw[..16], 100_000);
+        legacy_decrypt(&raw[16..], &key).map_err(|e| VmError::runtime_error(format!("secure_decrypt: {}", e)))?
+    };
 
     let text = String::from_utf8(plaintext)
         .map_err(|e| VmError::runtime_error(format!("secure_decrypt: invalid UTF-8: {}", e)))?;
@@ -641,4 +614,71 @@ pub fn builtin_secure_wipe_recordings(args: &[Value]) -> Result<Value, VmError> 
     }
 
     Ok(Value::Number(count as f64))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn s(v: &str) -> Value {
+        Value::Str(v.to_string())
+    }
+
+    fn text(v: Result<Value, VmError>) -> String {
+        match v {
+            Ok(Value::Str(t)) => t,
+            other => panic!("expected a string, got {:?}", other.map(|v| v.to_string())),
+        }
+    }
+
+    #[test]
+    fn sha256_and_pbkdf2_match_python_hashlib() {
+        assert_eq!(hex_encode(&sha256(b"abc")), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+        let h = |iters| hex_encode(&pbkdf2_sha256(b"password", b"salt", iters));
+        assert_eq!(h(1), "120fb6cffcf8b32c43e7225256c4f837a86548c92ccc35480805987cb70be17b");
+        assert_eq!(h(1000), "632c2812e46d4604102ba7618e9d6d7d2f8128f6266b4a03264d2a0460b7dcb3");
+        assert_eq!(h(4096), "c5e478d59288c841aa530db6845c4c8d962893a001ce4e11a4963873aa98134a");
+        // a key longer than the HMAC block size is hashed first
+        let long = hex_encode(&pbkdf2_sha256(b"passwordPASSWORDpassword", b"saltSALTsaltSALTsaltSALTsaltSALTsalt", 100));
+        assert_eq!(long, "642ea3cc424c6e709af485b1e51692f0a7557aa922c0dddc7561830ed30fd4e9");
+    }
+
+    #[test]
+    fn encrypt_round_trips_and_every_message_is_different() {
+        let a = text(builtin_secure_encrypt(&[s("secret data \u{1F512}"), s("pw")]));
+        let b = text(builtin_secure_encrypt(&[s("secret data \u{1F512}"), s("pw")]));
+        assert_ne!(a, b, "salt and nonce must be fresh every time");
+        assert_eq!(text(builtin_secure_decrypt(&[s(&a), s("pw")])), "secret data \u{1F512}");
+        assert_eq!(text(builtin_secure_decrypt(&[s(&b), s("pw")])), "secret data \u{1F512}");
+        let empty = text(builtin_secure_encrypt(&[s(""), s("pw")]));
+        assert_eq!(text(builtin_secure_decrypt(&[s(&empty), s("pw")])), "");
+        // new data carries the version prefix
+        assert!(base64_decode(&a).unwrap().starts_with(b"KSE2"));
+    }
+
+    #[test]
+    fn a_wrong_password_or_any_changed_byte_is_rejected() {
+        let enc = text(builtin_secure_encrypt(&[s("attack at dawn"), s("right")]));
+        assert!(builtin_secure_decrypt(&[s(&enc), s("wrong")]).is_err());
+        let raw = base64_decode(&enc).unwrap();
+        // flipping a byte in each region must fail (the prefix itself would route to the old format). Every key
+        // derivation costs 100,000 hash rounds, so only the region boundaries are tried here; aead.rs flips
+        // every byte of a sealed message.
+        let n = raw.len();
+        for i in [4, 19, 20, 31, 32, n - 17, n - 16, n - 1] {
+            let mut bad = raw.clone();
+            bad[i] ^= 1;
+            assert!(builtin_secure_decrypt(&[s(&base64_encode(&bad)), s("right")]).is_err(), "flip at byte {}", i);
+        }
+        // truncated data
+        assert!(builtin_secure_decrypt(&[s(&base64_encode(&raw[..raw.len() - 1])), s("right")]).is_err());
+    }
+
+    #[test]
+    fn data_from_the_old_scheme_can_still_be_read() {
+        // produced by an independent Python implementation of the old format (salt 0..15, nonce 100..111)
+        let old = "AAECAwQFBgcICQoLDA0OD2RlZmdoaWprbG1ubzeAv02U9Y6yTAuHh9ABFeh7Hr8WCd5IMyCcnvZoRO4jCdg+B21M8OAwQQPzSEaLxqyV3Cad5K5PnYEm/vQKBA==";
+        assert_eq!(text(builtin_secure_decrypt(&[s(old), s("pw")])), "legacy data from the old scheme");
+        assert!(builtin_secure_decrypt(&[s(old), s("nope")]).is_err());
+    }
 }

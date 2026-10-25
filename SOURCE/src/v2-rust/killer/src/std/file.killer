@@ -1,0 +1,95 @@
+# Python-style file objects, written in Killer. Included automatically (never by hand) when a script calls
+# open(path[, mode]) and does not define its own `open` or `File`.
+#
+#   f = open("notes.txt", "w")      f.write("hello\n")            f.close()
+#   with open("notes.txt") as f { text = f.read() }
+#   lines = open("notes.txt").readlines()
+#
+# Modes: "r" read (default), "w" write (truncates), "a" append. Text only: "rb"/"wb" are not supported.
+class File {
+  fn init(path, mode) {
+    if mode != "r" and mode != "w" and mode != "a" {
+      throw "open(): mode must be \"r\", \"w\" or \"a\" (binary and update modes are not supported), got \"" + str(mode) + "\""
+    }
+    this.path = path
+    this.mode = mode
+    this.closed = false
+    this._pos = 0
+    this._text = ""
+    if mode == "r" {
+      this._text = file_read(path)
+    } else if mode == "w" {
+      file_write(path, "")
+    }
+  }
+  fn _need(kind) {
+    if this.closed {
+      throw "I/O operation on a closed file: " + this.path
+    }
+    if kind == "r" and this.mode != "r" {
+      throw "file not open for reading: " + this.path
+    }
+    if kind == "w" and this.mode == "r" {
+      throw "file not open for writing: " + this.path
+    }
+  }
+  fn read() {
+    this._need("r")
+    rest = substr(this._text, this._pos)
+    this._pos = len(this._text)
+    return rest
+  }
+  fn readline() {
+    this._need("r")
+    rest = substr(this._text, this._pos)
+    if len(rest) == 0 {
+      return ""
+    }
+    i = index_of(rest, "\n")
+    if i < 0 {
+      this._pos = len(this._text)
+      return rest
+    }
+    this._pos = this._pos + i + 1
+    return substr(rest, 0, i + 1)
+  }
+  fn readlines() {
+    this._need("r")
+    out = []
+    line = this.readline()
+    while line != "" {
+      push(out, line)
+      line = this.readline()
+    }
+    return out
+  }
+  fn write(text) {
+    this._need("w")
+    s = str(text)
+    file_append(this.path, s)
+    return len(s)
+  }
+  fn writelines(items) {
+    for item in items {
+      this.write(item)
+    }
+    return null
+  }
+  fn flush() {
+    this._need("w")
+    return null
+  }
+  fn close() {
+    this.closed = true
+    return null
+  }
+  fn __enter__() {
+    return this
+  }
+  fn __exit__(err) {
+    this.close()
+  }
+}
+fn open(path, mode = "r") {
+  return new File(path, mode)
+}
