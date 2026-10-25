@@ -157,29 +157,17 @@ fn pbkdf2_sha256(password: &[u8], salt: &[u8], iterations: u32) -> [u8; 32] {
     result
 }
 
-// XORshift RNG for nonce generation (seeded from system time + address randomness)
-fn secure_random(buf: &mut [u8]) {
-    let mut seed = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_nanos() as u64)
-        .unwrap_or(0x1234567890abcdef);
-
-    // Mix in some address space randomness
-    seed ^= (buf.as_ptr() as u64).wrapping_mul(0x9e3779b97f4a7c15);
-
-    for byte in buf.iter_mut() {
-        seed ^= seed << 13;
-        seed ^= seed >> 7;
-        seed ^= seed << 17;
-        *byte = (seed & 0xFF) as u8;
-    }
+// Random bytes come from the operating system's cryptographic generator (see os_random). There is no
+// fallback: if it fails the operation fails, rather than using a guessable value for a salt or nonce.
+fn secure_random(buf: &mut [u8]) -> Result<(), VmError> {
+    crate::os_random::fill(buf).map_err(|e| VmError::runtime_error(format!("secure random: {}", e)))
 }
 
 /// Simple AES-256-CTR encryption (XOR keystream)
 /// Returns: nonce(12) + ciphertext + tag(32 = HMAC-SHA256 of nonce+ciphertext)
-fn aes256_encrypt(plaintext: &[u8], key: &[u8; 32]) -> Vec<u8> {
+fn aes256_encrypt(plaintext: &[u8], key: &[u8; 32]) -> Result<Vec<u8>, VmError> {
     let mut nonce = [0u8; 12];
-    secure_random(&mut nonce);
+    secure_random(&mut nonce)?;
 
     // Generate keystream using SHA-256 in counter mode
     let mut ciphertext = Vec::with_capacity(plaintext.len());
@@ -213,7 +201,7 @@ fn aes256_encrypt(plaintext: &[u8], key: &[u8; 32]) -> Vec<u8> {
     output.extend_from_slice(&nonce);
     output.extend_from_slice(&ciphertext);
     output.extend_from_slice(&tag);
-    output
+    Ok(output)
 }
 
 /// Decrypt AES-256-CTR with authentication
@@ -355,11 +343,11 @@ pub fn builtin_secure_encrypt(args: &[Value]) -> Result<Value, VmError> {
 
     // Derive key from password
     let mut salt = [0u8; 16];
-    secure_random(&mut salt);
+    secure_random(&mut salt)?;
     let key = pbkdf2_sha256(password.as_bytes(), &salt, 100_000);
 
     // Encrypt
-    let encrypted = aes256_encrypt(&data, &key);
+    let encrypted = aes256_encrypt(&data, &key)?;
 
     // Output: salt(16) + encrypted
     let mut output = Vec::with_capacity(16 + encrypted.len());
@@ -439,7 +427,7 @@ pub fn builtin_secure_random_bytes(args: &[Value]) -> Result<Value, VmError> {
         _ => 32,
     };
     let mut buf = vec![0u8; count];
-    secure_random(&mut buf);
+    secure_random(&mut buf)?;
     Ok(Value::Str(base64_encode(&buf)))
 }
 

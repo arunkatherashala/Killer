@@ -58,7 +58,8 @@ p("errors", "try / catch / finally", 'try {\n  throw "boom"\n} catch e {\n  prin
 p("errors", "division by zero is catchable", 'try {\n  x = 1 / 0\n} catch e {\n  println("caught")\n}', "caught")
 p("errors", "custom exception class", 'class MyErr {\n  fn init(m) {\n    this.m = m\n  }\n}\ntry {\n  throw new MyErr("x")\n} catch e {\n  println(e.m)\n}', "x")
 p("errors", "unassigned variable is an error", 'fn f() {\n  if false {\n    x = 1\n  }\n  return x\n}\ntry {\n  println(f())\n} catch e {\n  println("error")\n}', "error")
-p("errors", "with statement / context manager", 'with open("x") as f {\n  println(1)\n}', "__SKIP_IF_ERR__")
+p("errors", "with statement / context manager", 'class R {\n  fn __enter__() {\n    return this\n  }\n  fn __exit__(e) {\n    println("exit")\n  }\n}\nwith new R() as r {\n  println("body")\n}', "body\nexit")
+p("stdlib", "open() returns a file object", 'f = open("x")\nprintln(1)', "__SKIP_IF_ERR__")
 p("errors", "assert statement", 'try {\n  assert(1 == 2)\n} catch e {\n  println("assert failed")\n}', "assert failed")
 # ---- standard library
 p("stdlib", "regex find / replace", 'println(regex_test("caat", "a+"), regex_replace("caat", "a+", "X"))', "true cXt")

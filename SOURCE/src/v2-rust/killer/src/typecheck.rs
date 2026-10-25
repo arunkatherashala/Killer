@@ -21,10 +21,12 @@ pub enum Ty {
 impl Ty {
     fn parse(s: &str) -> Option<Ty> {
         Some(match s.trim() {
-            "number" => Ty::Number,
-            "string" => Ty::Str,
-            "bool" => Ty::Bool,
-            "array" => Ty::Array,
+            // Python / Java / TypeScript spellings are accepted as aliases: Killer has one number type, so
+            // `int` and `float` both mean `number` (a hint `int` does not reject 1.5)
+            "number" | "int" | "integer" | "float" | "double" => Ty::Number,
+            "string" | "str" => Ty::Str,
+            "bool" | "boolean" => Ty::Bool,
+            "array" | "list" => Ty::Array,
             "dict" => Ty::Dict,
             "any" | "void" => Ty::Any,
             _ => return None,
@@ -708,5 +710,12 @@ f(1, 5)
     #[test]
     fn rejects_unknown_type_name() {
         assert!(err("fn f(a: nubmer) {\n  return a\n}\n").contains("unknown type 'nubmer'"));
+    }
+
+    #[test]
+    fn python_style_type_names_are_aliases_and_still_checked() {
+        assert!(process("fn f(a: int, b: str, c: list, d: bool, e: float) {\n  return a\n}\nf(1, \"x\", [1], true, 2.5)\n").is_ok());
+        assert!(err("fn f(a: int) {\n  return a\n}\nf(\"x\")\n").contains("number"));
+        assert!(err("fn f(a: str) {\n  return a\n}\nf(1)\n").contains("string"));
     }
 }

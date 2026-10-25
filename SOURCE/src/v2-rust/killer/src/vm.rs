@@ -415,6 +415,9 @@ pub struct VirtualMachine {
     scope_pool: Vec<Scope>,
     /// GC: allocation counter — triggers gc_collect every GC_INTERVAL array allocs.
     gc_alloc_epoch: u64,
+    /// (number of methods when computed, any `get x()` / `set x(v)` property method exists): lets field reads and
+    /// writes skip the property lookup entirely in programs that define none.
+    accessor_cache: std::cell::Cell<(usize, bool)>,
     /// When true, `run()` preserves scopes and classes across calls (REPL mode).
     pub repl_mode: bool,
 }
@@ -478,6 +481,7 @@ impl Default for VirtualMachine {
             init_cache: Default::default(),
             method_ic: Default::default(),
             gc_alloc_epoch: 0,
+            accessor_cache: std::cell::Cell::new((usize::MAX, false)),
             repl_mode: false,
         }
     }
@@ -614,6 +618,7 @@ impl VirtualMachine {
             init_cache: Default::default(),
             method_ic: Default::default(),
             gc_alloc_epoch: 0,
+            accessor_cache: std::cell::Cell::new((usize::MAX, false)),
             repl_mode: false,
         }
     }
@@ -1091,7 +1096,8 @@ impl VirtualMachine {
                                 // __getitem__ when the class has it
                                 match o.get_field(value) {
                                     Some(v) => Some(v),
-                                    None if self.find_method_in_class(&o.class_name().clone(), "__getitem__", program).is_some() => None,
+                                    None if self.find_method_in_class(&o.class_name().clone(), "__getitem__", program).is_some()
+                                        || self.property_method(&Value::Object(o.clone()), "__get_", value, program).is_some() => None,
                                     None => Some(Value::Null),
                                 }
                             }
@@ -3055,6 +3061,15 @@ impl VirtualMachine {
                         _ => false,
                     };
                     if let (Value::Object(_), false) = (&object, field_read) {
+                        // `get name() { ... }` property: a missing field `name` runs the getter
+                        if let Value::Str(k) = &index {
+                            if let Some(start) = self.property_method(&object, "__get_", k, program) {
+                                let r = self.call_method_nested(object.clone(), start, vec![], program)?;
+                                self.stack.push(r);
+                                self.ip += 1;
+                                continue;
+                            }
+                        }
                         if let Some(start) = self.dunder(&object, "__getitem__", program) {
                             let r = self.call_method_nested(object.clone(), start, vec![index], program)?;
                             self.stack.push(r);
@@ -4756,11 +4771,19 @@ impl VirtualMachine {
                                 if args.is_empty() {
                                     if let Some(value) = obj_inst.get_field(method_name) {
                                         self.stack.push(value.clone());
+                                    } else if let Some(start) = property_read
+                                        .then(|| self.property_method(&object, "__get_", method_name, program))
+                                        .flatten()
+                                    {
+                                        // `get name() { ... }`: a bare `obj.name` with no such field runs the getter
+                                        method_bytecode_start = Some(start);
+                                        break;
                                     } else {
                                         self.stack.push(Value::Null);
                                     }
-                                    method_bytecode_start = None;
-                                    break;
+                                    if method_bytecode_start.is_none() {
+                                        break;
+                                    }
                                 }
 
                                 return Err(VmError::runtime_error(format!(
@@ -7253,8 +7276,13 @@ impl VirtualMachine {
     /// key; string keys set fields. Without `__setitem__` other keys are a clear error.
     fn object_setitem(&mut self, object: &Value, index: &Value, value: &Value, program: &Program) -> Result<bool, VmError> {
         if let Value::Object(_) = object {
-            // `obj.name = v` and `obj["name"] = v` share the instruction: a string key always sets a field
-            if matches!(index, Value::Str(_)) {
+            // `obj.name = v` and `obj["name"] = v` share the instruction: a string key sets a field, unless the
+            // class defines `set name(v) { ... }`, which runs instead
+            if let Value::Str(k) = index {
+                if let Some(start) = self.property_method(object, "__set_", k, program) {
+                    self.call_method_nested(object.clone(), start, vec![value.clone()], program)?;
+                    return Ok(true);
+                }
                 return Ok(false);
             }
             if let Some(start) = self.dunder(object, "__setitem__", program) {
@@ -7269,6 +7297,23 @@ impl VirtualMachine {
             }
         }
         Ok(false)
+    }
+
+    /// Start of the property method `prefix + name` (`__get_x` / `__set_x`) on the class of `v`. Cheap when the
+    /// program defines no property methods at all (one cached flag), which is the common case.
+    fn property_method(&self, v: &Value, prefix: &str, name: &str, program: &Program) -> Option<usize> {
+        let (len, any) = self.accessor_cache.get();
+        let any = if len == program.method_bytecode.len() {
+            any
+        } else {
+            let any = program.method_bytecode.keys().any(|(_, m)| m.starts_with("__get_") || m.starts_with("__set_"));
+            self.accessor_cache.set((program.method_bytecode.len(), any));
+            any
+        };
+        if !any {
+            return None;
+        }
+        self.dunder(v, &format!("{}{}", prefix, name), program)
     }
 
     /// Start of the method `name` on the class of object `v` (None for non-objects / no such method).

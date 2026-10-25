@@ -793,7 +793,9 @@ println(total)
 Decorators wrap a function: `@loud` above `fn base` means `base = loud(base)`. Recursion works
 (depth 50,000 is fine; the limit is 100,000 frames, see [Resource limits](#resource-limits-and-capabilities))
 and self tail-calls run in constant stack depth. Parameters may carry
-type annotations (`a: number`, `-> number`) which are checked at call time.
+type annotations (`a: number`, `-> number`) which are checked at call time. The names are `number`,
+`string`, `bool`, `array`, `dict`, `any`; Python-style `int`, `float`, `str`, `list` and `boolean` are accepted
+as aliases (there is one number type, so `int` does not reject `1.5`).
 
 ```killer
 fn loud(f) {
@@ -1005,6 +1007,81 @@ if not b { println("small bag") }
 # expect: 30
 # expect: 6 9 negated 1 false
 # expect: small bag
+```
+
+## Properties and `with`
+
+A class can define a property with `get name() { ... }` and, optionally, `set name(v) { ... }`. Reading
+`obj.name` with no field of that name runs the getter; assigning `obj.name = v` runs the setter (a real
+field of the same name is read and written directly, so keep the stored value under another name such as
+`_name`). Properties are inherited.
+
+```killer
+class Temp {
+  fn init(c) {
+    this._c = c
+  }
+  get celsius() {
+    return this._c
+  }
+  set celsius(v) {
+    if v < -273 {
+      throw "below absolute zero"
+    }
+    this._c = v
+  }
+  get fahrenheit() {
+    return this._c * 9 / 5 + 32
+  }
+}
+t = new Temp(100)
+println(t.celsius, t.fahrenheit)
+t.celsius = 0
+println(t.fahrenheit)
+try {
+  t.celsius = -300
+} catch e {
+  println(e)
+}
+# expect: 100 212
+# expect: 32
+# expect: below absolute zero
+```
+
+`with expr as name { body }` calls the value's `__enter__()` (its result becomes `name`; `as name` is
+optional), runs the body, and always calls `__exit__(error)` afterwards: after the last statement, after
+`return`, `break` or `continue`, and when the body throws (the error is passed to `__exit__` and then
+re-thrown; `__exit__` cannot swallow it). One item per `with`; nest them for more.
+
+```killer
+class Res {
+  fn init(n) {
+    this.n = n
+  }
+  fn __enter__() {
+    println("open " + this.n)
+    return this
+  }
+  fn __exit__(err) {
+    println("close " + this.n + " " + str(err))
+  }
+}
+with new Res("a") as r {
+  println("using " + r.n)
+}
+try {
+  with new Res("b") as r {
+    throw "boom"
+  }
+} catch e {
+  println("caught " + e)
+}
+# expect: open a
+# expect: using a
+# expect: close a null
+# expect: open b
+# expect: close b boom
+# expect: caught boom
 ```
 
 ## Errors

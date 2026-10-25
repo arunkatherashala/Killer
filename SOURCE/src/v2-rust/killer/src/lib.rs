@@ -145,6 +145,7 @@ pub mod android_phone;
 pub mod android_service;
 // Encryption, PIN lock, evidence hashing, secure wipe, integrity check
 pub mod android_security;
+pub mod os_random;
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Production Module — Regex engine, Help/Docs, File DB, Formatter, Linter

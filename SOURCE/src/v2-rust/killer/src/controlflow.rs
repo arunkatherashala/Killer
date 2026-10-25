@@ -9,6 +9,8 @@
 //! do { body } while cond          while true { <skip the test on the first pass> body }
 //! for (i = 0; i < n; i++) { body } init ; while true { <step except on the first pass> if !cond break ; body }
 //! for a, b in pairs { body }      for __it_0 in pairs { a = __it_0[0] ; b = __it_0[1] ; body }
+//! get name() { body }            fn __get_name() { body }      (property getter; `set name(v)` is `__set_name`)
+//! with expr as name { body }      __w = expr ; name = __w.__enter__() ; try { body } catch ... finally { __w.__exit__(err) }
 //! ```
 //! `continue` keeps working in `do`/`for(;;)` because the test/step sit at the top of the loop.
 //! Strings and comments are never touched.
@@ -170,7 +172,7 @@ pub fn lower(src: &str) -> String {
 pub fn lower_mapped(src: &str) -> (String, Vec<usize>) {
     let probe = mask(src);
     let text = String::from_utf8_lossy(&probe).to_string();
-    let has_any = ["match", "switch", "do", "for"].iter().any(|k| text.contains(k));
+    let has_any = ["match", "switch", "do", "for", "with", "get", "set"].iter().any(|k| text.contains(k));
     if !has_any {
         let n = crate::sourcemap::line_count(src);
         return (src.to_string(), (0..n).collect());
@@ -194,7 +196,7 @@ fn lower_with_map(src: &str, counter: &mut Counter) -> (String, Vec<usize>) {
             continue;
         }
         let c = m[i];
-        if !(c == b'm' || c == b's' || c == b'd' || c == b'f') || !at_statement_start(&m, i) {
+        if !(c == b'm' || c == b's' || c == b'd' || c == b'f' || c == b'w' || c == b'g') || !at_statement_start(&m, i) {
             i += 1;
             continue;
         }
@@ -206,6 +208,10 @@ fn lower_with_map(src: &str, counter: &mut Counter) -> (String, Vec<usize>) {
             lower_do_while(src, &m, i, counter)
         } else if keyword_at(&m, i, "for") {
             lower_for(src, &m, i, counter)
+        } else if keyword_at(&m, i, "with") {
+            lower_with_block(src, &m, i, counter)
+        } else if keyword_at(&m, i, "get") || keyword_at(&m, i, "set") {
+            lower_property(src, &m, i)
         } else {
             None
         };
@@ -573,6 +579,99 @@ fn lower_do_while(src: &str, m: &[u8], at: usize, counter: &mut Counter) -> Opti
         body.trim_end_matches(|c| c == ' ' || c == '\t')
     );
     Some((out, cond_end))
+}
+
+// ---------------------------------------------------------------------------------------------
+// get / set properties
+
+/// `get name() {` / `set name(v) {` -> `fn __get_name() {` / `fn __set_name(v) {` (same line). Only when the
+/// word is followed by an identifier and `(`, so a call such as `get(d, k)` or a variable `get = 1` is untouched.
+fn lower_property(src: &str, m: &[u8], at: usize) -> Option<(String, usize)> {
+    let kind = if keyword_at(m, at, "get") { "get" } else { "set" };
+    let mut p = at + 3;
+    if p >= m.len() || !(m[p] == b' ' || m[p] == b'\t') {
+        return None;
+    }
+    while p < m.len() && (m[p] == b' ' || m[p] == b'\t') {
+        p += 1;
+    }
+    let start = p;
+    while p < m.len() && is_word(m[p]) {
+        p += 1;
+    }
+    let name = &src[start..p];
+    if !is_ident(name) || p >= m.len() || m[p] != b'(' {
+        return None;
+    }
+    // the header must open a block on this line (`get x() {`); anything else is not a property
+    let eol = m[p..].iter().position(|c| *c == b'\n').map_or(m.len(), |e| p + e);
+    if !m[p..eol].contains(&b'{') {
+        return None;
+    }
+    Some((format!("fn __{kind}_{name}"), p))
+}
+
+// ---------------------------------------------------------------------------------------------
+// with
+
+/// `with expr as name { body }` (or without `as name`): the value's `__enter__()` runs first (its result
+/// is `name`), the body runs, and `__exit__(error)` runs afterwards on every path - normal end, `return`,
+/// `break`, `continue` or an error (which is passed to `__exit__` and then re-thrown; `__exit__` cannot
+/// swallow it). One item only: `with a as x, b as y` is left alone and stays a parse error.
+fn lower_with_block(src: &str, m: &[u8], at: usize, counter: &mut Counter) -> Option<(String, usize)> {
+    let header_start = at + "with".len();
+    if header_start >= m.len() || !(m[header_start] == b' ' || m[header_start] == b'\t') {
+        return None; // `with(...)` or an identifier that merely starts with "with"
+    }
+    let open = find_block_open(m, header_start)?;
+    let header = src[header_start..open].trim();
+    if header.is_empty() {
+        return None;
+    }
+    let hm = mask(header);
+    if !top_level_positions(&hm, 0, header.len(), b',').is_empty() {
+        return None;
+    }
+    // the last top-level " as "
+    let mut depth = 0i32;
+    let mut as_at = None;
+    for i in 0..hm.len() {
+        match hm[i] {
+            b'(' | b'[' | b'{' => depth += 1,
+            b')' | b']' | b'}' => depth -= 1,
+            b' ' if depth == 0 && hm[i..].starts_with(b" as ") => as_at = Some(i),
+            _ => {}
+        }
+    }
+    let (expr, name) = match as_at {
+        Some(i) => (header[..i].trim(), Some(header[i + 4..].trim())),
+        None => (header, None),
+    };
+    if expr.is_empty() || name.map_or(false, |n| !is_ident(n)) {
+        return None;
+    }
+    let close = matching(m, open)?;
+    let body = lower_with(&src[open + 1..close], counter);
+    let indent = indent_of(src, at);
+    let n = counter.next();
+    let (w, e, c) = (format!("__with_{n}"), format!("__werr_{n}"), format!("__wexc_{n}"));
+    let enter = match name {
+        Some(name) => format!("{name} = {w}.__enter__()"),
+        None => format!("{w}.__enter__()"),
+    };
+    let out = format!(
+        "{w} = {expr}
+{indent}{enter}
+{indent}{e} = null
+{indent}try {{{body}}} catch {c} {{
+{indent}  {e} = {c}
+{indent}  throw {c}
+{indent}}} finally {{
+{indent}  {w}.__exit__({e})
+{indent}}}",
+        body = body.trim_end_matches(|ch| ch == ' ' || ch == '\t')
+    );
+    Some((out, close + 1))
 }
 
 // ---------------------------------------------------------------------------------------------

@@ -12,9 +12,9 @@ documentation examples also pass on GitHub's Linux (x86-64), macOS (Apple Silico
 
 | Check | Result |
 |-------|--------|
-| Automated tests (`cargo test --tests --no-fail-fast`) | 3,402 passed, 0 failed |
+| Automated tests (`cargo test --tests --no-fail-fast`) | 3,432 passed, 0 failed |
 | Language parity probes (`python parity/run_parity.py`, 166 programs written like a Python/JS/Java programmer would) | 166 of 166 pass (it was 76 of 166, 46%, at the first audit) |
-| Documentation examples (`python docs/check_examples.py`) | 58 of 58 run and print what the docs say |
+| Documentation examples (`python docs/check_examples.py`) | 62 of 62 run and print what the docs say |
 | Documentation links (`python docs/check_links.py`) | 67 links, 0 broken |
 | Real programs | 18 programs in `parity/realworld/` and 5 applications in `examples/apps/` (REST service, RAG question answering, CSV tool, text adventure, expression interpreter), with Python mirrors for the deterministic parts |
 | Fuzzing | seeded runs of 20,000 cases over several seeds, no panic, hang or stack overflow |

@@ -148,3 +148,166 @@ fn percent_formatting() {
     fails("println(\"%d %d\" % 1)", "not enough arguments");
     fails("println(\"%y\" % 1)", "unsupported");
 }
+
+// ---- with statement ------------------------------------------------------------------------------
+
+const RES: &str = "class R {
+  fn init(n) {
+    this.n = n
+  }
+  fn __enter__() {
+    println(\"open \" + this.n)
+    return this
+  }
+  fn __exit__(err) {
+    println(\"close \" + this.n + \" \" + str(err))
+  }
+}
+";
+
+#[test]
+fn with_runs_enter_body_and_exit() {
+    let src = format!("{RES}with new R(\"a\") as r {{
+  println(\"body \" + r.n)
+}}
+println(\"after\")
+");
+    assert_eq!(out(&src), "open a
+body a
+close a null
+after");
+    // without `as`
+    let src = format!("{RES}with new R(\"b\") {{
+  println(\"body\")
+}}
+");
+    assert_eq!(out(&src), "open b
+body
+close b null");
+}
+
+#[test]
+fn with_exits_on_errors_return_break_and_continue() {
+    let src = format!("{RES}try {{
+  with new R(\"c\") as r {{
+    throw \"boom\"
+  }}
+}} catch e {{
+  println(\"caught \" + e)
+}}
+");
+    assert_eq!(out(&src), "open c
+close c boom
+caught boom");
+    let src = format!("{RES}fn f() {{
+  with new R(\"d\") as r {{
+    return 5
+  }}
+  return 0
+}}
+println(f())
+");
+    assert_eq!(out(&src), "open d
+close d null
+5");
+    let src = format!("{RES}for i in range(3) {{
+  with new R(\"e\" + str(i)) as r {{
+    if i == 0 {{
+      continue
+    }}
+    if i == 1 {{
+      break
+    }}
+  }}
+}}
+");
+    assert_eq!(out(&src), "open e0
+close e0 null
+open e1
+close e1 null");
+}
+
+#[test]
+fn nested_with_closes_in_reverse_order() {
+    let src = format!("{RES}with new R(\"x\") as a {{
+  with new R(\"y\") as b {{
+    println(\"inner\")
+  }}
+}}
+");
+    assert_eq!(out(&src), "open x
+open y
+inner
+close y null
+close x null");
+}
+
+#[test]
+fn with_errors_point_at_the_original_line() {
+    let src = format!("{RES}with new R(\"z\") as r {{
+  x = 1
+  y = missing_function(x)
+}}
+");
+    let (ok, _, stderr) = run(&src);
+    assert!(!ok);
+    // the failing call is on line 15 of the script (RES is 12 lines, then `with`, `x = 1`, the call), not
+    // on a line of the lowered try/catch/finally text
+    assert!(stderr.contains("Line 15"), "stderr was: {stderr}");
+}
+
+#[test]
+fn an_identifier_called_with_is_not_a_statement() {
+    assert_eq!(out("with = 5
+println(with + 1)"), "6");
+}
+
+// ---- property getters and setters ----------------------------------------------------------------
+
+const TEMP: &str = "class Temp {
+  fn init(c) {
+    this._c = c
+  }
+  get celsius() {
+    return this._c
+  }
+  set celsius(v) {
+    if v < -273 {
+      throw \"below absolute zero\"
+    }
+    this._c = v
+  }
+  get fahrenheit() {
+    return this._c * 9 / 5 + 32
+  }
+}
+";
+
+#[test]
+fn getters_and_setters_work_like_python_properties() {
+    let src = format!("{TEMP}t = new Temp(100)\nprintln(t.celsius, t.fahrenheit)\nt.celsius = 0\nprintln(t.celsius, t.fahrenheit)\nprintln(t._c)\n");
+    assert_eq!(out(&src), "100 212\n0 32\n0");
+}
+
+#[test]
+fn a_setter_can_reject_a_value() {
+    let src = format!("{TEMP}t = new Temp(1)\ntry {{\n  t.celsius = -300\n}} catch e {{\n  println(\"rejected: \" + e)\n}}\nprintln(t.celsius)\n");
+    assert_eq!(out(&src), "rejected: below absolute zero\n1");
+}
+
+#[test]
+fn properties_are_inherited_and_methods_can_use_them() {
+    let src = format!("{TEMP}class Sensor extends Temp {{\n  fn describe() {{\n    return \"it is \" + str(this.celsius) + \" C\"\n  }}\n}}\ns = new Sensor(21)\nprintln(s.describe())\n");
+    assert_eq!(out(&src), "it is 21 C");
+}
+
+#[test]
+fn a_real_field_wins_over_a_getter_and_plain_objects_are_unaffected() {
+    let src = "class A {\n  fn init() {\n    this.x = 1\n  }\n  get x() {\n    return 99\n  }\n  get y() {\n    return 2\n  }\n}\na = new A()\nprintln(a.x, a.y)\nclass P {\n  fn init(v) {\n    this.v = v\n  }\n}\np = new P(5)\np.v = p.v + 1\nprintln(p.v, p.missing)\n";
+    assert_eq!(out(src), "1 2\n6 null");
+}
+
+#[test]
+fn get_and_set_stay_usable_as_names() {
+    assert_eq!(out("d = {\"a\": 1}\nprintln(get(d, \"b\", 7))\nget = 3\nset = 4\nprintln(get + set)"), "7\n7");
+}
