@@ -1340,24 +1340,54 @@ and returns the number of rows changed; `sql_query(db, sql[, params])` runs a SE
 `sql_close(db)` closes it. `?` marks a parameter taken from the list (use parameters, never text pasting).
 
 Supported SQL: `CREATE TABLE [IF NOT EXISTS] t (col type, ...)`, `DROP TABLE [IF EXISTS] t`,
-`INSERT INTO t [(cols)] VALUES (...), (...)`, `SELECT cols | * | COUNT / SUM / AVG / MIN / MAX FROM t [WHERE ...]
-[GROUP BY cols] [ORDER BY col [DESC], ...] [LIMIT n [OFFSET m]]`, `UPDATE t SET c = expr, ... [WHERE ...]`,
-`DELETE FROM t [WHERE ...]`. Expressions: numbers, `'strings'` (`''` is a quote), `NULL`, columns, `?`, `+ - * / %`,
-`= != <> < <= > >=`, `AND OR NOT`, `IS [NOT] NULL`, `[NOT] LIKE` (`%` and `_`), `[NOT] IN (...)`. Column types are
-accepted but not enforced. There are no joins, subqueries, indexes or transactions, and only one statement per call.
-Opening a file needs the file capabilities.
+`INSERT INTO t [(cols)] VALUES (...), (...)` or `INSERT INTO t [(cols)] SELECT ...`,
+`UPDATE t SET c = expr, ... [WHERE ...]`, `DELETE FROM t [WHERE ...]`, and
+
+```text
+SELECT [DISTINCT] item, ... FROM source [[INNER | LEFT [OUTER] | CROSS] JOIN source [ON cond] | , source] ...
+  [WHERE cond] [GROUP BY expr, ...] [HAVING cond] [ORDER BY expr [ASC | DESC], ...] [LIMIT n [OFFSET m]]
+```
+
+An item is `*`, `t.*` or `expr [AS name]`. A source is `table [AS] alias` or `(SELECT ...) [AS] alias`. Columns may be
+written `alias.col`; a bare name that exists in two joined tables is an "ambiguous column" error, and an unknown table,
+alias or column is an error that lists what exists. `SELECT *` over a join names two columns with the same name
+`alias.col` so that neither is lost in the result dict. ORDER BY and GROUP BY accept output aliases and 1-based
+positions; HAVING and WHERE accept aliases too.
+
+Subqueries: `x [NOT] IN (SELECT ...)`, `EXISTS (SELECT ...)`, a scalar `(SELECT ...)` anywhere a value goes (first row,
+first column; null when empty), and `FROM (SELECT ...) alias`. Subqueries may refer to columns of the enclosing query
+(correlated); they are checked for unknown columns when they run, so a typo inside one is only reported once the outer
+query has a row to run it on. `UPDATE` and `DELETE` conditions may use subqueries.
+
+Expressions: numbers, `'strings'` (`''` is a quote), `NULL`, columns, `?`, `+ - * / %`, `= != <> < <= > >=`,
+`AND OR NOT` (three-valued, as in SQL), `IS [NOT] NULL`, `[NOT] LIKE` (`%` and `_`), `[NOT] IN (...)`,
+`[NOT] BETWEEN a AND b`, `CASE [x] WHEN ... THEN ... [ELSE ...] END`, aggregates `COUNT(*)`, `COUNT/SUM/AVG/MIN/MAX([DISTINCT] x)`,
+and the functions `COALESCE IFNULL NULLIF ABS ROUND UPPER LOWER LENGTH SUBSTR`. Differences from SQLite worth knowing:
+numbers are all floating point (so `7 / 2` is `3.5`, not `3`), division by zero is an error rather than null, column
+types are accepted but not enforced, and a bare column next to an aggregate takes its value from the group's first
+row. Not supported: RIGHT and FULL joins (swap the tables and use LEFT), `JOIN ... USING`, `UNION`, window functions,
+indexes, transactions, more than one statement per call. Opening a file needs the file capabilities. The file format
+is unchanged, so databases written by earlier versions open as before.
 
 ```killer
 db = sql_open(":memory:")
-sql_exec(db, "CREATE TABLE users (name TEXT, age INTEGER)")
-sql_exec(db, "INSERT INTO users VALUES (?, ?), (?, ?)", ["Ann", 30, "Bo", 20])
-for r in sql_query(db, "SELECT name, age FROM users WHERE age >= ? ORDER BY age DESC", [18]) {
-  println(r["name"], r["age"])
+sql_exec(db, "CREATE TABLE users (id INTEGER, name TEXT, age INTEGER)")
+sql_exec(db, "CREATE TABLE orders (user_id INTEGER, total REAL)")
+sql_exec(db, "INSERT INTO users VALUES (1, 'Ann', 30), (2, 'Bo', 20), (3, 'Cy', 41)")
+sql_exec(db, "INSERT INTO orders VALUES (?, ?), (?, ?), (?, ?)", [1, 9.5, 1, 20, 2, 5])
+q = "SELECT u.name, COUNT(o.total) AS n, SUM(o.total) AS spent FROM users u LEFT JOIN orders o ON o.user_id = u.id GROUP BY u.name HAVING n >= 0 ORDER BY spent DESC, u.name"
+for r in sql_query(db, q) {
+  println(r["name"], r["n"], r["spent"])
+}
+for r in sql_query(db, "SELECT name FROM users WHERE id IN (SELECT user_id FROM orders WHERE total > ?) ORDER BY name", [6]) {
+  println(r["name"])
 }
 println(sql_query(db, "SELECT COUNT(*) AS n, AVG(age) AS mean FROM users")[0]["mean"])
-# expect: Ann 30
-# expect: Bo 20
-# expect: 25
+# expect: Ann 2 29.5
+# expect: Bo 1 5
+# expect: Cy 0 null
+# expect: Ann
+# expect: 30.333333333333332
 ```
 
 ## Windows (GUI) and the step debugger
