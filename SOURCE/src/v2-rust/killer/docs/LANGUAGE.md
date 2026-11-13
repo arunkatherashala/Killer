@@ -1250,7 +1250,7 @@ the peer has closed. Handles belong to the thread that opened them.
 | `sock_close(s)` | close any socket |
 | `udp_bind(addr)`, `udp_send(s, addr, text)` | UDP |
 | `udp_recv(s[, max, ms])` | `{"data": ..., "from": "host:port"}` or `null` |
-| `ws_connect("ws://host:port/path")` | WebSocket client (no `wss://`) |
+| `ws_connect("ws://host:port/path"[, opts])` | WebSocket client (`wss://` through TLS, see below) |
 | `ws_accept(l[, ms])` | take a connection from a `tcp_listen` listener and do the WebSocket handshake |
 | `ws_send(s, text)`, `ws_recv(s[, ms])` | text messages; `ws_recv` gives `null` on timeout or close; pings are answered |
 | `ws_close(s)` | send a close frame and drop the socket |
@@ -1372,6 +1372,33 @@ posts JSON to `handlers[name]` and returns a promise with the handler's result. 
 input: `s` step into, `n` next (step over), `f` finish the function, `c` continue, `b N` / `d N` / `bl` breakpoints,
 `l [N]` list source, `bt` call stack, `locals`, `globals`, `p NAME`, `q` quit. Local variables of a function call
 show as `arg0`, `arg1`, ... and numbered slots, because the bytecode does not keep their names.
+
+## TLS (`wss://`) and WebAssembly
+
+**TLS client.** `tcp_connect_tls("host:port"[, {"ca_file": path}])` opens a TLS connection and returns an ordinary
+TCP handle (`sock_send`, `sock_recv`, `sock_recv_line`, `sock_close` work as before), and `ws_connect("wss://host/path"[,
+opts])` is a secure WebSocket. The connection is made through the system `openssl s_client`, which must be on the
+PATH: it checks the certificate chain against the system trust store (or the extra CA file in `ca_file`) and checks
+that the certificate matches the host name. A server that fails the check is dropped, so the first receive sees the
+connection closed; `tls_error(socket)` returns what `openssl` said (for example `verify error:num=18:self-signed
+certificate`). There is no TLS *listener*: serving HTTPS needs a reverse proxy in front of `serve`. The HTTP client
+(`http_get` and friends) already handles `https://` through `curl`.
+
+**WebAssembly.** `killer wasm script.killer [-o out.wasm]` compiles the numeric functions of a script to a small
+WebAssembly module with no imports, one export per function, that runs in a browser, Node or `wasmtime`. The script
+may contain only `fn` definitions and `const NAME = number`. Inside a function: numbers, `true` / `false`, parameters
+and local variables, `+ - * / %` (floor modulo, as in the VM), unary `-`, `== != < <= > >=`, `&& || !` (short-circuit),
+`x = e`, `x += e` (also `-= *= /=`), `x++`, `x--`, `if` / `else if` / `else`, `while`, `for i in range(n)` /
+`range(a, b)`, `break`, `continue`, `return`, calls to the file's own functions (recursion too) and `sqrt abs floor
+ceil trunc min max`. Everything else (strings, lists, objects, other builtins) is an error that names the line. All
+values are `f64`; a function that ends without `return` gives 0; dividing by zero gives infinity or NaN rather than
+the VM's error.
+
+```text
+$ killer wasm math.killer -o math.wasm
+wrote math.wasm (131 bytes)
+  export fib(1 number)
+```
 
 ## Errors
 

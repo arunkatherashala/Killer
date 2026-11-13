@@ -343,6 +343,7 @@ pub mod exprsplit;             // top-level operator splitting for the expressio
 pub mod net_ai;                // network + AI building blocks: serve/route, http_request, vec_*, chunking, logging
 pub mod llm_stream;            // streaming LLM output (llm_stream / llm_stream_cb)
 pub mod profile_cli;            // `killer profile` / `killer_super --profile`
+pub mod wasm_compile;           // `killer wasm`: numeric functions to a .wasm module
 pub mod vm_debug;               // step debugger: `killer debug`
 pub mod vm_profile;             // VM profiler: call counts, self/inclusive time, line hits, flame graph
 pub mod http_sse;              // SSE replies for serve handlers

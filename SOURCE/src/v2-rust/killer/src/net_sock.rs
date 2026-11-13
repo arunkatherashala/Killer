@@ -7,7 +7,10 @@
 //! TCP:   tcp_listen(addr) tcp_accept(l[, ms]) tcp_connect(addr[, ms]) sock_send(s, text) sock_recv(s[, max, ms])
 //!        sock_recv_line(s[, ms]) sock_addr(s) sock_peer(s) sock_close(s)
 //! UDP:   udp_bind(addr) udp_send(s, addr, text) udp_recv(s[, max, ms]) -> {"data", "from"}
-//! WS:    ws_connect(url) ws_accept(listener[, ms]) ws_send(s, text) ws_recv(s[, ms]) ws_close(s)
+//! WS:    ws_connect(url[, opts]) ws_accept(listener[, ms]) ws_send(s, text) ws_recv(s[, ms]) ws_close(s)
+//! TLS:   tcp_connect_tls(addr[, opts]) and ws_connect("wss://...") connect through the system `openssl s_client`,
+//!        which verifies the certificate chain and the host name; opts {"ca_file": path} trusts an extra CA file.
+//!        tls_error(s) returns what openssl reported (for example a certificate failure) once such a connection closed.
 //!
 //! A receive that times out returns `null`; `sock_recv` returns `""` once the peer has closed.
 //! `call` returns `None` for names this module does not own.
@@ -18,13 +21,186 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::{ErrorKind, Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs, UdpSocket};
+use std::process::{Child, ChildStdin, Command, Stdio};
+use std::sync::mpsc::{channel, Receiver, RecvTimeoutError};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 enum Sock {
     Listener(TcpListener),
-    Tcp { stream: TcpStream, buf: Vec<u8> },
+    Tcp { stream: Conn, buf: Vec<u8> },
     Udp(UdpSocket),
-    Ws { stream: TcpStream, buf: Vec<u8>, client: bool, closed: bool },
+    Ws { stream: Conn, buf: Vec<u8>, client: bool, closed: bool },
+}
+
+/// A byte stream: a plain TCP socket, or a TLS connection made through the system `openssl s_client` (which checks the
+/// server certificate and host name). The TLS side is a child process whose output is read on a helper thread.
+enum Conn {
+    Tcp(TcpStream),
+    Tls(Box<TlsPipe>),
+}
+
+struct TlsPipe {
+    child: Child,
+    stdin: Option<ChildStdin>,
+    rx: Receiver<Vec<u8>>,
+    pending: Vec<u8>,
+    timeout: Option<Duration>,
+    errors: Arc<Mutex<String>>,
+    addr: String,
+}
+
+impl Drop for TlsPipe {
+    fn drop(&mut self) {
+        self.stdin.take();
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
+impl Conn {
+    fn set_read_timeout(&mut self, d: Option<Duration>) -> std::io::Result<()> {
+        match self {
+            Conn::Tcp(s) => s.set_read_timeout(d),
+            Conn::Tls(t) => {
+                t.timeout = d;
+                Ok(())
+            }
+        }
+    }
+    fn local(&self) -> std::io::Result<String> {
+        match self {
+            Conn::Tcp(s) => s.local_addr().map(|a| a.to_string()),
+            Conn::Tls(_) => Ok("(tls)".to_string()),
+        }
+    }
+    fn peer(&self) -> std::io::Result<String> {
+        match self {
+            Conn::Tcp(s) => s.peer_addr().map(|a| a.to_string()),
+            Conn::Tls(t) => Ok(t.addr.clone()),
+        }
+    }
+    /// What `openssl` said (certificate or network errors), for messages after a TLS connection closed early.
+    fn tls_hint(&self) -> String {
+        match self {
+            Conn::Tls(t) => {
+                let e = t.errors.lock().map(|g| g.trim().to_string()).unwrap_or_default();
+                if e.is_empty() {
+                    String::new()
+                } else {
+                    format!(" (TLS: {})", e.lines().rev().take(3).collect::<Vec<_>>().into_iter().rev().collect::<Vec<_>>().join("; "))
+                }
+            }
+            Conn::Tcp(_) => String::new(),
+        }
+    }
+}
+
+impl Read for Conn {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        match self {
+            Conn::Tcp(s) => s.read(buf),
+            Conn::Tls(t) => {
+                if t.pending.is_empty() {
+                    let got = match t.timeout {
+                        Some(d) => t.rx.recv_timeout(d),
+                        None => t.rx.recv().map_err(|_| RecvTimeoutError::Disconnected),
+                    };
+                    match got {
+                        Ok(v) => t.pending = v,
+                        Err(RecvTimeoutError::Timeout) => return Err(std::io::Error::new(ErrorKind::TimedOut, "timed out")),
+                        Err(RecvTimeoutError::Disconnected) => return Ok(0),
+                    }
+                }
+                let n = buf.len().min(t.pending.len());
+                buf[..n].copy_from_slice(&t.pending[..n]);
+                t.pending.drain(..n);
+                Ok(n)
+            }
+        }
+    }
+}
+
+impl Write for Conn {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        match self {
+            Conn::Tcp(s) => s.write(buf),
+            Conn::Tls(t) => match t.stdin.as_mut() {
+                Some(w) => w.write(buf),
+                None => Err(std::io::Error::new(ErrorKind::BrokenPipe, "the TLS connection is closed")),
+            },
+        }
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        match self {
+            Conn::Tcp(s) => s.flush(),
+            Conn::Tls(t) => t.stdin.as_mut().map_or(Ok(()), |w| w.flush()),
+        }
+    }
+}
+
+/// Open a verified TLS connection to `host:port` with `openssl s_client`. `ca_file` adds a trusted certificate
+/// authority file (for a private or test CA). The system trust store is used otherwise.
+fn tls_connect(addr: &str, ca_file: Option<&str>, who: &str) -> Result<Conn, VmError> {
+    let (host, port) = match addr.rsplit_once(':') {
+        Some((h, p)) if !h.is_empty() && p.parse::<u16>().is_ok() => (h.trim_matches(|c| c == '[' || c == ']').to_string(), p.to_string()),
+        _ => return err(format!("{}(): the address must look like host:port, got '{}'", who, addr)),
+    };
+    if host.starts_with('-') || host.chars().any(|c| c.is_whitespace() || c.is_control()) {
+        return err(format!("{}(): bad host name", who));
+    }
+    let mut cmd = Command::new("openssl");
+    cmd.arg("s_client").arg("-quiet").arg("-connect").arg(format!("{}:{}", host, port)).arg("-servername").arg(&host);
+    cmd.arg("-verify_return_error").arg("-verify_hostname").arg(&host);
+    if let Some(f) = ca_file {
+        if !std::path::Path::new(f).is_file() {
+            return err(format!("{}(): the ca_file '{}' does not exist", who, f));
+        }
+        cmd.arg("-CAfile").arg(f);
+    }
+    cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    let mut child = match cmd.spawn() {
+        Ok(c) => c,
+        Err(e) => return err(format!("{}(): TLS needs the `openssl` command-line tool on the PATH ({})", who, e)),
+    };
+    let mut out = child.stdout.take().unwrap();
+    let mut errp = child.stderr.take().unwrap();
+    let stdin = child.stdin.take();
+    let (tx, rx) = channel::<Vec<u8>>();
+    std::thread::spawn(move || {
+        let mut b = [0u8; 8192];
+        while let Ok(n) = out.read(&mut b) {
+            if n == 0 || tx.send(b[..n].to_vec()).is_err() {
+                break;
+            }
+        }
+    });
+    let errors = Arc::new(Mutex::new(String::new()));
+    let e2 = errors.clone();
+    std::thread::spawn(move || {
+        let mut b = [0u8; 2048];
+        while let Ok(n) = errp.read(&mut b) {
+            if n == 0 {
+                break;
+            }
+            if let Ok(mut g) = e2.lock() {
+                if g.len() < 8192 {
+                    g.push_str(&String::from_utf8_lossy(&b[..n]));
+                }
+            }
+        }
+    });
+    Ok(Conn::Tls(Box::new(TlsPipe { child, stdin, rx, pending: Vec::new(), timeout: None, errors, addr: addr.to_string() })))
+}
+
+fn opt_str(args: &[Value], i: usize, key: &str) -> Option<String> {
+    match args.get(i) {
+        Some(Value::Dict(d)) => match d.get(key) {
+            Some(Value::Str(s)) => Some(s),
+            _ => None,
+        },
+        _ => None,
+    }
 }
 
 thread_local! {
@@ -34,7 +210,7 @@ thread_local! {
 
 const NAMES: &[&str] = &[
     "tcp_listen", "tcp_accept", "tcp_connect", "sock_send", "sock_recv", "sock_recv_line", "sock_addr", "sock_peer",
-    "sock_close", "udp_bind", "udp_send", "udp_recv", "ws_connect", "ws_accept", "ws_send", "ws_recv", "ws_close",
+    "sock_close", "tcp_connect_tls", "tls_error", "udp_bind", "udp_send", "udp_recv", "ws_connect", "ws_accept", "ws_send", "ws_recv", "ws_close",
 ];
 
 /// True when `name` is one of this module's builtins (the compiler needs the list too).
@@ -156,7 +332,7 @@ fn text(bytes: &[u8]) -> Value {
 }
 
 /// Read what is available (up to `max` bytes) into the connection's own buffer logic. `Ok(None)` is a timeout.
-fn read_some(stream: &mut TcpStream, buf: &mut Vec<u8>, max: usize, ms: u64, who: &str) -> Result<Option<Vec<u8>>, VmError> {
+fn read_some(stream: &mut Conn, buf: &mut Vec<u8>, max: usize, ms: u64, who: &str) -> Result<Option<Vec<u8>>, VmError> {
     if !buf.is_empty() {
         let n = max.min(buf.len());
         return Ok(Some(buf.drain(..n).collect()));
@@ -173,7 +349,7 @@ fn read_some(stream: &mut TcpStream, buf: &mut Vec<u8>, max: usize, ms: u64, who
     }
 }
 
-fn read_line(stream: &mut TcpStream, buf: &mut Vec<u8>, ms: u64, who: &str) -> Result<Option<Vec<u8>>, VmError> {
+fn read_line(stream: &mut Conn, buf: &mut Vec<u8>, ms: u64, who: &str) -> Result<Option<Vec<u8>>, VmError> {
     io(who, stream.set_read_timeout(timeout(ms)))?;
     loop {
         if let Some(p) = buf.iter().position(|&b| b == b'\n') {
@@ -224,14 +400,29 @@ fn dispatch(name: &str, args: &[Value]) -> Result<Value, VmError> {
                 _ => err("tcp_accept(): not a listener"),
             })?;
             Ok(match got {
-                Some(stream) => insert(Sock::Tcp { stream, buf: Vec::new() }),
+                Some(stream) => insert(Sock::Tcp { stream: Conn::Tcp(stream), buf: Vec::new() }),
                 None => Value::Null,
             })
         }
         "tcp_connect" => {
             let addr = string(args, 0, name)?;
             let ms = whole(args, 1, name, Some(10_000))?;
-            Ok(insert(Sock::Tcp { stream: connect(addr, ms, name)?, buf: Vec::new() }))
+            Ok(insert(Sock::Tcp { stream: Conn::Tcp(connect(addr, ms, name)?), buf: Vec::new() }))
+        }
+        "tls_error" => {
+            let id = handle(args, name)?;
+            with_sock(id, name, |s| match s {
+                Sock::Tcp { stream, .. } | Sock::Ws { stream, .. } => match stream {
+                    Conn::Tls(t) => Ok(Value::Str(t.errors.lock().map(|g| g.trim().to_string()).unwrap_or_default())),
+                    Conn::Tcp(_) => Ok(Value::Str(String::new())),
+                },
+                _ => err("tls_error(): not a TCP or WebSocket connection"),
+            })
+        }
+        "tcp_connect_tls" => {
+            let addr = string(args, 0, name)?;
+            let ca = opt_str(args, 1, "ca_file");
+            Ok(insert(Sock::Tcp { stream: tls_connect(addr, ca.as_deref(), name)?, buf: Vec::new() }))
         }
         "sock_send" => {
             let id = handle(args, name)?;
@@ -271,17 +462,17 @@ fn dispatch(name: &str, args: &[Value]) -> Result<Value, VmError> {
             let id = handle(args, name)?;
             with_sock(id, name, |s| {
                 let r = match s {
-                    Sock::Listener(l) => l.local_addr(),
+                    Sock::Listener(l) => l.local_addr().map(|a| a.to_string()),
                     Sock::Tcp { stream, .. } | Sock::Ws { stream, .. } => {
                         if name == "sock_peer" {
-                            stream.peer_addr()
+                            stream.peer()
                         } else {
-                            stream.local_addr()
+                            stream.local()
                         }
                     }
-                    Sock::Udp(u) => u.local_addr(),
+                    Sock::Udp(u) => u.local_addr().map(|a| a.to_string()),
                 };
-                Ok(Value::Str(io(name, r)?.to_string()))
+                Ok(Value::Str(io(name, r)?))
             })
         }
         "sock_close" | "ws_close" => {
@@ -328,7 +519,7 @@ fn dispatch(name: &str, args: &[Value]) -> Result<Value, VmError> {
                 _ => err("udp_recv(): not a UDP socket"),
             })
         }
-        "ws_connect" => ws_connect(string(args, 0, name)?),
+        "ws_connect" => ws_connect(string(args, 0, name)?, opt_str(args, 1, "ca_file").as_deref()),
         "ws_accept" => {
             let id = handle(args, name)?;
             let ms = whole(args, 1, name, Some(0))?;
@@ -337,7 +528,8 @@ fn dispatch(name: &str, args: &[Value]) -> Result<Value, VmError> {
                 _ => err("ws_accept(): not a listener (make one with tcp_listen)"),
             })?;
             match got {
-                Some(mut stream) => {
+                Some(raw) => {
+                    let mut stream = Conn::Tcp(raw);
                     let mut buf = Vec::new();
                     server_handshake(&mut stream, &mut buf)?;
                     Ok(insert(Sock::Ws { stream, buf, client: false, closed: false }))
@@ -380,18 +572,23 @@ fn accept_key(key: &str) -> String {
     base64(&sha1(format!("{}{}", key.trim(), GUID).as_bytes()))
 }
 
-fn ws_connect(url: &str) -> Result<Value, VmError> {
-    let rest = match url.strip_prefix("ws://") {
-        Some(r) => r,
-        None if url.starts_with("wss://") => return err("ws_connect(): wss:// (TLS) is not supported, use ws://"),
-        None => return err("ws_connect(): the url must start with ws://"),
+fn ws_connect(url: &str, ca_file: Option<&str>) -> Result<Value, VmError> {
+    let (tls, rest) = if let Some(r) = url.strip_prefix("ws://") {
+        (false, r)
+    } else if let Some(r) = url.strip_prefix("wss://") {
+        (true, r)
+    } else {
+        return err("ws_connect(): the url must start with ws:// or wss://");
     };
     let (hostport, path) = match rest.find('/') {
         Some(i) => (&rest[..i], &rest[i..]),
         None => (rest, "/"),
     };
-    let addr = if hostport.contains(':') { hostport.to_string() } else { format!("{}:80", hostport) };
-    let mut stream = connect(&addr, 10_000, "ws_connect")?;
+    if hostport.is_empty() || hostport.chars().any(|c| c.is_whitespace() || c.is_control()) || path.chars().any(|c| c.is_control() || c == ' ') {
+        return err("ws_connect(): bad url");
+    }
+    let addr = if hostport.contains(':') { hostport.to_string() } else { format!("{}:{}", hostport, if tls { 443 } else { 80 }) };
+    let mut stream = if tls { tls_connect(&addr, ca_file, "ws_connect")? } else { Conn::Tcp(connect(&addr, 10_000, "ws_connect")?) };
     let key = base64(&nonce16());
     let req = format!(
         "GET {path} HTTP/1.1\r\nHost: {hostport}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n\r\n"
@@ -413,7 +610,7 @@ fn ws_connect(url: &str) -> Result<Value, VmError> {
     Ok(insert(Sock::Ws { stream, buf, client: true, closed: false }))
 }
 
-fn server_handshake(stream: &mut TcpStream, buf: &mut Vec<u8>) -> Result<(), VmError> {
+fn server_handshake(stream: &mut Conn, buf: &mut Vec<u8>) -> Result<(), VmError> {
     let head = read_head(stream, buf, "ws_accept")?;
     let key = head
         .lines()
@@ -433,7 +630,7 @@ fn server_handshake(stream: &mut TcpStream, buf: &mut Vec<u8>) -> Result<(), VmE
 }
 
 /// Read an HTTP head (up to the blank line); anything read past it stays in `buf`.
-fn read_head(stream: &mut TcpStream, buf: &mut Vec<u8>, who: &str) -> Result<String, VmError> {
+fn read_head(stream: &mut Conn, buf: &mut Vec<u8>, who: &str) -> Result<String, VmError> {
     io(who, stream.set_read_timeout(Some(Duration::from_secs(10))))?;
     loop {
         if let Some(p) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
@@ -446,7 +643,7 @@ fn read_head(stream: &mut TcpStream, buf: &mut Vec<u8>, who: &str) -> Result<Str
         }
         let mut chunk = [0u8; 2048];
         match stream.read(&mut chunk) {
-            Ok(0) => return err(format!("{}(): the connection closed during the handshake", who)),
+            Ok(0) => return err(format!("{}(): the connection closed during the handshake{}", who, stream.tls_hint())),
             Ok(n) => buf.extend_from_slice(&chunk[..n]),
             Err(e) => return err(format!("{}(): {}", who, e)),
         }
@@ -477,12 +674,12 @@ fn frame(opcode: u8, payload: &[u8], mask: bool) -> Vec<u8> {
     out
 }
 
-fn fill(stream: &mut TcpStream, buf: &mut Vec<u8>, need: usize, ms: u64) -> Result<bool, VmError> {
+fn fill(stream: &mut Conn, buf: &mut Vec<u8>, need: usize, ms: u64) -> Result<bool, VmError> {
     while buf.len() < need {
         io("ws_recv", stream.set_read_timeout(timeout(ms)))?;
         let mut chunk = [0u8; 4096];
         match stream.read(&mut chunk) {
-            Ok(0) => return err("ws_recv(): the connection closed in the middle of a message"),
+            Ok(0) => return err(format!("ws_recv(): the connection closed in the middle of a message{}", stream.tls_hint())),
             Ok(n) => buf.extend_from_slice(&chunk[..n]),
             Err(e) if is_timeout(&e) => return Ok(false),
             Err(e) => return err(format!("ws_recv(): {}", e)),
@@ -492,7 +689,7 @@ fn fill(stream: &mut TcpStream, buf: &mut Vec<u8>, need: usize, ms: u64) -> Resu
 }
 
 /// Next text/binary message: `null` on timeout or once the peer has sent close. Pings are answered.
-fn ws_read(stream: &mut TcpStream, buf: &mut Vec<u8>, client: bool, closed: &mut bool, ms: u64) -> Result<Value, VmError> {
+fn ws_read(stream: &mut Conn, buf: &mut Vec<u8>, client: bool, closed: &mut bool, ms: u64) -> Result<Value, VmError> {
     if *closed {
         return Ok(Value::Null);
     }
@@ -658,12 +855,13 @@ mod tests {
             let (mut s, _) = l.accept().unwrap();
             let mut buf = Vec::new();
             let mut closed = false;
+            let mut s = Conn::Tcp(s);
             let v = ws_read(&mut s, &mut buf, false, &mut closed, 5000).unwrap();
             let big = "x".repeat(70_000);
             s.write_all(&frame(1, big.as_bytes(), false)).unwrap();
             v
         });
-        let mut c = TcpStream::connect(addr).unwrap();
+        let mut c = Conn::Tcp(TcpStream::connect(addr).unwrap());
         c.write_all(&frame(1, b"hello", true)).unwrap();
         let (mut buf, mut closed) = (Vec::new(), false);
         let reply = ws_read(&mut c, &mut buf, true, &mut closed, 5000).unwrap();

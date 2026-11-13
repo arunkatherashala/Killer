@@ -104,3 +104,97 @@ ws_close(c)
     assert!(server.wait().unwrap().success());
     let _ = std::fs::remove_dir_all(file.parent().unwrap());
 }
+
+// ---------------------------------------------------------------------------------------------
+// TLS (through the system `openssl`): skipped when the tool is missing
+
+fn have_openssl() -> bool {
+    Command::new("openssl").arg("version").stdout(Stdio::null()).stderr(Stdio::null()).status().map(|s| s.success()).unwrap_or(false)
+}
+
+struct TlsServer {
+    child: std::process::Child,
+    port: u16,
+    cert: String,
+    dir: PathBuf,
+}
+
+impl Drop for TlsServer {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+        let _ = std::fs::remove_dir_all(&self.dir);
+    }
+}
+
+fn tls_server() -> TlsServer {
+    let dir = std::env::temp_dir().join(format!("killer_tls_{}_{}", std::process::id(), NEXT.fetch_add(1, Ordering::SeqCst)));
+    std::fs::create_dir_all(&dir).unwrap();
+    let (cert, key) = (dir.join("cert.pem"), dir.join("key.pem"));
+    let made = Command::new("openssl")
+        .env("MSYS_NO_PATHCONV", "1")
+        .args(["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "2", "-subj", "/CN=localhost", "-addext", "subjectAltName=DNS:localhost"])
+        .arg("-keyout")
+        .arg(&key)
+        .arg("-out")
+        .arg(&cert)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .unwrap();
+    assert!(made.success(), "openssl could not make a test certificate");
+    let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let child = Command::new("openssl")
+        .args(["s_server", "-quiet", "-www", "-accept", &port.to_string()])
+        .arg("-cert")
+        .arg(&cert)
+        .arg("-key")
+        .arg(&key)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    for _ in 0..100 {
+        if std::net::TcpStream::connect(("127.0.0.1", port)).is_ok() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    TlsServer { child, port, cert: cert.to_string_lossy().replace('\\', "/"), dir }
+}
+
+#[test]
+fn tls_connection_checks_the_certificate() {
+    if !have_openssl() {
+        eprintln!("skipped: openssl is not installed");
+        return;
+    }
+    let s = tls_server();
+    // trusted through ca_file: the request works
+    let (ok, out, err) = run(&format!(
+        "c = tcp_connect_tls(\"localhost:{}\", {{\"ca_file\": \"{}\"}})\nsock_send(c, \"GET / HTTP/1.0\\r\\n\\r\\n\")\nprintln(sock_recv_line(c, 10000))\nprintln(sock_peer(c))\nsock_close(c)\n",
+        s.port, s.cert
+    ));
+    assert!(ok, "{err}");
+    assert!(out.starts_with("HTTP/1.0 200"), "{out}");
+    // not trusted: the connection is dropped and tls_error says why
+    let (ok, out, err) = run(&format!(
+        "c = tcp_connect_tls(\"localhost:{}\")\nsock_send(c, \"GET / HTTP/1.0\\r\\n\\r\\n\")\nprintln(\"[\" + str(sock_recv(c, 100, 10000)) + \"]\")\nprintln(contains(lower(tls_error(c)), \"verif\"))\n",
+        s.port
+    ));
+    assert!(ok, "{err}");
+    assert_eq!(out, "[]\ntrue");
+}
+
+#[test]
+fn wss_to_an_untrusted_server_is_a_clear_error() {
+    if !have_openssl() {
+        eprintln!("skipped: openssl is not installed");
+        return;
+    }
+    let s = tls_server();
+    let (ok, _, err) = run(&format!("ws_connect(\"wss://localhost:{}/\")\n", s.port));
+    assert!(!ok);
+    assert!(err.contains("closed during the handshake") && err.contains("TLS"), "{err}");
+}

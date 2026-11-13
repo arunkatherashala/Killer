@@ -48,12 +48,12 @@ The row-by-row history is in the root `tracker.csv`; the Python comparison is in
 | HTTP client and server | yes | |
 | TCP sockets | yes | `tcp_listen`, `tcp_connect`, `sock_send`, `sock_recv` |
 | UDP sockets | yes | `udp_bind`, `udp_send`, `udp_recv` |
-| WebSocket client and server | yes | `ws://` only, text messages; `wss://` (TLS) no |
-| TLS sockets (`wss://`, TLS servers) | no | HTTPS client works through `curl` |
+| WebSocket client and server | yes | `ws://`, and `wss://` through TLS; text messages |
+| TLS client sockets | yes | `tcp_connect_tls`, `wss://`; verified through the system `openssl` command |
 | SQL database | yes | `sql_open` / `sql_exec` / `sql_query`: single-table SQL, no joins; file or memory |
 | Process control, environment | yes | |
 | Graphical windows (GUI) | yes | the browser is the window: `gui_show`, `gui_open`; no native widgets |
-| WebAssembly output | no | |
+| WebAssembly output | partial | `killer wasm`: numeric functions only (f64, loops, recursion); no strings or lists |
 | Matrix library | yes | `Matrix`, det, inverse, solve; written in Killer (not fast for big sizes) |
 
 ## AI
@@ -81,6 +81,6 @@ The row-by-row history is in the root `tracker.csv`; the Python comparison is in
 
 ## Not built
 
-1. TLS listeners and `wss://` (the HTTPS client works through `curl`).
-2. WebAssembly output.
-3. SQL joins and subqueries; native GUI widgets; hygienic macros.
+1. TLS listeners (HTTPS servers); WebAssembly for strings, lists and objects.
+2. SQL joins and subqueries; native GUI widgets; hygienic macros.
+3. Live LLM provider tests (need an API key) and a run of the release workflow (needs a tag).
