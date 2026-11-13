@@ -76,7 +76,7 @@ The row-by-row history is in the root `tracker.csv`; the Python comparison is in
 | Language server | partial | `killer lsp` |
 | Step debugger | yes | `killer debug`: step, next, finish, breakpoints, call stack; locals by slot |
 | Editor support | partial | VS Code grammar |
-| Installers and release workflow | partial | written, never run (a release tag is needed to test) |
+| Installers and release workflow | partial | `install.sh` verified locally against a served archive (checksum pass and fail); the workflow has a manual dry-run mode; a real tag run and `install.ps1` are still untested; see [RELEASING.md](RELEASING.md) |
 | CI on Linux, macOS, Windows | yes | |
 
 ## Not built
