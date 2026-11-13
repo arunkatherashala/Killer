@@ -53,7 +53,7 @@ The row-by-row history is in the root `tracker.csv`; the Python comparison is in
 | SQL database | yes | `sql_open` / `sql_exec` / `sql_query`: single-table SQL, no joins; file or memory |
 | Process control, environment | yes | |
 | Graphical windows (GUI) | yes | the browser is the window: `gui_show`, `gui_open`; no native widgets |
-| WebAssembly output | partial | `killer wasm`: numeric functions only (f64, loops, recursion); no strings or lists |
+| WebAssembly output | partial | `killer wasm`: numbers, ASCII strings (concat, compare, index, iterate) and lists of numbers (index, assign, push, iterate) with a bump allocator and host helpers; no dicts, objects, `str()`, lists of strings, or non-ASCII text |
 | Matrix library | yes | `Matrix`, det, inverse, solve; written in Killer (not fast for big sizes) |
 
 ## AI
