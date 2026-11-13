@@ -3,7 +3,7 @@
 #
 #   f = open("notes.txt", "w")      f.write("hello\n")            f.close()
 #   with open("notes.txt") as f { text = f.read() }
-#   lines = open("notes.txt").readlines()
+#   lines = open("notes.txt").readlines()      for line in open("notes.txt") { ... }
 #
 # Modes: "r" read (default), "w" write (truncates), "a" append. Text only: "rb"/"wb" are not supported.
 class File {
@@ -68,6 +68,9 @@ class File {
     s = str(text)
     file_append(this.path, s)
     return len(s)
+  }
+  fn __iter__() {
+    return this.readlines()
   }
   fn writelines(items) {
     for item in items {

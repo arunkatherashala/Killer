@@ -476,6 +476,81 @@ println(x)"#, r#"Fraction(1, 2)"#),
     (r#"# Complex(1, 2)
 println(1)"#, r#"1"#),
 ];
+const LIST_PATTERNS: &[(&str, &str)] = &[
+    (r#"fn d(x) {
+  match x {
+    [] => { return "empty" }
+    [a] => { return "one " + str(a) }
+    [1, b] => { return "s1 " + str(b) }
+    [h, ...t] if len(t) > 2 => { return "long " + str(len(t)) }
+    [h, ...t] => { return "list " + str(h) + str(t) }
+    _ => { return "other" }
+  }
+}
+println(d([]), d([7]), d([1, 2]), d([5, 6]), d([1, 2, 3, 4]), d(3))"#, r#"empty one 7 s1 2 list 5[6] long 3 other"#),
+    (r#"match [1, [2, 3]] {
+  [a, [b, c]] => { println(a + b + c) }
+}"#, r#"6"#),
+    (r#"match [1, 2] {
+  [_, y] => { println(y) }
+}"#, r#"2"#),
+    (r#"match "ab" {
+  [a] => { println("list") }
+  _ => { println("not a list") }
+}"#, r#"not a list"#),
+];
+const LABELED_DO: &[(&str, &str)] = &[
+    (r#"n = 0
+outer: do {
+  n = n + 1
+  for i in range(3) {
+    if i == 1 { continue outer }
+    if n == 3 { break outer }
+  }
+} while n < 10
+println(n)"#, r#"3"#),
+    (r#"k = 0
+do {
+  k++
+} while k < 3
+println(k)"#, r#"3"#),
+];
+const FILE_ITERATION: &[(&str, &str)] = &[
+    (r#"f = open("it.txt", "w")
+f.write("a\nb\nc")
+f.close()
+for line in open("it.txt") {
+  println(trim(line))
+}"#, r#"a
+b
+c"#),
+    (r#"f = open("it2.txt", "w")
+f.write("x\ny\n")
+f.close()
+n = 0
+with open("it2.txt") as g {
+  for line in g { n = n + 1 }
+}
+println(n)"#, r#"2"#),
+];
+
+/// `[a, b]`, `[h, ...t]`, `[]`, literals, `_` and guards in `match`.
+#[test]
+fn list_patterns_in_match() {
+    check(LIST_PATTERNS);
+}
+
+/// `label: do { } while cond` with `break label` / `continue label`.
+#[test]
+fn labeled_do_while() {
+    check(LABELED_DO);
+}
+
+/// `for line in open(path)` and over a `with` file.
+#[test]
+fn for_loop_over_a_file() {
+    check(FILE_ITERATION);
+}
 
 /// `[...a, 3]`, `{...d, k: v}` (`dict_merge`) and `{1, 2, 3}`.
 #[test]

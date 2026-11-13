@@ -15,8 +15,7 @@ differences; ten were fixed the next day (see "Closed since the first measuremen
 
 Also: an integer literal above 2^53 is read as a float before any arithmetic (`9007199254740993` is
 `9007199254740992`); write `9007199254740993n`. `__exit__` cannot swallow an exception (Python's can by
-returning true). File objects are text-only (`"r"`, `"w"`, `"a"`); there is no `"rb"`, `"r+"` or iteration with
-`for line in f` (use `f.readlines()`).
+returning true). File objects are text-only (`"r"`, `"w"`, `"a"`); there is no `"rb"`, `"r+"`. `for line in f` works (each line keeps its newline).
 
 ## Closed since the first measurement
 

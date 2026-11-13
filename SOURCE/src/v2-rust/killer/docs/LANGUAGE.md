@@ -1194,6 +1194,27 @@ println(π + 1)
 # expect: 4
 ```
 
+**List patterns in `match`.** `[]`, `[a]`, `[1, b]`, `[head, ...tail]` and nested `[a, [b, c]]` match a list of that
+shape: a bare name binds, `_` ignores, anything else must be equal; `...rest` takes the remaining items (and needs at
+least the items before it). A guard (`[h, ...t] if len(t) > 2`) can use the bound names. A non-list never matches.
+
+**Labels on `do-while`.** `outer: do { ... } while cond` takes `break outer` and `continue outer` like any loop
+(`continue` runs the condition test first).
+
+**Files in a `for` loop.** `for line in open("notes.txt") { ... }` visits each line (the newline is kept).
+
+```killer
+fn shape(x) {
+  match x {
+    [] => { return "empty" }
+    [h, ...t] => { return str(h) + " then " + str(len(t)) + " more" }
+    _ => { return "not a list" }
+  }
+}
+println(shape([]), shape([4, 5, 6]), shape(1))
+# expect: empty 4 then 2 more not a list
+```
+
 ### Fractions and complex numbers
 
 `Fraction(n, d)` is an exact fraction kept in lowest terms (`Fraction("3/4")` also works) and `Complex(re, im)` a

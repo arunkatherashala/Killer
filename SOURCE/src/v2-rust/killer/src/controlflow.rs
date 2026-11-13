@@ -175,6 +175,63 @@ pub fn lower(src: &str) -> String {
 
 /// Like [`lower`], also returning for every output line the index of the input line it came from.
 pub fn lower_mapped(src: &str) -> (String, Vec<usize>) {
+    match lower_labeled_do_whiles(src) {
+        Some((pre, pre_map)) => {
+            let (out, map) = lower_mapped_inner(&pre);
+            let composed = map.iter().map(|&l| pre_map.get(l).copied().unwrap_or(0)).collect();
+            (out, composed)
+        }
+        None => lower_mapped_inner(src),
+    }
+}
+
+/// `label: do { ... } while cond` becomes `label: while true { ... }` (with the do-while flag), so the label pass
+/// sees an ordinary loop. `None` when there is no labeled `do`.
+fn lower_labeled_do_whiles(src: &str) -> Option<(String, Vec<usize>)> {
+    if !src.contains("do") {
+        return None;
+    }
+    let m = mask(src);
+    let mut counter = Counter(1_000_000);
+    let mut out = crate::sourcemap::Rewriter::new(src);
+    let mut copied = 0usize;
+    let mut i = 0usize;
+    let mut changed = false;
+    while i < m.len() {
+        if (m[i].is_ascii_alphabetic() || m[i] == b'_') && (i == 0 || !is_word(m[i - 1])) && at_statement_start(&m, i) {
+            let mut j = i;
+            while j < m.len() && is_word(m[j]) {
+                j += 1;
+            }
+            let k0 = skip_blanks(&m, j);
+            if k0 < m.len() && m[k0] == b':' && m.get(k0 + 1) != Some(&b':') && src.is_char_boundary(j) {
+                let k = skip_blanks(&m, k0 + 1);
+                if keyword_at(&m, k, "do") {
+                    if let Some((lowered, end)) = lower_do_while(src, &m, k, &mut counter) {
+                        let label = &src[i..j];
+                        let lowered = lowered.replacen("while true {", &format!("{label}: while true {{"), 1);
+                        out.copy(copied, i);
+                        out.replace(i, end, &lowered);
+                        copied = end;
+                        i = end;
+                        changed = true;
+                        continue;
+                    }
+                }
+            }
+            i = j;
+            continue;
+        }
+        i += 1;
+    }
+    if !changed {
+        return None;
+    }
+    out.copy(copied, src.len());
+    Some(out.finish())
+}
+
+fn lower_mapped_inner(src: &str) -> (String, Vec<usize>) {
     let probe = mask(src);
     let text = String::from_utf8_lossy(&probe).to_string();
     let mut counter = Counter(0);
@@ -381,8 +438,12 @@ fn lower_match(src: &str, m: &[u8], at: usize, counter: &mut Counter) -> Option<
             default_body = Some(body);
             continue;
         }
+        let mut list_binds: Vec<(String, String)> = Vec::new();
         let (mut cond, bind) = if pattern == "_" {
             ("true".to_string(), None)
+        } else if let Some((c, b)) = list_pattern(&pattern, &var) {
+            list_binds = b;
+            (c, None)
         } else if is_ident(&pattern) && !matches!(pattern.as_str(), "true" | "false" | "null" | "nil") {
             ("true".to_string(), Some(pattern.clone()))
         } else {
@@ -397,11 +458,18 @@ fn lower_match(src: &str, m: &[u8], at: usize, counter: &mut Counter) -> Option<
                 Some(name) => replace_word(&g, name, &var),
                 None => g,
             };
+            let mut g = g;
+            for (name, expr) in &list_binds {
+                g = replace_word(&g, name, expr);
+            }
             cond = if cond == "true" { format!("({g})") } else { format!("({cond}) && ({g})") };
         }
         let mut block = String::new();
         if let Some(name) = bind {
             block.push_str(&format!("{indent}  {name} = {var}\n"));
+        }
+        for (name, expr) in &list_binds {
+            block.push_str(&format!("{indent}  {name} = {expr}\n"));
         }
         block.push_str(&format!("{indent}  {}\n", body.trim()));
         out.push_str(&format!(
@@ -422,6 +490,72 @@ fn lower_match(src: &str, m: &[u8], at: usize, counter: &mut Counter) -> Option<
     out.push('\n');
     // swallow the rest of the closing line's newline so line structure stays tidy
     Some((out.trim_end_matches('\n').to_string(), close + 1))
+}
+
+/// `[a, 1, _]` / `[head, ...rest]` / `[]` -> (condition, bindings) over the matched value `var`.
+/// A bare name binds, `_` ignores, anything else must equal the item. Not a list pattern -> None.
+fn list_pattern(pattern: &str, var: &str) -> Option<(String, Vec<(String, String)>)> {
+    let p = pattern.trim();
+    if !(p.starts_with('[') && p.ends_with(']')) {
+        return None;
+    }
+    let inner = &p[1..p.len() - 1];
+    let m = mask(inner);
+    let mut items: Vec<String> = Vec::new();
+    let (mut depth, mut last) = (0i32, 0usize);
+    for i in 0..inner.len() {
+        match m[i] {
+            b'(' | b'[' | b'{' => depth += 1,
+            b')' | b']' | b'}' => depth -= 1,
+            b',' if depth == 0 => {
+                items.push(inner[last..i].trim().to_string());
+                last = i + 1;
+            }
+            _ => {}
+        }
+    }
+    let tail = inner[last..].trim();
+    if !tail.is_empty() || !items.is_empty() {
+        items.push(tail.to_string());
+    }
+    let mut rest: Option<String> = None;
+    if let Some(r) = items.last().and_then(|x| x.strip_prefix("...")) {
+        let r = r.trim();
+        if !is_ident(r) {
+            return None;
+        }
+        rest = Some(r.to_string());
+        items.pop();
+    }
+    let n = items.len();
+    let mut conds = vec![format!("type_of({var}) == \"array\"")];
+    conds.push(if rest.is_some() { format!("len({var}) >= {n}") } else { format!("len({var}) == {n}") });
+    let mut binds = Vec::new();
+    for (i, it) in items.iter().enumerate() {
+        if it.is_empty() {
+            return None;
+        }
+        if it == "_" {
+            continue;
+        }
+        if it.starts_with('[') {
+            if let Some((c, b)) = list_pattern(it, &format!("{var}[{i}]")) {
+                // the length is tested before the item is indexed, so a short list never reads past its end
+                conds.push(c);
+                binds.extend(b);
+                continue;
+            }
+        }
+        if is_ident(it) && !matches!(it.as_str(), "true" | "false" | "null" | "nil") {
+            binds.push((it.clone(), format!("{var}[{i}]")));
+        } else {
+            conds.push(format!("{var}[{i}] == {it}"));
+        }
+    }
+    if let Some(r) = rest {
+        binds.push((r, format!("slice({var}, {n})")));
+    }
+    Some((conds.join(" && "), binds))
 }
 
 /// `pattern if guard` -> (pattern, guard)
