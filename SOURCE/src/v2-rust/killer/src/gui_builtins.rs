@@ -9,7 +9,7 @@ use std::process::{Command, Stdio};
 
 pub fn call(name: &str, args: &[Value]) -> Option<Result<Value, VmError>> {
     if name != "gui_open" {
-        return None;
+        return crate::gui_native::call(name, args); // native widgets
     }
     Some(open(args))
 }

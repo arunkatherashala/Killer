@@ -1,0 +1,129 @@
+# Native windows with real widgets, written in Killer on top of the gui_win_* builtins. Included automatically (never
+# by hand) when a script calls `window(` or `message_box(` and defines neither itself.
+#
+#   win = window("Counter", 320, 240)
+#   win.label("Count: 0", "shown")
+#   win.button("Add", fn(w) { w.set("shown", "Count: " + str(int(w.get("shown")[7:]) + 1)) })
+#   win.input("who", "Ann")
+#   win.checkbox("loud", "Shout")
+#   win.list("fruit", ["apple", "pear"], fn(w) { println(w.get("fruit")) })
+#   win.combo("size", ["S", "M", "L"])
+#   win.button("Quit", fn(w) { w.close() })
+#   win.run()                      # blocks until the window is closed
+#   message_box("Done", "Bye")     # returns "ok" ("yes" / "no" / "cancel" for the other kinds)
+#
+# Widgets stack from the top. The name defaults to the text (label and button) so `win.get(name)` / `win.set(name,
+# value)` read and write them: text for label, input and button, a bool for checkbox, the selected item (or null) for
+# list and combo. A handler is called with the window. `win.on(name, handler)` sets a handler later; `win.on_close(f)`
+# runs when the window closes. Handlers run on the VM thread; a long handler freezes the window.
+# Test hooks (no screen needed): KILLER_GUI_HEADLESS=1 runs the same API on an in-memory model, and
+# `win.simulate_click(name[, item])` acts as a click (a list or combo takes the item to select); `run()` then
+# returns when the queued events are used up. `win.close()` ends the window. `gui_win_mode()` says "win32" or
+# "headless". KILLER_GUI_HIDDEN=1 creates real windows without showing them.
+
+class __Window {
+  fn init(title, width, height) {
+    this.id = gui_win_new(title, width, height)
+    this.handlers = {}
+    this.close_handler = null
+    this.is_closed = false
+    this.count = 0
+  }
+  fn __add(kind, name, text, handler, items) {
+    this.count = this.count + 1
+    if name == null {
+      name = text != "" ? text : kind + str(this.count)
+    }
+    gui_win_add(this.id, kind, name, text, items)
+    if handler != null {
+      this.handlers[name] = handler
+    }
+    return this
+  }
+  fn label(text, name = null) {
+    return this.__add("label", name, text, null, [])
+  }
+  fn button(text, handler = null, name = null) {
+    return this.__add("button", name, text, handler, [])
+  }
+  fn input(name, text = "") {
+    return this.__add("input", name, text, null, [])
+  }
+  fn checkbox(name, text = "", handler = null) {
+    return this.__add("checkbox", name, text != "" ? text : name, handler, [])
+  }
+  fn list(name, items, handler = null) {
+    return this.__add("list", name, "", handler, items)
+  }
+  fn combo(name, items, handler = null) {
+    return this.__add("combo", name, "", handler, items)
+  }
+  fn get(name) {
+    return gui_win_get(this.id, name)
+  }
+  fn set(name, value) {
+    gui_win_set(this.id, name, value)
+    return this
+  }
+  fn set_items(name, items) {
+    gui_win_items(this.id, name, items)
+    return this
+  }
+  fn on(name, handler) {
+    this.handlers[name] = handler
+    return this
+  }
+  fn on_close(handler) {
+    this.close_handler = handler
+    return this
+  }
+  fn simulate_click(name, item = null) {
+    gui_win_click(this.id, name, item)
+    return this
+  }
+  fn close() {
+    if !this.is_closed {
+      this.is_closed = true
+      gui_win_close(this.id)
+    }
+    return this
+  }
+  fn run(max_seconds = 0) {
+    deadline = max_seconds > 0 ? max_seconds * 1000 : null
+    started = time_ms()
+    handled = 0
+    while !this.is_closed {
+      wait = null
+      if deadline != null {
+        wait = deadline - (time_ms() - started)
+        if wait <= 0 {
+          break
+        }
+      }
+      ev = gui_win_wait(this.id, wait)
+      if ev == null {
+        break
+      }
+      handled = handled + 1
+      h = this.handlers[ev]
+      if h != null {
+        h(this)
+      }
+    }
+    this.close()
+    if this.close_handler != null {
+      h = this.close_handler
+      this.close_handler = null
+      h(this)
+    }
+    return handled
+  }
+}
+
+fn window(title, width = 400, height = 300) {
+  return new __Window(title, width, height)
+}
+
+fn message_box(title, text, kind = "ok") {
+  return gui_message_box(title, text, kind)
+}

@@ -277,6 +277,23 @@ fn needs_matrix_prelude(source: &str) -> bool {
     calls_plain_function(&text, "Matrix") || calls_plain_function(&text, "matrix_zeros") || calls_plain_function(&text, "matrix_identity")
 }
 
+/// `window(...)` and `message_box(...)`: native widgets (see `gui_native.rs`).
+const GUI_NATIVE_PRELUDE: &str = include_str!("std/gui_native.killer");
+const GUI_NATIVE_PRELUDE_NAME: &str = "<std>/gui_native.killer";
+
+/// True when the script calls `window(` or `message_box(` and defines neither.
+fn needs_gui_native_prelude(source: &str) -> bool {
+    if !(source.contains("window(") || source.contains("message_box(")) {
+        return false;
+    }
+    let m = crate::lambda::mask(source);
+    let text = String::from_utf8_lossy(&m);
+    if text.contains("fn window") || text.contains("fn message_box") || text.contains("class __Window") {
+        return false;
+    }
+    calls_plain_function(&text, "window") || calls_plain_function(&text, "message_box")
+}
+
 /// True when the script calls `gui_show(` and defines no `gui_show` of its own.
 fn needs_gui_prelude(source: &str) -> bool {
     if !source.contains("gui_show(") {
@@ -311,7 +328,8 @@ pub fn resolve_mapped(source: &str) -> Result<(String, SourceMap), String> {
     let numbers = needs_numbers_prelude(source);
     let matrix = needs_matrix_prelude(source);
     let gui = needs_gui_prelude(source);
-    if !prelude && !numbers && !matrix && !gui && !source.contains("import") {
+    let gui_native = needs_gui_native_prelude(source);
+    if !prelude && !numbers && !matrix && !gui && !gui_native && !source.contains("import") {
         return Ok((source.to_string(), SourceMap::identity(&main, source)));
     }
     let dir = base_dir();
@@ -358,6 +376,16 @@ pub fn resolve_mapped(source: &str) -> Result<(String, SourceMap), String> {
         if !out.ends_with('\n') {
             out.push('\n');
             ex.locs.push(Loc { file: idx, line: GUI_PRELUDE.split('\n').count() as u32 });
+        }
+    }
+    if gui_native {
+        ex.files.push(GUI_NATIVE_PRELUDE_NAME.to_string());
+        ex.sources.push(GUI_NATIVE_PRELUDE.to_string());
+        let idx = (ex.files.len() - 1) as u32;
+        ex.expand(GUI_NATIVE_PRELUDE, idx, &dir, 1, &mut out)?;
+        if !out.ends_with('\n') {
+            out.push('\n');
+            ex.locs.push(Loc { file: idx, line: GUI_NATIVE_PRELUDE.split('\n').count() as u32 });
         }
     }
     ex.expand(source, 0, &dir, 0, &mut out)?;

@@ -1403,11 +1403,46 @@ println(sql_query(db, "SELECT COUNT(*) AS n, AVG(age) AS mean FROM users")[0]["m
 
 ## Windows (GUI) and the step debugger
 
-**Windows.** The browser is the window. `gui_show(title, body_html, handlers, opts)` serves the page on a free local
+**Browser windows.** The browser is the window. `gui_show(title, body_html, handlers, opts)` serves the page on a free local
 port, opens it with `gui_open`, and handles events until the page calls `quit()`. In the page, `send(name, data)`
 posts JSON to `handlers[name]` and returns a promise with the handler's result. `gui_open(target)` opens any
 `http(s)://` address or existing file in the default browser (it needs the process-spawn capability). Options:
 `"open": false` (do not start a browser), `"port"`, `"max_requests"`, `"max_seconds"` (default 3600).
+
+**Native widgets.** `win = window(title, width = 400, height = 300)` makes a real window; `win.label(text[, name])`,
+`win.button(text, handler[, name])`, `win.input(name[, text])`, `win.checkbox(name[, text, handler])`,
+`win.list(name, items[, handler])` and `win.combo(name, items[, handler])` stack widgets from the top. A widget is
+addressed by its name (for a label or button that is its text unless a name is given). `win.get(name)` reads text,
+a bool (checkbox) or the selected item or `null` (list, combo); `win.set(name, value)` writes; `win.set_items(name,
+items)` replaces list items; `win.on(name, handler)` sets a handler later; `win.on_close(f)` runs when the window
+ends. A handler receives the window. `win.run([max_seconds])` is the blocking event loop (it returns the number of
+events handled when the window is closed by the user or by `win.close()`); handlers run on the VM thread, so a long
+one freezes the window. `message_box(title, text[, "ok" | "okcancel" | "yesno"])` returns `"ok"`, `"cancel"`, `"yes"`
+or `"no"`. Creating a window or a message box needs the process-spawn capability, like `gui_open`.
+
+On Windows the widgets are real Win32 controls (declared with `extern "system"`, no crate). On other systems, or with
+`KILLER_GUI_HEADLESS=1`, the same API runs on an in-memory model with no screen: `win.simulate_click(name[, item])`
+acts as a click (a checkbox toggles; a list or combo selects `item`), `run()` returns when the queued events are used
+up, and `message_box` answers `"ok"` / `"yes"` at once. Without a display and without the variable, other systems get an
+error that points to `gui_show`. `KILLER_GUI_HIDDEN=1` creates real windows without showing them (used by the tests).
+`gui_win_mode()` returns `"win32"` or `"headless"`.
+
+```killer
+win = window("Counter", 320, 240)
+count = [0]
+win.label("Count: 0", "shown")
+win.button("Add", fn(w) {
+  count[0] = count[0] + 1
+  w.set("shown", "Count: " + str(count[0]))
+}, "add")
+win.button("Quit", fn(w) { w.close() }, "quit")
+win.simulate_click("add")
+win.simulate_click("add")
+win.simulate_click("quit")
+win.run()
+println(win.get("shown"))
+# expect: Count: 2
+```
 
 **Debugger.** `killer debug script.killer [--break LINE]...` stops at the first line and reads commands from standard
 input: `s` step into, `n` next (step over), `f` finish the function, `c` continue, `b N` / `d N` / `bl` breakpoints,
