@@ -193,7 +193,10 @@ impl LlmResponse {
 pub fn complete(config: &LlmConfig, messages: &[LlmMessage]) -> Result<LlmResponse, String> {
     // v2.2 Inference cache: skip network round-trip for identical prompts
     let cache_key = {
-        let mut k = format!("{:?}:{}", config.provider, config.model);
+        // Everything that changes the request or who may send it is part of the key, so a cached success
+        // is never served to a request with a different endpoint, key or sampling setup.
+        let mut k = format!("{:?}:{}:{:?}:{:?}:{}:{}:{}", config.provider, config.model, config.base_url,
+                            config.api_key, config.temperature, config.max_tokens, config.json_mode);
         for m in messages { k.push('|'); k.push_str(&m.role); k.push(':'); k.push_str(&m.content); }
         k
     };
@@ -238,11 +241,45 @@ pub fn ask(config: &LlmConfig, prompt: &str) -> Result<String, String> {
 
 /// Check if Ollama is running locally.
 pub fn ollama_is_running() -> bool {
-    let host = "127.0.0.1:11434";
-    TcpStream::connect_timeout(
-        &host.parse().unwrap_or("127.0.0.1:11434".parse().unwrap()),
-        Duration::from_secs(1),
-    ).is_ok()
+    let (host, port) = ollama_endpoint(None);
+    ollama_socket_addr(&host, port)
+        .map(|a| TcpStream::connect_timeout(&a, Duration::from_secs(1)).is_ok())
+        .unwrap_or(false)
+}
+
+/// Where Ollama listens: `base_url` (`http://host:port`) if given, else the `OLLAMA_HOST` environment
+/// variable (`host`, `host:port` or a URL), else 127.0.0.1:11434. `0.0.0.0` means this machine.
+pub fn ollama_endpoint(base_url: Option<&str>) -> (String, u16) {
+    let env = std::env::var("OLLAMA_HOST").ok();
+    parse_ollama_endpoint(base_url.or(env.as_deref()))
+}
+
+pub fn parse_ollama_endpoint(spec: Option<&str>) -> (String, u16) {
+    let default = ("127.0.0.1".to_string(), 11434u16);
+    let Some(spec) = spec.map(str::trim).filter(|s| !s.is_empty()) else { return default };
+    let s = spec.strip_prefix("http://").or_else(|| spec.strip_prefix("https://")).unwrap_or(spec);
+    let s = s.split('/').next().unwrap_or(s);
+    let (host, port) = if let Some(rest) = s.strip_prefix('[') {
+        match rest.split_once(']') {
+            Some((h, p)) => (h.to_string(), p.strip_prefix(':').and_then(|p| p.parse().ok())),
+            None => return default,
+        }
+    } else {
+        match s.rsplit_once(':') {
+            Some((h, p)) => (h.to_string(), p.parse().ok()),
+            None => (s.to_string(), None),
+        }
+    };
+    let host = if host.is_empty() || host == "0.0.0.0" || host == "localhost" { "127.0.0.1".to_string() } else { host };
+    (host, port.unwrap_or(11434))
+}
+
+fn ollama_socket_addr(host: &str, port: u16) -> Result<std::net::SocketAddr, String> {
+    use std::net::ToSocketAddrs;
+    (host, port).to_socket_addrs()
+        .map_err(|e| format!("Invalid Ollama address {}:{}: {}", host, port, e))?
+        .next()
+        .ok_or_else(|| format!("Invalid Ollama address {}:{}", host, port))
 }
 
 /// List models available in local Ollama.
@@ -267,7 +304,7 @@ pub fn ollama_list_models() -> Result<Vec<String>, String> {
 fn complete_ollama(config: &LlmConfig, messages: &[LlmMessage]) -> Result<LlmResponse, String> {
     let model = &config.model;
     let body = build_ollama_chat_body(model, messages, config.temperature, config.max_tokens);
-    let raw = http_post_ollama("/api/chat", &body, config.timeout_s)?;
+    let raw = http_post_ollama(config.base_url.as_deref(), "/api/chat", &body, config.timeout_s)?;
     parse_ollama_chat_response(&raw, model)
 }
 
@@ -277,7 +314,10 @@ fn embed_ollama(config: &LlmConfig, text: &str) -> Result<Vec<f64>, String> {
         json_string(&config.model),
         json_string(text)
     );
-    let raw = http_post_ollama("/api/embeddings", &body, config.timeout_s)?;
+    let raw = http_post_ollama(config.base_url.as_deref(), "/api/embeddings", &body, config.timeout_s)?;
+    if let Some(e) = extract_json_string(&raw, "error") {
+        return Err(format!("Ollama error: {}", e));
+    }
     // Response: {"embedding":[0.1,0.2,...]}
     parse_float_array(&raw, "embedding")
 }
@@ -292,6 +332,10 @@ fn build_ollama_chat_body(model: &str, messages: &[LlmMessage], temperature: f64
 
 fn parse_ollama_chat_response(raw: &str, model: &str) -> Result<LlmResponse, String> {
     // Ollama response: {"model":"llama3","message":{"role":"assistant","content":"..."},"done":true}
+    // Failures come back as {"error":"model 'x' not found"}.
+    if let Some(e) = extract_json_string(raw, "error") {
+        return Err(format!("Ollama error: {}", e));
+    }
     let content = extract_nested_value(raw, "message", "content")
         .or_else(|| extract_json_string(raw, "content"))
         .ok_or_else(|| format!("Failed to parse Ollama response: {}", &raw[..raw.len().min(200)]))?;
@@ -301,13 +345,12 @@ fn parse_ollama_chat_response(raw: &str, model: &str) -> Result<LlmResponse, Str
     Ok(LlmResponse { content, model: model.to_string(), prompt_tokens, completion_tokens })
 }
 
-fn http_post_ollama(path: &str, body: &str, timeout_s: u64) -> Result<String, String> {
-    let host = "127.0.0.1";
-    let port = 11434u16;
+fn http_post_ollama(base_url: Option<&str>, path: &str, body: &str, timeout_s: u64) -> Result<String, String> {
+    let (host, port) = ollama_endpoint(base_url);
     let addr = format!("{}:{}", host, port);
 
     let mut stream = TcpStream::connect_timeout(
-        &addr.parse().map_err(|e| format!("Invalid address: {}", e))?,
+        &ollama_socket_addr(&host, port)?,
         Duration::from_secs(timeout_s),
     ).map_err(|e| format!("Cannot connect to Ollama at {} — is it running? Error: {}", addr, e))?;
 
@@ -335,12 +378,10 @@ fn http_post_ollama(path: &str, body: &str, timeout_s: u64) -> Result<String, St
 }
 
 fn http_get_ollama(path: &str) -> Result<String, String> {
-    let host = "127.0.0.1";
-    let port = 11434u16;
-    let addr = format!("{}:{}", host, port);
+    let (host, port) = ollama_endpoint(None);
 
     let mut stream = TcpStream::connect_timeout(
-        &addr.parse().map_err(|e| format!("addr parse: {}", e))?,
+        &ollama_socket_addr(&host, port)?,
         Duration::from_secs(3),
     ).map_err(|e| format!("Cannot connect to Ollama: {}", e))?;
 
@@ -381,8 +422,10 @@ fn complete_openai(config: &LlmConfig, messages: &[LlmMessage]) -> Result<LlmRes
 
 fn embed_openai(config: &LlmConfig, text: &str) -> Result<Vec<f64>, String> {
     let api_key = resolve_api_key(config, "OPENAI_API_KEY")?;
-    let url = "https://api.openai.com/v1/embeddings".to_string();
-    let embed_model = "text-embedding-3-small";
+    let base = config.base_url.as_deref().unwrap_or("https://api.openai.com/v1").trim_end_matches('/');
+    let url = format!("{}/embeddings", base);
+    // `model` is used when it names an embedding model, else the default one.
+    let embed_model = if config.model.contains("embed") { config.model.as_str() } else { "text-embedding-3-small" };
     let body = format!(
         r#"{{"input":{},"model":"{}"}}"#,
         json_string(text), embed_model
@@ -396,7 +439,12 @@ fn embed_openai(config: &LlmConfig, text: &str) -> Result<Vec<f64>, String> {
         &body,
         config.timeout_s,
     )?;
-    // Response: {"data":[{"embedding":[...]}]}
+    // Response: {"data":[{"embedding":[...]}]}, or {"error":{"message":...}}
+    if raw.contains("\"error\"") {
+        if let Some(m) = extract_json_string(&raw, "message") {
+            return Err(format!("OpenAI API error: {}", m));
+        }
+    }
     parse_float_array(&raw, "embedding")
 }
 
@@ -432,11 +480,11 @@ fn complete_anthropic(config: &LlmConfig, messages: &[LlmMessage]) -> Result<Llm
     let url = format!("{}/messages", base);
 
     // Anthropic separates system prompt from conversation messages
-    let (system, conv_msgs): (Option<&LlmMessage>, Vec<&LlmMessage>) = {
-        let mut sys = None;
+    let (system, conv_msgs): (Vec<&str>, Vec<&LlmMessage>) = {
+        let mut sys = Vec::new();
         let mut rest = Vec::new();
         for m in messages {
-            if m.role == "system" { sys = Some(m); } else { rest.push(m); }
+            if m.role == "system" { sys.push(m.content.as_str()); } else { rest.push(m); }
         }
         (sys, rest)
     };
@@ -445,8 +493,9 @@ fn complete_anthropic(config: &LlmConfig, messages: &[LlmMessage]) -> Result<Llm
         format!(r#"{{"role":{},"content":{}}}"#, json_string(&m.role), json_string(&m.content))
     }).collect::<Vec<_>>().join(",");
 
-    let system_part = system.map(|s| format!(r#","system":{}"#, json_string(&s.content)))
-                            .unwrap_or_default();
+    // Several system messages are joined, not dropped.
+    let system_part = if system.is_empty() { String::new() }
+                      else { format!(r#","system":{}"#, json_string(&system.join("\n"))) };
 
     let body = format!(
         r#"{{"model":{},"max_tokens":{},"messages":[{}]{},"temperature":{}}}"#,
@@ -551,6 +600,26 @@ pub fn extract_json_string(json: &str, key: &str) -> Option<String> {
                     'n'  => result.push('\n'),
                     'r'  => result.push('\r'),
                     't'  => result.push('\t'),
+                    '/'  => result.push('/'),
+                    'b'  => result.push('\u{8}'),
+                    'f'  => result.push('\u{c}'),
+                    'u'  => {
+                        let mut code = 0u32;
+                        for _ in 0..4 { code = code * 16 + chars.next()?.to_digit(16)?; }
+                        // surrogate pair: \uD83D\uDE00
+                        if (0xD800..0xDC00).contains(&code) {
+                            let mut look = chars.clone();
+                            if look.next() == Some('\\') && look.next() == Some('u') {
+                                let mut lo = 0u32;
+                                for _ in 0..4 { lo = lo * 16 + look.next()?.to_digit(16)?; }
+                                if (0xDC00..0xE000).contains(&lo) {
+                                    code = 0x10000 + ((code - 0xD800) << 10) + (lo - 0xDC00);
+                                    chars = look;
+                                }
+                            }
+                        }
+                        result.push(char::from_u32(code).unwrap_or('\u{FFFD}'));
+                    }
                     c    => { result.push('\\'); result.push(c); }
                 },
                 '"' => break,
@@ -5483,8 +5552,9 @@ fn extract_http_body(raw: &str) -> Result<String, String> {
     // Find the blank line separating headers from body
     if let Some(pos) = raw.find("\r\n\r\n") {
         let body = raw[pos + 4..].to_string();
-        // Check for chunked transfer encoding — strip chunk sizes
-        return if body.starts_with(|c: char| c.is_ascii_hexdigit()) && body.contains("\r\n") {
+        // Chunked transfer encoding is announced in the headers; strip the chunk sizes.
+        let chunked = raw[..pos].to_ascii_lowercase().contains("transfer-encoding: chunked");
+        return if chunked || (body.starts_with(|c: char| c.is_ascii_hexdigit()) && body.contains("\r\n") && !body.starts_with('{')) {
             Ok(unchunk(&body))
         } else {
             Ok(body)
