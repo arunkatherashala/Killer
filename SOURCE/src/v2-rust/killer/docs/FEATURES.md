@@ -32,7 +32,7 @@ The row-by-row history is in the root `tracker.csv`; the Python comparison is in
 | Type hints | yes | checked; Python-style names accepted |
 | Unicode names and text | yes | |
 | Fractions and complex numbers | yes | library written in Killer |
-| Macros | yes | `macro name(a) { ... }` and `name!(x)`, text expansion, not hygienic |
+| Macros | yes | `macro name(a) { ... }` and `name!(x)`, text expansion, hygienic (body-local names renamed per expansion, `$name` to capture) |
 | `eval` / `exec` of text | yes | fresh VM, same capabilities as the caller (no new power) |
 
 ## Standard library
@@ -82,5 +82,5 @@ The row-by-row history is in the root `tracker.csv`; the Python comparison is in
 ## Not built
 
 1. TLS listeners (HTTPS servers); WebAssembly for strings, lists and objects.
-2. SQL joins and subqueries; native GUI widgets; hygienic macros.
+2. SQL joins and subqueries; native GUI widgets.
 3. Live LLM provider tests (need an API key) and a run of the release workflow (needs a tag).
