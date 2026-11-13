@@ -23,6 +23,7 @@ const COMMANDS: &[(&str, &str, Handler)] = &[
     ("run", "run a program: killer run <file.killer>", cli_tools::cmd_run),
     ("fmt", "format files: killer fmt [--check] <files or dirs>", cli_tools::cmd_fmt),
     ("profile", "profile a program: killer profile <file.killer> [--html out.html] [--top N] [--lines N]", killer_native::profile_cli::cmd_profile),
+    ("debug", "step debugger: killer debug <file.killer> [--break LINE]...", killer_native::vm_debug::cmd_debug),
     ("lint", "lint files: killer lint [--deny-warnings] <files or dirs>", cli_tools::cmd_lint),
     ("test", "run tests: killer test [--junit FILE] [filter] [paths]", testfw::cmd_test),
     ("repl", "interactive prompt", cli_tools::cmd_repl),

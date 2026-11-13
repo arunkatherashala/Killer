@@ -1266,6 +1266,113 @@ println(sock_recv(s, 100, 1000))
 # expect: world
 ```
 
+## Patterns, private members, macros, `eval`
+
+**Dict patterns in `match`.** `{name, age: years, "kind": "user"}` matches a dict that has all those keys: a bare
+key binds a variable of that name, `key: name` binds `name`, `key: literal` must be equal, and a nested list or dict
+pattern may follow the colon. Extra keys are ignored; a guard can use the bound names.
+
+**Private members.** Inside a class, `private fn secret() { ... }` makes a method private and `private balance, pin`
+makes the fields `this.balance` and `this.pin` private. They work everywhere inside that class's body (on `this`
+and on other objects of the class) and are a compile error anywhere else, including subclasses.
+
+**Macros.** `macro square(x) { x * x }` defines a text template and `square!(3 + 1)` expands it before the program
+is compiled. An argument that is an expression is wrapped in parentheses (so that example is `(3 + 1) * (3 + 1)`);
+an argument that is a statement (an assignment or a block) is pasted as it is, so `macro twice(s) { s` newline `s }`
+can repeat code. Macros may use other macros (16 levels at most); they are not hygienic (names in the body are the
+caller's names), and the text `name!(...)` inside a string is left alone.
+
+**`eval` and `exec`.** `eval("1 + 2 * 3")` returns the value of one expression; `exec(code)` runs statements and
+returns a dict of the names the code defined (variables assigned at column 0, functions, classes). Both take an
+optional dict of variables (numbers, strings, lists, dicts) that the code can read: `eval("x * 2", {"x": 5})`. The
+code runs in a fresh virtual machine, so it cannot see or change the caller's variables, and it runs under the
+caller's capabilities: with files, network or processes denied by the sandbox, the evaluated code is denied too.
+Nesting is limited to 8 levels; an error inside the text becomes an ordinary error with the message.
+
+```killer
+class Account {
+  private balance
+  fn init(b) {
+    this.balance = b
+  }
+  fn deposit(n) {
+    this.balance = this.balance + n
+    return this.balance
+  }
+}
+macro square(x) { x * x }
+println((new Account(10)).deposit(5))
+println(square!(2 + 1))
+println(eval("x * 2 + 1", {"x": 4}))
+user = {"kind": "user", "name": "Ann"}
+match user {
+  {"kind": "user", name} => { println("hello " + name) }
+  _ => { println("other") }
+}
+# expect: 15
+# expect: 9
+# expect: 9
+# expect: hello Ann
+```
+
+## Matrices
+
+`Matrix([[1, 2], [3, 4]])`, `matrix_zeros(rows[, cols])` and `matrix_identity(n)` make matrices (a library written in
+Killer, included when a script uses those names and defines no `Matrix`). Operators: `+ -` with a matrix or a
+number, `*` (matrix product, or scalar), unary `-`, `==`. Indexing: `m[i][j]`. Methods: `rows`, `cols`, `get(i, j)`,
+`set(i, j, v)`, `row(i)`, `col(j)`, `transpose()`, `trace()`, `det()`, `inverse()`, `solve(b)` (a list or a
+one-column matrix), `map(f)`, `sum()`, `to_list()` and `close(other, eps)` (use it to compare the float results of
+`inverse()`). A wrong size or a singular matrix is an error.
+
+```killer
+a = Matrix([[2, 1], [1, 3]])
+println(a * matrix_identity(2) == a, a.det(), a.transpose())
+println(a.solve([3, 5]))
+# expect: true 5 [[2, 1], [1, 3]]
+# expect: [0.8, 1.4]
+```
+
+## SQL database
+
+`sql_open(path)` opens a database file (created when missing, saved after every change; `":memory:"` keeps it in
+memory) and returns a handle. `sql_exec(db, sql[, params])` runs CREATE TABLE, DROP TABLE, INSERT, UPDATE or DELETE
+and returns the number of rows changed; `sql_query(db, sql[, params])` runs a SELECT and returns a list of dicts;
+`sql_close(db)` closes it. `?` marks a parameter taken from the list (use parameters, never text pasting).
+
+Supported SQL: `CREATE TABLE [IF NOT EXISTS] t (col type, ...)`, `DROP TABLE [IF EXISTS] t`,
+`INSERT INTO t [(cols)] VALUES (...), (...)`, `SELECT cols | * | COUNT / SUM / AVG / MIN / MAX FROM t [WHERE ...]
+[GROUP BY cols] [ORDER BY col [DESC], ...] [LIMIT n [OFFSET m]]`, `UPDATE t SET c = expr, ... [WHERE ...]`,
+`DELETE FROM t [WHERE ...]`. Expressions: numbers, `'strings'` (`''` is a quote), `NULL`, columns, `?`, `+ - * / %`,
+`= != <> < <= > >=`, `AND OR NOT`, `IS [NOT] NULL`, `[NOT] LIKE` (`%` and `_`), `[NOT] IN (...)`. Column types are
+accepted but not enforced. There are no joins, subqueries, indexes or transactions, and only one statement per call.
+Opening a file needs the file capabilities.
+
+```killer
+db = sql_open(":memory:")
+sql_exec(db, "CREATE TABLE users (name TEXT, age INTEGER)")
+sql_exec(db, "INSERT INTO users VALUES (?, ?), (?, ?)", ["Ann", 30, "Bo", 20])
+for r in sql_query(db, "SELECT name, age FROM users WHERE age >= ? ORDER BY age DESC", [18]) {
+  println(r["name"], r["age"])
+}
+println(sql_query(db, "SELECT COUNT(*) AS n, AVG(age) AS mean FROM users")[0]["mean"])
+# expect: Ann 30
+# expect: Bo 20
+# expect: 25
+```
+
+## Windows (GUI) and the step debugger
+
+**Windows.** The browser is the window. `gui_show(title, body_html, handlers, opts)` serves the page on a free local
+port, opens it with `gui_open`, and handles events until the page calls `quit()`. In the page, `send(name, data)`
+posts JSON to `handlers[name]` and returns a promise with the handler's result. `gui_open(target)` opens any
+`http(s)://` address or existing file in the default browser (it needs the process-spawn capability). Options:
+`"open": false` (do not start a browser), `"port"`, `"max_requests"`, `"max_seconds"` (default 3600).
+
+**Debugger.** `killer debug script.killer [--break LINE]...` stops at the first line and reads commands from standard
+input: `s` step into, `n` next (step over), `f` finish the function, `c` continue, `b N` / `d N` / `bl` breakpoints,
+`l [N]` list source, `bt` call stack, `locals`, `globals`, `p NAME`, `q` quit. Local variables of a function call
+show as `arg0`, `arg1`, ... and numbered slots, because the bytecode does not keep their names.
+
 ## Errors
 
 `throw` any value; `try { } catch e { }` binds it; `finally` runs on **every** exit of its `try`: normal

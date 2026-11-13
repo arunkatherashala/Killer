@@ -343,6 +343,7 @@ pub mod exprsplit;             // top-level operator splitting for the expressio
 pub mod net_ai;                // network + AI building blocks: serve/route, http_request, vec_*, chunking, logging
 pub mod llm_stream;            // streaming LLM output (llm_stream / llm_stream_cb)
 pub mod profile_cli;            // `killer profile` / `killer_super --profile`
+pub mod vm_debug;               // step debugger: `killer debug`
 pub mod vm_profile;             // VM profiler: call counts, self/inclusive time, line hits, flame graph
 pub mod http_sse;              // SSE replies for serve handlers
 pub mod http_serve;            // real HTTP server with Killer handlers
@@ -355,6 +356,9 @@ pub mod csv_builtins;           // RFC 4180 parse_csv / to_csv
 pub mod stdio_builtins;        // eprintln / eprint (standard error)
 pub mod log_builtins;          // log_info/warn/error, load_env
 pub mod http_req;              // hardened curl core for the http_* client builtins
+pub mod gui_builtins;           // gui_open(): the browser as a window (see std/gui.killer)
+pub mod sql_engine;             // sql_open / sql_exec / sql_query / sql_close
+pub mod eval_builtins;         // eval(code, vars) / exec(code, vars)
 pub mod net_sock;              // real TCP / UDP / WebSocket sockets
 pub mod lang_builtins;         // everyday builtins: ord/chr, padding, logs, stats, base64, sets
 pub mod text_methods;          // capitalize/title/find/count/zfill/is* and method-call fallback to builtins

@@ -15,10 +15,10 @@ The row-by-row history is in the root `tracker.csv`; the Python comparison is in
 | `abstract`, `interface`, `implements` | yes | an interface is a parent class whose bodiless methods throw |
 | `enum` | yes | |
 | `const` | yes | checked at compile time |
-| Private members | no | convention only (`_name`); no access check |
+| Private members | yes | `private fn`, `private a, b`; compile error outside the class |
 | Pattern matching: values, `\|`, guards, bindings | yes | |
 | Pattern matching: list patterns `[a, ...rest]` | yes | nested too |
-| Pattern matching: dict / object patterns | no | use dict destructuring |
+| Pattern matching: dict patterns `{name, age: n}` | yes | nested too |
 | Destructuring: lists, dicts | yes | `{a, b: c} = d` |
 | Spread `...` in lists and dicts | yes | |
 | Sets, dicts, lists, strings, ranges | yes | set literal `{1, 2}` |
@@ -32,8 +32,8 @@ The row-by-row history is in the root `tracker.csv`; the Python comparison is in
 | Type hints | yes | checked; Python-style names accepted |
 | Unicode names and text | yes | |
 | Fractions and complex numbers | yes | library written in Killer |
-| Macros | no | |
-| `eval` of text | no | not built on purpose (security); needs a decision |
+| Macros | yes | `macro name(a) { ... }` and `name!(x)`, text expansion, not hygienic |
+| `eval` / `exec` of text | yes | fresh VM, same capabilities as the caller (no new power) |
 
 ## Standard library
 
@@ -49,12 +49,12 @@ The row-by-row history is in the root `tracker.csv`; the Python comparison is in
 | TCP sockets | yes | `tcp_listen`, `tcp_connect`, `sock_send`, `sock_recv` |
 | UDP sockets | yes | `udp_bind`, `udp_send`, `udp_recv` |
 | WebSocket client and server | yes | `ws://` only, text messages; `wss://` (TLS) no |
-| TLS sockets | no | |
-| SQL database (`sqlite`) | no | key-value store `db_*` exists |
+| TLS sockets (`wss://`, TLS servers) | no | HTTPS client works through `curl` |
+| SQL database | yes | `sql_open` / `sql_exec` / `sql_query`: single-table SQL, no joins; file or memory |
 | Process control, environment | yes | |
-| Graphical windows (GUI) | no | |
+| Graphical windows (GUI) | yes | the browser is the window: `gui_show`, `gui_open`; no native widgets |
 | WebAssembly output | no | |
-| Matrix / numeric array library | no | lists of lists only |
+| Matrix library | yes | `Matrix`, det, inverse, solve; written in Killer (not fast for big sizes) |
 
 ## AI
 
@@ -74,14 +74,13 @@ The row-by-row history is in the root `tracker.csv`; the Python comparison is in
 | Formatter, linter, test runner, profiler, REPL | yes | `killer fmt`, `lint`, `test`, `profile`, `repl` |
 | Package manager | partial | local registry; no public registry |
 | Language server | partial | `killer lsp` |
-| Step debugger | no | the profiler covers timing |
+| Step debugger | yes | `killer debug`: step, next, finish, breakpoints, call stack; locals by slot |
 | Editor support | partial | VS Code grammar |
 | Installers and release workflow | partial | written, never run (a release tag is needed to test) |
 | CI on Linux, macOS, Windows | yes | |
 
-## Not built, in priority order for a decision
+## Not built
 
-1. `eval` and macros (security decision first).
-2. Private members.
-3. TLS (`wss://`, `https` servers), `sqlite`.
-4. GUI, WebAssembly, matrix library.
+1. TLS listeners and `wss://` (the HTTPS client works through `curl`).
+2. WebAssembly output.
+3. SQL joins and subqueries; native GUI widgets; hygienic macros.

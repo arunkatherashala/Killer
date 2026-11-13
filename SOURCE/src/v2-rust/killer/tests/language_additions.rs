@@ -476,6 +476,228 @@ println(x)"#, r#"Fraction(1, 2)"#),
     (r#"# Complex(1, 2)
 println(1)"#, r#"1"#),
 ];
+const MATRIX_LIBRARY: &[(&str, &str)] = &[
+    (r#"a = Matrix([[1, 2], [3, 4]])
+println(a * matrix_identity(2) == a)
+println(a + a, a - 1, 2 * a, a * 3, -a)"#, r#"true
+[[2, 4], [6, 8]] [[0, 1], [2, 3]] [[2, 4], [6, 8]] [[3, 6], [9, 12]] [[-1, -2], [-3, -4]]"#),
+    (r#"a = Matrix([[1, 2], [3, 4]])
+println(a.transpose(), a.det(), a.trace(), a[1][0], a.rows, a.cols)"#, r#"[[1, 3], [2, 4]] -2 5 3 2 2"#),
+    (r#"a = Matrix([[1, 2], [3, 4]])
+println((a * a.inverse()).close(matrix_identity(2)))"#, r#"true"#),
+    (r#"println(Matrix([[2, 1], [1, 3]]).solve([3, 5]))"#, r#"[0.8, 1.4]"#),
+    (r#"println(Matrix([[1, 2], [3, 4], [5, 6]]) * Matrix([[1, 0], [0, 1]]))"#, r#"[[1, 2], [3, 4], [5, 6]]"#),
+    (r#"println(matrix_zeros(2, 3), matrix_identity(2))"#, r#"[[0, 0, 0], [0, 0, 0]] [[1, 0], [0, 1]]"#),
+    (r#"println(Matrix([[1, 2], [2, 4]]).inverse())"#, r#"ERR"#),
+    (r#"println(Matrix([[1, 2]]) * Matrix([[1, 2]]))"#, r#"ERR"#),
+    (r#"println(Matrix([[1, 2], [3]]))"#, r#"ERR"#),
+    (r#"fn Matrix(x) {
+  return x + 1
+}
+println(Matrix(1))"#, r#"2"#),
+    (r#"println("Matrix([[1]])")"#, r#"Matrix([[1]])"#),
+];
+const SQL_DATABASE: &[(&str, &str)] = &[
+    (r#"db = sql_open(":memory:")
+sql_exec(db, "CREATE TABLE users (id INTEGER, name TEXT, age INTEGER)")
+println(sql_exec(db, "INSERT INTO users VALUES (?, ?, ?)", [1, "Ann", 30]))
+sql_exec(db, "INSERT INTO users VALUES (2, 'Bo', 20), (3, 'O''Neil', 41)")
+for r in sql_query(db, "SELECT name, age FROM users WHERE age > ? ORDER BY age DESC", [18]) {
+  println(r["name"], r["age"])
+}"#, r#"1
+O'Neil 41
+Ann 30
+Bo 20"#),
+    (r#"db = sql_open(":memory:")
+sql_exec(db, "CREATE TABLE s (k TEXT, v INTEGER)")
+sql_exec(db, "INSERT INTO s VALUES ('a', 1), ('a', 2), ('b', 5)")
+r = sql_query(db, "SELECT k, SUM(v) AS total FROM s GROUP BY k ORDER BY total DESC")
+println(r[0]["k"], r[0]["total"], r[1]["k"], r[1]["total"])
+println(sql_query(db, "SELECT COUNT(*) AS n FROM s")[0]["n"])"#, r#"b 5 a 3
+3"#),
+    (r#"db = sql_open(":memory:")
+sql_exec(db, "CREATE TABLE t (a, b)")
+sql_exec(db, "INSERT INTO t VALUES (1, 'x'), (2, 'y'), (3, NULL)")
+println(sql_exec(db, "UPDATE t SET a = a + 10 WHERE b = 'y'"))
+println(sql_exec(db, "DELETE FROM t WHERE b IS NULL"))
+println(len(sql_query(db, "SELECT * FROM t")), sql_query(db, "SELECT a FROM t WHERE b LIKE 'y%'")[0]["a"])"#, r#"1
+1
+2 12"#),
+    (r#"db = sql_open(":memory:")
+sql_exec(db, "CREATE TABLE t (n)")
+sql_exec(db, "INSERT INTO t VALUES (3), (1), (2), (5), (4)")
+rows = sql_query(db, "SELECT n FROM t ORDER BY n LIMIT 2 OFFSET 1")
+println(rows[0]["n"], rows[1]["n"], len(rows))"#, r#"2 3 2"#),
+    (r#"f = "killer_sql_roundtrip.db"
+d = sql_open(f)
+sql_exec(d, "CREATE TABLE IF NOT EXISTS t (a, b)")
+sql_exec(d, "INSERT INTO t VALUES (?, ?)", ["line1\nline2\ttab", 2.5])
+sql_close(d)
+d2 = sql_open(f)
+r = sql_query(d2, "SELECT * FROM t")[0]
+println(len(r["a"]), r["b"])
+sql_close(d2)
+file_delete(f)"#, r#"15 2.5"#),
+    (r#"db = sql_open(":memory:")
+sql_exec(db, "CREATE TABLE t (a)")
+sql_query(db, "SELECT nope FROM t")"#, r#"ERR"#),
+    (r#"db = sql_open(":memory:")
+sql_exec(db, "CREATE TABLE t (a)")
+sql_exec(db, "INSERT INTO t VALUES (1, 2)")"#, r#"ERR"#),
+    (r#"db = sql_open(":memory:")
+sql_exec(db, "CREATE TABLE t (a)")
+sql_exec(db, "INSERT INTO t VALUES (?)", [])"#, r#"ERR"#),
+    (r#"db = sql_open(":memory:")
+sql_exec(db, "SELECT 1 FROM t")"#, r#"ERR"#),
+    (r#"db = sql_open(":memory:")
+sql_exec(db, "CREATE TABLE t (a)")
+sql_exec(db, "INSERT INTO t VALUES ('a''b')")
+println(sql_query(db, "SELECT a FROM t")[0]["a"])"#, r#"a'b"#),
+];
+
+/// `Matrix`, `matrix_zeros`, `matrix_identity`: products, determinant, inverse, solve, size errors.
+#[test]
+fn matrix_library() {
+    check(MATRIX_LIBRARY);
+}
+
+/// `sql_open` / `sql_exec` / `sql_query`: tables, parameters, WHERE, GROUP BY, ORDER BY, LIMIT, files, errors.
+#[test]
+fn sql_database() {
+    check(SQL_DATABASE);
+}
+const DICT_PATTERNS: &[(&str, &str)] = &[
+    (r#"fn d(x) {
+  match x {
+    {"kind": "user", name, age: years} if years > 17 => { return name + " adult " + str(years) }
+    {"kind": "user", name} => { return name + " minor" }
+    {pos: [px, py]} => { return "at " + str(px) + "," + str(py) }
+    _ => { return "other" }
+  }
+}
+println(d({"kind": "user", "name": "Ann", "age": 20}))
+println(d({"kind": "user", "name": "Bo", "age": 5}))
+println(d({"pos": [1, 2]}))
+println(d({"zzz": 1}))
+println(d(3))"#, r#"Ann adult 20
+Bo minor
+at 1,2
+other
+other"#),
+    (r#"match [{"a": 1}, {"a": 2}] {
+  [{a: p}, {a: q}] => { println(p + q) }
+}"#, r#"3"#),
+];
+const PRIVATE_MEMBERS: &[(&str, &str)] = &[
+    (r#"class Account {
+  private balance, pin
+  fn init(b) {
+    this.balance = b
+    this.pin = 1
+  }
+  private fn audit() {
+    return "audit " + str(this.balance)
+  }
+  fn deposit(n) {
+    this.balance = this.balance + n
+    return this.audit()
+  }
+  fn same(other) {
+    return other.balance == this.balance
+  }
+}
+a = new Account(10)
+println(a.deposit(5))
+println(a.same(new Account(15)))"#, r#"audit 15
+true"#),
+    (r#"class A {
+  private x
+  fn init() { this.x = 1 }
+}
+a = new A()
+println(a.x)"#, r#"ERR"#),
+    (r#"class A {
+  private fn secret() { return 1 }
+  fn pub() { return this.secret() }
+}
+println((new A()).pub())
+println((new A()).secret())"#, r#"ERR"#),
+    (r#"class A {
+  private v
+  fn init() { this.v = 2 }
+}
+class B extends A {
+  fn peek() { return this.v }
+}
+println((new B()).peek())"#, r#"ERR"#),
+    (r#"class P {
+  private n
+  fn init() { this.n = 3 }
+  fn get_n() { return this.n }
+}
+class Q {
+  fn init() { this.n = 9 }
+  fn get_n() { return this.n }
+}
+println((new P()).get_n(), (new Q()).get_n())"#, r#"3 9"#),
+];
+const EVAL_EXEC: &[(&str, &str)] = &[
+    (r#"println(eval("1 + 2 * 3"))
+println(eval("x * 2 + len(items)", {"x": 5, "items": [1, 2, 3]}))"#, r#"7
+13"#),
+    (r#"ns = exec("a = 10\nfn twice(n) { return n * 2 }\nb = twice(a)")
+println(ns["a"], ns["b"])"#, r#"10 20"#),
+    (r#"try {
+  eval("1 +")
+} catch e {
+  println("caught")
+}"#, r#"caught"#),
+    (r#"println(eval("eval('7') + 1"))"#, r#"8"#),
+    (r#"x = 5
+println(eval("x"))"#, r#"ERR"#),
+    (r#"println(eval("f", {"f": 1}), eval("s", {"s": "a\"b"}))"#, r#"1 a"b"#),
+];
+const MACROS: &[(&str, &str)] = &[
+    (r#"macro square(x) { x * x }
+println(square!(3 + 1))
+println(square!(square!(2)))"#, r#"16
+16"#),
+    (r#"macro twice(s) { s
+s }
+n = 0
+twice!(n = n + 1)
+println(n)"#, r#"2"#),
+    (r#"macro unless(c, body) { if !(c) { body } }
+unless!(1 > 2, println("ok"))"#, r#"ok"#),
+    (r#"macro sq(x) { x * x }
+println("sq!(2)")
+println(sq!(5))"#, r#"sq!(2)
+25"#),
+];
+
+/// `{name, age: n, kind: "x"}` patterns, nested in lists and dicts.
+#[test]
+fn dict_patterns_in_match() {
+    check(DICT_PATTERNS);
+}
+
+/// `private fn` / `private a, b` are usable inside the class and a compile error outside it (also in subclasses).
+#[test]
+fn private_members() {
+    check(PRIVATE_MEMBERS);
+}
+
+/// `eval(code, vars)` and `exec(code, vars)` run text in a fresh VM and cannot see the caller's variables.
+#[test]
+fn eval_and_exec() {
+    check(EVAL_EXEC);
+}
+
+/// `macro name(args) { text }` and `name!(args)` expand at compile time, with expression arguments protected.
+#[test]
+fn macros() {
+    check(MACROS);
+}
 const LIST_PATTERNS: &[(&str, &str)] = &[
     (r#"fn d(x) {
   match x {

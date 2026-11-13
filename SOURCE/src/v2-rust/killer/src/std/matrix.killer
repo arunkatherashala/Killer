@@ -1,0 +1,332 @@
+# Matrices, written in Killer. Included automatically (never by hand) when a script calls `Matrix(`,
+# `matrix_zeros(` or `matrix_identity(` and does not define its own `Matrix`.
+#
+#   a = Matrix([[1, 2], [3, 4]])
+#   b = matrix_identity(2)
+#   println(a * b, a + a, a.transpose(), a.det(), a.inverse())
+#
+# Operators: + - (matrix or scalar), * (matrix product, or scalar), unary -, ==. `a[i]` is row i (a list) and
+# `a[i][j]` an element. Methods: rows, cols, get(i, j), set(i, j, v), row(i), col(j), transpose(), trace(), det(),
+# close(o, eps), inverse(), solve(b) (b a list or a one-column matrix), to_list(), map(f), sum(). Sizes are checked and a wrong
+# size or a singular matrix throws.
+
+class __Matrix {
+  fn init(data) {
+    if type(data) != "array" or len(data) == 0 {
+      throw "Matrix needs a non-empty list of rows, e.g. Matrix([[1, 2], [3, 4]])"
+    }
+    this.data = []
+    this.rows = len(data)
+    this.cols = -1
+    for r in data {
+      if type(r) != "array" {
+        throw "Matrix rows must be lists"
+      }
+      if this.cols == -1 {
+        this.cols = len(r)
+      }
+      if len(r) != this.cols or this.cols == 0 {
+        throw "Matrix rows must all have the same, non-zero length"
+      }
+      push(this.data, slice(r, 0))
+    }
+  }
+  fn __getitem__(i) {
+    return this.data[i]
+  }
+  fn __len__() {
+    return this.rows
+  }
+  fn get(i, j) {
+    return this.data[i][j]
+  }
+  fn set(i, j, v) {
+    this.data[i][j] = v
+    return this
+  }
+  fn row(i) {
+    return slice(this.data[i], 0)
+  }
+  fn col(j) {
+    out = []
+    for r in this.data {
+      push(out, r[j])
+    }
+    return out
+  }
+  fn to_list() {
+    out = []
+    for r in this.data {
+      push(out, slice(r, 0))
+    }
+    return out
+  }
+  fn map(f) {
+    out = []
+    for r in this.data {
+      row = []
+      for v in r {
+        push(row, f(v))
+      }
+      push(out, row)
+    }
+    return new __Matrix(out)
+  }
+  fn sum() {
+    s = 0
+    for r in this.data {
+      for v in r {
+        s = s + v
+      }
+    }
+    return s
+  }
+  fn _same(o, op) {
+    if type(o) == "number" or type(o) == "bigint" {
+      return null
+    }
+    if o.rows != this.rows or o.cols != this.cols {
+      throw "Matrix " + op + ": sizes differ (" + str(this.rows) + "x" + str(this.cols) + " and " + str(o.rows) + "x" + str(o.cols) + ")"
+    }
+    return o
+  }
+  fn __add__(o) {
+    m = this._same(o, "+")
+    out = []
+    for i in range(this.rows) {
+      row = []
+      for j in range(this.cols) {
+        push(row, this.data[i][j] + (m == null ? o : m.data[i][j]))
+      }
+      push(out, row)
+    }
+    return new __Matrix(out)
+  }
+  fn __sub__(o) {
+    m = this._same(o, "-")
+    out = []
+    for i in range(this.rows) {
+      row = []
+      for j in range(this.cols) {
+        push(row, this.data[i][j] - (m == null ? o : m.data[i][j]))
+      }
+      push(out, row)
+    }
+    return new __Matrix(out)
+  }
+  fn __neg__() {
+    return this.map(fn(v) { return 0 - v })
+  }
+  fn __radd__(o) {
+    return this.__add__(o)
+  }
+  fn __rmul__(o) {
+    return this.map(fn(v) { return o * v })
+  }
+  fn __mul__(o) {
+    if type(o) == "number" or type(o) == "bigint" {
+      return this.map(fn(v) { return v * o })
+    }
+    if this.cols != o.rows {
+      throw "Matrix *: " + str(this.rows) + "x" + str(this.cols) + " times " + str(o.rows) + "x" + str(o.cols) + " does not fit (inner sizes differ)"
+    }
+    out = []
+    for i in range(this.rows) {
+      row = []
+      for j in range(o.cols) {
+        s = 0
+        for k in range(this.cols) {
+          s = s + this.data[i][k] * o.data[k][j]
+        }
+        push(row, s)
+      }
+      push(out, row)
+    }
+    return new __Matrix(out)
+  }
+  fn __eq__(o) {
+    if type(o) == "number" or o.rows != this.rows or o.cols != this.cols {
+      return false
+    }
+    for i in range(this.rows) {
+      for j in range(this.cols) {
+        if this.data[i][j] != o.data[i][j] {
+          return false
+        }
+      }
+    }
+    return true
+  }
+  # True when every element is within eps of the other matrix's (float results such as inverse() are not exact).
+  fn close(o, eps = 1e-9) {
+    if o.rows != this.rows or o.cols != this.cols {
+      return false
+    }
+    for i in range(this.rows) {
+      for j in range(this.cols) {
+        if abs(this.data[i][j] - o.data[i][j]) > eps {
+          return false
+        }
+      }
+    }
+    return true
+  }
+  fn transpose() {
+    out = []
+    for j in range(this.cols) {
+      push(out, this.col(j))
+    }
+    return new __Matrix(out)
+  }
+  fn trace() {
+    if this.rows != this.cols {
+      throw "Matrix trace needs a square matrix"
+    }
+    s = 0
+    for i in range(this.rows) {
+      s = s + this.data[i][i]
+    }
+    return s
+  }
+  fn _square(who) {
+    if this.rows != this.cols {
+      throw "Matrix " + who + " needs a square matrix, got " + str(this.rows) + "x" + str(this.cols)
+    }
+  }
+  fn det() {
+    this._square("det")
+    n = this.rows
+    a = this.to_list()
+    d = 1
+    for c in range(n) {
+      p = c
+      for r in range(c + 1, n) {
+        if abs(a[r][c]) > abs(a[p][c]) {
+          p = r
+        }
+      }
+      if a[p][c] == 0 {
+        return 0
+      }
+      if p != c {
+        t = a[p]
+        a[p] = a[c]
+        a[c] = t
+        d = 0 - d
+      }
+      d = d * a[c][c]
+      for r in range(c + 1, n) {
+        f = a[r][c] / a[c][c]
+        for k in range(c, n) {
+          a[r][k] = a[r][k] - f * a[c][k]
+        }
+      }
+    }
+    return d
+  }
+  # Gauss-Jordan on [this | rhs]; returns the right-hand block.
+  fn _eliminate(rhs, who) {
+    this._square(who)
+    n = this.rows
+    k = rhs.cols
+    a = []
+    for i in range(n) {
+      row = slice(this.data[i], 0)
+      for j in range(k) {
+        push(row, rhs.data[i][j])
+      }
+      push(a, row)
+    }
+    for c in range(n) {
+      p = c
+      for r in range(c + 1, n) {
+        if abs(a[r][c]) > abs(a[p][c]) {
+          p = r
+        }
+      }
+      if abs(a[p][c]) < 1e-12 {
+        throw "Matrix " + who + ": the matrix is singular"
+      }
+      t = a[p]
+      a[p] = a[c]
+      a[c] = t
+      pv = a[c][c]
+      for j in range(n + k) {
+        a[c][j] = a[c][j] / pv
+      }
+      for r in range(n) {
+        if r != c {
+          f = a[r][c]
+          if f != 0 {
+            for j in range(n + k) {
+              a[r][j] = a[r][j] - f * a[c][j]
+            }
+          }
+        }
+      }
+    }
+    out = []
+    for i in range(n) {
+      push(out, slice(a[i], n))
+    }
+    return new __Matrix(out)
+  }
+  fn inverse() {
+    return this._eliminate(matrix_identity(this.rows), "inverse")
+  }
+  fn solve(b) {
+    if type(b) == "array" {
+      col = []
+      for v in b {
+        push(col, [v])
+      }
+      b = new __Matrix(col)
+    }
+    if b.rows != this.rows {
+      throw "Matrix solve: the right-hand side needs " + str(this.rows) + " rows"
+    }
+    r = this._eliminate(b, "solve")
+    if b.cols == 1 {
+      return r.col(0)
+    }
+    return r
+  }
+  fn toString() {
+    lines = []
+    for r in this.data {
+      cells = []
+      for v in r {
+        push(cells, str(v))
+      }
+      push(lines, "[" + join(cells, ", ") + "]")
+    }
+    return "[" + join(lines, ", ") + "]"
+  }
+}
+
+fn Matrix(data) {
+  return new __Matrix(data)
+}
+
+fn matrix_zeros(r, c = -1) {
+  if c == -1 {
+    c = r
+  }
+  out = []
+  for i in range(r) {
+    row = []
+    for j in range(c) {
+      push(row, 0)
+    }
+    push(out, row)
+  }
+  return new __Matrix(out)
+}
+
+fn matrix_identity(n) {
+  m = matrix_zeros(n)
+  for i in range(n) {
+    m.data[i][i] = 1
+  }
+  return m
+}

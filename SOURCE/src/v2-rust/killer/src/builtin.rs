@@ -1312,6 +1312,15 @@ impl BuiltinFunctions {
                 if let Some(result) = crate::lang_builtins::call(name, args) {
                     return result;
                 }
+                if let Some(result) = crate::gui_builtins::call(name, args) {
+                    return result;
+                }
+                if let Some(result) = crate::sql_engine::call(name, args) {
+                    return result;
+                }
+                if let Some(result) = crate::eval_builtins::call(name, args) {
+                    return result;
+                }
                 if let Some(result) = crate::net_sock::call(name, args) {
                     return result;
                 }

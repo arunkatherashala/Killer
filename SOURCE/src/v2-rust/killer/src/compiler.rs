@@ -368,6 +368,8 @@ pub fn compile_killer_subset(source: &str) -> Result<Program, VmError> {
     let imported = crate::testfw::lower(&imported);
     // `const NAME = value`: assigning it again is a compile error; the word `const` is removed (same line count)
     let imported = crate::controlflow::check_consts(&imported).map_err(|e| remap_error(e, &map))?;
+    // `private fn name()` / `private field` inside a class: mangled inside the class, an error elsewhere (same line count)
+    let imported = crate::controlflow::check_private(&imported).map_err(|e| remap_error(e, &map))?;
     let checked = crate::typecheck::process(&imported).map_err(|e| remap_error(e, &map))?;
     let (lowered, pass) = crate::controlflow::lower_mapped(&checked);
     let map = map.compose(&pass);
@@ -6914,6 +6916,7 @@ const BUILTINS: &[&str] = &[
     "llm_chat", "llm_ask", "llm_info", "llm_complete", "llm_embed",
     "ffi_open", "ffi_call", "ffi_close", "ffi_alloc", "ffi_free", "ffi_poke", "ffi_peek",
     "hex", "bin", "oct", "uuid", "dict_merge",
+    "eval", "exec", "gui_open", "sql_open", "sql_exec", "sql_query", "sql_close",
     "tcp_listen", "tcp_accept", "tcp_connect", "sock_send", "sock_recv", "sock_recv_line", "sock_addr", "sock_peer",
     "sock_close", "udp_bind", "udp_send", "udp_recv", "ws_connect", "ws_accept", "ws_send", "ws_recv", "ws_close",
     "ord", "chr", "pad_left", "pad_right", "repeat", "strip", "lstrip", "rstrip", "startsWith", "endsWith",

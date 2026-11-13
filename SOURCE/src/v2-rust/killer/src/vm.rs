@@ -355,6 +355,8 @@ pub struct VirtualMachine {
     /// Profiling on/off: the only cost when off is one branch per instruction (see `vm_profile`).
     pub(crate) profiling: bool,
     pub(crate) profiler: Option<Box<crate::vm_profile::Profiler>>,
+    /// Step debugger session (see `vm_debug`); needs `profiling` on so every line is visited.
+    pub(crate) debugger: Option<Box<crate::vm_debug::DebugSession>>,
     /// Generators currently being resumed, innermost last.
     gen_ctx: Vec<GenCtx>,
     /// Set by `Yield` for the `gen_resume` that is waiting for it: (value, saved frame).
@@ -448,6 +450,7 @@ impl Default for VirtualMachine {
             generator_manager: GeneratorManager::default(),
             profiling: false,
             profiler: None,
+            debugger: None,
             gen_ctx: Vec::new(),
             gen_yielded: None,
             yielded_values: Vec::new(),
@@ -585,6 +588,7 @@ impl VirtualMachine {
             generator_manager: GeneratorManager::default(),
             profiling: false,
             profiler: None,
+            debugger: None,
             gen_ctx: Vec::new(),
             gen_yielded: None,
             yielded_values: Vec::new(),
@@ -1063,6 +1067,9 @@ impl VirtualMachine {
             if self.profiling {
                 if let Some(p) = self.profiler.as_mut() {
                     p.step(self.ip, self.call_stack.len());
+                }
+                if self.debugger.is_some() {
+                    crate::vm_debug::before_instruction(self, program)?;
                 }
             }
 
@@ -6475,6 +6482,32 @@ impl VirtualMachine {
         self.execution_budget = saved.0;
         self.exec_start = saved.1;
         r
+    }
+
+    pub(crate) fn attach_debugger(&mut self, session: crate::vm_debug::DebugSession) {
+        self.debugger = Some(Box::new(session));
+        self.profiling = true;
+    }
+
+    /// Values of the current frame's local slots (the debugger shows them by number).
+    pub(crate) fn debug_locals(&self) -> Vec<(String, Value)> {
+        let mut out: Vec<(String, Value)> = Vec::new();
+        // named variables of the innermost scope (parameters and locals of a function call), then numbered slots
+        if self.scopes.len() > 1 {
+            if let Some(scope) = self.scopes.last() {
+                let mut named: Vec<(String, Value)> = scope.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+                named.sort_by(|a, b| a.0.cmp(&b.0));
+                out.extend(named);
+            }
+        }
+        if let Some(frame) = self.locals_stack.last() {
+            for (i, v) in frame.iter().enumerate() {
+                if !matches!(v, Value::Unbound) {
+                    out.push((format!("slot {}", i), v.clone()));
+                }
+            }
+        }
+        out
     }
 
     pub(crate) fn call_stack_depth(&self) -> usize {

@@ -19,6 +19,7 @@
 //! Strings and comments are never touched.
 
 use crate::lambda::mask;
+use std::collections::HashMap;
 
 /// A byte of an identifier. Bytes of a multi-byte UTF-8 character (every one is >= 0x80) count, so names such as
 /// `naïve` or `π` are one word; strings and comments are masked before any scanning.
@@ -26,7 +27,7 @@ fn is_word(c: u8) -> bool {
     c.is_ascii_alphanumeric() || c == b'_' || c >= 0x80
 }
 
-fn is_ident(s: &str) -> bool {
+pub(crate) fn is_ident(s: &str) -> bool {
     let mut chars = s.chars();
     match chars.next() {
         Some(c) if c.is_alphabetic() || c == '_' => chars.all(|c| c.is_alphanumeric() || c == '_'),
@@ -175,6 +176,17 @@ pub fn lower(src: &str) -> String {
 
 /// Like [`lower`], also returning for every output line the index of the input line it came from.
 pub fn lower_mapped(src: &str) -> (String, Vec<usize>) {
+    match expand_macros(src) {
+        Some((text, macro_map)) => {
+            let (out, map) = lower_after_macros(&text);
+            let composed = map.iter().map(|&l| macro_map.get(l).copied().unwrap_or(0)).collect();
+            (out, composed)
+        }
+        None => lower_after_macros(src),
+    }
+}
+
+fn lower_after_macros(src: &str) -> (String, Vec<usize>) {
     match lower_labeled_do_whiles(src) {
         Some((pre, pre_map)) => {
             let (out, map) = lower_mapped_inner(&pre);
@@ -441,7 +453,7 @@ fn lower_match(src: &str, m: &[u8], at: usize, counter: &mut Counter) -> Option<
         let mut list_binds: Vec<(String, String)> = Vec::new();
         let (mut cond, bind) = if pattern == "_" {
             ("true".to_string(), None)
-        } else if let Some((c, b)) = list_pattern(&pattern, &var) {
+        } else if let Some((c, b)) = list_pattern(&pattern, &var).or_else(|| dict_pattern(&pattern, &var)) {
             list_binds = b;
             (c, None)
         } else if is_ident(&pattern) && !matches!(pattern.as_str(), "true" | "false" | "null" | "nil") {
@@ -492,6 +504,79 @@ fn lower_match(src: &str, m: &[u8], at: usize, counter: &mut Counter) -> Option<
     Some((out.trim_end_matches('\n').to_string(), close + 1))
 }
 
+/// Split `a, b: c, "k": [x]` at top-level commas.
+fn split_top_commas(inner: &str) -> Vec<String> {
+    let m = mask(inner);
+    let mut items: Vec<String> = Vec::new();
+    let (mut depth, mut last) = (0i32, 0usize);
+    for i in 0..inner.len() {
+        match m[i] {
+            b'(' | b'[' | b'{' => depth += 1,
+            b')' | b']' | b'}' => depth -= 1,
+            b',' if depth == 0 => {
+                items.push(inner[last..i].trim().to_string());
+                last = i + 1;
+            }
+            _ => {}
+        }
+    }
+    let tail = inner[last..].trim();
+    if !tail.is_empty() || !items.is_empty() {
+        items.push(tail.to_string());
+    }
+    items
+}
+
+/// `{name, age: years, "kind": "user", pos: [x, y]}` -> (condition, bindings) over `var`. Every key must be present;
+/// a bare key binds a variable of that name, `key: name` binds `name`, `key: literal` must be equal, and a nested
+/// list or dict pattern may follow the colon. Extra keys in the value are ignored.
+fn dict_pattern(pattern: &str, var: &str) -> Option<(String, Vec<(String, String)>)> {
+    let p = pattern.trim();
+    if !(p.starts_with('{') && p.ends_with('}')) || p.len() < 3 {
+        return None;
+    }
+    let mut conds = vec![format!("type_of({var}) == \"dict\"")];
+    let mut binds = Vec::new();
+    for item in split_top_commas(&p[1..p.len() - 1]) {
+        if item.is_empty() {
+            return None;
+        }
+        let m = mask(&item);
+        let colon = m.iter().position(|&c| c == b':');
+        let (key, sub) = match colon {
+            Some(i) => (item[..i].trim().to_string(), Some(item[i + 1..].trim().to_string())),
+            None => (item.trim().to_string(), None),
+        };
+        let key_expr = if is_ident(&key) { format!("\"{key}\"") } else if key.starts_with('"') && key.ends_with('"') && key.len() >= 2 { key.clone() } else { return None };
+        conds.push(format!("({key_expr} in {var})"));
+        let slot = format!("{var}[{key_expr}]");
+        match sub {
+            None => {
+                if !is_ident(&key) {
+                    return None;
+                }
+                binds.push((key.clone(), slot));
+            }
+            Some(sub) => {
+                if sub.is_empty() {
+                    return None;
+                }
+                if sub.starts_with('[') || sub.starts_with('{') {
+                    let (c, b) = list_pattern(&sub, &slot).or_else(|| dict_pattern(&sub, &slot))?;
+                    conds.push(c);
+                    binds.extend(b);
+                } else if sub == "_" {
+                } else if is_ident(&sub) && !matches!(sub.as_str(), "true" | "false" | "null" | "nil") {
+                    binds.push((sub, slot));
+                } else {
+                    conds.push(format!("{slot} == {sub}"));
+                }
+            }
+        }
+    }
+    Some((conds.join(" && "), binds))
+}
+
 /// `[a, 1, _]` / `[head, ...rest]` / `[]` -> (condition, bindings) over the matched value `var`.
 /// A bare name binds, `_` ignores, anything else must equal the item. Not a list pattern -> None.
 fn list_pattern(pattern: &str, var: &str) -> Option<(String, Vec<(String, String)>)> {
@@ -538,8 +623,9 @@ fn list_pattern(pattern: &str, var: &str) -> Option<(String, Vec<(String, String
         if it == "_" {
             continue;
         }
-        if it.starts_with('[') {
-            if let Some((c, b)) = list_pattern(it, &format!("{var}[{i}]")) {
+        if it.starts_with('[') || it.starts_with('{') {
+            let sub = format!("{var}[{i}]");
+            if let Some((c, b)) = list_pattern(it, &sub).or_else(|| dict_pattern(it, &sub)) {
                 // the length is tested before the item is indexed, so a short list never reads past its end
                 conds.push(c);
                 binds.extend(b);
@@ -1573,5 +1659,311 @@ mod tests {
         let out = lower("match a {\n  1 => {\n    do {\n      n = n + 1\n    } while n < 2\n  }\n  _ => println(\"match x { 1 => 2 }\")\n}\n");
         assert!(out.contains("while true"), "{out}");
         assert!(out.contains("\"match x { 1 => 2 }\""), "{out}");
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// private members
+
+/// `private fn name(...)` and `private a, b` (a list of field names) inside a class make those members private to
+/// that class: inside the class body every `.name` / `fn name` becomes a mangled name, so `obj.name` anywhere else
+/// is a compile error (a subclass counts as "elsewhere"). Line numbers are unchanged. Returns `src` untouched when
+/// there is no `private`.
+pub fn check_private(src: &str) -> Result<String, crate::error::VmError> {
+    if !src.contains("private") {
+        return Ok(src.to_string());
+    }
+    let m = mask(src);
+    let line_of = |pos: usize| src[..pos.min(src.len())].matches('\n').count() + 1;
+    let fail = |pos: usize, msg: String| Err(crate::error::VmError::parse_error_simple(format!("Line {}: {}", line_of(pos), msg)));
+
+    // class bodies: (name, open brace, close brace)
+    let mut classes: Vec<(String, usize, usize)> = Vec::new();
+    for i in 0..m.len() {
+        if m[i] == b'c' && keyword_at(&m, i, "class") && at_statement_start(&m, i) {
+            let p = skip_blanks(&m, i + 5);
+            if let Some((name, q)) = read_ident(src, p) {
+                if let Some(open) = find_block_open(&m, q) {
+                    if let Some(close) = matching(&m, open) {
+                        classes.push((name.to_string(), open, close));
+                    }
+                }
+            }
+        }
+    }
+    // edits: (start, end, replacement); private names per class index
+    let mut edits: Vec<(usize, usize, String)> = Vec::new();
+    let mut privs: Vec<(usize, String)> = Vec::new();
+    for (ci, (_, open, close)) in classes.iter().enumerate() {
+        let mut i = *open + 1;
+        while i < *close {
+            if m[i] == b'p' && keyword_at(&m, i, "private") && at_statement_start(&m, i) {
+                let after = skip_blanks(&m, i + 7);
+                if after == i + 7 {
+                    i += 1;
+                    continue;
+                }
+                if keyword_at(&m, after, "fn") {
+                    let q = skip_blanks(&m, after + 2);
+                    match read_ident(src, q) {
+                        Some((name, _)) => {
+                            privs.push((ci, name.to_string()));
+                            edits.push((i, after, String::new()));
+                        }
+                        None => return fail(i, "private fn needs a name".to_string()),
+                    }
+                    i = after;
+                    continue;
+                }
+                let end = statement_end(&m, after);
+                let mut names = Vec::new();
+                for part in src[after..end].split(',') {
+                    let n = part.trim();
+                    if !is_ident(n) {
+                        return fail(i, format!("private expects `fn name(...)` or a list of field names, got `{}`", src[i..end].trim()));
+                    }
+                    names.push(n.to_string());
+                }
+                for n in names {
+                    privs.push((ci, n));
+                }
+                edits.push((i, end, String::new())); // the declaration line becomes empty
+                i = end;
+                continue;
+            }
+            i += 1;
+        }
+    }
+    // rename inside the declaring class body
+    for (ci, name) in &privs {
+        let (cname, open, close) = &classes[*ci];
+        let mangled = format!("_priv_{}_{}", cname, name);
+        let mut p = *open + 1;
+        while p + name.len() <= *close {
+            if m[p..].starts_with(name.as_bytes())
+                && (p + name.len() >= m.len() || !is_word(m[p + name.len()]))
+                && p > 0
+                && (m[p - 1] == b'.' || (p >= 3 && &m[p - 3..p] == b"fn "))
+                && !edits.iter().any(|(s, e, _)| p >= *s && p < *e)
+            {
+                edits.push((p, p + name.len(), mangled.clone()));
+                p += name.len();
+            } else {
+                p += 1;
+            }
+        }
+    }
+    // use outside the class
+    for (ci, name) in &privs {
+        let (cname, open, close) = &classes[*ci];
+        let defined_elsewhere = {
+            let needle = format!("fn {}", name);
+            let this_dot = format!("this.{}", name);
+            (0..m.len()).any(|p| {
+                (p < *open || p > *close)
+                    && ((m[p..].starts_with(needle.as_bytes()) && !is_word(*m.get(p + needle.len()).unwrap_or(&b' ')))
+                        // another class's own field: `this.name` inside a different class body
+                        || (m[p..].starts_with(this_dot.as_bytes())
+                            && !is_word(*m.get(p + this_dot.len()).unwrap_or(&b' '))
+                            && {
+                                // an assignment (`this.name = ...`), not a read
+                                let a = skip_blanks(&m, p + this_dot.len());
+                                m.get(a) == Some(&b'=') && m.get(a + 1) != Some(&b'=')
+                            }
+                            && classes.iter().any(|(_, o, c)| p > *o && p < *c)))
+            })
+        };
+        if defined_elsewhere {
+            continue;
+        }
+        let mut p = 0usize;
+        while p + name.len() < m.len() {
+            if (p < *open || p > *close)
+                && p > 0
+                && m[p - 1] == b'.'
+                && m[p..].starts_with(name.as_bytes())
+                && !is_word(*m.get(p + name.len()).unwrap_or(&b' '))
+            {
+                return fail(p, format!("`{}` is private to class {} and cannot be used outside it", name, cname));
+            }
+            p += 1;
+        }
+    }
+    edits.sort_by_key(|e| e.0);
+    let mut out = String::with_capacity(src.len());
+    let mut last = 0usize;
+    for (s, e, r) in edits {
+        if s < last {
+            continue;
+        }
+        out.push_str(&src[last..s]);
+        out.push_str(&r);
+        last = e;
+    }
+    out.push_str(&src[last..]);
+    Ok(out)
+}
+
+// ---------------------------------------------------------------------------------------------
+// macros
+
+struct Macro {
+    params: Vec<String>,
+    body: String,
+}
+
+/// `macro name(a, b) { text }` defines a text template; `name!(x, y)` is replaced by the text with each parameter
+/// word replaced by the argument text (not evaluated first, so a macro can wrap code: `macro twice(s) { s; s }`).
+/// A one-line body used inside an expression is wrapped in parentheses. There is no hygiene: names in the body are
+/// the caller's names. Expansion is limited to 16 levels (a macro that expands to itself stops there).
+fn expand_macros(src: &str) -> Option<(String, Vec<usize>)> {
+    if !src.contains("macro") {
+        return None;
+    }
+    let m = mask(src);
+    let mut macros: HashMap<String, Macro> = HashMap::new();
+    let mut defs: Vec<(usize, usize)> = Vec::new();
+    for i in 0..m.len() {
+        if m[i] == b'm' && keyword_at(&m, i, "macro") && at_statement_start(&m, i) {
+            let p = skip_blanks(&m, i + 5);
+            if p == i + 5 {
+                continue;
+            }
+            let (name, q) = match read_ident(src, p) {
+                Some(x) => x,
+                None => continue,
+            };
+            let q = skip_blanks(&m, q);
+            if q >= m.len() || m[q] != b'(' {
+                continue;
+            }
+            let (close_p, open_b) = match matching(&m, q).map(|c| (c, skip_blanks(&m, c + 1))) {
+                Some((c, b)) if b < m.len() && m[b] == b'{' => (c, b),
+                _ => continue,
+            };
+            let close_b = match matching(&m, open_b) {
+                Some(c) => c,
+                None => continue,
+            };
+            let params: Vec<String> = src[q + 1..close_p].split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+            if !params.iter().all(|p| is_ident(p)) {
+                continue;
+            }
+            macros.insert(name.to_string(), Macro { params, body: src[open_b + 1..close_b].trim().to_string() });
+            defs.push((i, close_b + 1));
+        }
+    }
+    if macros.is_empty() {
+        return None;
+    }
+    let mut out = crate::sourcemap::Rewriter::new(src);
+    let mut copied = 0usize;
+    let mut i = 0usize;
+    while i < src.len() {
+        if !src.is_char_boundary(i) {
+            i += 1;
+            continue;
+        }
+        if let Some(&(s, e)) = defs.iter().find(|d| d.0 == i) {
+            out.copy(copied, s);
+            out.replace(s, e, &"\n".repeat(src[s..e].matches('\n').count())); // keep the line count
+            copied = e;
+            i = e;
+            continue;
+        }
+        if is_word(m[i]) && (i == 0 || !is_word(m[i - 1])) {
+            let mut j = i;
+            while j < m.len() && is_word(m[j]) {
+                j += 1;
+            }
+            if m.get(j) == Some(&b'!') && m.get(j + 1) == Some(&b'(') && macros.contains_key(&src[i..j]) {
+                if let Some(close) = matching(&m, j + 1) {
+                    let args = split_top_commas(&src[j + 2..close]);
+                    let indent = indent_of(src, i);
+                    let expanded = expand_one(&macros[&src[i..j]], &args, &macros, &indent, at_statement_start(&m, i), 0);
+                    out.copy(copied, i);
+                    out.replace(i, close + 1, &expanded);
+                    copied = close + 1;
+                    i = close + 1;
+                    continue;
+                }
+            }
+            i = j;
+            continue;
+        }
+        i += 1;
+    }
+    out.copy(copied, src.len());
+    Some(out.finish())
+}
+
+/// An argument that is an expression is wrapped in parentheses, so `square!(3 + 1)` means `(3 + 1) * (3 + 1)`;
+/// a statement (an assignment, a block, several lines) is passed through unchanged.
+fn protect_arg(arg: &str) -> String {
+    let a = arg.trim();
+    let m = mask(a);
+    let simple = a.is_empty() || m.iter().all(|&c| is_word(c) || c == b'.' || c == b'"' || c == b'\'');
+    let mut assigns = false;
+    for i in 0..m.len() {
+        if m[i] == b'=' {
+            let prev = if i > 0 { m[i - 1] } else { b' ' };
+            let next = m.get(i + 1).copied().unwrap_or(b' ');
+            if next != b'=' && !matches!(prev, b'=' | b'!' | b'<' | b'>') && next != b'>' {
+                assigns = true;
+            }
+        }
+    }
+    let blocky = m.iter().any(|&c| matches!(c, b'{' | b'\n' | b';'));
+    if simple || assigns || blocky || (a.starts_with('(') && matching(&m, 0) == Some(a.len() - 1)) {
+        a.to_string()
+    } else {
+        format!("({a})")
+    }
+}
+
+fn expand_one(mac: &Macro, args: &[String], all: &HashMap<String, Macro>, indent: &str, statement: bool, depth: u32) -> String {
+    let mut text = mac.body.clone();
+    for (k, p) in mac.params.iter().enumerate() {
+        let arg = args.get(k).map(|s| s.as_str()).unwrap_or("null");
+        text = replace_word(&text, p, &protect_arg(arg));
+    }
+    if depth < 16 {
+        // expand macros used inside the expansion
+        let m = mask(&text);
+        let mut out = String::new();
+        let mut last = 0usize;
+        let mut i = 0usize;
+        while i < text.len() {
+            if text.is_char_boundary(i) && is_word(m[i]) && (i == 0 || !is_word(m[i - 1])) {
+                let mut j = i;
+                while j < m.len() && is_word(m[j]) {
+                    j += 1;
+                }
+                if m.get(j) == Some(&b'!') && m.get(j + 1) == Some(&b'(') {
+                    if let (Some(inner), Some(close)) = (all.get(&text[i..j]), matching(&m, j + 1)) {
+                        let a = split_top_commas(&text[j + 2..close]);
+                        out.push_str(&text[last..i]);
+                        out.push_str(&expand_one(inner, &a, all, indent, at_statement_start(&m, i), depth + 1));
+                        last = close + 1;
+                        i = close + 1;
+                        continue;
+                    }
+                }
+                i = j;
+                continue;
+            }
+            i += 1;
+        }
+        out.push_str(&text[last..]);
+        text = out;
+    }
+    if statement {
+        // several statements: one per line at the caller's indentation (`;` separates statements in the body)
+        let parts: Vec<String> = text.lines().map(|l| l.trim().to_string()).filter(|l| !l.is_empty()).collect();
+        parts.join(&format!("\n{indent}"))
+    } else if text.contains('\n') {
+        text
+    } else {
+        format!("({})", text.trim())
     }
 }

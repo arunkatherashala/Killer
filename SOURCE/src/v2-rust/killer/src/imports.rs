@@ -233,6 +233,14 @@ const FILE_PRELUDE_NAME: &str = "<std>/file.killer";
 const NUMBERS_PRELUDE: &str = include_str!("std/numbers.killer");
 const NUMBERS_PRELUDE_NAME: &str = "<std>/numbers.killer";
 
+/// `Matrix(rows)`, `matrix_zeros(r, c)` and `matrix_identity(n)`, written in Killer.
+const MATRIX_PRELUDE: &str = include_str!("std/matrix.killer");
+const MATRIX_PRELUDE_NAME: &str = "<std>/matrix.killer";
+
+/// `gui_show(title, html, handlers)`: a window made from a served page plus the system browser.
+const GUI_PRELUDE: &str = include_str!("std/gui.killer");
+const GUI_PRELUDE_NAME: &str = "<std>/gui.killer";
+
 /// True when `source` calls `name(` as a plain function (not `x.name(`, `fn name(`, a longer word, or text inside a
 /// string or comment).
 fn calls_plain_function(masked: &str, name: &str) -> bool {
@@ -254,6 +262,29 @@ fn needs_numbers_prelude(source: &str) -> bool {
         }
     }
     calls_plain_function(&text, "Fraction") || calls_plain_function(&text, "Complex")
+}
+
+/// True when the script uses `Matrix(`, `matrix_zeros(` or `matrix_identity(` and defines no `Matrix` of its own.
+fn needs_matrix_prelude(source: &str) -> bool {
+    if !(source.contains("Matrix(") || source.contains("matrix_zeros(") || source.contains("matrix_identity(")) {
+        return false;
+    }
+    let m = crate::lambda::mask(source);
+    let text = String::from_utf8_lossy(&m);
+    if text.contains("fn Matrix") || text.contains("class Matrix") || text.contains("fn matrix_zeros") || text.contains("fn matrix_identity") {
+        return false;
+    }
+    calls_plain_function(&text, "Matrix") || calls_plain_function(&text, "matrix_zeros") || calls_plain_function(&text, "matrix_identity")
+}
+
+/// True when the script calls `gui_show(` and defines no `gui_show` of its own.
+fn needs_gui_prelude(source: &str) -> bool {
+    if !source.contains("gui_show(") {
+        return false;
+    }
+    let m = crate::lambda::mask(source);
+    let text = String::from_utf8_lossy(&m);
+    !text.contains("fn gui_show") && calls_plain_function(&text, "gui_show")
 }
 
 /// True when `source` calls the builtin-style `open(...)` (not a method `x.open(`, a longer name such as
@@ -278,7 +309,9 @@ pub fn resolve_mapped(source: &str) -> Result<(String, SourceMap), String> {
     let main = main_file();
     let prelude = needs_file_prelude(source);
     let numbers = needs_numbers_prelude(source);
-    if !prelude && !numbers && !source.contains("import") {
+    let matrix = needs_matrix_prelude(source);
+    let gui = needs_gui_prelude(source);
+    if !prelude && !numbers && !matrix && !gui && !source.contains("import") {
         return Ok((source.to_string(), SourceMap::identity(&main, source)));
     }
     let dir = base_dir();
@@ -305,6 +338,26 @@ pub fn resolve_mapped(source: &str) -> Result<(String, SourceMap), String> {
         if !out.ends_with('\n') {
             out.push('\n');
             ex.locs.push(Loc { file: idx, line: NUMBERS_PRELUDE.split('\n').count() as u32 });
+        }
+    }
+    if matrix {
+        ex.files.push(MATRIX_PRELUDE_NAME.to_string());
+        ex.sources.push(MATRIX_PRELUDE.to_string());
+        let idx = (ex.files.len() - 1) as u32;
+        ex.expand(MATRIX_PRELUDE, idx, &dir, 1, &mut out)?;
+        if !out.ends_with('\n') {
+            out.push('\n');
+            ex.locs.push(Loc { file: idx, line: MATRIX_PRELUDE.split('\n').count() as u32 });
+        }
+    }
+    if gui {
+        ex.files.push(GUI_PRELUDE_NAME.to_string());
+        ex.sources.push(GUI_PRELUDE.to_string());
+        let idx = (ex.files.len() - 1) as u32;
+        ex.expand(GUI_PRELUDE, idx, &dir, 1, &mut out)?;
+        if !out.ends_with('\n') {
+            out.push('\n');
+            ex.locs.push(Loc { file: idx, line: GUI_PRELUDE.split('\n').count() as u32 });
         }
     }
     ex.expand(source, 0, &dir, 0, &mut out)?;
