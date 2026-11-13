@@ -366,6 +366,8 @@ pub fn compile_killer_subset(source: &str) -> Result<Program, VmError> {
     }
     // `test "name" { }` blocks become functions (same line count, so `map` is unchanged)
     let imported = crate::testfw::lower(&imported);
+    // `const NAME = value`: assigning it again is a compile error; the word `const` is removed (same line count)
+    let imported = crate::controlflow::check_consts(&imported).map_err(|e| remap_error(e, &map))?;
     let checked = crate::typecheck::process(&imported).map_err(|e| remap_error(e, &map))?;
     let (lowered, pass) = crate::controlflow::lower_mapped(&checked);
     let map = map.compose(&pass);
@@ -3959,6 +3961,39 @@ fn compile_expr_str(
         }
     }
 
+    // `{...a, "k": 1, ...b}` merges dicts left to right (a later key wins); `{1, 2, 3}` (no colons at all)
+    // is a set
+    if expr.starts_with('{') && expr.ends_with('}') && expr.len() >= 2 {
+        let inner = expr[1..expr.len() - 1].trim();
+        if let Some(parts) = split_arguments(inner) {
+            if parts.iter().any(|p| p.trim_start().starts_with("...")) {
+                let mut text = String::from("dict_merge({}");
+                let mut run: Vec<String> = Vec::new();
+                for part in &parts {
+                    let p = part.trim();
+                    if let Some(rest) = p.strip_prefix("...") {
+                        if !run.is_empty() {
+                            text.push_str(&format!(", {{{}}}", run.join(", ")));
+                            run.clear();
+                        }
+                        text.push_str(&format!(", {}", rest.trim()));
+                    } else {
+                        run.push(p.to_string());
+                    }
+                }
+                if !run.is_empty() {
+                    text.push_str(&format!(", {{{}}}", run.join(", ")));
+                }
+                text.push(')');
+                return compile_expr_str(&text, line_no, state, context);
+            }
+            if !parts.is_empty() && parts.iter().all(|p| find_top_level_colon(p).is_none()) {
+                let text = format!("set_from_array([{}])", parts.iter().map(|p| p.trim()).collect::<Vec<_>>().join(", "));
+                return compile_expr_str(&text, line_no, state, context);
+            }
+        }
+    }
+
     // Dict literal: {} or { k: v, ... } (keys/values compiled like AST Expr::Dict)
     if expr.starts_with('{') && expr.ends_with('}') && expr.len() >= 2 {
         let inner = expr[1..expr.len() - 1].trim();
@@ -4324,6 +4359,28 @@ fn compile_expr_str(
             return Ok(());
         }
         if let Some(elems) = split_arguments(inner) {
+            // `[...a, 3, ...b]`: each spread is a list that is concatenated, the plain items are grouped
+            if elems.iter().any(|e| e.trim_start().starts_with("...")) {
+                let mut text = String::from("([]");
+                let mut run: Vec<String> = Vec::new();
+                for elem in &elems {
+                    let e = elem.trim();
+                    if let Some(rest) = e.strip_prefix("...") {
+                        if !run.is_empty() {
+                            text.push_str(&format!(" + [{}]", run.join(", ")));
+                            run.clear();
+                        }
+                        text.push_str(&format!(" + ({})", rest.trim()));
+                    } else {
+                        run.push(e.to_string());
+                    }
+                }
+                if !run.is_empty() {
+                    text.push_str(&format!(" + [{}]", run.join(", ")));
+                }
+                text.push(')');
+                return compile_expr_str(&text, line_no, state, context);
+            }
             for elem in &elems {
                 compile_expr_str(elem.trim(), line_no, state, context)?;
             }
@@ -6856,7 +6913,7 @@ const BUILTINS: &[&str] = &[
     // Native GGUF inference
     "llm_chat", "llm_ask", "llm_info", "llm_complete", "llm_embed",
     "ffi_open", "ffi_call", "ffi_close", "ffi_alloc", "ffi_free", "ffi_poke", "ffi_peek",
-    "hex", "bin", "oct", "uuid",
+    "hex", "bin", "oct", "uuid", "dict_merge",
     "ord", "chr", "pad_left", "pad_right", "repeat", "strip", "lstrip", "rstrip", "startsWith", "endsWith",
     "base64_encode", "base64_decode", "hmac_sha256", "float", "bool", "log", "log2", "log10", "exp", "cbrt",
     "trunc", "sign", "atan2", "hypot", "asin", "acos", "atan", "sinh", "cosh", "tanh", "degrees", "radians",
@@ -8101,9 +8158,9 @@ fn is_valid_name(name: &str) -> bool {
         return false;
     };
 
-    if !(first.is_ascii_alphabetic() || first == '_') {
+    if !(first.is_alphabetic() || first == '_') {
         return false;
     }
 
-    chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+    chars.all(|c| c.is_alphanumeric() || c == '_')
 }

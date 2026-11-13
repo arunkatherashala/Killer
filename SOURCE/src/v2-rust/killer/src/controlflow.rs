@@ -9,6 +9,9 @@
 //! do { body } while cond          while true { <skip the test on the first pass> body }
 //! for (i = 0; i < n; i++) { body } init ; while true { <step except on the first pass> if !cond break ; body }
 //! for a, b in pairs { body }      for __it_0 in pairs { a = __it_0[0] ; b = __it_0[1] ; body }
+//! enum Color { RED, GREEN = 5 }  Color = {"RED": 0, "GREEN": 5}    (read as Color.RED)
+//! {a, b: c} = expr                __ds = expr ; a = __ds["a"] ; c = __ds["b"]
+//! abstract fn area()              fn area() { throw ... }   (also: interface I { fn m() }, class C implements I)
 //! get name() { body }            fn __get_name() { body }      (property getter; `set name(v)` is `__set_name`)
 //! with expr as name { body }      __w = expr ; name = __w.__enter__() ; try { body } catch ... finally { __w.__exit__(err) }
 //! ```
@@ -17,14 +20,16 @@
 
 use crate::lambda::mask;
 
+/// A byte of an identifier. Bytes of a multi-byte UTF-8 character (every one is >= 0x80) count, so names such as
+/// `naïve` or `π` are one word; strings and comments are masked before any scanning.
 fn is_word(c: u8) -> bool {
-    c.is_ascii_alphanumeric() || c == b'_'
+    c.is_ascii_alphanumeric() || c == b'_' || c >= 0x80
 }
 
 fn is_ident(s: &str) -> bool {
     let mut chars = s.chars();
     match chars.next() {
-        Some(c) if c.is_ascii_alphabetic() || c == '_' => chars.all(|c| c.is_ascii_alphanumeric() || c == '_'),
+        Some(c) if c.is_alphabetic() || c == '_' => chars.all(|c| c.is_alphanumeric() || c == '_'),
         _ => false,
     }
 }
@@ -172,13 +177,30 @@ pub fn lower(src: &str) -> String {
 pub fn lower_mapped(src: &str) -> (String, Vec<usize>) {
     let probe = mask(src);
     let text = String::from_utf8_lossy(&probe).to_string();
-    let has_any = ["match", "switch", "do", "for", "with", "get", "set"].iter().any(|k| text.contains(k));
-    if !has_any {
-        let n = crate::sourcemap::line_count(src);
-        return (src.to_string(), (0..n).collect());
-    }
     let mut counter = Counter(0);
-    lower_with_map(src, &mut counter)
+    // labeled loops first: they only rewrite loop headers, jumps and the line after an inner loop
+    let labeled = if text.contains("for") || text.contains("while") { lower_labels_mapped(src, &mut counter) } else { None };
+    let (src_owned, label_map) = match labeled {
+        Some((t, m)) => (t, Some(m)),
+        None => (src.to_string(), None),
+    };
+    let src2 = src_owned.as_str();
+    let probe = mask(src2);
+    let text = String::from_utf8_lossy(&probe).to_string();
+    let has_any = ["match", "switch", "do", "for", "with", "get", "set", "enum", "abstract", "interface", "implements", "} =", "}="].iter().any(|k| text.contains(k));
+    let (out, map) = if has_any {
+        lower_with_map(src2, &mut counter)
+    } else {
+        let n = crate::sourcemap::line_count(src2);
+        (src2.to_string(), (0..n).collect())
+    };
+    match label_map {
+        Some(lm) => {
+            let composed = map.iter().map(|&l| lm.get(l).copied().unwrap_or(0)).collect();
+            (out, composed)
+        }
+        None => (out, map),
+    }
 }
 
 fn lower_with(src: &str, counter: &mut Counter) -> String {
@@ -196,7 +218,7 @@ fn lower_with_map(src: &str, counter: &mut Counter) -> (String, Vec<usize>) {
             continue;
         }
         let c = m[i];
-        if !(c == b'm' || c == b's' || c == b'd' || c == b'f' || c == b'w' || c == b'g') || !at_statement_start(&m, i) {
+        if !(c == b'm' || c == b's' || c == b'd' || c == b'f' || c == b'w' || c == b'g' || c == b'e' || c == b'a' || c == b'i' || c == b'c' || c == b'{') || !at_statement_start(&m, i) {
             i += 1;
             continue;
         }
@@ -212,6 +234,16 @@ fn lower_with_map(src: &str, counter: &mut Counter) -> (String, Vec<usize>) {
             lower_with_block(src, &m, i, counter)
         } else if keyword_at(&m, i, "get") || keyword_at(&m, i, "set") {
             lower_property(src, &m, i)
+        } else if keyword_at(&m, i, "enum") {
+            lower_enum(src, &m, i)
+        } else if keyword_at(&m, i, "abstract") {
+            lower_abstract(src, &m, i)
+        } else if keyword_at(&m, i, "interface") {
+            lower_interface(src, &m, i)
+        } else if keyword_at(&m, i, "class") {
+            lower_implements(src, &m, i)
+        } else if c == b'{' {
+            lower_dict_destructure(src, &m, i, counter)
         } else {
             None
         };
@@ -579,6 +611,563 @@ fn lower_do_while(src: &str, m: &[u8], at: usize, counter: &mut Counter) -> Opti
         body.trim_end_matches(|c| c == ' ' || c == '\t')
     );
     Some((out, cond_end))
+}
+
+// ---------------------------------------------------------------------------------------------
+// enum, dict destructuring, abstract methods, interface, implements
+
+/// End of the statement that starts at `from`: the next newline or `;` outside brackets.
+fn statement_end(m: &[u8], from: usize) -> usize {
+    let mut depth = 0i32;
+    let mut i = from;
+    while i < m.len() {
+        match m[i] {
+            b'(' | b'[' | b'{' => depth += 1,
+            b')' | b']' | b'}' => depth -= 1,
+            b'\n' | b';' if depth <= 0 => return i,
+            _ => {}
+        }
+        i += 1;
+    }
+    m.len()
+}
+
+fn skip_blanks(m: &[u8], mut p: usize) -> usize {
+    while p < m.len() && (m[p] == b' ' || m[p] == b'\t') {
+        p += 1;
+    }
+    p
+}
+
+fn read_ident(src: &str, p: usize) -> Option<(&str, usize)> {
+    let b = src.as_bytes();
+    let mut q = p;
+    while q < b.len() && is_word(b[q]) {
+        q += 1;
+    }
+    let name = &src[p..q];
+    if is_ident(name) {
+        Some((name, q))
+    } else {
+        None
+    }
+}
+
+/// `enum Color { RED, GREEN = 5, BLUE }` -> `Color = {"RED": 0, "GREEN": 5, "BLUE": 6}` (a dict, read as
+/// `Color.RED`). Members count up from 0 (or from the last explicit number); a member whose value is not a
+/// number needs no counting (`NAME = "text"`), but an automatic member after one is left unsupported.
+fn lower_enum(src: &str, m: &[u8], at: usize) -> Option<(String, usize)> {
+    let mut p = at + "enum".len();
+    if p >= m.len() || !(m[p] == b' ' || m[p] == b'\t') {
+        return None;
+    }
+    p = skip_blanks(m, p);
+    let (name, q) = read_ident(src, p)?;
+    let open = skip_blanks(m, q);
+    if open >= m.len() || m[open] != b'{' {
+        return None;
+    }
+    let close = matching(m, open)?;
+    let body = &src[open + 1..close];
+    // a `# comment` that follows a member on its line is not blanked by `mask` (only whole-line comments are),
+    // and it may contain commas, so blank it here before splitting
+    let mut bm_owned = m[open + 1..close].to_vec();
+    let mut line_start = 0usize;
+    while line_start < bm_owned.len() {
+        let line_end = bm_owned[line_start..].iter().position(|c| *c == b'\n').map_or(bm_owned.len(), |e| line_start + e);
+        if let Some(h) = bm_owned[line_start..line_end].iter().position(|c| *c == b'#') {
+            for c in &mut bm_owned[line_start + h..line_end] {
+                *c = b' ';
+            }
+        }
+        line_start = line_end + 1;
+    }
+    let bm = &bm_owned[..];
+    // split into members at top-level commas and newlines
+    let mut members: Vec<(usize, usize)> = Vec::new();
+    let (mut depth, mut start) = (0i32, 0usize);
+    for i in 0..=bm.len() {
+        let at_end = i == bm.len();
+        let split = at_end || (depth == 0 && (bm[i] == b',' || bm[i] == b'\n'));
+        if !at_end {
+            match bm[i] {
+                b'(' | b'[' | b'{' => depth += 1,
+                b')' | b']' | b'}' => depth -= 1,
+                _ => {}
+            }
+        }
+        if split {
+            members.push((start, i));
+            start = i + 1;
+        }
+    }
+    let mut entries: Vec<String> = Vec::new();
+    let mut next: Option<f64> = Some(0.0);
+    let mut seen: Vec<&str> = Vec::new();
+    for (s, e) in members {
+        let mtext = String::from_utf8_lossy(&bm[s..e]).to_string();
+        let mtrim = mtext.trim();
+        if mtrim.is_empty() {
+            continue; // blank line or comment
+        }
+        // the member as written, without a trailing comment (the masked text has comments blanked)
+        let lead = mtext.len() - mtext.trim_start().len();
+        let written = body[s + lead..s + lead + mtrim.len()].trim();
+        let (mname, value) = match top_level_positions(mtrim.as_bytes(), 0, mtrim.len(), b'=').first() {
+            Some(&eq) if mtrim.as_bytes().get(eq + 1) != Some(&b'=') => (written[..eq].trim(), Some(written[eq + 1..].trim())),
+            _ => (written, None),
+        };
+        if !is_ident(mname) || seen.contains(&mname) {
+            return None;
+        }
+        seen.push(mname);
+        let text = match value {
+            Some(v) if !v.is_empty() => {
+                next = v.parse::<f64>().ok().map(|n| n + 1.0);
+                v.to_string()
+            }
+            Some(_) => return None,
+            None => {
+                let n = next?;
+                next = Some(n + 1.0);
+                format!("{}", n)
+            }
+        };
+        entries.push(format!("\"{}\": {}", mname, text));
+    }
+    if entries.is_empty() {
+        return None;
+    }
+    Some((format!("{} = {{{}}}", name, entries.join(", ")), close + 1))
+}
+
+/// `{a, b: c} = expr` -> `__ds_0 = expr` then `a = __ds_0["a"]`, `c = __ds_0["b"]` (a missing key is `null`).
+fn lower_dict_destructure(src: &str, m: &[u8], at: usize, counter: &mut Counter) -> Option<(String, usize)> {
+    let close = matching(m, at)?;
+    let q = skip_blanks(m, close + 1);
+    if q >= m.len() || m[q] != b'=' || matches!(m.get(q + 1), Some(b'=') | Some(b'>')) {
+        return None;
+    }
+    let inner = &src[at + 1..close];
+    let im = &m[at + 1..close];
+    let mut bounds = vec![0usize];
+    bounds.extend(top_level_positions(im, 0, im.len(), b',').into_iter().map(|p| p + 1));
+    bounds.push(im.len() + 1);
+    let mut pairs: Vec<(String, String)> = Vec::new(); // (key text, variable)
+    for w in bounds.windows(2) {
+        let part = inner[w[0]..(w[1] - 1).min(inner.len())].trim();
+        if part.is_empty() {
+            continue;
+        }
+        match part.split_once(':') {
+            Some((k, v)) => {
+                let (k, v) = (k.trim(), v.trim());
+                let key = if is_ident(k) { format!("\"{}\"", k) } else if k.len() >= 2 && k.starts_with('"') && k.ends_with('"') { k.to_string() } else { return None };
+                if !is_ident(v) {
+                    return None;
+                }
+                pairs.push((key, v.to_string()));
+            }
+            None => {
+                if !is_ident(part) {
+                    return None;
+                }
+                pairs.push((format!("\"{}\"", part), part.to_string()));
+            }
+        }
+    }
+    if pairs.is_empty() {
+        return None;
+    }
+    let end = statement_end(m, q + 1);
+    let expr = src[q + 1..end].trim();
+    if expr.is_empty() {
+        return None;
+    }
+    let indent = indent_of(src, at);
+    let tmp = format!("__ds_{}", counter.next());
+    let mut out = format!("{tmp} = {expr}");
+    for (key, var) in pairs {
+        out.push_str(&format!("\n{indent}{var} = {tmp}[{key}]"));
+    }
+    Some((out, end))
+}
+
+/// `abstract fn area()` (no body) -> a method that throws when called; `abstract class X` -> `class X`.
+fn lower_abstract(src: &str, m: &[u8], at: usize) -> Option<(String, usize)> {
+    let after = at + "abstract".len();
+    if after >= m.len() || !(m[after] == b' ' || m[after] == b'\t') {
+        return None;
+    }
+    let p = skip_blanks(m, after);
+    if keyword_at(m, p, "class") {
+        return Some((String::new(), p)); // drop the word `abstract` and the blanks after it
+    }
+    if !keyword_at(m, p, "fn") {
+        return None;
+    }
+    let eol = m[p..].iter().position(|c| *c == b'\n').map_or(m.len(), |e| p + e);
+    let header = src[p..eol].trim_end();
+    if m[p..eol].contains(&b'{') || !header.contains('(') {
+        return None;
+    }
+    let (name, _) = read_ident(src, skip_blanks(m, p + 2))?;
+    Some((format!("{header} {{ throw \"{name}() is abstract: a subclass must define it\" }}"), eol))
+}
+
+/// `interface Shape { fn area() ... }` -> `class Shape { ... }` where a method with no body throws when called
+/// (a method with a body is a default). A class takes an interface with `implements`.
+fn lower_interface(src: &str, m: &[u8], at: usize) -> Option<(String, usize)> {
+    let p = skip_blanks(m, at + "interface".len());
+    let (name, q) = read_ident(src, p)?;
+    let open = skip_blanks(m, q);
+    if open >= m.len() || m[open] != b'{' {
+        return None;
+    }
+    let close = matching(m, open)?;
+    let mut body = String::new();
+    for (i, line) in src[open + 1..close].split('\n').enumerate() {
+        let lm = mask(line);
+        let t = String::from_utf8_lossy(&lm).trim().to_string();
+        if i > 0 {
+            body.push('\n');
+        }
+        let is_bodiless_fn = t.starts_with("fn ") && t.contains('(') && !t.contains('{');
+        if is_bodiless_fn {
+            let header = line.trim_end();
+            let fname = header.trim_start()[3..].trim_start().split(|c: char| !(c.is_ascii_alphanumeric() || c == '_')).next().unwrap_or("");
+            body.push_str(&format!("{header} {{ throw \"{fname}() is part of interface {name}: the class must define it\" }}"));
+        } else {
+            body.push_str(line);
+        }
+    }
+    Some((format!("class {name} {{{body}}}"), close + 1))
+}
+
+/// `class C implements A, B {` -> `class C extends A {` (a class has one parent, so the first interface is
+/// the parent and the rest are not enforced); with an `extends` already present the `implements` part is dropped.
+fn lower_implements(src: &str, m: &[u8], at: usize) -> Option<(String, usize)> {
+    let eol = m[at..].iter().position(|c| *c == b'\n').map_or(m.len(), |e| at + e);
+    let line_m = &m[at..eol];
+    let pos = (0..line_m.len()).find(|&i| keyword_at(line_m, i, "implements") && (i == 0 || line_m[i - 1] == b' '))?;
+    let brace = line_m.iter().position(|c| *c == b'{')?;
+    if brace < pos {
+        return None;
+    }
+    let before = src[at..at + pos].trim_end();
+    let list = src[at + pos + "implements".len()..at + brace].trim();
+    let first = list.split(',').next()?.trim();
+    if !is_ident(first) {
+        return None;
+    }
+    let tail = &src[at + brace..eol];
+    let head = if before.contains(" extends ") { before.to_string() } else { format!("{before} extends {first}") };
+    Some((format!("{head} {tail}"), eol))
+}
+
+// ---------------------------------------------------------------------------------------------
+// labeled loops
+
+struct LabelEdit {
+    start: usize,
+    end: usize,
+    text: String,
+}
+
+/// Lower every `label: for ... { }` / `label: while ... { }` that is the target of a `break label` or
+/// `continue label` inside a nested loop, until none are left. `None` when the source has no labeled loop.
+fn lower_labels_mapped(src: &str, counter: &mut Counter) -> Option<(String, Vec<usize>)> {
+    let mut text = src.to_string();
+    let mut map: Vec<usize> = (0..crate::sourcemap::line_count(src)).collect();
+    let mut changed = false;
+    for _ in 0..64 {
+        match lower_one_label(&text, counter) {
+            Some((new_text, new_map)) => {
+                map = new_map.iter().map(|&l| map.get(l).copied().unwrap_or(0)).collect();
+                text = new_text;
+                changed = true;
+            }
+            None => break,
+        }
+    }
+    changed.then_some((text, map))
+}
+
+/// Lower the first labeled loop in `src`: a jump out of an inner loop sets a flag (1 = break, 2 = continue) and
+/// breaks the inner loop; after every inner loop that contains such a jump the flag is tested to break (or
+/// continue) the next loop out, up to the labeled loop. Jumps directly in the labeled loop's body are plain.
+fn lower_one_label(src: &str, counter: &mut Counter) -> Option<(String, Vec<usize>)> {
+    let m = mask(src);
+    let mut found: Option<(usize, String, usize, usize)> = None; // (start, label, loop keyword position, keyword length)
+    let mut i = 0usize;
+    while i < m.len() {
+        if (m[i].is_ascii_alphabetic() || m[i] == b'_') && (i == 0 || !is_word(m[i - 1])) && at_statement_start(&m, i) {
+            let mut j = i;
+            while j < m.len() && is_word(m[j]) {
+                j += 1;
+            }
+            let k0 = skip_blanks(&m, j);
+            if k0 < m.len() && m[k0] == b':' && m.get(k0 + 1) != Some(&b':') && &src[i..j] != "default" {
+                let k = skip_blanks(&m, k0 + 1);
+                if keyword_at(&m, k, "for") {
+                    found = Some((i, src[i..j].to_string(), k, 3));
+                    break;
+                }
+                if keyword_at(&m, k, "while") {
+                    found = Some((i, src[i..j].to_string(), k, 5));
+                    break;
+                }
+            }
+            i = j;
+            continue;
+        }
+        i += 1;
+    }
+    let (label_at, label, kw, kwlen) = found?;
+    let open = find_block_open(&m, kw + kwlen)?;
+    let close = matching(&m, open)?;
+
+    // loops nested anywhere inside the body: (start of the loop statement incl. any label, closing brace)
+    let mut nested: Vec<(usize, usize)> = Vec::new();
+    let mut p = open + 1;
+    while p < close {
+        if (m[p].is_ascii_alphabetic() || m[p] == b'_') && (p == 0 || !is_word(m[p - 1])) && at_statement_start(&m, p) {
+            let mut j = p;
+            while j < m.len() && is_word(m[j]) {
+                j += 1;
+            }
+            // an inner `label: for ...` counts as a loop too
+            let k0 = skip_blanks(&m, j);
+            let k = if k0 < m.len() && m[k0] == b':' && m.get(k0 + 1) != Some(&b':') { skip_blanks(&m, k0 + 1) } else { p };
+            let len = if keyword_at(&m, k, "for") {
+                3
+            } else if keyword_at(&m, k, "while") {
+                5
+            } else {
+                0
+            };
+            if len > 0 {
+                if let Some(o2) = find_block_open(&m, k + len) {
+                    if let Some(c2) = matching(&m, o2) {
+                        if c2 < close {
+                            nested.push((p, c2));
+                        }
+                    }
+                }
+                p = k + len;
+                continue;
+            }
+            p = j.max(p + 1);
+            continue;
+        }
+        p += 1;
+    }
+
+    // jumps to this label: (start, end, is_break)
+    let mut jumps: Vec<(usize, usize, bool)> = Vec::new();
+    let mut q = open + 1;
+    while q < close {
+        if (m[q] == b'b' || m[q] == b'c') && at_statement_start(&m, q) {
+            let (len, is_break) = if keyword_at(&m, q, "break") {
+                (5, true)
+            } else if keyword_at(&m, q, "continue") {
+                (8, false)
+            } else {
+                (0, false)
+            };
+            if len > 0 {
+                let r = skip_blanks(&m, q + len);
+                if let Some((word, end)) = read_ident(src, r) {
+                    if word == label {
+                        jumps.push((q, end, is_break));
+                    }
+                }
+                q += len;
+                continue;
+            }
+        }
+        q += 1;
+    }
+
+    let indent = indent_of(src, label_at);
+    let mut edits: Vec<LabelEdit> = Vec::new();
+    if jumps.is_empty() {
+        edits.push(LabelEdit { start: label_at, end: kw, text: String::new() });
+    } else {
+        let flag = format!("__lb_{}", counter.next());
+        edits.push(LabelEdit { start: label_at, end: kw, text: format!("{flag} = 0\n{indent}") });
+        let inside = |s: usize, e: usize, pos: usize| s < pos && pos < e;
+        let mut needs_check: Vec<(usize, usize)> = Vec::new();
+        for &(start, end, is_break) in &jumps {
+            let enclosing: Vec<&(usize, usize)> = nested.iter().filter(|(s, e)| inside(*s, *e, start)).collect();
+            let text = if enclosing.is_empty() {
+                (if is_break { "break" } else { "continue" }).to_string()
+            } else {
+                for l in enclosing {
+                    if !needs_check.contains(l) {
+                        needs_check.push(*l);
+                    }
+                }
+                format!("{flag} = {}; break", if is_break { 1 } else { 2 })
+            };
+            edits.push(LabelEdit { start, end, text });
+        }
+        for &(s, c) in &needs_check {
+            let has_parent = nested.iter().any(|(s2, e2)| *s2 < s && c < *e2);
+            let after = if has_parent {
+                format!("}} if {flag} != 0 {{ break }}")
+            } else {
+                format!("}} if {flag} == 1 {{ break }} if {flag} == 2 {{ {flag} = 0; continue }}")
+            };
+            edits.push(LabelEdit { start: c, end: c + 1, text: after });
+        }
+    }
+    edits.sort_by_key(|e| e.start);
+    let mut out = crate::sourcemap::Rewriter::new(src);
+    let mut copied = 0usize;
+    for e in &edits {
+        out.copy(copied, e.start);
+        out.replace(e.start, e.end, &e.text);
+        copied = e.end;
+    }
+    out.copy(copied, src.len());
+    Some(out.finish())
+}
+
+// ---------------------------------------------------------------------------------------------
+// const
+
+/// True when the text after a name at `p` (blanks skipped) is an assignment to it: `=`, `+=`, `-=`, `*=`, `/=`,
+/// `%=`, `++` or `--` (not `==`, `=>`).
+fn assigns_at(m: &[u8], after_name: usize) -> bool {
+    let p = skip_blanks(m, after_name);
+    match m.get(p) {
+        Some(b'=') => !matches!(m.get(p + 1), Some(b'=') | Some(b'>')),
+        Some(c @ (b'+' | b'-' | b'*' | b'/' | b'%')) => m.get(p + 1) == Some(&b'=') || ((*c == b'+' || *c == b'-') && m.get(p + 1) == Some(c)),
+        _ => false,
+    }
+}
+
+/// `const NAME = value` declares a name that cannot be assigned again in the block it is declared in (for a
+/// top-level constant: anywhere in the file, except in a function that has its own local of that name; a function
+/// that says `global NAME` is checked too). Assigning to a constant, or declaring it twice, is a compile error;
+/// the contents of a constant list or dict can still change (as in JavaScript). Returns the source with the
+/// word `const` removed (line numbers unchanged).
+pub fn check_consts(src: &str) -> Result<String, crate::error::VmError> {
+    if !src.contains("const") {
+        return Ok(src.to_string());
+    }
+    let m = mask(src);
+    let line_of = |pos: usize| src[..pos.min(src.len())].matches('\n').count() + 1;
+    let fail = |pos: usize, msg: String| -> Result<String, crate::error::VmError> {
+        Err(crate::error::VmError::parse_error_simple(format!("Line {}: {}", line_of(pos), msg)))
+    };
+
+    // declarations: (name, start of `const`, start of the name, end of the statement, block depth)
+    let mut decls: Vec<(String, usize, usize, usize, i32)> = Vec::new();
+    let mut depth = 0i32;
+    for i in 0..m.len() {
+        match m[i] {
+            b'{' => depth += 1,
+            b'}' => depth -= 1,
+            b'c' if keyword_at(&m, i, "const") && at_statement_start(&m, i) => {
+                let p = skip_blanks(&m, i + 5);
+                if p > i + 5 {
+                    if let Some((name, q)) = read_ident(src, p) {
+                        let q2 = skip_blanks(&m, q);
+                        if q2 < m.len() && m[q2] == b'=' && !matches!(m.get(q2 + 1), Some(b'=') | Some(b'>')) {
+                            decls.push((name.to_string(), i, p, statement_end(&m, q2 + 1), depth));
+                        } else {
+                            return fail(i, format!("a constant needs a value: const {} = ...", name));
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    if decls.is_empty() {
+        return Ok(src.to_string());
+    }
+
+    for (idx, (name, _, name_at, stmt_end, decl_depth)) in decls.iter().enumerate() {
+        // the block the constant lives in ends at the `}` that closes it (or at the end of the file)
+        let mut scope_end = m.len();
+        let mut d = *decl_depth;
+        for pos in *stmt_end..m.len() {
+            match m[pos] {
+                b'{' => d += 1,
+                b'}' => {
+                    if d == *decl_depth {
+                        scope_end = pos;
+                        break;
+                    }
+                    d -= 1;
+                }
+                _ => {}
+            }
+        }
+        // function bodies inside the scope that are skipped (their locals may reuse the name) unless they
+        // declare `global NAME`
+        let mut skipped: Vec<(usize, usize)> = Vec::new();
+        let mut p = *stmt_end;
+        while p < scope_end {
+            let is_fn = m[p] == b'f' && keyword_at(&m, p, "fn") && (at_statement_start(&m, p) || (p >= 6 && &m[p - 6..p] == b"async "));
+            if is_fn {
+                if let Some(open) = find_block_open(&m, p + 2) {
+                    if let Some(close) = matching(&m, open) {
+                        let body = String::from_utf8_lossy(&m[open..close]).to_string();
+                        let declares_global = body.lines().any(|l| {
+                            let t = l.trim_start();
+                            t.strip_prefix("global ").map_or(false, |rest| rest.split(|c: char| c == ',' || c.is_whitespace()).any(|w| w == name))
+                        });
+                        if !declares_global {
+                            skipped.push((open, close));
+                        }
+                        p = open + 1;
+                        continue;
+                    }
+                }
+            }
+            p += 1;
+        }
+        let mut q = *stmt_end;
+        while q < scope_end {
+            if (m[q].is_ascii_alphabetic() || m[q] == b'_') && (q == 0 || !is_word(m[q - 1])) {
+                let mut e = q;
+                while e < m.len() && is_word(m[e]) {
+                    e += 1;
+                }
+                if &src[q..e] == name.as_str() && at_statement_start(&m, q) && !skipped.iter().any(|(s, c)| *s < q && q < *c) {
+                    if assigns_at(&m, e) {
+                        return fail(q, format!("cannot assign to constant `{}` (declared with const on line {})", name, line_of(*name_at)));
+                    }
+                }
+                // a second declaration of the same name in the same block
+                if &src[q..e] == "const" {
+                    let n2 = skip_blanks(&m, e);
+                    if let Some((other, _)) = read_ident(src, n2) {
+                        if other == name && at_statement_start(&m, q) && decls.iter().enumerate().any(|(j, d)| j != idx && d.1 == q && d.4 == *decl_depth) && !skipped.iter().any(|(s, c)| *s < q && q < *c) {
+                            return fail(q, format!("the constant `{}` is already declared (line {})", name, line_of(*name_at)));
+                        }
+                    }
+                }
+                q = e;
+                continue;
+            }
+            q += 1;
+        }
+    }
+
+    // remove the word `const` and the blanks after it
+    let mut out = String::with_capacity(src.len());
+    let mut copied = 0usize;
+    for (_, kw, name_at, _, _) in &decls {
+        out.push_str(&src[copied..*kw]);
+        copied = *name_at;
+    }
+    out.push_str(&src[copied..]);
+    Ok(out)
 }
 
 // ---------------------------------------------------------------------------------------------

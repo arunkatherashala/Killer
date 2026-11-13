@@ -55,7 +55,7 @@ fn starts_at(b: &[u8], i: usize, pat: &str) -> bool {
 }
 
 fn is_word_byte(c: u8) -> bool {
-    c.is_ascii_alphanumeric() || c == b'_'
+    c.is_ascii_alphanumeric() || c == b'_' || c >= 0x80
 }
 
 /// `cond ? a : b`  ->  (cond, a, b). The `:` matching the first `?` is found by counting nested `?`.

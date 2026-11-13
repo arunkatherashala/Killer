@@ -67,6 +67,7 @@ DESC = {
     "secure_decrypt": "decrypt secure_encrypt output (error on a wrong password or changed data); also reads the older format",
     "secure_random_bytes": "base64 of random bytes from the operating system's cryptographic generator (up to 1024)",
     "secure_hash": "SHA-256 of a value as hex",
+    "dict_merge": "new dict with the keys of every argument, a later one wins a repeated key; `{...a, \"k\": 1}` compiles to this",
     "hex": "number to text such as \"0xff\"", "bin": "number to text such as \"0b101\"", "oct": "number to text such as \"0o10\"",
     "uuid": "random version 4 UUID text",
     "round": "round to nearest, or to `digits` decimals: round(x[, digits])", "int": "convert to integer; int(text, base) parses digits in base 2 to 36",

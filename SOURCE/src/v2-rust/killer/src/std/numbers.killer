@@ -1,0 +1,179 @@
+# Exact fractions and complex numbers, written in Killer. Included automatically (never by hand) when a script
+# uses `Fraction(` or `Complex(` and does not define a class of that name.
+#
+#   Fraction(1, 3) + Fraction(1, 6)        -> 1/2        (exact, always in lowest terms)
+#   Fraction("3/4") * 2                    -> 3/2        (also Fraction(0.75) is not accepted: use Fraction(3, 4))
+#   Complex(1, 2) * Complex(3, -1)         -> 5+5i
+#
+# Operators: + - * / ** (whole exponent), unary -, == != < <= > >= for Fraction. `str(x)` and println show the
+# value. Methods: Fraction: num, den, to_float(); Complex: re, im, abs(), conj(), to_string().
+
+class __Fraction {
+  fn init(n, d = 1) {
+    if type(n) == "string" {
+      parts = split(trim(n), "/")
+      if len(parts) == 2 {
+        n = int(trim(parts[0]))
+        d = int(trim(parts[1]))
+      } else {
+        n = int(trim(parts[0]))
+        d = 1
+      }
+    }
+    if d == 0 {
+      throw "Fraction: the denominator cannot be 0"
+    }
+    if n != floor(n) or d != floor(d) {
+      throw "Fraction needs whole numbers: Fraction(3, 4), not Fraction(0.75)"
+    }
+    if d < 0 {
+      n = 0 - n
+      d = 0 - d
+    }
+    g = gcd(abs(n), d)
+    if g > 1 {
+      n = idiv(n, g)
+      d = idiv(d, g)
+    }
+    this.num = n
+    this.den = d
+  }
+  fn _of(x) {
+    if type(x) == "number" or type(x) == "bigint" {
+      return new __Fraction(x, 1)
+    }
+    return x
+  }
+  fn __add__(o) {
+    o = this._of(o)
+    return new __Fraction(this.num * o.den + o.num * this.den, this.den * o.den)
+  }
+  fn __sub__(o) {
+    o = this._of(o)
+    return new __Fraction(this.num * o.den - o.num * this.den, this.den * o.den)
+  }
+  fn __mul__(o) {
+    o = this._of(o)
+    return new __Fraction(this.num * o.num, this.den * o.den)
+  }
+  fn __div__(o) {
+    o = this._of(o)
+    if o.num == 0 {
+      throw "Fraction: division by zero"
+    }
+    return new __Fraction(this.num * o.den, this.den * o.num)
+  }
+  fn __neg__() {
+    return new __Fraction(0 - this.num, this.den)
+  }
+  fn __pow__(e) {
+    if e != floor(e) {
+      throw "Fraction ** needs a whole exponent"
+    }
+    if e >= 0 {
+      return new __Fraction(this.num ** e, this.den ** e)
+    }
+    return new __Fraction(this.den ** (0 - e), this.num ** (0 - e))
+  }
+  fn __eq__(o) {
+    o = this._of(o)
+    return this.num == o.num and this.den == o.den
+  }
+  fn __lt__(o) {
+    o = this._of(o)
+    return this.num * o.den < o.num * this.den
+  }
+  fn __radd__(o) {
+    return this.__add__(o)
+  }
+  fn __rmul__(o) {
+    return this.__mul__(o)
+  }
+  fn __rsub__(o) {
+    return this._of(o).__sub__(this)
+  }
+  fn __rdiv__(o) {
+    return this._of(o).__div__(this)
+  }
+  fn to_float() {
+    return this.num / this.den
+  }
+  fn toString() {
+    if this.den == 1 {
+      return str(this.num)
+    }
+    return str(this.num) + "/" + str(this.den)
+  }
+}
+
+class __Complex {
+  fn init(re, im = 0) {
+    this.re = re
+    this.im = im
+  }
+  fn _of(x) {
+    if type(x) == "number" or type(x) == "bigint" {
+      return new __Complex(x, 0)
+    }
+    return x
+  }
+  fn __add__(o) {
+    o = this._of(o)
+    return new __Complex(this.re + o.re, this.im + o.im)
+  }
+  fn __sub__(o) {
+    o = this._of(o)
+    return new __Complex(this.re - o.re, this.im - o.im)
+  }
+  fn __mul__(o) {
+    o = this._of(o)
+    return new __Complex(this.re * o.re - this.im * o.im, this.re * o.im + this.im * o.re)
+  }
+  fn __div__(o) {
+    o = this._of(o)
+    d = o.re * o.re + o.im * o.im
+    if d == 0 {
+      throw "Complex: division by zero"
+    }
+    return new __Complex((this.re * o.re + this.im * o.im) / d, (this.im * o.re - this.re * o.im) / d)
+  }
+  fn __neg__() {
+    return new __Complex(0 - this.re, 0 - this.im)
+  }
+  fn __eq__(o) {
+    o = this._of(o)
+    return this.re == o.re and this.im == o.im
+  }
+  fn __radd__(o) {
+    return this.__add__(o)
+  }
+  fn __rmul__(o) {
+    return this.__mul__(o)
+  }
+  fn __rsub__(o) {
+    return this._of(o).__sub__(this)
+  }
+  fn __rdiv__(o) {
+    return this._of(o).__div__(this)
+  }
+  fn abs() {
+    return sqrt(this.re * this.re + this.im * this.im)
+  }
+  fn conj() {
+    return new __Complex(this.re, 0 - this.im)
+  }
+  fn toString() {
+    if this.im < 0 {
+      return str(this.re) + "-" + str(0 - this.im) + "i"
+    }
+    return str(this.re) + "+" + str(this.im) + "i"
+  }
+}
+
+fn Fraction(n, d = 1) {
+  return new __Fraction(n, d)
+}
+
+fn Complex(re, im = 0) {
+  return new __Complex(re, im)
+}

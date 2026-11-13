@@ -1111,6 +1111,106 @@ file_delete("open_demo.txt")
 # expect: true
 ```
 
+## More syntax: spread, sets, enums, destructuring, labels, `const`, interfaces
+
+**Spread.** `[...a, 3, ...b]` joins lists into a new list and `{...d, "k": 1}` merges dicts left to right (a
+later key wins; it is `dict_merge(d, {"k": 1})`). Spreading something that is not a list (or dict) is an error.
+
+**Set literals.** `{1, 2, 3}` is a set (items separated by commas, no colons); `{}` is still an empty dict.
+
+**Enums.** `enum Color { RED, GREEN = 5, BLUE }` makes a dict, read as `Color.RED`. Members count up from 0 (or
+from the last explicit number); a member may be given a string (`A = "a"`), after which the next member needs
+its own value. A repeated member name is an error.
+
+**Dict destructuring.** `{a, b: c} = d` reads `d["a"]` into `a` and `d["b"]` into `c`; a missing key gives `null`.
+
+**Labeled loops.** `outer: for ... { ... break outer ... }` and `continue outer` leave or continue a loop from any
+depth of inner `for` / `while` loops.
+
+**`const`.** `const LIMIT = 10` declares a name that cannot be assigned again in its block (`=`, `+=`, `++` and a
+second `const` of the same name are compile errors); a top-level constant is checked everywhere except inside a
+function that has a local of that name (add `global LIMIT` in the function to check it too). The contents of a
+constant list or dict can still change, as in JavaScript.
+
+**Abstract methods and interfaces.** `abstract fn area()` (no body) defines a method that throws when called, so a
+subclass must override it. `interface Shape { fn area() }` is a class whose bodiless methods throw; a method with a
+body is a default. `class Square implements Shape { ... }` makes `Shape` the parent (one interface is used as the
+parent; with an existing `extends`, the `implements` part is accepted but not enforced).
+
+**Names.** Variable, function, class and key names may use any letters: `π`, `naïve`, `größe`, `名前`.
+
+```killer
+a = [1, 2]
+println([0, ...a, 3])
+println({...{"x": 1}, "y": 2}["y"])
+println(len({1, 2, 2, 3}))
+
+enum Level { LOW = 10, MID, HIGH = 50 }
+println(Level.LOW, Level.MID, Level.HIGH)
+
+{name, age: years} = {"name": "Ann", "age": 5}
+println(name, years)
+
+rows = [[1, 2], [3, 4], [5, 6]]
+found = null
+search: for r in rows {
+  for c in r {
+    if c == 4 {
+      found = c
+      break search
+    }
+  }
+}
+println(found)
+
+const RATE = 3
+println(RATE * 2)
+
+interface Shape {
+  fn area()
+  fn describe() {
+    return "area " + str(this.area())
+  }
+}
+class Square implements Shape {
+  fn init(s) {
+    this.s = s
+  }
+  fn area() {
+    return this.s * this.s
+  }
+}
+println((new Square(3)).describe())
+π = 3
+println(π + 1)
+# expect: [0, 1, 2, 3]
+# expect: 2
+# expect: 3
+# expect: 10 11 50
+# expect: Ann 5
+# expect: 4
+# expect: 6
+# expect: area 9
+# expect: 4
+```
+
+### Fractions and complex numbers
+
+`Fraction(n, d)` is an exact fraction kept in lowest terms (`Fraction("3/4")` also works) and `Complex(re, im)` a
+complex number. Both support `+ - * /`, unary `-` and mixing with plain numbers (`2 * Fraction(1, 4)`);
+`Fraction` also has `**` with a whole exponent, `== < >`, `.num`, `.den` and `.to_float()`; `Complex` has
+`.re`, `.im`, `.abs()` and `.conj()`. The library is written in Killer and is included automatically when a
+script calls `Fraction(` or `Complex(` and does not define its own.
+
+```killer
+println(Fraction(1, 3) + Fraction(1, 6))
+println(2 * Fraction(1, 4), Fraction(2, 3) ** 3)
+println(Complex(1, 2) * Complex(3, -1), Complex(3, 4).abs())
+# expect: 1/2
+# expect: 1/2 8/27
+# expect: 5+5i 5
+```
+
 ## Errors
 
 `throw` any value; `try { } catch e { }` binds it; `finally` runs on **every** exit of its `try`: normal

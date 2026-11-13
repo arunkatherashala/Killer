@@ -59,7 +59,7 @@ pub(crate) fn mask(src: &str) -> Vec<u8> {
 }
 
 fn is_word(c: u8) -> bool {
-    c.is_ascii_alphanumeric() || c == b'_'
+    c.is_ascii_alphanumeric() || c == b'_' || c >= 0x80
 }
 
 /// Index of the bracket matching the opener at `open`, in masked text.

@@ -229,6 +229,33 @@ const FILE_PRELUDE: &str = include_str!("std/file.killer");
 /// Name shown in diagnostics for the embedded file library.
 const FILE_PRELUDE_NAME: &str = "<std>/file.killer";
 
+/// `Fraction(n, d)` (exact fractions) and `Complex(re, im)`, written in Killer.
+const NUMBERS_PRELUDE: &str = include_str!("std/numbers.killer");
+const NUMBERS_PRELUDE_NAME: &str = "<std>/numbers.killer";
+
+/// True when `source` calls `name(` as a plain function (not `x.name(`, `fn name(`, a longer word, or text inside a
+/// string or comment).
+fn calls_plain_function(masked: &str, name: &str) -> bool {
+    let pat = format!("{name}(");
+    let b = masked.as_bytes();
+    masked.match_indices(&pat).any(|(i, _)| i == 0 || !(b[i - 1].is_ascii_alphanumeric() || b[i - 1] == b'_' || b[i - 1] == b'.' || b[i - 1] >= 0x80))
+}
+
+/// True when the script uses `Fraction(` or `Complex(` and defines neither a function nor a class of those names.
+fn needs_numbers_prelude(source: &str) -> bool {
+    if !(source.contains("Fraction(") || source.contains("Complex(")) {
+        return false;
+    }
+    let m = crate::lambda::mask(source);
+    let text = String::from_utf8_lossy(&m);
+    for name in ["Fraction", "Complex"] {
+        if text.contains(&format!("fn {name}")) || text.contains(&format!("class {name}")) {
+            return false;
+        }
+    }
+    calls_plain_function(&text, "Fraction") || calls_plain_function(&text, "Complex")
+}
+
 /// True when `source` calls the builtin-style `open(...)` (not a method `x.open(`, a longer name such as
 /// `reopen(`, or text inside a string or comment) and defines neither its own `open` nor a class `File`.
 fn needs_file_prelude(source: &str) -> bool {
@@ -250,7 +277,8 @@ fn needs_file_prelude(source: &str) -> bool {
 pub fn resolve_mapped(source: &str) -> Result<(String, SourceMap), String> {
     let main = main_file();
     let prelude = needs_file_prelude(source);
-    if !prelude && !source.contains("import") {
+    let numbers = needs_numbers_prelude(source);
+    if !prelude && !numbers && !source.contains("import") {
         return Ok((source.to_string(), SourceMap::identity(&main, source)));
     }
     let dir = base_dir();
@@ -267,6 +295,16 @@ pub fn resolve_mapped(source: &str) -> Result<(String, SourceMap), String> {
         if !out.ends_with('\n') {
             out.push('\n');
             ex.locs.push(Loc { file: idx, line: FILE_PRELUDE.split('\n').count() as u32 });
+        }
+    }
+    if numbers {
+        ex.files.push(NUMBERS_PRELUDE_NAME.to_string());
+        ex.sources.push(NUMBERS_PRELUDE.to_string());
+        let idx = (ex.files.len() - 1) as u32;
+        ex.expand(NUMBERS_PRELUDE, idx, &dir, 1, &mut out)?;
+        if !out.ends_with('\n') {
+            out.push('\n');
+            ex.locs.push(Loc { file: idx, line: NUMBERS_PRELUDE.split('\n').count() as u32 });
         }
     }
     ex.expand(source, 0, &dir, 0, &mut out)?;

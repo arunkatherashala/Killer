@@ -5,7 +5,7 @@
 //! own table. All functions are pure Rust with no dependencies.
 
 use crate::error::VmError;
-use crate::value::{SetKey, Value};
+use crate::value::{SetKey, SharedDict, Value};
 
 fn err<T>(msg: impl Into<String>) -> Result<T, VmError> {
     Err(VmError::runtime_error(msg.into()))
@@ -682,6 +682,30 @@ pub fn call(name: &str, args: &[Value]) -> Option<Result<Value, VmError>> {
                 return err(format!("{}() expects a whole number, got {}", name, n));
             }
             Ok(Value::Str(format!("{}{}{}", if n < 0.0 { "-" } else { "" }, prefix, radix_digits(n.abs() as u128, radix, false))))
+        })(),
+        // dict_merge(a, b, ...): a new dict with the keys of every argument; a later argument wins a repeated key.
+        // `{...a, "k": 1}` is compiled to this.
+        "dict_merge" => (|| {
+            let mut order: Vec<String> = Vec::new();
+            let mut at: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+            let mut vals: Vec<Value> = Vec::new();
+            for a in args {
+                let Value::Dict(d) = a else {
+                    return err(format!("dict_merge() and `{{...x}}` need dicts, got {}", a.type_name()));
+                };
+                for k in d.keys() {
+                    let v = d.get(&k).unwrap_or(Value::Null);
+                    match at.get(&k) {
+                        Some(&i) => vals[i] = v,
+                        None => {
+                            at.insert(k.clone(), vals.len());
+                            order.push(k);
+                            vals.push(v);
+                        }
+                    }
+                }
+            }
+            Ok(Value::Dict(SharedDict::from_pairs(order.into_iter().zip(vals).collect())))
         })(),
         // uuid(): a random (version 4) UUID such as "3f2b8c1e-9a4d-4e0b-8c53-1d2f7a9b6e04"
         "uuid" => (|| {
