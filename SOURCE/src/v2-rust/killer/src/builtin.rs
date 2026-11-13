@@ -642,10 +642,6 @@ impl BuiltinFunctions {
             // WebSocket functions (Week 24: Real-time Communication)
             "websocket_new" => Self::websocket_new(args),
             "websocket_server_new" => Self::websocket_server_new(args),
-            "ws_connect" => Self::ws_connect(args),
-            "ws_send" => Self::ws_send(args),
-            "ws_receive" => Self::ws_receive(args),
-            "ws_disconnect" => Self::ws_disconnect(args),
             
             // Trait system functions (Week 24: Polymorphism)
             "trait_new" => Self::trait_new(args),
@@ -1314,6 +1310,9 @@ impl BuiltinFunctions {
 
             _ => {
                 if let Some(result) = crate::lang_builtins::call(name, args) {
+                    return result;
+                }
+                if let Some(result) = crate::net_sock::call(name, args) {
                     return result;
                 }
                 if let Some(result) = crate::net_ai::call(name, args) {

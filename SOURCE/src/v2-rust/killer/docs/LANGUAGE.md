@@ -1232,6 +1232,40 @@ println(Complex(1, 2) * Complex(3, -1), Complex(3, 4).abs())
 # expect: 5+5i 5
 ```
 
+## Sockets: TCP, UDP and WebSocket
+
+A socket is a whole number (a handle) returned by the opening call. Every call needs the network capability. Timeouts
+are in milliseconds and 0 means wait forever. A receive that times out returns `null`; `sock_recv` returns `""` once
+the peer has closed. Handles belong to the thread that opened them.
+
+| Call | Does |
+|---|---|
+| `tcp_listen(addr)` | listen on `"host:port"` (port 0 picks a free one; `sock_addr(l)` tells which) |
+| `tcp_accept(l[, ms])` | next connection, or `null` after `ms` |
+| `tcp_connect(addr[, ms])` | connect (default 10000 ms) |
+| `sock_send(s, text)` | send; returns the byte count |
+| `sock_recv(s[, max, ms])` | up to `max` bytes (default 4096) |
+| `sock_recv_line(s[, ms])` | one line without its newline; `null` at the end |
+| `sock_addr(s)`, `sock_peer(s)` | local and remote address |
+| `sock_close(s)` | close any socket |
+| `udp_bind(addr)`, `udp_send(s, addr, text)` | UDP |
+| `udp_recv(s[, max, ms])` | `{"data": ..., "from": "host:port"}` or `null` |
+| `ws_connect("ws://host:port/path")` | WebSocket client (no `wss://`) |
+| `ws_accept(l[, ms])` | take a connection from a `tcp_listen` listener and do the WebSocket handshake |
+| `ws_send(s, text)`, `ws_recv(s[, ms])` | text messages; `ws_recv` gives `null` on timeout or close; pings are answered |
+| `ws_close(s)` | send a close frame and drop the socket |
+
+```killer
+l = tcp_listen("127.0.0.1:0")
+c = tcp_connect(sock_addr(l))
+s = tcp_accept(l)
+sock_send(c, "hello\nworld")
+println(sock_recv_line(s))
+println(sock_recv(s, 100, 1000))
+# expect: hello
+# expect: world
+```
+
 ## Errors
 
 `throw` any value; `try { } catch e { }` binds it; `finally` runs on **every** exit of its `try`: normal
