@@ -357,6 +357,7 @@ pub mod csv_builtins;           // RFC 4180 parse_csv / to_csv
 pub mod stdio_builtins;        // eprintln / eprint (standard error)
 pub mod log_builtins;          // log_info/warn/error, load_env
 pub mod http_req;              // hardened curl core for the http_* client builtins
+pub mod gui_native;             // native widgets: window(), message_box() (see std/gui_native.killer)
 pub mod gui_builtins;           // gui_open(): the browser as a window (see std/gui.killer)
 pub mod sql_engine;             // sql_open / sql_exec / sql_query / sql_close
 pub mod eval_builtins;         // eval(code, vars) / exec(code, vars)
