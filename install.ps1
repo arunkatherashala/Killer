@@ -11,7 +11,7 @@ $Repo = if ($env:KILLER_REPO) { $env:KILLER_REPO } else { "arunkatherashala/Kill
 
 if ($Help) {
   Write-Host "Usage: install.ps1 [-Version vX.Y.Z] [-Prefix DIR] [-DryRun] [-Help]"
-  Write-Host "Installs killer_super.exe into DIR\bin (default: ~\.killer\bin)."
+  Write-Host "Installs killer.exe and killer_super.exe into DIR\bin (default: ~\.killer\bin)."
   Write-Host "Environment: KILLER_VERSION, KILLER_HOME, KILLER_REPO override the defaults."
   return
 }
@@ -36,13 +36,13 @@ if ($Version -eq "latest") {
 } else { $Tag = $Version }
 
 $name = "killer_super-$Tag-$target"
-$base = "https://github.com/$Repo/releases/download/$Tag"
+$base = if ($env:KILLER_BASE_URL) { $env:KILLER_BASE_URL } else { "https://github.com/$Repo/releases/download/$Tag" }
 $binDir = Join-Path $Prefix "bin"
 Write-Host "target:   $target"
 Write-Host "tag:      $Tag"
 Write-Host "archive:  $base/$name.zip"
 Write-Host "checksum: $base/$name.zip.sha256"
-Write-Host "install:  $binDir\killer_super.exe"
+Write-Host "install:  $binDir\killer.exe and $binDir\killer_super.exe"
 if ($DryRun) { Write-Host "dry run: nothing downloaded or installed"; return }
 
 $work = Join-Path ([IO.Path]::GetTempPath()) ("killer-install-" + [guid]::NewGuid())
@@ -56,8 +56,10 @@ try {
   Write-Host "checksum ok"
   Expand-Archive "$work\$name.zip" -DestinationPath $work
   New-Item -ItemType Directory -Force $binDir | Out-Null
-  Copy-Item "$work\$name\killer_super.exe" "$binDir\killer_super.exe" -Force
-  Write-Host "installed $binDir\killer_super.exe"
+  foreach ($b in "killer", "killer_super") {
+    Copy-Item "$work\$name\$b.exe" "$binDir\$b.exe" -Force
+    Write-Host "installed $binDir\$b.exe"
+  }
   if (-not (($env:Path -split ";") -contains $binDir)) {
     Write-Host "add it to your PATH:  setx PATH `"$binDir;%PATH%`""
   }
