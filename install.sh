@@ -12,7 +12,7 @@ usage() {
   cat <<USAGE
 Usage: install.sh [--version vX.Y.Z] [--prefix DIR] [--dry-run] [--help]
 
-Installs killer_super into DIR/bin (default: ~/.killer/bin).
+Installs killer and killer_super into DIR/bin (default: ~/.killer/bin).
 
 Options:
   --version TAG   release tag to install (default: latest)
@@ -20,7 +20,8 @@ Options:
   --dry-run       print what would be done, download nothing
   --help          show this help
 
-Environment: KILLER_VERSION, KILLER_HOME, KILLER_REPO override the defaults.
+Environment: KILLER_VERSION, KILLER_HOME, KILLER_REPO override the defaults;
+KILLER_BASE_URL replaces the whole download directory URL (mirrors, local testing).
 USAGE
 }
 
@@ -35,8 +36,8 @@ while [ $# -gt 0 ]; do
 done
 
 detect_target() {
-  os="$(uname -s)"
-  arch="$(uname -m)"
+  os="${KILLER_OS:-$(uname -s)}"
+  arch="${KILLER_ARCH:-$(uname -m)}"
   case "$os" in
     Linux)  o=linux ;;
     Darwin) o=macos ;;
@@ -101,14 +102,14 @@ else
 fi
 
 NAME="killer_super-$TAG-$TARGET"
-BASE="https://github.com/$REPO/releases/download/$TAG"
+BASE="${KILLER_BASE_URL:-https://github.com/$REPO/releases/download/$TAG}"
 BIN_DIR="$PREFIX/bin"
 
 echo "target:   $TARGET"
 echo "tag:      $TAG"
 echo "archive:  $BASE/$NAME.tar.gz"
 echo "checksum: $BASE/$NAME.tar.gz.sha256"
-echo "install:  $BIN_DIR/killer_super"
+echo "install:  $BIN_DIR/killer and $BIN_DIR/killer_super"
 
 if [ "$DRY_RUN" -eq 1 ]; then
   echo "dry run: nothing downloaded or installed"
@@ -131,9 +132,11 @@ echo "checksum ok"
 
 tar -xzf "$work/$NAME.tar.gz" -C "$work"
 mkdir -p "$BIN_DIR"
-cp "$work/$NAME/killer_super" "$BIN_DIR/killer_super"
-chmod +x "$BIN_DIR/killer_super"
-echo "installed $BIN_DIR/killer_super"
+for b in killer killer_super; do
+  cp "$work/$NAME/$b" "$BIN_DIR/$b"
+  chmod +x "$BIN_DIR/$b"
+  echo "installed $BIN_DIR/$b"
+done
 
 case ":$PATH:" in
   *":$BIN_DIR:"*) ;;

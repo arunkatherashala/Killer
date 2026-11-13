@@ -1,14 +1,24 @@
 # Builds release binaries when a tag like v1.0.0 is pushed and attaches them
-# (plus SHA256 sums) to the GitHub release. Not runnable locally.
+# (plus SHA256 sums) to the GitHub release.
+# Manual dry run: Actions > release > Run workflow. It builds, tests and uploads the archives as
+# workflow artifacts but never creates a release (the publish job only runs for a pushed tag).
 name: release
 
 on:
   push:
     tags:
-      - "v*"
+      - "v[0-9]+.[0-9]+.[0-9]+*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version label for the archive names (dry run only, no release is created)"
+        default: "v0.0.0-dryrun"
+        type: string
 
 env:
   CARGO_TERM_COLOR: always
+  # Tag on a tag push, the typed label on a manual dry run (a branch name would contain slashes).
+  RELEASE_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || inputs.version }}
 
 permissions:
   contents: write
@@ -49,19 +59,47 @@ jobs:
         with:
           workspaces: "SOURCE/src/v2-rust/killer"
 
-      # The crate has no src/bin/killer.rs, so killer_super is the only binary shipped.
-      - name: Build killer_super
+      # The tag must match the crate version, so `killer --version` agrees with the release.
+      - name: Check tag matches Cargo.toml version
+        if: github.ref_type == 'tag'
+        shell: bash
+        run: |
+          crate="$(sed -n 's/^version *= *"\([^"]*\)".*/\1/p' SOURCE/src/v2-rust/killer/Cargo.toml | head -n 1)"
+          if [ "v$crate" != "${RELEASE_VERSION%%-*}" ]; then
+            echo "tag $RELEASE_VERSION does not match Cargo.toml version $crate" >&2
+            exit 1
+          fi
+
+      # `killer` is the driver (run, fmt, test, ...); killer_super is the compiler pipeline.
+      - name: Build killer and killer_super
         working-directory: SOURCE/src/v2-rust/killer
-        run: cargo build --release --bin killer_super --target ${{ matrix.rust-target }}
+        run: cargo build --release --bin killer --bin killer_super --target ${{ matrix.rust-target }}
+
+      # macos-x64 is cross-compiled on an arm64 runner and cannot be executed there.
+      - name: Smoke test
+        if: matrix.target-name != 'macos-x64'
+        shell: bash
+        working-directory: SOURCE/src/v2-rust/killer
+        run: |
+          bin="target/${{ matrix.rust-target }}/release/killer"
+          "$bin" --version
+          echo 'print("hello from killer")' > "$RUNNER_TEMP/hello.killer"
+          out="$("$bin" run "$RUNNER_TEMP/hello.killer" | tr -d '\r')"
+          echo "$out"
+          [ "$out" = "hello from killer" ]
+          crate="$(sed -n 's/^version *= *"\([^"]*\)".*/\1/p' Cargo.toml | head -n 1)"
+          "$bin" --version | grep -F "$crate"
 
       - name: Package (unix)
         if: matrix.archive == 'tar.gz'
         shell: bash
         run: |
           set -euo pipefail
-          name="killer_super-${GITHUB_REF_NAME}-${{ matrix.target-name }}"
+          name="killer_super-${RELEASE_VERSION}-${{ matrix.target-name }}"
           mkdir "$name"
-          cp "SOURCE/src/v2-rust/killer/target/${{ matrix.rust-target }}/release/killer_super" "$name/"
+          for b in killer killer_super; do
+            cp "SOURCE/src/v2-rust/killer/target/${{ matrix.rust-target }}/release/$b" "$name/"
+          done
           cp LICENSE README.md "$name/"
           tar -czf "$name.tar.gz" "$name"
           if command -v sha256sum >/dev/null 2>&1; then
@@ -75,9 +113,11 @@ jobs:
         if: matrix.archive == 'zip'
         shell: pwsh
         run: |
-          $name = "killer_super-$env:GITHUB_REF_NAME-${{ matrix.target-name }}"
+          $name = "killer_super-$env:RELEASE_VERSION-${{ matrix.target-name }}"
           New-Item -ItemType Directory $name | Out-Null
-          Copy-Item "SOURCE/src/v2-rust/killer/target/${{ matrix.rust-target }}/release/killer_super.exe" $name
+          foreach ($b in "killer", "killer_super") {
+            Copy-Item "SOURCE/src/v2-rust/killer/target/${{ matrix.rust-target }}/release/$b.exe" $name
+          }
           Copy-Item LICENSE, README.md $name
           Compress-Archive -Path $name -DestinationPath "$name.zip"
           $hash = (Get-FileHash "$name.zip" -Algorithm SHA256).Hash.ToLower()
@@ -94,6 +134,7 @@ jobs:
   publish:
     name: Publish release
     needs: build
+    if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -107,4 +148,4 @@ jobs:
         with:
           files: dist/*
           generate_release_notes: true
-          prerelease: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
