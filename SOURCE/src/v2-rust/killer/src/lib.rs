@@ -361,6 +361,7 @@ pub mod gui_builtins;           // gui_open(): the browser as a window (see std/
 pub mod sql_engine;             // sql_open / sql_exec / sql_query / sql_close
 pub mod eval_builtins;         // eval(code, vars) / exec(code, vars)
 pub mod net_sock;              // real TCP / UDP / WebSocket sockets
+pub mod net_tls_server;       // TLS listener side (openssl s_server per connection)
 pub mod lang_builtins;         // everyday builtins: ord/chr, padding, logs, stats, base64, sets
 pub mod text_methods;          // capitalize/title/find/count/zfill/is* and method-call fallback to builtins
 pub mod ordered_map;           // insertion-ordered map behind dictionaries

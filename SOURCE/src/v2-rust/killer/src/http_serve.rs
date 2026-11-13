@@ -468,7 +468,34 @@ fn serve_loop(vm: &mut VirtualMachine, args: &[Value], program: &Program, once: 
     if handler.is_none() && ROUTES.with(|r| r.borrow().is_empty()) {
         return err(format!("{}(): pass a handler function or register routes with route() first", who));
     }
-    let listener = TcpListener::bind((host.as_str(), port)).map_err(|e| VmError::runtime_error(format!("{}: cannot bind {}:{}: {}", who, host, port, e)))?;
+    // `tls: {cert, key}` serves HTTPS: a TLS front (openssl) listens on host:port and forwards plain text to a private
+    // loopback listener, which the loop below serves as usual.
+    let tls_files = match opts.as_ref().and_then(|o| o.get("tls")) {
+        None | Some(Value::Null) => None,
+        Some(Value::Dict(t)) => match (t.get("cert"), t.get("key")) {
+            (Some(Value::Str(c)), Some(Value::Str(k))) => Some((c, k)),
+            _ => return err(format!("{}(): tls must be a dict {{\"cert\": file, \"key\": file}}", who)),
+        },
+        Some(_) => return err(format!("{}(): tls must be a dict {{\"cert\": file, \"key\": file}}", who)),
+    };
+    let tls_stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    struct StopOnDrop(std::sync::Arc<std::sync::atomic::AtomicBool>);
+    impl Drop for StopOnDrop {
+        fn drop(&mut self) {
+            self.0.store(true, std::sync::atomic::Ordering::SeqCst);
+        }
+    }
+    let _tls_guard = StopOnDrop(tls_stop.clone());
+    let listener = if let Some((cert, key)) = tls_files {
+        crate::net_tls_server::check_credentials(&cert, &key, who)?;
+        let front = TcpListener::bind((host.as_str(), port)).map_err(|e| VmError::runtime_error(format!("{}: cannot bind {}:{}: {}", who, host, port, e)))?;
+        let inner = TcpListener::bind(("127.0.0.1", 0)).map_err(|e| VmError::runtime_error(format!("{}: {}", who, e)))?;
+        let backend = inner.local_addr().map_err(|e| VmError::runtime_error(format!("{}: {}", who, e)))?;
+        crate::net_tls_server::spawn_front(front, backend, cert, key, tls_stop.clone());
+        inner
+    } else {
+        TcpListener::bind((host.as_str(), port)).map_err(|e| VmError::runtime_error(format!("{}: cannot bind {}:{}: {}", who, host, port, e)))?
+    };
     listener.set_nonblocking(true).map_err(|e| VmError::runtime_error(format!("{}: {}", who, e)))?;
     STOP.store(false, std::sync::atomic::Ordering::SeqCst);
 

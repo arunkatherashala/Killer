@@ -50,6 +50,7 @@ The row-by-row history is in the root `tracker.csv`; the Python comparison is in
 | UDP sockets | yes | `udp_bind`, `udp_send`, `udp_recv` |
 | WebSocket client and server | yes | `ws://`, and `wss://` through TLS; text messages |
 | TLS client sockets | yes | `tcp_connect_tls`, `wss://`; verified through the system `openssl` command |
+| TLS servers (HTTPS, `wss://`) | yes | `tls_listen` / `tls_accept`, `serve(..., {tls: {cert, key}})`, `ws_accept` on a TLS listener; one `openssl s_server` child per connection; needs `openssl` on the PATH |
 | SQL database | yes | `sql_open` / `sql_exec` / `sql_query`: single-table SQL, no joins; file or memory |
 | Process control, environment | yes | |
 | Graphical windows (GUI) | yes | the browser is the window: `gui_show`, `gui_open`; no native widgets |
@@ -81,6 +82,6 @@ The row-by-row history is in the root `tracker.csv`; the Python comparison is in
 
 ## Not built
 
-1. TLS listeners (HTTPS servers); WebAssembly for strings, lists and objects.
+1. WebAssembly for strings, lists and objects.
 2. SQL joins and subqueries; native GUI widgets; hygienic macros.
 3. Live LLM provider tests (need an API key) and a run of the release workflow (needs a tag).

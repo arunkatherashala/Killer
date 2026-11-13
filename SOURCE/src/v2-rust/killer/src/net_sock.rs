@@ -48,11 +48,17 @@ struct TlsPipe {
     timeout: Option<Duration>,
     errors: Arc<Mutex<String>>,
     addr: String,
+    /// server side: on close, let `openssl` flush and finish before it is killed
+    graceful: bool,
 }
 
 impl Drop for TlsPipe {
     fn drop(&mut self) {
         self.stdin.take();
+        if self.graceful {
+            crate::net_tls_server::reap(&mut self.child, Duration::from_secs(3));
+            return;
+        }
         let _ = self.child.kill();
         let _ = self.child.wait();
     }
@@ -163,9 +169,14 @@ fn tls_connect(addr: &str, ca_file: Option<&str>, who: &str) -> Result<Conn, VmE
         Ok(c) => c,
         Err(e) => return err(format!("{}(): TLS needs the `openssl` command-line tool on the PATH ({})", who, e)),
     };
-    let mut out = child.stdout.take().unwrap();
-    let mut errp = child.stderr.take().unwrap();
+    let out = child.stdout.take().unwrap();
+    let errp = child.stderr.take().unwrap();
     let stdin = child.stdin.take();
+    Ok(pipe_conn(child, stdin, out, errp, addr.to_string(), false))
+}
+
+/// Wrap a TLS child process (plain text read from its stdout on a helper thread, stderr collected) as a connection.
+fn pipe_conn(child: Child, stdin: Option<ChildStdin>, mut out: impl Read + Send + 'static, mut errp: impl Read + Send + 'static, addr: String, graceful: bool) -> Conn {
     let (tx, rx) = channel::<Vec<u8>>();
     std::thread::spawn(move || {
         let mut b = [0u8; 8192];
@@ -190,7 +201,19 @@ fn tls_connect(addr: &str, ca_file: Option<&str>, who: &str) -> Result<Conn, VmE
             }
         }
     });
-    Ok(Conn::Tls(Box::new(TlsPipe { child, stdin, rx, pending: Vec::new(), timeout: None, errors, addr: addr.to_string() })))
+    Conn::Tls(Box::new(TlsPipe { child, stdin, rx, pending: Vec::new(), timeout: None, errors, addr, graceful }))
+}
+
+/// A connection accepted on listener `id`: plain, or (for a `tls_listen` listener) with TLS terminated by `openssl`.
+fn wrap_accepted(id: u64, raw: TcpStream, who: &str) -> Result<Conn, VmError> {
+    match TLS_CFG.with(|c| c.borrow().get(&id).cloned()) {
+        None => Ok(Conn::Tcp(raw)),
+        Some((cert, key)) => {
+            let peer = raw.peer_addr().map(|a| a.to_string()).unwrap_or_default();
+            let t = crate::net_tls_server::terminate(raw, &cert, &key, who)?;
+            Ok(pipe_conn(t.child, Some(t.stdin), t.stdout, t.stderr, peer, true))
+        }
+    }
 }
 
 fn opt_str(args: &[Value], i: usize, key: &str) -> Option<String> {
@@ -205,12 +228,14 @@ fn opt_str(args: &[Value], i: usize, key: &str) -> Option<String> {
 
 thread_local! {
     static SOCKS: RefCell<HashMap<u64, Sock>> = RefCell::new(HashMap::new());
+    /// listener handle -> (certificate file, key file) for listeners made by `tls_listen`
+    static TLS_CFG: RefCell<HashMap<u64, (String, String)>> = RefCell::new(HashMap::new());
     static NEXT: RefCell<u64> = const { RefCell::new(1) };
 }
 
 const NAMES: &[&str] = &[
     "tcp_listen", "tcp_accept", "tcp_connect", "sock_send", "sock_recv", "sock_recv_line", "sock_addr", "sock_peer",
-    "sock_close", "tcp_connect_tls", "tls_error", "udp_bind", "udp_send", "udp_recv", "ws_connect", "ws_accept", "ws_send", "ws_recv", "ws_close",
+    "sock_close", "tcp_connect_tls", "tls_error", "tls_listen", "tls_accept", "udp_bind", "udp_send", "udp_recv", "ws_connect", "ws_accept", "ws_send", "ws_recv", "ws_close",
 ];
 
 /// True when `name` is one of this module's builtins (the compiler needs the list too).
@@ -392,15 +417,29 @@ fn dispatch(name: &str, args: &[Value]) -> Result<Value, VmError> {
             let l = io(name, TcpListener::bind(resolve(addr, name)?))?;
             Ok(insert(Sock::Listener(l)))
         }
-        "tcp_accept" => {
+        "tls_listen" => {
+            let addr = string(args, 0, name)?;
+            let (cert, key) = (string(args, 1, name)?, string(args, 2, name)?);
+            crate::net_tls_server::check_credentials(cert, key, name)?;
+            let l = io(name, TcpListener::bind(resolve(addr, name)?))?;
+            let v = insert(Sock::Listener(l));
+            if let Value::Number(n) = &v {
+                TLS_CFG.with(|c| c.borrow_mut().insert(*n as u64, (cert.to_string(), key.to_string())));
+            }
+            Ok(v)
+        }
+        "tcp_accept" | "tls_accept" => {
             let id = handle(args, name)?;
             let ms = whole(args, 1, name, Some(0))?;
+            if name == "tls_accept" && !TLS_CFG.with(|c| c.borrow().contains_key(&id)) {
+                return err("tls_accept(): not a TLS listener (make one with tls_listen)");
+            }
             let got = with_sock(id, name, |s| match s {
                 Sock::Listener(l) => accept(l, ms, name),
-                _ => err("tcp_accept(): not a listener"),
+                _ => err(format!("{}(): not a listener", name)),
             })?;
             Ok(match got {
-                Some(stream) => insert(Sock::Tcp { stream: Conn::Tcp(stream), buf: Vec::new() }),
+                Some(stream) => insert(Sock::Tcp { stream: wrap_accepted(id, stream, name)?, buf: Vec::new() }),
                 None => Value::Null,
             })
         }
@@ -478,8 +517,14 @@ fn dispatch(name: &str, args: &[Value]) -> Result<Value, VmError> {
         "sock_close" | "ws_close" => {
             let id = handle(args, name)?;
             let removed = SOCKS.with(|s| s.borrow_mut().remove(&id));
-            if let Some(Sock::Ws { mut stream, client, closed: false, .. }) = removed {
+            TLS_CFG.with(|c| c.borrow_mut().remove(&id));
+            if let Some(Sock::Ws { mut stream, mut buf, client, closed: false }) = removed {
                 let _ = stream.write_all(&frame(8, &[], client));
+                if matches!(stream, Conn::Tls(_)) {
+                    // finish the closing handshake so the TLS child has sent the close frame before it is stopped
+                    let mut done = false;
+                    let _ = ws_read(&mut stream, &mut buf, client, &mut done, 1500);
+                }
             }
             Ok(Value::Null)
         }
@@ -529,7 +574,7 @@ fn dispatch(name: &str, args: &[Value]) -> Result<Value, VmError> {
             })?;
             match got {
                 Some(raw) => {
-                    let mut stream = Conn::Tcp(raw);
+                    let mut stream = wrap_accepted(id, raw, name)?;
                     let mut buf = Vec::new();
                     server_handshake(&mut stream, &mut buf)?;
                     Ok(insert(Sock::Ws { stream, buf, client: false, closed: false }))

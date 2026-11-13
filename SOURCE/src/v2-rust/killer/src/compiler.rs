@@ -6917,7 +6917,7 @@ const BUILTINS: &[&str] = &[
     "ffi_open", "ffi_call", "ffi_close", "ffi_alloc", "ffi_free", "ffi_poke", "ffi_peek",
     "hex", "bin", "oct", "uuid", "dict_merge",
     "eval", "exec", "gui_open", "sql_open", "sql_exec", "sql_query", "sql_close",
-    "tcp_listen", "tcp_accept", "tcp_connect", "sock_send", "sock_recv", "sock_recv_line", "sock_addr", "sock_peer",
+    "tls_listen", "tls_accept", "tcp_listen", "tcp_accept", "tcp_connect", "sock_send", "sock_recv", "sock_recv_line", "sock_addr", "sock_peer",
     "sock_close", "tcp_connect_tls", "tls_error", "udp_bind", "udp_send", "udp_recv", "ws_connect", "ws_accept", "ws_send", "ws_recv", "ws_close",
     "ord", "chr", "pad_left", "pad_right", "repeat", "strip", "lstrip", "rstrip", "startsWith", "endsWith",
     "base64_encode", "base64_decode", "hmac_sha256", "float", "bool", "log", "log2", "log10", "exp", "cbrt",
