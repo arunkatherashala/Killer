@@ -61,7 +61,7 @@ The row-by-row history is in the root `tracker.csv`; the Python comparison is in
 | Feature | Status | Notes |
 |---|---|---|
 | Local model inference (GGUF) | yes | |
-| LLM providers (OpenAI, Anthropic, Ollama) | partial | code and mocks tested; no live-provider test (needs a key) |
+| LLM providers (OpenAI, Anthropic, Ollama) | partial | request building, headers, parsing, streaming and errors tested against a local fake server (`tests/llm_live.rs`); the opt-in live suite (`docs/LLM_TESTING.md`) is written but not yet run against a real provider (needs a key) |
 | Embeddings, vector store, chunking, RAG | yes | scale measured at 33k and 332k chunks |
 | Streaming responses | yes | |
 
