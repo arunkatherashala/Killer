@@ -56,7 +56,7 @@ impl Drop for TlsPipe {
     fn drop(&mut self) {
         self.stdin.take();
         if self.graceful {
-            crate::net_tls_server::reap(&mut self.child, Duration::from_secs(3));
+            crate::net_tls_server::reap(&mut self.child, Duration::from_secs(20));
             return;
         }
         let _ = self.child.kill();
@@ -676,7 +676,7 @@ fn server_handshake(stream: &mut Conn, buf: &mut Vec<u8>) -> Result<(), VmError>
 
 /// Read an HTTP head (up to the blank line); anything read past it stays in `buf`.
 fn read_head(stream: &mut Conn, buf: &mut Vec<u8>, who: &str) -> Result<String, VmError> {
-    io(who, stream.set_read_timeout(Some(Duration::from_secs(10))))?;
+    io(who, stream.set_read_timeout(Some(Duration::from_secs(30))))?;
     loop {
         if let Some(p) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
             let head: Vec<u8> = buf.drain(..p + 4).collect();

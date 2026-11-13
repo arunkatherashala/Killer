@@ -478,6 +478,38 @@ fn rewrite_line(line: &str, counter: &mut usize) -> String {
     let code = code.trim_end_matches(';').trim_end();
     let masked_code = &masked_code[..code.len().min(masked_code.len())];
 
+    // 0) `if c { x += 1 } else { n++ }`, `for s in xs { total += s; n++ }`: rewrite each statement of a one-line block
+    if let Some(pairs) = one_line_blocks(code, masked_code) {
+        let mut out = String::new();
+        let mut last = 0;
+        for (open, close) in pairs {
+            let body_o = &code[open + 1..close];
+            let body_m = &masked_code[open + 1..close];
+            let mut parts: Vec<String> = Vec::new();
+            let mut start = 0;
+            let mut depth = 0i32;
+            for (k, c) in body_m.char_indices() {
+                match c {
+                    '{' => depth += 1,
+                    '}' => depth -= 1,
+                    ';' if depth == 0 => {
+                        parts.push(body_o[start..k].to_string());
+                        start = k + 1;
+                    }
+                    _ => {}
+                }
+            }
+            parts.push(body_o[start..].to_string());
+            let rewritten: Vec<String> =
+                parts.iter().filter(|p| !p.trim().is_empty()).map(|p| rewrite_line(p.trim(), counter)).collect();
+            out.push_str(&code[last..open + 1]);
+            out.push_str(&format!(" {} ", rewritten.join("; ")));
+            last = close;
+        }
+        out.push_str(&code[last..]);
+        return format!("{}{}{}", indent, out, comment_part);
+    }
+
     // 1) x++  /  a[i]++  /  this.n++
     if let Some(tl) = target_len(code) {
         let rest = code[tl..].trim();
@@ -546,6 +578,48 @@ fn rewrite_line(line: &str, counter: &mut usize) -> String {
         }
     }
     line.to_string()
+}
+
+/// For a line that is a control header with whole bodies on the same line (`for s in xs { total += s }`,
+/// `if c { a += 1 } else { n++ }`, `} else { n++ }`), the (open, close) byte positions of each outermost
+/// `{ ... }` body. Anything else gives `None`.
+fn one_line_blocks(code: &str, masked: &str) -> Option<Vec<(usize, usize)>> {
+    let head = code.trim_start_matches('}').trim_start();
+    let word: String = head.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
+    if !matches!(word.as_str(), "if" | "while" | "for" | "else" | "elif" | "catch" | "try" | "finally" | "do") {
+        return None;
+    }
+    if !code.ends_with('}') {
+        return None;
+    }
+    // the outermost `{ ... }` pairs; bodies are rewritten recursively, so nested one-line blocks work too
+    let mut pairs = Vec::new();
+    let mut depth = 0i32;
+    let mut open = 0usize;
+    for (i, c) in masked.char_indices() {
+        match c {
+            '{' => {
+                if depth == 0 {
+                    open = i;
+                }
+                depth += 1;
+            }
+            '}' => {
+                depth -= 1;
+                if depth < 0 {
+                    return None;
+                }
+                if depth == 0 {
+                    pairs.push((open, i));
+                }
+            }
+            _ => {}
+        }
+    }
+    if depth != 0 || pairs.is_empty() {
+        return None;
+    }
+    Some(pairs)
 }
 
 /// Byte index of the first comment start (`#` after whitespace, `//`, `--`) outside strings.

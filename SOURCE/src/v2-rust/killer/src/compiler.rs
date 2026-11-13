@@ -364,6 +364,13 @@ pub fn compile_killer_subset(source: &str) -> Result<Program, VmError> {
             &map,
         ));
     }
+    // `i--` would silently become `i` (`--` starts a comment): make that mistake an error too
+    if let Some(line) = crate::hints::silent_decrement(&imported) {
+        return Err(remap_error(
+            VmError::parse_error_simple(format!("Line {}: {}", line, crate::hints::DECREMENT_MESSAGE)),
+            &map,
+        ));
+    }
     // `test "name" { }` blocks become functions (same line count, so `map` is unchanged)
     let imported = crate::testfw::lower(&imported);
     // `const NAME = value`: assigning it again is a compile error; the word `const` is removed (same line count)

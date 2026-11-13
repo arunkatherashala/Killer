@@ -253,3 +253,61 @@ mod tests {
         assert!(floor_division_hint("s = \"a // b\" + (1").is_none());
     }
 }
+
+/// The message for a `x--` that was meant as a decrement.
+pub const DECREMENT_MESSAGE: &str = "-- starts a comment in Killer, so `x--` would do nothing; write x -= 1";
+
+/// Scan a whole program for a decrement written as `x--` (or `a[i]--;`), which would silently
+/// become a comment and leave the variable unchanged (an endless loop in a `while`).
+/// Returns the 1-based line of the first one. The mistake is a name, `)` or `]` with `--` glued
+/// to it and nothing but `;` after. `x --` (with a space), `-- comment` lines, strings and `@lang`
+/// blocks are untouched.
+pub fn silent_decrement(source: &str) -> Option<usize> {
+    let mut poly_depth = 0i32;
+    let mut in_backtick = false;
+    for (index, line) in source.lines().enumerate() {
+        let trimmed = line.trim();
+        if poly_depth > 0 {
+            poly_depth += trimmed.matches('{').count() as i32 - trimmed.matches('}').count() as i32;
+            continue;
+        }
+        if !in_backtick && trimmed.starts_with('@') && trimmed.contains('{') {
+            poly_depth = trimmed.matches('{').count() as i32 - trimmed.matches('}').count() as i32;
+            continue;
+        }
+        let b = line.as_bytes();
+        let mut quote: Option<u8> = if in_backtick { Some(b'`') } else { None };
+        let mut i = 0;
+        while i < b.len() {
+            let c = b[i];
+            match quote {
+                Some(q) => {
+                    if c == 92 && q != b'`' {
+                        i += 1;
+                    } else if c == q {
+                        quote = None;
+                    }
+                }
+                None => {
+                    if c == b'"' || c == 39 || c == b'`' {
+                        quote = Some(c);
+                    } else if c == b'#' && (i == 0 || b[i - 1].is_ascii_whitespace()) {
+                        break;
+                    } else if c == b'/' && b.get(i + 1) == Some(&b'/') {
+                        break;
+                    } else if c == b'-' && b.get(i + 1) == Some(&b'-') {
+                        let glued = i > 0 && (b[i - 1].is_ascii_alphanumeric() || matches!(b[i - 1], b'_' | b')' | b']'));
+                        let rest = line[i + 2..].trim();
+                        if glued && (rest.is_empty() || rest == ";") {
+                            return Some(index + 1);
+                        }
+                        break; // any other `--` starts a comment
+                    }
+                }
+            }
+            i += 1;
+        }
+        in_backtick = quote == Some(b'`');
+    }
+    None
+}

@@ -232,30 +232,38 @@ fn serve_over_https_handles_several_requests() {
         r#"fn h(req) {{
     return {{"status": 200, "headers": {{"X-Seen": req["path"]}}, "body": "hello " + req["method"] + " " + req["path"]}}
 }}
-n = serve({port}, h, {{"max_requests": 3, "tls": {{"cert": "{cert}", "key": "{key}"}}}})
+n = serve({port}, h, {{"max_requests": 12, "tls": {{"cert": "{cert}", "key": "{key}"}}}})
 println("served", n)
 "#
     );
     let file = script(&server_src);
-    let server = Command::new(env!("CARGO_BIN_EXE_killer")).arg("run").arg(&file).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+    let mut server = Command::new(env!("CARGO_BIN_EXE_killer")).arg("run").arg(&file).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
     for p in ["/a", "/b", "/c"] {
         let mut got = None;
+        let mut last_err = String::new();
         for _ in 0..100 {
             let o = Command::new("curl").args(["-sS", "-k", "-i", "--max-time", "90"]).arg(format!("https://127.0.0.1:{port}{p}")).output().unwrap();
             if o.status.success() {
                 got = Some(String::from_utf8_lossy(&o.stdout).to_string());
                 break;
             }
+            last_err.push_str(&format!(" | [{p}] {} {}", o.status, String::from_utf8_lossy(&o.stderr).trim()));
             std::thread::sleep(std::time::Duration::from_millis(200)); // server not up yet
         }
-        let r = got.expect("no answer over https");
+        if got.is_none() {
+            let _ = server.kill();
+            let o = server.wait_with_output().unwrap();
+            panic!("no answer over https for {p}: curl errors: {last_err}; server stdout: {} stderr: {}", String::from_utf8_lossy(&o.stdout), String::from_utf8_lossy(&o.stderr));
+        }
+        let r = got.unwrap();
         assert!(r.contains("200 OK"), "{r}");
         assert!(r.contains(&format!("hello GET {p}")), "{r}");
         assert!(r.to_lowercase().contains(&format!("x-seen: {p}")), "{r}");
     }
-    let o = server.wait_with_output().unwrap();
-    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
-    assert_eq!(String::from_utf8_lossy(&o.stdout).trim(), "served 3");
+    // max_requests has headroom (a retried attempt that the server already counted must not end the run),
+    // so stop the server ourselves once all three answers are in
+    let _ = server.kill();
+    let _ = server.wait();
     let _ = std::fs::remove_dir_all(file.parent().unwrap());
 }
 

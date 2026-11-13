@@ -339,6 +339,14 @@ y = x // 2
 # expect-error: starts a comment in Killer
 ```
 
+**`x--` is a mistake, not a decrement.** Killer has `x++`, but `--` starts a comment, so `i--` would silently
+become `i` and a `while i > 0` loop would never end. A name, `)` or `]` with `--` glued to it and nothing after it
+(except `;`) is a compile error: "-- starts a comment in Killer, so `x--` would do nothing; write x -= 1".
+`x -= 1` is the way to decrement; `x -- note` (with a space) is still a comment.
+
+**One-line blocks take `+=` and `++`.** `for s in xs { total += s }`, `while n < 3 { n++ }` and
+`if a { n += 1 } else { n -= 1 }` work like their multi-line forms, nested one-line blocks included.
+
 ## Strings
 
 Strings use `"..."` or `'...'`, support the escapes `\n \t \\ \"`, triple-quoted `"""..."""` for
@@ -1473,7 +1481,7 @@ one TLS helper child on a private loopback port (`openssl s_server -naccept 1`; 
 idle; `openssl` turns the PEM files into a one-off PKCS#12 file that the script deletes once loaded), and a bridge thread
 copies the encrypted bytes between the client and that child while the plain text goes through the child's pipes. The handshake runs in the background, so
 `tls_accept` returns at once and the first read waits for it; a client that fails the handshake only loses its own
-connection. `sock_close` lets `openssl` flush pending output (up to 3 s) before it is stopped, so a reply sent right before
+connection. `sock_close` lets `openssl` flush pending output (up to 20 s, normally a few milliseconds) before it is stopped, so a reply sent right before
 closing arrives complete. Limits: each connection costs one `openssl` process plus a few threads (fine for tens of
 clients, not thousands); no client certificates, ALPN or session resumption; `sock_addr` of a TLS connection is
 `"(tls)"`.

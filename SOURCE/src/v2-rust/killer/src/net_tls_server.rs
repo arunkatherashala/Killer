@@ -263,7 +263,7 @@ pub fn spawn_front(front: TcpListener, backend: std::net::SocketAddr, cert: Stri
                             }
                         }
                         drop(stdin); // EOF: s_server finishes the connection
-                        reap(&mut child, Duration::from_secs(3));
+                        reap(&mut child, Duration::from_secs(20));
                         let _ = up.join();
                     });
                 }
