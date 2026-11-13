@@ -824,3 +824,128 @@ fn a_constant_error_names_the_constant_and_the_right_line() {
     assert!(!ok);
     assert!(stderr.contains("LIMIT") && stderr.contains("Line 4"), "stderr was: {stderr}");
 }
+
+const HYGIENE: &[(&str, &str)] = &[
+    // a temporary inside the macro does not clobber the caller's variable of the same name
+    (r#"macro swap(a, b) { tmp = a
+a = b
+b = tmp }
+tmp = 100
+x = 1
+y = 2
+swap!(x, y)
+println(x, y, tmp)"#, r#"2 1 100"#),
+    // the caller's argument may itself mention the macro's temporary name
+    (r#"macro swap(a, b) { tmp = a
+a = b
+b = tmp }
+tmp = 1
+y = 2
+swap!(tmp, y)
+println(tmp, y)"#, r#"2 1"#),
+    // two expansions in one scope get separate temporaries
+    (r#"macro double_it(v) { t = v * 2
+v = t }
+a = 3
+b = 5
+double_it!(a)
+double_it!(b)
+println(a, b)"#, r#"6 10"#),
+    // nested and recursive use: each level has its own names
+    (r#"macro inc(v) { t = v + 1
+v = t }
+macro inc2(v) { t = v
+inc!(t)
+inc!(t)
+v = t }
+t = 10
+q = 5
+inc2!(q)
+println(q, t)"#, r#"7 10"#),
+    // a loop variable of the macro does not touch the caller's i
+    (r#"macro sum_to(n) { total = 0
+for i in range(n) { total = total + i }
+println(total) }
+i = 42
+total = 7
+sum_to!(4)
+sum_to!(5)
+println(i, total)"#, r#"6
+10
+42 7"#),
+    // C-style for, catch variable, lambda parameter, let
+    (r#"macro m() { for (k = 0; k < 2; k++) { w = k }
+try { throw "boom" } catch e { println(e) }
+f = (x) => x + 1
+println(f(1)) }
+k = 9
+e = "mine"
+x = 5
+w = 3
+m!()
+println(k, e, x, w)"#, r#"boom
+2
+9 mine 5 3"#),
+    // inside a function and a class method
+    (r#"macro bump(v) { t = v + 1
+v = t }
+fn f() {
+  t = 50
+  n = 1
+  bump!(n)
+  bump!(n)
+  return [n, t]
+}
+println(f())
+class C {
+  fn go() {
+    t = "keep"
+    n = 10
+    bump!(n)
+    return n + len(t)
+  }
+}
+println((new C()).go())"#, r#"[3, 50]
+15"#),
+    // free names, members, keys, strings and f-strings: globals and functions stay; f-string interpolation is renamed
+    (r#"fn helper(a) { return a * 10 }
+macro m(v) { r = helper(v)
+d = {"r": r, "r2": 1}
+println(f"r={r} {d.r2}")
+println("r") }
+r = 1
+m!(4)
+println(r)"#, r#"r=40 1
+r
+1"#),
+    // `$name` is an intentional capture of the caller's variable
+    (r#"macro count_up() { $counter = $counter + 1 }
+counter = 0
+count_up!()
+count_up!()
+println(counter)"#, r#"2"#),
+    // without `$`, an assignment in the body is private
+    (r#"macro out() { result = 5 }
+out!()
+println(result)"#, r#"ERR"#),
+];
+
+/// Macros are hygienic: names the body introduces are renamed per expansion, `$name` captures on purpose.
+#[test]
+fn macro_hygiene() {
+    check(HYGIENE);
+}
+
+/// Errors raised inside an expansion still point at the source line of the call, and lines after it stay right.
+#[test]
+fn macro_error_lines() {
+    let src = "macro boom(v) { t = v\nprintln(t / 0) }\nprintln(\"start\")\n\n\nboom!(3)\nprintln(\"never\")\n";
+    let (ok, stdout, stderr) = run(src);
+    assert!(!ok);
+    assert_eq!(stdout, "start");
+    assert!(stderr.contains("line 6") || stderr.contains(":6"), "stderr: {stderr}");
+    let src2 = "macro one() { t = 1 }\n\none!()\nx = 2\n\n\nprintln(undefined_name)\n";
+    let (ok2, _o, e2) = run(src2);
+    assert!(!ok2);
+    assert!(e2.contains("line 7") || e2.contains(":7"), "stderr: {e2}");
+}

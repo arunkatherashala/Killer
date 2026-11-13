@@ -1814,8 +1814,8 @@ struct Macro {
 
 /// `macro name(a, b) { text }` defines a text template; `name!(x, y)` is replaced by the text with each parameter
 /// word replaced by the argument text (not evaluated first, so a macro can wrap code: `macro twice(s) { s; s }`).
-/// A one-line body used inside an expression is wrapped in parentheses. There is no hygiene: names in the body are
-/// the caller's names. Expansion is limited to 16 levels (a macro that expands to itself stops there).
+/// A one-line body used inside an expression is wrapped in parentheses. Macros are hygienic: names the body itself
+/// introduces are renamed per expansion (`hygienic_body`), `$name` opts out. Expansion is limited to 16 levels (a macro that expands to itself stops there).
 fn expand_macros(src: &str) -> Option<(String, Vec<usize>)> {
     if !src.contains("macro") {
         return None;
@@ -1856,6 +1856,7 @@ fn expand_macros(src: &str) -> Option<(String, Vec<usize>)> {
     if macros.is_empty() {
         return None;
     }
+    let mut counter = 0usize;
     let mut out = crate::sourcemap::Rewriter::new(src);
     let mut copied = 0usize;
     let mut i = 0usize;
@@ -1880,7 +1881,7 @@ fn expand_macros(src: &str) -> Option<(String, Vec<usize>)> {
                 if let Some(close) = matching(&m, j + 1) {
                     let args = split_top_commas(&src[j + 2..close]);
                     let indent = indent_of(src, i);
-                    let expanded = expand_one(&macros[&src[i..j]], &args, &macros, &indent, at_statement_start(&m, i), 0);
+                    let expanded = expand_one(&macros[&src[i..j]], &args, &macros, &indent, at_statement_start(&m, i), 0, &mut counter);
                     out.copy(copied, i);
                     out.replace(i, close + 1, &expanded);
                     copied = close + 1;
@@ -1921,8 +1922,209 @@ fn protect_arg(arg: &str) -> String {
     }
 }
 
-fn expand_one(mac: &Macro, args: &[String], all: &HashMap<String, Macro>, indent: &str, statement: bool, depth: u32) -> String {
-    let mut text = mac.body.clone();
+const HYGIENE_KEYWORDS: &[&str] = &[
+    "if", "else", "while", "for", "in", "fn", "return", "let", "const", "var", "class", "try", "catch", "finally", "throw", "match",
+    "switch", "case", "default", "do", "break", "continue", "this", "self", "true", "false", "null", "new", "import", "from", "as",
+    "with", "and", "or", "not", "is", "yield", "await", "async", "enum", "super", "private", "static",
+];
+
+fn prev_nonblank(m: &[u8], i: usize) -> Option<u8> {
+    m[..i].iter().rev().find(|c| !c.is_ascii_whitespace()).copied()
+}
+
+fn word_end(m: &[u8], i: usize) -> usize {
+    let mut j = i;
+    while j < m.len() && is_word(m[j]) {
+        j += 1;
+    }
+    j
+}
+
+/// The names a macro body introduces itself: assignments at statement start, `let`/`const`/`var`, `for` variables
+/// (also the init of `for (i = 0; ...)`), `catch e`, and parameters of `fn(...)` and `(a, b) => ...` lambdas.
+fn introduced_names(body: &str, m: &[u8]) -> Vec<String> {
+    let mut found: Vec<String> = Vec::new();
+    let mut add = |s: &str| {
+        if is_ident(s) && !HYGIENE_KEYWORDS.contains(&s) && !found.iter().any(|f| f == s) {
+            found.push(s.to_string());
+        }
+    };
+    let mut i = 0;
+    while i < m.len() {
+        if !(is_word(m[i]) && (i == 0 || !is_word(m[i - 1]))) {
+            if m[i] == b'(' {
+                if let Some(c) = matching(m, i) {
+                    let after = skip_blanks(m, c + 1);
+                    if m.get(after) == Some(&b'=') && m.get(after + 1) == Some(&b'>') {
+                        for p in body[i + 1..c].split(',') {
+                            add(p.trim());
+                        }
+                    }
+                }
+            }
+            i += 1;
+            continue;
+        }
+        let j = word_end(m, i);
+        let w = &body[i..j];
+        let q = skip_blanks(m, j);
+        match w {
+            "let" | "const" | "var" | "catch" => {
+                if let Some((n, _)) = read_ident(body, q) {
+                    add(n);
+                }
+            }
+            "for" => {
+                if m.get(q) == Some(&b'(') {
+                    let r = skip_blanks(m, q + 1);
+                    if let Some((n, e)) = read_ident(body, r) {
+                        if m.get(skip_blanks(m, e)) == Some(&b'=') {
+                            add(n);
+                        }
+                    }
+                } else {
+                    let mut r = q;
+                    let mut names: Vec<&str> = Vec::new();
+                    while let Some((n, e)) = read_ident(body, r) {
+                        if n == "in" {
+                            break;
+                        }
+                        names.push(n);
+                        r = skip_blanks(m, e);
+                        if m.get(r) == Some(&b',') {
+                            r = skip_blanks(m, r + 1);
+                        } else {
+                            break;
+                        }
+                    }
+                    if read_ident(body, r).map(|x| x.0) == Some("in") {
+                        for n in names {
+                            add(n);
+                        }
+                    }
+                }
+            }
+            "fn" => {
+                let mut r = q;
+                if let Some((_, e)) = read_ident(body, r) {
+                    r = skip_blanks(m, e);
+                }
+                if m.get(r) == Some(&b'(') {
+                    if let Some(c) = matching(m, r) {
+                        for p in body[r + 1..c].split(',') {
+                            add(p.split('=').next().unwrap_or("").trim());
+                        }
+                    }
+                }
+            }
+            _ => {
+                if at_statement_start(m, i) && m.get(q) == Some(&b'=') && !matches!(m.get(q + 1), Some(b'=') | Some(b'>')) {
+                    add(w);
+                }
+            }
+        }
+        i = j;
+    }
+    found
+}
+
+/// Hygiene: every name the macro body introduces (not a parameter) gets a unique name for this expansion
+/// (`_m3__tmp`), so it can neither capture nor clobber a caller variable. Free names (globals, functions, builtins),
+/// member names after `.`, dict keys and string text are left alone; `{expr}` inside `f"..."` is renamed too.
+/// `$name` in the body is an intentional capture: the `$` is dropped and the name is left as the caller sees it.
+fn hygienic_body(body: &str, params: &[String], n: usize) -> String {
+    let m = mask(body);
+    let names: Vec<String> = introduced_names(body, &m).into_iter().filter(|x| !params.contains(x)).collect();
+    if names.is_empty() && !body.contains('$') {
+        return body.to_string();
+    }
+    let rename = |at: usize, end: usize, m: &[u8], key_check: bool| -> Option<String> {
+        let w = &body[at..end];
+        if !names.iter().any(|x| x == w) || m[at].is_ascii_digit() {
+            return None;
+        }
+        if at > 0 && matches!(m[at - 1], b'.' | b'$') {
+            return None;
+        }
+        if key_check && m.get(skip_blanks(m, end)) == Some(&b':') && matches!(prev_nonblank(m, at), Some(b'{') | Some(b',')) {
+            return None;
+        }
+        Some(format!("_m{n}__{w}"))
+    };
+    let mut out = String::new();
+    let mut last = 0usize;
+    let mut in_str = false;
+    let mut i = 0usize;
+    while i < body.len() {
+        if !body.is_char_boundary(i) {
+            i += 1;
+            continue;
+        }
+        let c = m[i];
+        if c == b'"' || c == b'`' {
+            if !in_str && c == b'"' && i > 0 && matches!(m[i - 1], b'f' | b'k') && (i < 2 || !is_word(m[i - 2])) {
+                // an interpolated string: rename inside its `{...}` parts (raw text, the mask hides them)
+                let close = m[i + 1..].iter().position(|&x| x == b'"').map(|p| p + i + 1).unwrap_or(m.len());
+                let raw = body.as_bytes();
+                let mut k = i + 1;
+                let mut depth = 0u32;
+                while k < close {
+                    if depth == 0 && raw[k] == b'{' && raw.get(k + 1) == Some(&b'{') {
+                        k += 2;
+                        continue;
+                    }
+                    if raw[k] == b'{' {
+                        depth += 1;
+                    } else if raw[k] == b'}' && depth > 0 {
+                        depth -= 1;
+                    } else if depth > 0 && is_word(raw[k]) && !is_word(raw[k - 1]) {
+                        let e = word_end(raw, k).min(close);
+                        if let Some(r) = rename(k, e, raw, false) {
+                            out.push_str(&body[last..k]);
+                            out.push_str(&r);
+                            last = e;
+                        }
+                        k = e;
+                        continue;
+                    }
+                    k += 1;
+                }
+                i = (close + 1).min(body.len());
+                continue;
+            }
+            in_str = !in_str;
+            i += 1;
+            continue;
+        }
+        if in_str {
+            i += 1;
+            continue;
+        }
+        if c == b'$' && m.get(i + 1).map_or(false, |&x| is_word(x) && !x.is_ascii_digit()) {
+            out.push_str(&body[last..i]);
+            last = i + 1;
+            i = word_end(&m, i + 1);
+            continue;
+        }
+        if is_word(c) && (i == 0 || !is_word(m[i - 1])) {
+            let e = word_end(&m, i);
+            if let Some(r) = rename(i, e, &m, true) {
+                out.push_str(&body[last..i]);
+                out.push_str(&r);
+                last = e;
+            }
+            i = e;
+            continue;
+        }
+        i += 1;
+    }
+    out.push_str(&body[last..]);
+    out
+}
+
+fn expand_one(mac: &Macro, args: &[String], all: &HashMap<String, Macro>, indent: &str, statement: bool, depth: u32, counter: &mut usize) -> String {
+    *counter += 1;
+    let mut text = hygienic_body(&mac.body, &mac.params, *counter);
     for (k, p) in mac.params.iter().enumerate() {
         let arg = args.get(k).map(|s| s.as_str()).unwrap_or("null");
         text = replace_word(&text, p, &protect_arg(arg));
@@ -1943,7 +2145,7 @@ fn expand_one(mac: &Macro, args: &[String], all: &HashMap<String, Macro>, indent
                     if let (Some(inner), Some(close)) = (all.get(&text[i..j]), matching(&m, j + 1)) {
                         let a = split_top_commas(&text[j + 2..close]);
                         out.push_str(&text[last..i]);
-                        out.push_str(&expand_one(inner, &a, all, indent, at_statement_start(&m, i), depth + 1));
+                        out.push_str(&expand_one(inner, &a, all, indent, at_statement_start(&m, i), depth + 1, counter));
                         last = close + 1;
                         i = close + 1;
                         continue;

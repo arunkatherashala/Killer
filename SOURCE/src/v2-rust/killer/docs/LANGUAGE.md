@@ -1279,8 +1279,19 @@ and on other objects of the class) and are a compile error anywhere else, includ
 **Macros.** `macro square(x) { x * x }` defines a text template and `square!(3 + 1)` expands it before the program
 is compiled. An argument that is an expression is wrapped in parentheses (so that example is `(3 + 1) * (3 + 1)`);
 an argument that is a statement (an assignment or a block) is pasted as it is, so `macro twice(s) { s` newline `s }`
-can repeat code. Macros may use other macros (16 levels at most); they are not hygienic (names in the body are the
-caller's names), and the text `name!(...)` inside a string is left alone.
+can repeat code. Macros may use other macros (16 levels at most), and the text `name!(...)` inside a string is left alone.
+
+Macros are **hygienic**. A name the macro body introduces itself (an assignment at the start of a statement, `let` /
+`const`, a `for` variable, a `catch` variable, a `fn(...)` or `(a, b) =>` parameter) is renamed per expansion to a unique
+name such as `_m3__tmp`, so it can neither overwrite nor read a caller variable of the same name, and two expansions in
+one scope do not share it. Left alone: parameters (replaced by the argument text), names the body only reads (globals,
+functions, classes, builtins), member names after `.`, dict keys, and string text; `{expr}` inside `f"..."` is renamed.
+The consequence is that a macro cannot leave a result in a plain variable: `macro out() { result = 5 }` makes
+`result` private. To capture a caller's variable on purpose, write `$name` in the body (the `$` is dropped):
+`macro count_up() { $counter = $counter + 1 }`. Pass the variable as an argument instead when you can.
+Limits: the rule is a text scan, not a full parse, so a name introduced only in a way it does not recognise (for
+example `a, b = ...` or a single-parameter `x => ...` lambda) is not renamed; and names a macro defines with `fn name`
+or `class` stay global.
 
 **`eval` and `exec`.** `eval("1 + 2 * 3")` returns the value of one expression; `exec(code)` runs statements and
 returns a dict of the names the code defined (variables assigned at column 0, functions, classes). Both take an
