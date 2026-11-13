@@ -1250,6 +1250,8 @@ the peer has closed. Handles belong to the thread that opened them.
 | `sock_close(s)` | close any socket |
 | `udp_bind(addr)`, `udp_send(s, addr, text)` | UDP |
 | `udp_recv(s[, max, ms])` | `{"data": ..., "from": "host:port"}` or `null` |
+| `tls_listen(addr, cert_file, key_file)` | like `tcp_listen`, but connections are TLS (see below); checks the files and `openssl` first |
+| `tls_accept(l[, ms])` | take a connection from a `tls_listen` listener (`tcp_accept` and `ws_accept` do the same on one); returns a socket for `sock_send` / `sock_recv` / `sock_recv_line` / `sock_close`, or `null` on timeout |
 | `ws_connect("ws://host:port/path"[, opts])` | WebSocket client (`wss://` through TLS, see below) |
 | `ws_accept(l[, ms])` | take a connection from a `tcp_listen` listener and do the WebSocket handshake |
 | `ws_send(s, text)`, `ws_recv(s[, ms])` | text messages; `ws_recv` gives `null` on timeout or close; pings are answered |
@@ -1457,8 +1459,30 @@ opts])` is a secure WebSocket. The connection is made through the system `openss
 PATH: it checks the certificate chain against the system trust store (or the extra CA file in `ca_file`) and checks
 that the certificate matches the host name. A server that fails the check is dropped, so the first receive sees the
 connection closed; `tls_error(socket)` returns what `openssl` said (for example `verify error:num=18:self-signed
-certificate`). There is no TLS *listener*: serving HTTPS needs a reverse proxy in front of `serve`. The HTTP client
+certificate`). The HTTP client
 (`http_get` and friends) already handles `https://` through `curl`.
+
+**TLS server.** `tls_listen("host:port", "cert.pem", "key.pem")` returns a listener (use port 0 and `sock_addr` for a free
+port); `tls_accept(listener[, ms])` returns an ordinary socket handle for each client, so `sock_send`, `sock_recv`,
+`sock_recv_line`, `sock_peer` and `sock_close` work as for any TCP connection (`tls_error(socket)` reports what
+`openssl` said about a failed handshake). `ws_accept` on a TLS listener gives a `wss://` server. The certificate and key
+are PEM files (the key unencrypted); `tls_listen` checks that `openssl` is installed, that both files exist and parse,
+and that the key belongs to the certificate, and raises a clear error otherwise. Design: every accepted connection starts
+one TLS helper child on a private loopback port (`openssl s_server -naccept 1`; on Windows a short PowerShell script using
+.NET `SslStream`, because the Windows build of `openssl s_server` was found to ignore the network while its piped stdin is
+idle; `openssl` turns the PEM files into a one-off PKCS#12 file that the script deletes once loaded), and a bridge thread
+copies the encrypted bytes between the client and that child while the plain text goes through the child's pipes. The handshake runs in the background, so
+`tls_accept` returns at once and the first read waits for it; a client that fails the handshake only loses its own
+connection. `sock_close` lets `openssl` flush pending output (up to 3 s) before it is stopped, so a reply sent right before
+closing arrives complete. Limits: each connection costs one `openssl` process plus a few threads (fine for tens of
+clients, not thousands); no client certificates, ALPN or session resumption; `sock_addr` of a TLS connection is
+`"(tls)"`.
+
+**HTTPS.** `serve(port, handler, {"tls": {"cert": "cert.pem", "key": "key.pem"}})` serves HTTPS. A TLS front on
+`host:port` forwards the decrypted requests to a private plain listener on 127.0.0.1 that the usual accept loop
+serves; requests are handled one at a time as before, but TLS handshakes of waiting clients run in parallel. Handlers
+see the same request dict (the client address is not available), and `max_requests`, `idle_timeout` and
+`server_stop()` work unchanged. The internal loopback port accepts plain HTTP from other local processes.
 
 **WebAssembly.** `killer wasm script.killer [-o out.wasm]` compiles the functions of a script to a small
 WebAssembly module that runs in a browser, Node or `wasmtime`. The script may contain only `fn` definitions and
@@ -1729,7 +1753,7 @@ null)` dispatches to the routes (unmatched requests get `404`). Options: `host` 
 `"0.0.0.0"` exposes the server), `max_requests`, `idle_timeout` (seconds). `serve_once(port, handler)`
 serves one request, `server_stop()` called from a handler stops after the current response,
 `routes_clear()` forgets the routes and `free_port()` returns an unused local port. `serve` returns the
-number of requests served. There is no TLS in the server; put a reverse proxy in front for HTTPS.
+number of requests served. For HTTPS pass `tls: {cert, key}` (see the TLS section).
 
 **Client.** `http_get(url[, headers, timeout])` returns the body text. `http_post`, `http_put`,
 `http_delete`, `http_patch`, `http_head`, `http_get_json` and `http_download` are the other verbs.
@@ -2156,7 +2180,7 @@ Observed, not hypothetical:
 - `//` is a comment, so there is no integer-division operator (use `floor(a / b)` or `idiv`).
 - `len(s)` and `s[i]` on very long strings are O(n) per call.
 - `count_tokens` is an approximation, not a model tokenizer.
-- The HTTP server has no TLS and serves one request at a time; the HTTP client needs `curl` for HTTPS.
+- The HTTP server serves one request at a time (HTTPS needs `openssl` and costs one child process per connection); the HTTP client needs `curl` for HTTPS.
 - The debugger shows one stack frame.
 - The x86-64 JIT only handles pure numeric functions; on other CPU architectures everything runs in the
   interpreter (same results, slower).
