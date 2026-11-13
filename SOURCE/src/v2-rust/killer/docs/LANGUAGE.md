@@ -1460,20 +1460,68 @@ connection closed; `tls_error(socket)` returns what `openssl` said (for example 
 certificate`). There is no TLS *listener*: serving HTTPS needs a reverse proxy in front of `serve`. The HTTP client
 (`http_get` and friends) already handles `https://` through `curl`.
 
-**WebAssembly.** `killer wasm script.killer [-o out.wasm]` compiles the numeric functions of a script to a small
-WebAssembly module with no imports, one export per function, that runs in a browser, Node or `wasmtime`. The script
-may contain only `fn` definitions and `const NAME = number`. Inside a function: numbers, `true` / `false`, parameters
-and local variables, `+ - * / %` (floor modulo, as in the VM), unary `-`, `== != < <= > >=`, `&& || !` (short-circuit),
-`x = e`, `x += e` (also `-= *= /=`), `x++`, `x--`, `if` / `else if` / `else`, `while`, `for i in range(n)` /
-`range(a, b)`, `break`, `continue`, `return`, calls to the file's own functions (recursion too) and `sqrt abs floor
-ceil trunc min max`. Everything else (strings, lists, objects, other builtins) is an error that names the line. All
-values are `f64`; a function that ends without `return` gives 0; dividing by zero gives infinity or NaN rather than
-the VM's error.
+**WebAssembly.** `killer wasm script.killer [-o out.wasm]` compiles the functions of a script to a small
+WebAssembly module that runs in a browser, Node or `wasmtime`. The script may contain only `fn` definitions and
+`const NAME = number`; every function is exported under its own name and may call the others (recursion too).
+Inside a function you can use:
+
+- numbers and `true` / `false` (1 / 0), parameters, local variables, constants
+- `+ - * / %` (floor modulo, as in the VM), unary `-`, `== != < <= > >=`, `&& || !` (short-circuit)
+- strings: literals (`"..."` or `'...'`, ASCII only), `a + b` (concatenation), `==` / `!=`, `len(s)`, `s[i]` (a
+  one-character string, a negative index counts from the end), `for c in s`
+- lists of numbers: `[1, 2, 3]`, `xs[i]`, `xs[i] = e`, `xs[i] += e`, `len(xs)`, `push(xs, n)`, `for x in xs`
+- `x = e`, `x += e` (also `-= *= /=`), `x++`, `x--`
+- `if` / `else if` / `else`, `while`, `for i in range(n)` / `range(a, b)`, `break`, `continue`, `return`
+- the math functions `sqrt abs floor ceil trunc min max`
+
+Types are worked out by the compiler: a parameter is a string or a list when the body or a caller uses it as one
+(`s + "x"`, `xs[0] = 1`, `push(xs, 1)`, `for x in xs`, passing it to a function that needs one), and anything with no
+clue is a number. You can also write them: `fn f(name: string, scores: array) -> string` (`number`, `string` and
+`array`, plus the aliases `int float bool str list`), which is needed for `len(x)` and `for c in x` when nothing
+else says what `x` is. A variable has one type for the whole function. Everything else (dicts, sets, lambdas, other
+builtins such as `str()` or `upper()`, number-to-text conversion, lists of strings or lists, non-ASCII text) is an
+error that names the line.
+
+A module that uses only numbers has no memory and no imports. One that uses strings or lists has one linear memory
+(exported as `memory`) and a bump allocator that never frees, so it suits short calls, not long-running loops that
+build text. A string value is an `i32` pointer `p` to `[length: u32][bytes]` (the text starts at `p + 4`); a list is an
+`i32` pointer to `[length: u32][capacity: u32][data pointer: u32]` whose elements are `f64`. The host builds and reads
+them through the exported helpers `killer_str_new(len)` (allocates a string and sets its length; you write the bytes at
+`p + 4`), `killer_str_len(p)`, `killer_list_new()`, `killer_list_push(p, x)`, `killer_list_len(p)`,
+`killer_list_get(p, i)`, `killer_list_set(p, i, x)` and `killer_alloc(bytes)`.
+
+```js
+// Node or a browser: const { instance } = await WebAssembly.instantiate(bytes);
+const { memory, greet, squares, killer_str_new, killer_list_len, killer_list_get } = instance.exports;
+function toStr(text) {              // JS string -> wasm string
+  const b = new TextEncoder().encode(text);
+  const p = killer_str_new(b.length);
+  new Uint8Array(memory.buffer, p + 4, b.length).set(b);
+  return p;
+}
+function fromStr(p) {               // wasm string -> JS string
+  const n = new Uint32Array(memory.buffer, p, 1)[0];
+  return new TextDecoder().decode(new Uint8Array(memory.buffer, p + 4, n));
+}
+function fromList(p) {              // wasm list -> JS array
+  return Array.from({ length: killer_list_len(p) }, (_, i) => killer_list_get(p, i));
+}
+console.log(fromStr(greet(toStr("Ada"))));   // Hello, Ada!
+console.log(fromList(squares(5)));           // [0, 1, 4, 9, 16]
+```
+
+Differences from the VM: an index outside a string or list traps (the VM gives `null`); dividing by zero gives
+infinity or NaN instead of an error; text is counted in bytes, so only ASCII strings behave the same; `for x in xs`
+reads the length once before the loop; a function that ends without `return` gives 0, an empty string or an empty
+list according to its type; the allocator traps when the memory cannot grow. Re-fetch `memory.buffer` after any call
+(growing the memory replaces it). Function names `memory` and `killer_*` are reserved in such modules.
 
 ```text
-$ killer wasm math.killer -o math.wasm
-wrote math.wasm (131 bytes)
-  export fib(1 number)
+$ killer wasm text.killer -o text.wasm
+wrote text.wasm (911 bytes)
+  export greet(name: string) -> string
+  export squares(n: number) -> list
+  memory + host helpers: killer_alloc killer_str_new killer_str_len killer_list_new killer_list_len killer_list_get killer_list_set killer_list_push
 ```
 
 ## Errors
