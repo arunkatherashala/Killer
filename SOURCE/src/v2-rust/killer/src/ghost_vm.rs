@@ -481,14 +481,7 @@ fn validate_sizes(c: &Capsule) -> Result<(), GhostError> {
 }
 
 fn ct_eq_sig(a: &[u8], b: &[u8]) -> bool {
-    if a.len() != b.len() {
-        return false;
-    }
-    let mut d = 0u8;
-    for (x, y) in a.iter().zip(b.iter()) {
-        d |= x ^ y;
-    }
-    d == 0
+    crate::encryption::constant_time_compare(a, b)
 }
 
 fn hmac_sha256(key: &[u8], data: &[u8]) -> Vec<u8> {

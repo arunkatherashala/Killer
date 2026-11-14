@@ -44,7 +44,7 @@ The row-by-row history is in the root `tracker.csv`; the Python comparison is in
 | Files: `open`, `with`, `for line in f` | yes | text only (`r`, `w`, `a`); no binary mode |
 | JSON, CSV, base64, hashing, HMAC | yes | SHA-256, HMAC-SHA256, base64 verified against FIPS 180 / RFC 4231 / RFC 4648 |
 | Dates and times | yes | |
-| Encryption | yes | ChaCha20-Poly1305 (RFC 8439), PBKDF2-HMAC-SHA256, OS random; checked against RFC/FIPS vectors, not audited; no AES, SHA-3, Argon2 or public-key crypto ([CRYPTO.md](CRYPTO.md)) |
+| Encryption | yes | ChaCha20-Poly1305 (RFC 8439), SHA-2, HMAC, PBKDF2-HMAC-SHA256 from the RustCrypto crates (`chacha20poly1305` had an NCC Group audit; `sha2`, `hmac`, `pbkdf2` are widely used and reviewed), OS random; checked against RFC/FIPS vectors, Killer itself not audited; no AES, SHA-3, Argon2 or public-key crypto ([CRYPTO.md](CRYPTO.md)) |
 | HTTP client and server | yes | |
 | TCP sockets | yes | `tcp_listen`, `tcp_connect`, `sock_send`, `sock_recv` |
 | UDP sockets | yes | `udp_bind`, `udp_send`, `udp_recv` |

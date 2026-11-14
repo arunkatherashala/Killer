@@ -5,6 +5,15 @@ All notable changes to `killer-native` are documented here.
 ## [Unreleased]
 
 ### Changed
+- Cryptography now uses the RustCrypto crates `chacha20poly1305`, `sha2`, `hmac`, `pbkdf2` and `subtle`
+  instead of hand-written code. These are the first external dependencies of `killer-native` (the "zero
+  external crates" claim no longer applies). The five duplicate SHA-256 implementations, the SHA-512,
+  HMAC, PBKDF2, ChaCha20 and Poly1305 code were removed and replaced by thin wrappers. Builtins, error
+  messages and the `KSE2` blob format are unchanged, and all RFC and FIPS test vectors still pass.
+  `chacha20poly1305` had an independent NCC Group audit; `sha2`, `hmac` and `pbkdf2` are widely used and
+  reviewed. SHA-1 (WebSocket handshake accept key only, no builtin exposes it) and base64 stay hand-written.
+
+### Changed
 - `%` is now **floor modulo** (Python) for plain numbers too: the result has the sign of the divisor, so
   `-7 % 3` is `2` (was `-1`), `7 % -3` is `-2`, `-5.5 % 2` is `0.5`. BigInt `%` already behaved this way.
   Applies to the VM, constant folding, the native function JIT, `%=`, and `divmod`'s remainder. Division by

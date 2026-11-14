@@ -207,15 +207,7 @@ fn base64_decode(text: &str) -> Result<Vec<u8>, String> {
 }
 
 fn hmac_sha256(key: &[u8], data: &[u8]) -> [u8; 32] {
-    let sha = crate::builtin::sha256_digest;
-    let mut k = if key.len() > 64 { sha(key).to_vec() } else { key.to_vec() };
-    k.resize(64, 0);
-    let mut inner: Vec<u8> = k.iter().map(|b| b ^ 0x36).collect();
-    inner.extend_from_slice(data);
-    let inner_hash = sha(&inner);
-    let mut outer: Vec<u8> = k.iter().map(|b| b ^ 0x5c).collect();
-    outer.extend_from_slice(&inner_hash);
-    sha(&outer)
+    crate::encryption::hmac_sha256(key, data)
 }
 
 fn bytes_of(v: &Value, who: &str) -> Result<Vec<u8>, VmError> {

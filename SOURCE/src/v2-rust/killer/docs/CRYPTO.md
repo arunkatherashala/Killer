@@ -1,27 +1,34 @@
 # Cryptography in Killer: what is implemented, what is verified, what is not
 
-Killer has no external crates, so every primitive below is written in this crate. Each one that exists is checked
-against published test vectors in `tests/crypto_vectors.rs` (integration tests, run against both the Rust functions and
-the Killer builtins through the `killer` binary) and in unit tests next to the code. An independent Python
+Killer uses the RustCrypto crates `chacha20poly1305`, `sha2`, `hmac`, `pbkdf2` and `subtle` for every primitive below
+except SHA-1 and base64, which are still written in this crate (SHA-1 stays hand-written on purpose: it is used only for the WebSocket handshake accept key in `net_sock::accept_key`, and no builtin exposes it). These
+crates are the first external dependencies of the project. The code in this repository is a thin wrapper
+(`aead`, `encryption`, `android_security`, `ghost_vm_sha`); the duplicate hand-written SHA-256, HMAC, PBKDF2, ChaCha20
+and Poly1305 code was removed. Each primitive is checked against published test vectors in `tests/crypto_vectors.rs`
+(integration tests, run against both the Rust functions and the Killer builtins through the `killer` binary) and in
+unit tests next to the code, so the wiring and the wire formats are verified here. An independent Python
 implementation (`tests/data/crypto_reference.py`: `hashlib`/`hmac` plus ChaCha20 and Poly1305 re-written from the RFC
 with big integers) cross-checks 258 more generated inputs; that test is skipped with a message when Python is absent.
 
-**Read this first.** This code has not been audited by a cryptographer. It makes no side-channel guarantees beyond the
-two constant-time comparisons listed below, does not wipe keys from memory, and runs in an interpreter whose strings
-may be copied freely. It is reasonable for tokens, checksums, protecting a file with a password, and teaching; do not
-treat it as a replacement for an audited library (OpenSSL, libsodium, ring) for high-value secrets.
+**Read this first.** The `chacha20poly1305` crate had an independent NCC Group security audit (2020, together with
+`aes-gcm`; it did not cover Killer, and the versions in use today are newer than the audited ones). `sha2`, `hmac`,
+`pbkdf2` and `subtle` are widely used and reviewed RustCrypto implementations; this document does not call them audited. Killer's own integration, its blob format and the interpreter around it
+have not been audited by a cryptographer, and this document makes no side-channel or key-wiping claims beyond what the
+crates themselves document. Strings in the interpreter may be copied freely, so secrets are not wiped from memory. It
+is reasonable for tokens, checksums, protecting a file with a password, and teaching; for high-value secrets use a
+reviewed, purpose-built tool and review the integration yourself.
 
 ## Verified primitives
 
 | Primitive | Where | Standard and vectors checked | Killer builtin |
 |---|---|---|---|
-| SHA-256 | `builtin::sha256_digest`, `android_security::sha256`, `ghost_vm_sha`, `encryption::sha256` | FIPS 180-4: `""`, `"abc"`, the 448-bit and 896-bit messages, one million `a`, and every padding boundary (55, 56, 63, 64, 65, 111 ... 129 bytes) in all five implementations | `sha256`, `sha256_bytes`, `secure_hash`, `secure_hash_file` |
+| SHA-256 | `builtin::sha256_digest`, `android_security::sha256`, `ghost_vm_sha`, `encryption::sha256` | FIPS 180-4: `""`, `"abc"`, the 448-bit and 896-bit messages, one million `a`, and every padding boundary (55, 56, 63, 64, 65, 111 ... 129 bytes) through every wrapper in this crate | `sha256`, `sha256_bytes`, `secure_hash`, `secure_hash_file` |
 | SHA-512 | `encryption::sha512` | FIPS 180-4: `""`, `"abc"`, 896-bit, one million `a`, boundaries of the 128-byte block | none |
 | SHA-1 | `net_sock::sha1` (WebSocket handshake only, not for security) | FIPS 180: `""`, `"abc"`, 448-bit, 896-bit, one million `a`, boundaries | none |
 | HMAC-SHA256 | `encryption::hmac_sha256`, `ghost_vm_sha::hmac_sha256`, `lang_builtins` | RFC 4231 test cases 1 to 7 (including the 131-byte keys hashed first and the truncated case 5), empty key and data | `hmac_sha256` |
 | PBKDF2-HMAC-SHA256 | `encryption::pbkdf2_hmac_sha256`, `android_security::pbkdf2_sha256` | RFC 7914 section 11 (`passwd`/`salt` 1 iteration, `Password`/`NaCl` 80000 iterations, 64 bytes), the usual `password`/`salt` 1, 2, 4096 iteration vectors, the 40-byte and NUL-byte vectors, empty password and salt, multi-block output | used inside `secure_encrypt` |
-| ChaCha20 | `aead` | RFC 8439 2.3.2 (block function), 2.4.2 (encryption), A.1 | used inside `secure_encrypt` |
-| Poly1305 | `aead` | RFC 8439 2.5.2, A.3 vectors 1 to 9 (carry and `2^130 - 5` edge cases), split updates at every block boundary | used inside `secure_encrypt` |
+| ChaCha20 | `aead` (`chacha20poly1305` crate) | RFC 8439 2.3.2 (block function), 2.4.2 (encryption), A.1 | used inside `secure_encrypt` |
+| Poly1305 | `aead` (`chacha20poly1305` crate) | RFC 8439 2.5.2, A.3 vectors 1 to 9 (carry and `2^130 - 5` edge cases), split updates at every block boundary | used inside `secure_encrypt` |
 | ChaCha20-Poly1305 AEAD | `aead::seal` / `aead::open`, `encryption::EncryptionEngine` | RFC 8439 2.8.2 and A.5, plus 10 lengths at block boundaries from an independent implementation | `secure_encrypt`, `secure_decrypt` |
 | base64 | `lang_builtins`, `builtin` (`b64_*`), `compression_module`, `net_sock`, and the encoders in `image_gen`, `nova_*`, `vision`, `android_audio`, `net_tls_server` | RFC 4648 section 10 (`""`, `f`, `fo`, `foo`, `foob`, `fooba`, `foobar`), all 256 byte values, `+` and `/` | `base64_encode`, `base64_decode`, `b64_encode`, `b64_decode` |
 | WebSocket accept key | `net_sock::accept_key` | RFC 6455 section 1.3 (`dGhlIHNhbXBsZSBub25jZQ==` gives `s3pPLMBiTxaQ9kYGzzhZRbK+xOo=`) | `ws_accept` / `ws_connect` |
@@ -44,7 +51,7 @@ changed data. The Python reference decrypts Killer output and Killer decrypts Py
 Limits:
 
 * 100,000 iterations is below the 600,000 that OWASP currently suggests for PBKDF2-HMAC-SHA256; the cost is kept low
-  because the pure-Rust hash is slow in unoptimised builds. Use a long random password.
+  because hashing is slow in unoptimised builds. Use a long random password.
 * `secure_decrypt` still reads data written by the older scheme (no `KSE2` header: a SHA-256 keystream with a SHA-256
   tag, never reviewed). It is read-only; nothing writes that format any more.
 * `secure_random_bytes(n)` silently caps `n` at 1024 and returns base64.
@@ -92,10 +99,10 @@ build and must not be wired in without being replaced.
 
 ## Constant time
 
-The Poly1305 tag comparison in `aead::open`, `encryption::constant_time_compare` (used for password hashes) and the PIN
-comparison OR together the XOR of every byte pair before deciding. That is established by reading the code, not by
-timing measurements. The arithmetic in ChaCha20 and Poly1305 has no secret-dependent branches or table lookups; SHA-256
-and PBKDF2 are plain integer code. None of this has been verified against cache or power side channels.
+The Poly1305 tag comparison inside `aead::open` is done by the `chacha20poly1305` crate. The password-hash, PIN and
+Ghost capsule signature comparisons (`encryption::constant_time_compare`, used by `android_security` and `ghost_vm`)
+use the `subtle` crate's constant-time equality. Beyond what those crates document, nothing here has been verified
+against timing, cache or power side channels.
 
 ## Running the checks
 

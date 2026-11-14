@@ -3,7 +3,7 @@
 Where things live in the `killer-native` crate (`SOURCE/src/v2-rust/killer`) and how a program gets from
 text to output. Every statement here was checked against the source at the time of writing; file and
 function names are given so you can check again. For the user-facing language see
-[LANGUAGE.md](LANGUAGE.md). Zero external crates (apart from `libc` on Unix) is a project rule.
+[LANGUAGE.md](LANGUAGE.md). External crates are kept to a minimum: `libc` on Unix and the RustCrypto crates for cryptography (see [CRYPTO.md](CRYPTO.md)).
 
 ## Overview
 

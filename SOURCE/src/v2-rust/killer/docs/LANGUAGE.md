@@ -1873,7 +1873,7 @@ println(build_rag_prompt("What is Killer?", ["Killer is a scripting language."])
 `round(x, digits)` rounds to that many decimals (negative digits round to tens, hundreds, ...; halves
 round away from zero). `int(text, base)` parses digits in base 2 to 36 (a `0x`, `0o` or `0b` prefix is
 accepted). `hex`, `bin` and `oct` give `"0xff"`, `"0b101"`, `"0o10"`. `uuid()` returns a random version 4
-identifier from the operating system's random generator. Hashing, HMAC, base64, `secure_encrypt` and the
+identifier from the operating system's random generator. Hashing, HMAC, base64, `secure_encrypt` (all built on the RustCrypto crates `sha2`, `hmac`, `pbkdf2` and `chacha20poly1305`) and the
 limits of all of them are listed in [CRYPTO.md](CRYPTO.md).
 
 ```killer
