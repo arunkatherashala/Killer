@@ -711,7 +711,7 @@ fn killer_secure_random_bytes_and_uuid() {
     let out = killer_ok(
         r#"println(bytes_len(base64_decode(secure_random_bytes(32))))
 println(bytes_len(base64_decode(secure_random_bytes())))
-println(bytes_len(base64_decode(secure_random_bytes(1))))
+println(len(secure_random_bytes(1)))
 println(bytes_len(base64_decode(secure_random_bytes(1024))))
 println(bytes_len(base64_decode(secure_random_bytes(5000))))
 println(secure_random_bytes(0) == "")
@@ -729,7 +729,8 @@ println(len(u[0]))
 println(slice(u[0], 14, 15))
 "#,
     );
-    assert_eq!(&out[..5], ["32", "32", "1", "1024", "1024"], "default 32 bytes, capped at 1024");
+    // one random byte is below 0x80 half the time, and base64_decode then returns text, so check its encoding instead
+    assert_eq!(&out[..5], ["32", "32", "4", "1024", "1024"], "default 32 bytes, capped at 1024; 1 byte is 4 base64 characters");
     assert_eq!(out[5], "true");
     assert_eq!(out[6], "50");
     assert_eq!(out[7], "200");
