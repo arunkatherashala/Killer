@@ -8,6 +8,11 @@ on:
   push:
     tags:
       - "v[0-9]+.[0-9]+.[0-9]+*"
+    # Dry run from any branch named dryrun-v<version>, for example dryrun-v1.0.0-beta: GitHub only allows a
+    # manual run of a workflow that exists on the default branch, a branch push works from anywhere.
+    # The publish job below only runs for tags, so this never creates a release.
+    branches:
+      - "dryrun-v*"
   workflow_dispatch:
     inputs:
       version:
@@ -18,7 +23,7 @@ on:
 env:
   CARGO_TERM_COLOR: always
   # Tag on a tag push, the typed label on a manual dry run (a branch name would contain slashes).
-  RELEASE_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || inputs.version }}
+  RELEASE_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || inputs.version || github.ref_name }}
 
 permissions:
   contents: write

@@ -43,3 +43,16 @@ point the installer at it: `KILLER_BASE_URL=http://127.0.0.1:8000 sh install.sh 
 - The GitHub-hosted runners, the macOS builds (macos-x64 is cross-compiled and never executed),
   and the upload/download-artifact and release publishing steps.
 - `install.ps1` and the Windows zip packaging step were not executed locally.
+
+## Dry run by branch push
+
+GitHub only offers "Run workflow" for a workflow that exists on the default branch. Until `release.yml` is on
+`main`, run the dry run by pushing the commit to a branch named `dryrun-v<version>`:
+
+```text
+git push origin HEAD:refs/heads/dryrun-v1.0.0-beta
+```
+
+The workflow builds every target, runs the smoke test and uploads the archives as workflow artifacts, labelled with
+the branch name. The publish job only runs for a pushed tag, so this never creates a release. Delete the branch
+afterwards: `git push origin --delete dryrun-v1.0.0-beta`.
