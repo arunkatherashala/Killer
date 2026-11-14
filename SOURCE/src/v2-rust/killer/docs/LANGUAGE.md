@@ -1308,7 +1308,15 @@ returns a dict of the names the code defined (variables assigned at column 0, fu
 optional dict of variables (numbers, strings, lists, dicts) that the code can read: `eval("x * 2", {"x": 5})`. The
 code runs in a fresh virtual machine, so it cannot see or change the caller's variables, and it runs under the
 caller's capabilities: with files, network or processes denied by the sandbox, the evaluated code is denied too.
-Nesting is limited to 8 levels; an error inside the text becomes an ordinary error with the message.
+Nesting is limited to 8 levels; an error inside the text becomes an ordinary error with the message. Each evaluation
+is also limited to 50 million instructions and 30 seconds of wall-clock time (shared by nested calls), so an endless
+loop in the text ends with an error instead of hanging the caller.
+
+> **Warning: never pass untrusted text to `eval` or `exec`.** The text is code and runs with every capability the
+> caller has (files, network, processes, environment). Text that came from the network, a file, a user or an LLM
+> must not be evaluated unless the whole script runs in a restricted sandbox. Passing data in through the `vars`
+> dict is safe; building code by joining strings is not. The time and instruction limits stop runaway loops, not
+> malicious code, and there is no memory limit.
 
 ```killer
 class Account {

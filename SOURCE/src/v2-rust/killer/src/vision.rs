@@ -20,6 +20,34 @@ use crate::value::Value;
 use crate::error::VmError;
 use std::process::Command;
 
+/// Run curl with the request (URL, headers incl. API keys, body) given as a config on stdin, so no secret or large
+/// body appears in the process list or hits the command-line length limit.
+fn curl_with_config(url: &str, headers: &[String], body: &str, timeout_s: u64) -> Result<std::process::Output, String> {
+    use std::io::Write;
+    use std::process::Stdio;
+    use crate::http_req::cfg_quote;
+    let mut cfg = format!("url = {}
+request = \"POST\"
+", cfg_quote(url));
+    for h in headers {
+        cfg.push_str(&format!("header = {}
+", cfg_quote(h)));
+    }
+    cfg.push_str(&format!("data = {}
+", cfg_quote(body)));
+    let mut child = Command::new(crate::tool_path::curl()?)
+        .args(["-s", "--fail-with-body", "--max-time", &timeout_s.to_string(), "-K", "-"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("curl: {}", e))?;
+    if let Some(mut stdin) = child.stdin.take() {
+        let _ = stdin.write_all(cfg.as_bytes());
+    }
+    child.wait_with_output().map_err(|e| format!("curl: {}", e))
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 //  Public builtin wrappers (called from builtin.rs dispatch table)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -228,17 +256,7 @@ fn vision_anthropic(
         content_json
     );
 
-    let output = Command::new("curl")
-        .args([
-            "-s", "--fail-with-body", "--max-time", "60",
-            "-X", "POST", url,
-            "-H", &format!("x-api-key: {}", api_key),
-            "-H", "anthropic-version: 2023-06-01",
-            "-H", "Content-Type: application/json",
-            "-d", &body,
-        ])
-        .output()
-        .map_err(|e| format!("curl: {}", e))?;
+    let output = curl_with_config(url, &[format!("x-api-key: {}", api_key), "anthropic-version: 2023-06-01".to_string(), "Content-Type: application/json".to_string()], &body, 60)?;
 
     let raw = String::from_utf8_lossy(&output.stdout).to_string();
     // { "content":[{"type":"text","text":"..."}], ... }
@@ -270,15 +288,7 @@ fn vision_gemini(
         temp
     );
 
-    let output = Command::new("curl")
-        .args([
-            "-s", "--fail-with-body", "--max-time", "60",
-            "-X", "POST", &url,
-            "-H", "Content-Type: application/json",
-            "-d", &body,
-        ])
-        .output()
-        .map_err(|e| format!("curl: {}", e))?;
+    let output = curl_with_config(&url, &["Content-Type: application/json".to_string()], &body, 60)?;
 
     let raw = String::from_utf8_lossy(&output.stdout).to_string();
     // {"candidates":[{"content":{"parts":[{"text":"..."}]}}]}
@@ -500,18 +510,7 @@ fn curl_post_json(url: &str, api_key: &str, body: &str, timeout_s: u64) -> Resul
     if !url.starts_with("https://") {
         return Err(format!("URL must use HTTPS: {}", &url[..url.len().min(60)]));
     }
-    let timeout_str = timeout_s.to_string();
-    let auth_header = format!("Authorization: Bearer {}", api_key);
-    let output = Command::new("curl")
-        .args([
-            "-s", "--fail-with-body", "--max-time", &timeout_str,
-            "-X", "POST", url,
-            "-H", &auth_header,
-            "-H", "Content-Type: application/json",
-            "-d", body,
-        ])
-        .output()
-        .map_err(|e| format!("curl: {}", e))?;
+    let output = curl_with_config(url, &[format!("Authorization: Bearer {}", api_key), "Content-Type: application/json".to_string()], body, timeout_s)?;
 
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();

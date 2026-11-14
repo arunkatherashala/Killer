@@ -56,8 +56,8 @@ pub struct Resp {
     pub body: String,
 }
 
-fn curl_bin() -> &'static str {
-    if cfg!(target_os = "windows") { "curl.exe" } else { "curl" }
+fn curl_bin() -> Result<std::path::PathBuf, String> {
+    crate::tool_path::curl()
 }
 
 /// Host part of a URL (no userinfo, no port, no brackets), lowercase.
@@ -213,7 +213,8 @@ pub fn parse_response(raw: &[u8]) -> Result<Resp, String> {
 
 fn one_attempt(spec: &ReqSpec) -> Result<Resp, (String, bool)> {
     let cfg = build_config(spec).map_err(|e| (e, false))?;
-    let mut child = Command::new(curl_bin())
+    let curl = curl_bin().map_err(|e| (format!("curl not available: {}", e), false))?;
+    let mut child = Command::new(curl)
         .args(build_argv(spec))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())

@@ -33,7 +33,7 @@ The row-by-row history is in the root `tracker.csv`; the Python comparison is in
 | Unicode names and text | yes | |
 | Fractions and complex numbers | yes | library written in Killer |
 | Macros | yes | `macro name(a) { ... }` and `name!(x)`, text expansion, hygienic (body-local names renamed per expansion, `$name` to capture) |
-| `eval` / `exec` of text | yes | fresh VM, same capabilities as the caller (no new power) |
+| `eval` / `exec` of text | yes | fresh VM, same capabilities as the caller (no new power), 50M-step / 30 s limit; WARNING: never eval untrusted text, it runs with all of the caller's powers |
 
 ## Standard library
 
