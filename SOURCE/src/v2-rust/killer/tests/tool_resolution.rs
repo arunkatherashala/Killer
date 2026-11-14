@@ -170,7 +170,16 @@ fn override_runs_exactly_the_given_absolute_program() {
     let fake = cwd.join("fake_openssl");
     std::fs::write(&fake, format!("#!/bin/sh\necho x > '{}'\nexit 1\n", marker.display())).unwrap();
     std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755)).unwrap();
-    let _ = run_script("tcp_connect_tls(\"127.0.0.1:9\")\n", &cwd, &[("KILLER_OPENSSL", fake.to_str().unwrap()), ("PATH", "")]);
+    // wait for the helper to finish (it exits right away): the interpreter kills a helper that is still running
+    // when the script ends, and on a slow machine (macOS CI) that could happen before the shell wrote the marker
+    let src = "s = tcp_connect_tls(\"127.0.0.1:9\")\nr = sock_recv(s, 16, 8000)\n";
+    let _ = run_script(src, &cwd, &[("KILLER_OPENSSL", fake.to_str().unwrap()), ("PATH", "")]);
+    for _ in 0..50 {
+        if marker.exists() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
     assert!(marker.exists(), "the override program was not started");
 }
 
