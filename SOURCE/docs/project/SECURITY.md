@@ -166,8 +166,8 @@ is limited to 8 nested levels, 50 million instructions, 30 seconds and a memory 
 paths. It is still arbitrary code: never evaluate untrusted text.
 
 *Memory cap.* Each evaluation is capped at 256 MB by default (`eval(code, vars, {"max_memory_mb": N})` or the
-environment variable `KILLER_EVAL_MAX_MEMORY`; 1 to 2048 MB, anything else is an error). The crate installs a thin
-counting wrapper around the system allocator that, only while an evaluation runs, keeps a per-thread count of live
+environment variable `KILLER_EVAL_MAX_MEMORY`; 1 to 2048 MB, anything else is an error). The Killer CLI binaries install a
+thin counting wrapper around the system allocator (`killer_native::memcap::CountingAlloc`) that, only while an evaluation runs, keeps a per-thread count of live
 bytes; the VM compares it with the limit every 256 instructions and the big allocation sites (string and list repeat
 and concatenation, `range`, padding) check before allocating. Exceeding it ends the evaluation with a catchable error
 (`memory limit exceeded (N MB)`) that code inside the evaluation cannot swallow, and the evaluation's VM is dropped,
@@ -178,3 +178,12 @@ buffer, so the real peak can be up to about twice the cap; threads or processes 
 counted; builtins that allocate outside the VM (file reads, network bodies, native libraries) are only caught by the
 periodic check afterwards; the caller's own memory is not counted. The cap protects against accidents and sloppy
 generated code, not against a determined attacker, who should be kept out by not evaluating untrusted text at all.
+
+*Embedders.* The library does not install an allocator itself, so it cannot conflict with an embedder's own
+`#[global_allocator]`. The live-bytes check is on in the Killer CLI binaries. An embedder that wants it either
+declares `killer_native::memcap::CountingAlloc` as its global allocator or enables the optional `mem-cap` Cargo
+feature (the library then installs it; the CLI binaries skip their own declaration in that case). Otherwise the
+live-memory check does not exist: there is no periodic live-bytes check at all, and only the explicit pre-checks
+(string and list repeat and concatenation, `range`, padding), the step budget, the time limit and the capability
+inheritance apply; nothing panics and no false "limit exceeded" is reported. `memcap::is_installed()` reports which
+case applies. `tests/eval_memory_embedded.rs` covers the no-allocator case.

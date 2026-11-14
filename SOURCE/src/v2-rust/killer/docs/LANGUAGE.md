@@ -1318,6 +1318,15 @@ nested evaluation has its own cap but can never use more than what is left of th
 it. The count is approximate (bytes the allocator hands out inside the evaluation, a growing list or string can
 briefly use up to twice its size, threads the code starts are not counted).
 
+The live-memory part of the cap is on in the Killer command-line programs (`killer`, `killer_super`, `killer-native`,
+`killer-repl`). A program that embeds the library must either declare `killer_native::memcap::CountingAlloc` as its
+`#[global_allocator]` or build the crate with the `mem-cap` Cargo feature (the library then declares it). Without
+that, the live-memory check does not exist: there is no periodic live-bytes check at all, and only the explicit
+checks before big allocations (string and list repeat and concatenation, `range`, padding), the 50 million
+instruction limit and the 30 second time limit apply. Allocations that are not at a checked site, such as a loop that
+pushes many small items, are then bounded only by the instruction and time limits. `killer_native::memcap::is_installed()`
+tells which case a process is in.
+
 > **Warning: never pass untrusted text to `eval` or `exec`.** The text is code and runs with every capability the
 > caller has (files, network, processes, environment). Text that came from the network, a file, a user or an LLM
 > must not be evaluated unless the whole script runs in a restricted sandbox. Passing data in through the `vars`

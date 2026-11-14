@@ -8,6 +8,12 @@ use killer_native::error::VmError;
 use killer_native::security::{SecurityConfig, read_file_safe};
 use killer_native::inference::{resolve_model_path, list_models, install_model, migrate_local_models};
 
+// The eval memory cap needs the counting allocator. The library does not install it (an embedder may have its own);
+// this binary does, unless the `mem-cap` feature already makes the library install it (two would not compile).
+#[cfg(not(feature = "mem-cap"))]
+#[global_allocator]
+static ALLOC: killer_native::memcap::CountingAlloc = killer_native::memcap::CountingAlloc;
+
 fn main() {
     if let Err(err) = run_cli() {
         eprintln!("Error: {err}");

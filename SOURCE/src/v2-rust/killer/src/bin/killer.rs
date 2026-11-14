@@ -68,6 +68,12 @@ fn dispatch(args: &[String]) -> i32 {
     }
 }
 
+// The eval memory cap needs the counting allocator. The library does not install it (an embedder may have its own);
+// this binary does, unless the `mem-cap` feature already makes the library install it (two would not compile).
+#[cfg(not(feature = "mem-cap"))]
+#[global_allocator]
+static ALLOC: killer_native::memcap::CountingAlloc = killer_native::memcap::CountingAlloc;
+
 /// The interpreter recurses on the Rust stack for nested calls (callbacks, `serve` handlers,
 /// resumed generators), and the default 1 MB main-thread stack overflows after one or two such
 /// levels in a debug build, so every command runs on a thread with a large (lazily committed)

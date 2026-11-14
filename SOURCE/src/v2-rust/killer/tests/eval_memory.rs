@@ -1,5 +1,8 @@
 //! The memory cap of `eval(code[, vars[, opts]])` / `exec`: allocations inside the evaluated text are counted and
 //! stopped with a catchable error ("memory limit exceeded (N MB)"); the host process is never aborted.
+// The cap needs the counting allocator; a test binary using the library directly installs it (the library does not).
+#[global_allocator]
+static ALLOC: killer_native::memcap::CountingAlloc = killer_native::memcap::CountingAlloc;
 use killer_native::builtin::BuiltinFunctions;
 use killer_native::value::{SharedDict, Value};
 use std::collections::HashMap;
