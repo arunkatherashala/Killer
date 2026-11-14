@@ -249,7 +249,7 @@ fn error_message_for_catch(error: &VmError) -> String {
 
 /// `"ab" * 3`, `3 * "ab"`, `[0] * 4`: repeat a string or list. `None` when neither operand is a
 /// sequence (ordinary arithmetic), `Some(Err)` for a bad count.
-fn repeat_sequence(lhs: &Value, rhs: &Value) -> Option<Result<Value, String>> {
+fn repeat_sequence(lhs: &Value, rhs: &Value) -> Option<Result<Value, VmError>> {
     let (seq, count) = match (lhs, rhs) {
         (Value::Str(_) | Value::Array(_), Value::Number(n)) => (lhs, *n),
         (Value::Number(n), Value::Str(_) | Value::Array(_)) => (rhs, *n),
@@ -258,14 +258,17 @@ fn repeat_sequence(lhs: &Value, rhs: &Value) -> Option<Result<Value, String>> {
         _ => return None,
     };
     if !count.is_finite() || count.fract() != 0.0 || count < 0.0 {
-        return Some(Err(format!("cannot repeat a {} {} times", seq.type_name(), count)));
+        return Some(Err(VmError::runtime_error(format!("cannot repeat a {} {} times", seq.type_name(), count))));
     }
     let n = count as usize;
     Some(match seq {
-        Value::Str(s) if (s.len() as u128) * (n as u128) > 1 << 28 => Err("repeated string is too large".to_string()),
-        Value::Str(s) => Ok(Value::Str(s.repeat(n))),
-        Value::Array(a) if (a.len() as u128) * (n as u128) > 1 << 24 => Err("repeated list is too large".to_string()),
+        Value::Str(s) if (s.len() as u128) * (n as u128) > 1 << 28 => Err(VmError::runtime_error("repeated string is too large".to_string())),
+        Value::Str(s) => crate::memcap::reserve(s.len() * n).map(|_| Value::Str(s.repeat(n))),
+        Value::Array(a) if (a.len() as u128) * (n as u128) > 1 << 24 => Err(VmError::runtime_error("repeated list is too large".to_string())),
         Value::Array(a) => {
+            if let Err(e) = crate::memcap::reserve(a.len() * n * std::mem::size_of::<Value>()) {
+                return Some(Err(e));
+            }
             let items = a.to_vec();
             let mut out = Vec::with_capacity(items.len() * n);
             for _ in 0..n {
@@ -291,7 +294,7 @@ pub(crate) fn check_string_size(bytes: usize) -> Result<(), VmError> {
     if bytes > MAX_STRING_BYTES {
         Err(string_too_large())
     } else {
-        Ok(())
+        crate::memcap::reserve(bytes)
     }
 }
 
@@ -801,6 +804,9 @@ impl VirtualMachine {
         if let Some(ref b) = self.execution_budget {
             if b.max_instruction_steps > 0 {
                 self.exec_step_counter = self.exec_step_counter.saturating_add(1);
+                if b.max_heap_bytes > 0 && self.exec_step_counter & 0xFF == 0 {
+                    crate::memcap::check()?;
+                }
                 if self.exec_step_counter > b.max_instruction_steps {
                     return Err(VmError::SecurityError {
                         message: format!(
@@ -1347,6 +1353,7 @@ impl VirtualMachine {
                                 if l.len() + r.len() > MAX_STRING_BYTES {
                                     return Err(string_too_large());
                                 }
+                                crate::memcap::reserve(r.len())?;
                                 l.push_str(r);
                                 self.stack.pop();
                                 self.ip += 3;
@@ -1618,23 +1625,17 @@ impl VirtualMachine {
                                 self.stack.push(Value::Number(l + r));
                             }
                             (Value::Str(l), Value::Str(r)) => {
-                                if l.len() + r.len() > MAX_STRING_BYTES {
-                                    return Err(string_too_large());
-                                }
+                                check_string_size(l.len() + r.len())?;
                                 self.stack.push(Value::Str(format!("{}{}", l, r)));
                             }
                             (Value::Str(l), r) => {
                                 let r = self.display_value(r, program)?;
-                                if l.len() + r.len() > MAX_STRING_BYTES {
-                                    return Err(string_too_large());
-                                }
+                                check_string_size(l.len() + r.len())?;
                                 self.stack.push(Value::Str(format!("{}{}", l, r)));
                             }
                             (l, Value::Str(r)) => {
                                 let l = self.display_value(l, program)?;
-                                if l.len() + r.len() > MAX_STRING_BYTES {
-                                    return Err(string_too_large());
-                                }
+                                check_string_size(l.len() + r.len())?;
                                 self.stack.push(Value::Str(format!("{}{}", l, r)));
                             }
                             // `[1, 2] + [3]` builds a new list (neither operand changes)
@@ -1642,6 +1643,7 @@ impl VirtualMachine {
                                 if l.len() + r.len() > MAX_ARRAY_LEN {
                                     return Err(VmError::runtime_error("list is too large".to_string()));
                                 }
+                                crate::memcap::reserve((l.len() + r.len()).saturating_mul(std::mem::size_of::<Value>()))?;
                                 let mut joined = l.to_vec();
                                 joined.extend(r.to_vec());
                                 self.stack.push(Value::from(joined));
@@ -1784,7 +1786,7 @@ impl VirtualMachine {
                             if let (Value::Integer(l), Value::Integer(r)) = (&lhs, &rhs) {
                                 self.stack.push(Value::Integer(l.wrapping_mul(*r)));
                             } else if let Some(repeated) = repeat_sequence(&lhs, &rhs) {
-                                self.stack.push(repeated.map_err(VmError::runtime_error)?);
+                                self.stack.push(repeated?);
                             } else if crate::bigint_ops::involves(&lhs, &rhs) {
                                 let r = crate::bigint_ops::arith(crate::bigint_ops::Op::Mul, &lhs, &rhs).map_err(VmError::runtime_error)?;
                                 self.stack.push(r);

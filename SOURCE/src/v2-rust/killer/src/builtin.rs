@@ -1474,6 +1474,7 @@ impl BuiltinFunctions {
                 len, MAX_RANGE_LEN
             )));
         }
+        crate::memcap::reserve((len as usize).saturating_mul(std::mem::size_of::<Value>()))?;
         let mut result = Vec::with_capacity(len as usize);
         let mut i = s;
         for _ in 0..len {

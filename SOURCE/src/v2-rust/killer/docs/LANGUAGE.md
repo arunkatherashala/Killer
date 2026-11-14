@@ -1309,14 +1309,20 @@ optional dict of variables (numbers, strings, lists, dicts) that the code can re
 code runs in a fresh virtual machine, so it cannot see or change the caller's variables, and it runs under the
 caller's capabilities: with files, network or processes denied by the sandbox, the evaluated code is denied too.
 Nesting is limited to 8 levels; an error inside the text becomes an ordinary error with the message. Each evaluation
-is also limited to 50 million instructions and 30 seconds of wall-clock time (shared by nested calls), so an endless
-loop in the text ends with an error instead of hanging the caller.
+is also limited to 50 million instructions, 30 seconds of wall-clock time (shared by nested calls) and 256 MB of
+memory, so an endless loop or a runaway allocation in the text ends with an error instead of hanging or exhausting
+the caller. The memory cap is an ordinary catchable error (`eval(): memory limit exceeded (256 MB)`). Change it with
+a third argument, `eval(code, vars, {"max_memory_mb": 64})`, or for the whole process with the environment variable
+`KILLER_EVAL_MAX_MEMORY` (megabytes; the option wins). Allowed values are 1 to 2048 MB; anything else is an error. A
+nested evaluation has its own cap but can never use more than what is left of the cap of the evaluation that started
+it. The count is approximate (bytes the allocator hands out inside the evaluation, a growing list or string can
+briefly use up to twice its size, threads the code starts are not counted).
 
 > **Warning: never pass untrusted text to `eval` or `exec`.** The text is code and runs with every capability the
 > caller has (files, network, processes, environment). Text that came from the network, a file, a user or an LLM
 > must not be evaluated unless the whole script runs in a restricted sandbox. Passing data in through the `vars`
-> dict is safe; building code by joining strings is not. The time and instruction limits stop runaway loops, not
-> malicious code, and there is no memory limit.
+> dict is safe; building code by joining strings is not. The time, instruction and memory limits stop runaway
+> loops and allocations, not malicious code.
 
 ```killer
 class Account {
