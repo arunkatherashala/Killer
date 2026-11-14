@@ -62,10 +62,33 @@ fn have_curl() -> bool {
     Command::new("curl").arg("--version").stdout(Stdio::null()).stderr(Stdio::null()).status().map(|s| s.success()).unwrap_or(false)
 }
 
+/// With KILLER_TLS_DEBUG set the server's TLS trace goes to the terminal, otherwise it is collected.
+fn server_stderr() -> Stdio {
+    if std::env::var_os("KILLER_TLS_DEBUG").is_some() {
+        Stdio::inherit()
+    } else {
+        Stdio::piped()
+    }
+}
+
+/// Kills a server process left running when an assertion fails (disarmed once the server was waited for).
+struct KillGuard(Option<u32>);
+impl Drop for KillGuard {
+    fn drop(&mut self) {
+        if let Some(pid) = self.0 {
+            let _ = if cfg!(windows) {
+                Command::new("taskkill").args(["/F", "/PID", &pid.to_string()]).stdout(Stdio::null()).stderr(Stdio::null()).status()
+            } else {
+                Command::new("kill").args(["-9", &pid.to_string()]).stdout(Stdio::null()).stderr(Stdio::null()).status()
+            };
+        }
+    }
+}
+
 /// Start a Killer script and return it with the first line it prints (its listening address).
 fn start(src: &str) -> (std::process::Child, BufReader<std::process::ChildStdout>, String, PathBuf) {
     let file = script(src);
-    let mut server = Command::new(env!("CARGO_BIN_EXE_killer")).arg("run").arg(&file).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+    let mut server = Command::new(env!("CARGO_BIN_EXE_killer")).arg("run").arg(&file).stdout(Stdio::piped()).stderr(server_stderr()).spawn().unwrap();
     let mut lines = BufReader::new(server.stdout.take().unwrap());
     let mut addr = String::new();
     lines.read_line(&mut addr).unwrap();
@@ -80,6 +103,9 @@ fn curl(addr: &str, path: &str, insecure: bool) -> (bool, Vec<u8>) {
         c.arg("-k");
     }
     let o = c.arg(format!("https://{addr}{path}")).output().unwrap();
+    if !o.status.success() && insecure {
+        eprintln!("curl {path} failed: {} {}", o.status, String::from_utf8_lossy(&o.stderr).trim());
+    }
     (o.status.success(), o.stdout)
 }
 
@@ -232,12 +258,13 @@ fn serve_over_https_handles_several_requests() {
         r#"fn h(req) {{
     return {{"status": 200, "headers": {{"X-Seen": req["path"]}}, "body": "hello " + req["method"] + " " + req["path"]}}
 }}
-n = serve({port}, h, {{"max_requests": 12, "tls": {{"cert": "{cert}", "key": "{key}"}}}})
+n = serve({port}, h, {{"max_requests": 3, "tls": {{"cert": "{cert}", "key": "{key}"}}}})
 println("served", n)
 "#
     );
     let file = script(&server_src);
-    let mut server = Command::new(env!("CARGO_BIN_EXE_killer")).arg("run").arg(&file).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+    let mut server = Command::new(env!("CARGO_BIN_EXE_killer")).arg("run").arg(&file).stdout(Stdio::piped()).stderr(server_stderr()).spawn().unwrap();
+    let mut guard = KillGuard(Some(server.id()));
     for p in ["/a", "/b", "/c"] {
         let mut got = None;
         let mut last_err = String::new();
@@ -248,6 +275,9 @@ println("served", n)
                 break;
             }
             last_err.push_str(&format!(" | [{p}] {} {}", o.status, String::from_utf8_lossy(&o.stderr).trim()));
+            if o.status.code() != Some(7) {
+                break; // only "could not connect" (server not up yet) may be retried: anything else is a real failure
+            }
             std::thread::sleep(std::time::Duration::from_millis(200)); // server not up yet
         }
         if got.is_none() {
@@ -260,10 +290,13 @@ println("served", n)
         assert!(r.contains(&format!("hello GET {p}")), "{r}");
         assert!(r.to_lowercase().contains(&format!("x-seen: {p}")), "{r}");
     }
-    // max_requests has headroom (a retried attempt that the server already counted must not end the run),
-    // so stop the server ourselves once all three answers are in
-    let _ = server.kill();
-    let _ = server.wait();
+    // the server stops by itself after exactly three requests: no request was retried after being counted
+    // (read its report line rather than waiting for the pipe to close: TLS helper processes may still hold it)
+    let mut line = String::new();
+    BufReader::new(server.stdout.take().unwrap()).read_line(&mut line).unwrap();
+    assert_eq!(line.trim(), "served 3", "server report");
+    assert!(server.wait().unwrap().success());
+    guard.0 = None;
     let _ = std::fs::remove_dir_all(file.parent().unwrap());
 }
 

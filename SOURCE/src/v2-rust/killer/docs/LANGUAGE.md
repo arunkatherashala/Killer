@@ -1482,7 +1482,7 @@ idle; `openssl` turns the PEM files into a one-off PKCS#12 file that the script 
 copies the encrypted bytes between the client and that child while the plain text goes through the child's pipes. The handshake runs in the background, so
 `tls_accept` returns at once and the first read waits for it; a client that fails the handshake only loses its own
 connection. `sock_close` lets `openssl` flush pending output (up to 20 s, normally a few milliseconds) before it is stopped, so a reply sent right before
-closing arrives complete. Limits: each connection costs one `openssl` process plus a few threads (fine for tens of
+closing arrives complete; the bridge only half-closes towards the client and waits for the client's own close (up to 10 s), because closing a socket that still has unread data sends a reset that discards the reply, and `serve` waits (up to 15 s) for TLS connections still delivering a reply before it returns, so the last of `max_requests` is answered completely. Limits: each connection costs one `openssl` process plus a few threads (fine for tens of
 clients, not thousands); no client certificates, ALPN or session resumption; `sock_addr` of a TLS connection is
 `"(tls)"`.
 
