@@ -613,7 +613,7 @@ fn dispatch(name: &str, args: &[Value]) -> Result<Value, VmError> {
 
 const GUID: &str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
-fn accept_key(key: &str) -> String {
+pub fn accept_key(key: &str) -> String {
     base64(&sha1(format!("{}{}", key.trim(), GUID).as_bytes()))
 }
 
@@ -801,7 +801,7 @@ fn ws_read(stream: &mut Conn, buf: &mut Vec<u8>, client: bool, closed: &mut bool
 // ---------------------------------------------------------------------------------------------
 // SHA-1 and base64 (only for the WebSocket handshake)
 
-fn sha1(data: &[u8]) -> [u8; 20] {
+pub fn sha1(data: &[u8]) -> [u8; 20] {
     let mut h: [u32; 5] = [0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476, 0xC3D2E1F0];
     let mut msg = data.to_vec();
     msg.push(0x80);
