@@ -353,7 +353,7 @@ impl StreamSource {
 
     pub fn start(plan: Plan) -> Result<Self, String> {
         let cfg = build_config(&plan.spec)?;
-        let mut child = Command::new(if cfg!(target_os = "windows") { "curl.exe" } else { "curl" })
+        let mut child = Command::new(crate::tool_path::curl()?)
             .args(stream_argv(&plan.spec))
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())

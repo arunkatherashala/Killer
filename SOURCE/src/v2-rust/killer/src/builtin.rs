@@ -11669,6 +11669,7 @@ The fact that you shared this means something. What's underneath it  what are 
         if args.len() != 2 { return Err(VmError::runtime_error("env_set(name, value)".to_string())); }
         let name = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(VmError::runtime_error("env_set: name must be string".to_string())) };
         let val = match &args[1] { Value::Str(s) => s.clone(), _ => format!("{}", args[1]) };
+        crate::tool_path::freeze_environment(); // keep the original PATH for the openssl / curl lookup
         std::env::set_var(&name, &val);
         Ok(Value::Null)
     }

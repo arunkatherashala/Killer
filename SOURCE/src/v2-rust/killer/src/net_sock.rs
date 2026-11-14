@@ -155,7 +155,8 @@ fn tls_connect(addr: &str, ca_file: Option<&str>, who: &str) -> Result<Conn, VmE
     if host.starts_with('-') || host.chars().any(|c| c.is_whitespace() || c.is_control()) {
         return err(format!("{}(): bad host name", who));
     }
-    let mut cmd = Command::new("openssl");
+    let openssl = crate::tool_path::openssl().map_err(|e| VmError::runtime_error(format!("{}(): TLS needs the `openssl` command-line tool: {}", who, e)))?;
+    let mut cmd = Command::new(openssl);
     cmd.arg("s_client").arg("-quiet").arg("-connect").arg(format!("{}:{}", host, port)).arg("-servername").arg(&host);
     cmd.arg("-verify_return_error").arg("-verify_hostname").arg(&host);
     if let Some(f) = ca_file {
@@ -167,7 +168,7 @@ fn tls_connect(addr: &str, ca_file: Option<&str>, who: &str) -> Result<Conn, VmE
     cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
     let mut child = match cmd.spawn() {
         Ok(c) => c,
-        Err(e) => return err(format!("{}(): TLS needs the `openssl` command-line tool on the PATH ({})", who, e)),
+        Err(e) => return err(format!("{}(): TLS cannot start the `openssl` command-line tool ({})", who, e)),
     };
     let out = child.stdout.take().unwrap();
     let errp = child.stderr.take().unwrap();

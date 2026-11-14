@@ -35,10 +35,24 @@ fn fail<T>(msg: String) -> Result<T, VmError> {
     Err(VmError::runtime_error(msg))
 }
 
+fn openssl_path(who: &str) -> Result<std::path::PathBuf, VmError> {
+    crate::tool_path::openssl().map_err(|e| VmError::runtime_error(format!("{}(): TLS needs the `openssl` command-line tool: {}", who, e)))
+}
+
 fn run_openssl(args: &[&str], who: &str) -> Result<std::process::Output, VmError> {
-    match Command::new("openssl").args(args).stdin(Stdio::null()).output() {
+    run_openssl_env(args, &[], who)
+}
+
+/// `envs` carries secrets (for example a password read through `-passout env:NAME`); they never go in `args`.
+fn run_openssl_env(args: &[&str], envs: &[(&str, &str)], who: &str) -> Result<std::process::Output, VmError> {
+    let mut c = Command::new(openssl_path(who)?);
+    c.args(args).stdin(Stdio::null());
+    for (k, v) in envs {
+        c.env(k, v);
+    }
+    match c.output() {
         Ok(o) => Ok(o),
-        Err(e) => fail(format!("{}(): TLS needs the `openssl` command-line tool on the PATH ({})", who, e)),
+        Err(e) => fail(format!("{}(): TLS cannot start the `openssl` command-line tool ({})", who, e)),
     }
 }
 
@@ -109,7 +123,7 @@ fn pump(mut from: TcpStream, mut to: TcpStream, tag: &str) {
 /// deletes as soon as it has loaded it.
 #[cfg(not(windows))]
 fn terminator_command(port: u16, cert: &str, key: &str, _who: &str) -> Result<Command, VmError> {
-    let mut cmd = Command::new("openssl");
+    let mut cmd = Command::new(openssl_path(_who)?);
     cmd.arg("s_server").arg("-quiet").arg("-no_ign_eof").arg("-naccept").arg("1");
     cmd.arg("-accept").arg(format!("127.0.0.1:{}", port)).arg("-cert").arg(cert).arg("-key").arg(key);
     Ok(cmd)
@@ -121,7 +135,10 @@ fn terminator_command(port: u16, cert: &str, key: &str, who: &str) -> Result<Com
     static SEQ: AtomicU64 = AtomicU64::new(0);
     let pfx = std::env::temp_dir().join(format!("killer_tls_{}_{}.pfx", std::process::id(), SEQ.fetch_add(1, Ordering::SeqCst)));
     let pfx_s = pfx.to_string_lossy().to_string();
-    let made = run_openssl(&["pkcs12", "-export", "-inkey", key, "-in", cert, "-out", &pfx_s, "-passout", "pass:killer"], who)?;
+    // one-off password for the temporary PKCS#12 file, handed over through the environment (not argv)
+    let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
+    let pw = format!("k{}-{}-{}", std::process::id(), nanos, SEQ.load(Ordering::SeqCst));
+    let made = run_openssl_env(&["pkcs12", "-export", "-inkey", key, "-in", cert, "-out", &pfx_s, "-passout", "env:KILLER_PFX_PW"], &[("KILLER_PFX_PW", &pw)], who)?;
     if !made.status.success() {
         let _ = std::fs::remove_file(&pfx);
         return fail(format!("{}(): cannot prepare the certificate for TLS: {}", who, last_line(&made.stderr)));
@@ -130,7 +147,7 @@ fn terminator_command(port: u16, cert: &str, key: &str, who: &str) -> Result<Com
     let script = format!(
         "$ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
-$cert=New-Object System.Security.Cryptography.X509Certificates.X509Certificate2('{q}','killer')
+$cert=New-Object System.Security.Cryptography.X509Certificates.X509Certificate2('{q}',$env:KILLER_PFX_PW)
 Remove-Item -LiteralPath '{q}' -Force -ErrorAction SilentlyContinue
 $l=New-Object System.Net.Sockets.TcpListener([System.Net.IPAddress]::Loopback,{port})
 $l.Start()
@@ -165,8 +182,10 @@ $c.Close()
     for u in script.encode_utf16() {
         utf16.extend_from_slice(&u.to_le_bytes());
     }
-    let mut cmd = Command::new("powershell");
+    let ps = crate::tool_path::powershell().map_err(|e| VmError::runtime_error(format!("{}(): cannot find PowerShell for TLS: {}", who, e)))?;
+    let mut cmd = Command::new(ps);
     cmd.args(["-NoProfile", "-NonInteractive", "-EncodedCommand", &base64(&utf16)]);
+    cmd.env("KILLER_PFX_PW", &pw);
     Ok(cmd)
 }
 

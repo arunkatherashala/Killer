@@ -217,7 +217,7 @@ fn download_image_as_data_uri(url: &str) -> Result<String, String> {
 
     // curl -sLk: silent + follow redirects + insecure (bypass SSL cert errors on Windows)
     // --max-time 90: Pollinations AI image generation can take up to 90 seconds
-    let status = Command::new("curl")
+    let status = Command::new(crate::tool_path::curl()?)
         .args(["-sLk", "--max-time", "90", "--connect-timeout", "15", url, "-o", &tmp_str])
         .status()
         .map_err(|e| format!("curl not found: {}", e))?;
@@ -586,7 +586,7 @@ fn curl_post(url: &str, headers: &[String], body: &str, timeout_s: u64) -> Resul
     args.extend_from_slice(&header_refs);
     args.extend_from_slice(&["-d", body]);
 
-    let output = Command::new("curl").args(&args).output()
+    let output = Command::new(crate::tool_path::curl()?).args(&args).output()
         .map_err(|e| format!("curl not found: {}", e))?;
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();

@@ -664,7 +664,7 @@ fn curl_post_form(url: &str, body: &str, timeout_s: u64) -> Result<String, Strin
         return Err(format!("URL must use HTTPS: {}", &url[..url.len().min(60)]));
     }
     let timeout_str = timeout_s.to_string();
-    let curl_bin = if cfg!(target_os = "windows") { "curl.exe" } else { "curl" };
+    let curl_bin = crate::tool_path::curl()?;
     let output = Command::new(curl_bin)
         .args(["-s", "-k", "--ssl-no-revoke", "--fail-with-body",
                "-X", "POST",
@@ -690,7 +690,7 @@ fn curl_get_with_ua(url: &str, timeout_s: u64, user_agent: &str) -> Result<Strin
         return Err(format!("URL must use HTTPS: {}", &url[..url.len().min(60)]));
     }
     let timeout_str = timeout_s.to_string();
-    let curl_bin = if cfg!(target_os = "windows") { "curl.exe" } else { "curl" };
+    let curl_bin = crate::tool_path::curl()?;
 
     // --ssl-no-revoke: required on corporate/proxy networks where the proxy
     // intercepts TLS and the certificate revocation check fails (CRYPT_E_NO_REVOCATION_CHECK).

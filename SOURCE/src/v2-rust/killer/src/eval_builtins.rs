@@ -3,7 +3,13 @@
 //! The code runs in its own fresh virtual machine (it cannot see or change the caller's variables); `vars` is a dict
 //! of values handed in as variables (numbers, strings, booleans, null, lists and dicts of those; JSON-like data).
 //! It runs under the caller's capabilities, so it can do nothing a script could not already do: with files or
-//! network denied by the sandbox, `eval`-ed code is denied too. Nesting is limited to 8 levels.
+//! network denied by the sandbox, `eval`-ed code is denied too (the fresh VM is given the caller's capability set,
+//! not the default trusted one). Nesting is limited to 8 levels. Every evaluation also runs under an instruction
+//! budget (50 million steps) and a wall-clock limit (30 s, shared by nested evaluations), so a loop in the text cannot hang
+//! the caller.
+//!
+//! WARNING: `eval` and `exec` run text as code with all the caller's powers. Never pass them text that came from
+//! an untrusted source (network, files, users, an LLM) unless the caller itself runs in a restricted sandbox.
 //!
 //! `eval("1 + 2")` returns the value of one expression. `exec("x = 1\nfn f() { return x }")` runs statements and
 //! returns a dict of the names it defined (names starting with an underscore are left out).
@@ -18,6 +24,13 @@ thread_local! {
 }
 
 const MAX_DEPTH: u32 = 8;
+const MAX_STEPS: u64 = 50_000_000;
+const MAX_WALL_MS: u64 = 30_000;
+
+thread_local! {
+    /// Deadline of the outermost running evaluation on this thread; nested ones may not outlive it.
+    static DEADLINE: Cell<Option<std::time::Instant>> = const { Cell::new(None) };
+}
 
 pub fn call(name: &str, args: &[Value]) -> Option<Result<Value, VmError>> {
     match name {
@@ -105,9 +118,20 @@ fn run(who: &str, args: &[Value]) -> Result<Value, VmError> {
         return err(format!("{}(): nested more than {} levels deep", who, MAX_DEPTH));
     }
     DEPTH.with(|d| d.set(depth + 1));
+    let now = std::time::Instant::now();
+    let outer_deadline = DEADLINE.with(|d| d.get());
+    let deadline = match outer_deadline {
+        Some(d) if d < now + std::time::Duration::from_millis(MAX_WALL_MS) => d,
+        _ => now + std::time::Duration::from_millis(MAX_WALL_MS),
+    };
+    DEADLINE.with(|d| d.set(Some(deadline)));
+    let wall_ms = (deadline.saturating_duration_since(now).as_millis() as u64).max(1);
     let result = (|| -> Result<Value, VmError> {
         let program = crate::compiler::compile_killer_default(&source).map_err(|e| shift(e, nested))?;
         let mut vm = crate::vm::VirtualMachine::new();
+        // a fresh VM defaults to the trusted capability set: hand it the caller's instead, so eval cannot escalate
+        vm.set_capabilities(crate::security::current_capabilities());
+        vm.set_execution_budget(Some(crate::security::ExecutionBudget { max_instruction_steps: MAX_STEPS, max_wall_ms: wall_ms, max_heap_bytes: 0 }));
         vm.run(&program).map_err(|e| shift(e, nested))?;
         let globals = vm.get_globals();
         if who == "eval" {
@@ -130,6 +154,7 @@ fn run(who: &str, args: &[Value]) -> Result<Value, VmError> {
         Ok(Value::Dict(SharedDict::new(out)))
     })();
     DEPTH.with(|d| d.set(depth));
+    DEADLINE.with(|d| d.set(outer_deadline));
     result.map_err(|e| VmError::runtime_error(format!("{}(): {}", who, e)))
 }
 
