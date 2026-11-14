@@ -19,6 +19,18 @@ pub struct Terminated {
     pub stderr: ChildStderr,
 }
 
+pub fn dbg_on() -> bool {
+    std::env::var_os("KILLER_TLS_DEBUG").is_some()
+}
+
+fn t_ms() -> u128 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() % 1_000_000).unwrap_or(0)
+}
+
+macro_rules! tdbg {
+    ($($a:tt)*) => { if dbg_on() { eprintln!("[tls {} pid{}] {}", t_ms(), std::process::id(), format!($($a)*)); } };
+}
+
 fn fail<T>(msg: String) -> Result<T, VmError> {
     Err(VmError::runtime_error(msg))
 }
@@ -62,11 +74,26 @@ fn free_loopback_port() -> std::io::Result<u16> {
     Ok(l.local_addr()?.port())
 }
 
-fn pump(mut from: TcpStream, mut to: TcpStream) {
+fn pump(mut from: TcpStream, mut to: TcpStream, tag: &str) {
     let mut b = [0u8; 16384];
-    while let Ok(n) = from.read(&mut b) {
-        if n == 0 || to.write_all(&b[..n]).is_err() {
-            break;
+    let mut total = 0usize;
+    loop {
+        match from.read(&mut b) {
+            Ok(0) => {
+                tdbg!("{} EOF after {} bytes", tag, total);
+                break;
+            }
+            Ok(n) => {
+                total += n;
+                if let Err(e) = to.write_all(&b[..n]) {
+                    tdbg!("{} write error {:?} after {} bytes", tag, e, total);
+                    break;
+                }
+            }
+            Err(e) => {
+                tdbg!("{} read error {:?} after {} bytes", tag, e, total);
+                break;
+            }
         }
     }
     let _ = to.shutdown(Shutdown::Write);
@@ -110,7 +137,16 @@ $l.Start()
 $c=$l.AcceptTcpClient()
 $l.Stop()
 $ssl=New-Object System.Net.Security.SslStream($c.GetStream(),$false)
-$ssl.AuthenticateAsServer($cert)
+try {{
+  $ssl.AuthenticateAsServer($cert)
+}} catch {{
+  $c.Client.Shutdown([System.Net.Sockets.SocketShutdown]::Send)
+  $c.Client.ReceiveTimeout=1000
+  $b=New-Object byte[] 4096
+  try {{ while ($c.Client.Receive($b) -gt 0) {{}} }} catch {{}}
+  $c.Close()
+  exit 1
+}}
 $in=[Console]::OpenStandardInput()
 $out=[Console]::OpenStandardOutput()
 $up=$ssl.CopyToAsync($out)
@@ -179,7 +215,7 @@ pub fn terminate(raw: TcpStream, cert: &str, key: &str, who: &str) -> Result<Ter
         let inner = loop {
             match TcpStream::connect(("127.0.0.1", port)) {
                 Ok(s) => break s,
-                Err(_) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(15)),
+                Err(e) if Instant::now() < deadline => { let _ = e; std::thread::sleep(Duration::from_millis(15)) }
                 Err(_) => {
                     let _ = r1.shutdown(Shutdown::Both);
                     return;
@@ -192,9 +228,18 @@ pub fn terminate(raw: TcpStream, cert: &str, key: &str, who: &str) -> Result<Ter
             Err(_) => return,
         };
         let r1b = r1.try_clone();
-        std::thread::spawn(move || pump(r2, inner2)); // client -> openssl
-        pump(inner, r1); // openssl -> client
+        let (done_tx, done_rx) = std::sync::mpsc::channel::<()>();
+        std::thread::spawn(move || {
+            pump(r2, inner2, "client->helper"); // client -> openssl
+            let _ = done_tx.send(());
+        });
+        pump(inner, r1, "helper->client"); // openssl -> client; ends with a FIN (shutdown Write) towards the client
+        // Closing a TCP socket that still has unread incoming data makes the stack send RST, and an RST discards the
+        // reply the client has not read yet (curl exit 56). So only half-close towards the client and wait for the
+        // client's own FIN (it sends it after reading the reply and its close_notify) before closing for good.
+        let waited = done_rx.recv_timeout(Duration::from_secs(10));
         if let Ok(r) = r1b {
+            tdbg!("bridge closing client socket (client finished: {})", waited.is_ok());
             let _ = r.shutdown(Shutdown::Both);
         }
     });
@@ -216,8 +261,9 @@ pub fn reap(child: &mut Child, grace: Duration) {
 }
 
 /// A TLS front for plain-text servers: listens on `front`, and for every connection terminates TLS and forwards the
-/// plain text to `backend` (a loopback address). Used by `serve(..., {tls: {cert, key}})`. Stops when `stop` is set.
-pub fn spawn_front(front: TcpListener, backend: std::net::SocketAddr, cert: String, key: String, stop: std::sync::Arc<std::sync::atomic::AtomicBool>) {
+/// plain text to `backend` (a loopback address). Used by `serve(..., {tls: {cert, key}})`. Stops when `stop` is set;
+/// `active` counts the connections still being served, so the caller can let them finish before it exits.
+pub fn spawn_front(front: TcpListener, backend: std::net::SocketAddr, cert: String, key: String, stop: std::sync::Arc<std::sync::atomic::AtomicBool>, active: std::sync::Arc<std::sync::atomic::AtomicUsize>) {
     use std::sync::atomic::Ordering;
     let _ = front.set_nonblocking(true);
     std::thread::spawn(move || {
@@ -225,13 +271,46 @@ pub fn spawn_front(front: TcpListener, backend: std::net::SocketAddr, cert: Stri
             match front.accept() {
                 Ok((raw, _)) => {
                     let (cert, key) = (cert.clone(), key.clone());
+                    struct Active(std::sync::Arc<std::sync::atomic::AtomicUsize>);
+                    impl Drop for Active {
+                        fn drop(&mut self) {
+                            self.0.fetch_sub(1, Ordering::SeqCst);
+                        }
+                    }
+                    active.fetch_add(1, Ordering::SeqCst);
+                    let token = Active(active.clone());
                     std::thread::spawn(move || {
+                        let _token = token;
                         let t = match terminate(raw, &cert, &key, "serve") {
                             Ok(t) => t,
                             Err(_) => return,
                         };
                         let Terminated { mut child, mut stdin, mut stdout, stderr } = t;
-                        drop(stderr);
+                        if dbg_on() {
+                            std::thread::spawn(move || {
+                                let mut e = stderr;
+                                let mut t = String::new();
+                                let _ = e.read_to_string(&mut t);
+                                if !t.trim().is_empty() {
+                                    tdbg!("helper stderr: {}", t.trim());
+                                }
+                            });
+                        } else {
+                            drop(stderr);
+                        }
+                        // Wait for the first plain-text bytes before touching the backend: the helper start-up and the
+                        // handshake can take seconds under load, and a backend connection that sits idle meanwhile holds
+                        // up the (single-threaded) HTTP loop and runs into its request timeout (408).
+                        let mut first = [0u8; 16384];
+                        let first_n = match stdout.read(&mut first) {
+                            Ok(n) if n > 0 => n,
+                            _ => {
+                                tdbg!("no request arrived (handshake failed or client left)");
+                                drop(stdin);
+                                reap(&mut child, Duration::from_millis(200));
+                                return;
+                            }
+                        };
                         let back = match TcpStream::connect(backend) {
                             Ok(b) => b,
                             Err(_) => {
@@ -245,6 +324,11 @@ pub fn spawn_front(front: TcpListener, backend: std::net::SocketAddr, cert: Stri
                             Err(_) => return,
                         };
                         let mut back_w = back;
+                        if back_w.write_all(&first[..first_n]).is_err() {
+                            drop(stdin);
+                            reap(&mut child, Duration::from_millis(200));
+                            return;
+                        }
                         // client -> backend
                         let up = std::thread::spawn(move || {
                             let mut b = [0u8; 16384];

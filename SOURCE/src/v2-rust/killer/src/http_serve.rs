@@ -479,19 +479,27 @@ fn serve_loop(vm: &mut VirtualMachine, args: &[Value], program: &Program, once: 
         Some(_) => return err(format!("{}(): tls must be a dict {{\"cert\": file, \"key\": file}}", who)),
     };
     let tls_stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-    struct StopOnDrop(std::sync::Arc<std::sync::atomic::AtomicBool>);
+    let tls_active = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    // On the way out: stop accepting, then give TLS connections that are still delivering their reply time to finish.
+    // Returning at once (for example right after the last of `max_requests`) would end the process while the helper
+    // still holds the end of the reply, and the client would see a reset instead of the response.
+    struct StopOnDrop(std::sync::Arc<std::sync::atomic::AtomicBool>, std::sync::Arc<std::sync::atomic::AtomicUsize>);
     impl Drop for StopOnDrop {
         fn drop(&mut self) {
             self.0.store(true, std::sync::atomic::Ordering::SeqCst);
+            let end = Instant::now() + Duration::from_secs(15);
+            while self.1.load(std::sync::atomic::Ordering::SeqCst) > 0 && Instant::now() < end {
+                std::thread::sleep(Duration::from_millis(5));
+            }
         }
     }
-    let _tls_guard = StopOnDrop(tls_stop.clone());
+    let _tls_guard = StopOnDrop(tls_stop.clone(), tls_active.clone());
     let listener = if let Some((cert, key)) = tls_files {
         crate::net_tls_server::check_credentials(&cert, &key, who)?;
         let front = TcpListener::bind((host.as_str(), port)).map_err(|e| VmError::runtime_error(format!("{}: cannot bind {}:{}: {}", who, host, port, e)))?;
         let inner = TcpListener::bind(("127.0.0.1", 0)).map_err(|e| VmError::runtime_error(format!("{}: {}", who, e)))?;
         let backend = inner.local_addr().map_err(|e| VmError::runtime_error(format!("{}: {}", who, e)))?;
-        crate::net_tls_server::spawn_front(front, backend, cert, key, tls_stop.clone());
+        crate::net_tls_server::spawn_front(front, backend, cert, key, tls_stop.clone(), tls_active.clone());
         inner
     } else {
         TcpListener::bind((host.as_str(), port)).map_err(|e| VmError::runtime_error(format!("{}: cannot bind {}:{}: {}", who, host, port, e)))?
