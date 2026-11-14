@@ -295,6 +295,92 @@ mod tests {
         assert_eq!(open(&key, &nonce, &aad, &sealed).unwrap(), pt.to_vec());
     }
 
+    // ---- RFC 8439 vectors (section 2.3.2, 2.4.2, 2.5.2, appendix A.1, A.3, A.5) ----
+
+    #[test]
+    fn rfc8439_2_3_2_full_block() {
+        let key: [u8; 32] = arr(&(0..32u8).collect::<Vec<_>>());
+        let nonce: [u8; 12] = arr(&unhex("000000090000004a00000000"));
+        assert_eq!(block(&key, 1, &nonce).to_vec(), unhex("10f1e7e4d13b5915500fdd1fa32071c4c7d1f4c733c068030422aa9ac3d46c4ed2826446079faa0914c2d705d98b02a2b5129cd1de164eb9cbd083e8a2503c4e"));
+    }
+
+    #[test]
+    fn rfc8439_a1_zero_key_blocks() {
+        let (key, nonce) = ([0u8; 32], [0u8; 12]);
+        assert_eq!(block(&key, 0, &nonce).to_vec(), unhex("76b8e0ada0f13d90405d6ae55386bd28bdd219b8a08ded1aa836efcc8b770dc7da41597c5157488d7724e03fb8d84a376a43b8f41518a11cc387b669b2ee6586"));
+        assert_eq!(block(&key, 1, &nonce).to_vec(), unhex("9f07e7be5551387a98ba977c732d080dcb0f29a048e3656912c6533e32ee7aed29b721769ce64e43d57133b074d839d531ed1f28510afb45ace10a1f4b794d6f"));
+    }
+
+    #[test]
+    fn rfc8439_2_4_2_stream_encryption_and_decryption() {
+        let key: [u8; 32] = arr(&(0..32u8).collect::<Vec<_>>());
+        let nonce: [u8; 12] = arr(&unhex("000000000000004a00000000"));
+        let pt = b"Ladies and Gentlemen of the class of '99: If I could offer you only one tip for the future, sunscreen would be it.".to_vec();
+        let want = unhex("6e2e359a2568f98041ba0728dd0d6981e97e7aec1d4360c20a27afccfd9fae0bf91b65c5524733ab8f593dabcd62b3571639d624e65152ab8f530c359f0861d807ca0dbf500d6a6156a38e088a22b65e52bc514d16ccf806818ce91ab77937365af90bbf74a35be6b40b8eedf2785e42874d");
+        let mut buf = pt.clone();
+        xor_stream(&key, 1, &nonce, &mut buf);
+        assert_eq!(buf, want);
+        xor_stream(&key, 1, &nonce, &mut buf);
+        assert_eq!(buf, pt, "XOR with the same stream decrypts");
+    }
+
+    fn poly(key: &str, msg: &[u8]) -> Vec<u8> {
+        let mut p = Poly1305::new(&arr(&unhex(key)));
+        p.update(msg);
+        p.finish().to_vec()
+    }
+
+    #[test]
+    fn rfc8439_a3_poly1305_vectors() {
+        let z = "00000000000000000000000000000000";
+        // 1: all zero key and message
+        assert_eq!(poly(&format!("{z}{z}"), &[0u8; 64]), vec![0u8; 16]);
+        let ietf = br#"Any submission to the IETF intended by the Contributor for publication as all or part of an IETF Internet-Draft or RFC and any statement made within the context of an IETF activity is considered an "IETF Contribution". Such statements include oral statements in IETF sessions, as well as written and electronic communications made at any time or place, which are addressed to"#;
+        // 2: r = 0, so the tag is s; 3: s = 0
+        assert_eq!(poly(&format!("{z}36e5f6b5c5e06070f0efca96227a863e"), ietf), unhex("36e5f6b5c5e06070f0efca96227a863e"));
+        assert_eq!(poly(&format!("36e5f6b5c5e06070f0efca96227a863e{z}"), ietf), unhex("f3477e7cd95417af89a6b8794c310cf0"));
+        // 4: the Jabberwocky text, 127 bytes (not a multiple of 16)
+        let jab = b"'Twas brillig, and the slithy toves\nDid gyre and gimble in the wabe:\nAll mimsy were the borogoves,\nAnd the mome raths outgrabe.";
+        assert_eq!(jab.len(), 127);
+        assert_eq!(poly("1c9240a5eb55d38af333888604f6b5f0473917c1402b80099dca5cbc207075c0", jab), unhex("4541669a7eaaee61e708dc7cbcc5eb62"));
+        // 5, 6, 9: carries and the wrap at 2^130 - 5
+        assert_eq!(poly(&format!("02{}{z}", "00".repeat(15)), &[0xff; 16]), unhex("03000000000000000000000000000000"));
+        assert_eq!(poly(&format!("02{}{}", "00".repeat(15), "ff".repeat(16)), &unhex("02000000000000000000000000000000")), unhex("03000000000000000000000000000000"));
+        assert_eq!(poly(&format!("02{}{z}", "00".repeat(15)), &unhex("fdffffffffffffffffffffffffffffff")), unhex("faffffffffffffffffffffffffffffff"));
+        // 7 and 8: sums that land exactly on, and just below, a multiple of 2^130 - 5
+        let k78 = format!("01{}{z}", "00".repeat(15));
+        let m7 = [vec![0xffu8; 16], unhex("f0ffffffffffffffffffffffffffffff"), unhex("11000000000000000000000000000000")].concat();
+        assert_eq!(poly(&k78, &m7), unhex("05000000000000000000000000000000"));
+        let m8 = [vec![0xffu8; 16], unhex("fbfefefefefefefefefefefefefefefe"), unhex("01010101010101010101010101010101")].concat();
+        assert_eq!(poly(&k78, &m8), vec![0u8; 16]);
+    }
+
+    #[test]
+    fn poly1305_split_updates_equal_one_update() {
+        let key = "1c9240a5eb55d38af333888604f6b5f0473917c1402b80099dca5cbc207075c0";
+        let msg: Vec<u8> = (0..100u32).map(|i| (i * 7 + 1) as u8).collect();
+        let whole = poly(key, &msg);
+        for cut in [0, 1, 15, 16, 17, 31, 32, 33, 99, 100] {
+            let mut p = Poly1305::new(&arr(&unhex(key)));
+            p.update(&msg[..cut]);
+            p.update(&msg[cut..]);
+            assert_eq!(p.finish().to_vec(), whole, "cut at {}", cut);
+        }
+    }
+
+    #[test]
+    fn rfc8439_a5_decryption_vector() {
+        let key: [u8; 32] = arr(&unhex("1c9240a5eb55d38af333888604f6b5f0473917c1402b80099dca5cbc207075c0"));
+        let nonce: [u8; 12] = arr(&unhex("000000000102030405060708"));
+        let aad = unhex("f33388860000000000004e91");
+        let pt = "Internet-Drafts are draft documents valid for a maximum of six months and may be updated, replaced, or obsoleted by other documents at any time. It is inappropriate to use Internet-Drafts as reference material or to cite them other than as /\u{201c}work in progress./\u{201d}";
+        let sealed = seal(&key, &nonce, &aad, pt.as_bytes());
+        assert_eq!(sealed.len(), 265 + 16);
+        assert_eq!(sealed[..32].to_vec(), unhex("64a0861575861af460f062c79be643bd5e805cfd345cf389f108670ac76c8cb2"));
+        assert_eq!(sealed[265..].to_vec(), unhex("eead9d67890cbb22392336fea1851f38"));
+        assert_eq!(open(&key, &nonce, &aad, &sealed).unwrap(), pt.as_bytes().to_vec());
+    }
+
     /// (plaintext length, aad hex, ciphertext hex, tag hex) from an independent implementation; the plaintext is
     /// byte i = (13 i + 1) mod 256.
     const VECTORS: &[(usize, &str, &str, &str)] = &[
