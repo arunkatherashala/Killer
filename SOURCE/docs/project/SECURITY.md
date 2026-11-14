@@ -162,5 +162,19 @@ errors ignored) for proxy compatibility; do not send secrets through them.
 
 **`eval` / `exec`.** The text runs with all the caller's capabilities (a fresh VM is given the caller's set, so a
 restricted script cannot use `eval` to escape), cannot see or change the caller's variables beyond the `vars` dict,
-is limited to 8 nested levels, 50 million instructions and 30 seconds, and its errors carry no host paths. It is
-still arbitrary code: never evaluate untrusted text. There is no memory limit for evaluated code.
+is limited to 8 nested levels, 50 million instructions, 30 seconds and a memory cap, and its errors carry no host
+paths. It is still arbitrary code: never evaluate untrusted text.
+
+*Memory cap.* Each evaluation is capped at 256 MB by default (`eval(code, vars, {"max_memory_mb": N})` or the
+environment variable `KILLER_EVAL_MAX_MEMORY`; 1 to 2048 MB, anything else is an error). The crate installs a thin
+counting wrapper around the system allocator that, only while an evaluation runs, keeps a per-thread count of live
+bytes; the VM compares it with the limit every 256 instructions and the big allocation sites (string and list repeat
+and concatenation, `range`, padding) check before allocating. Exceeding it ends the evaluation with a catchable error
+(`memory limit exceeded (N MB)`) that code inside the evaluation cannot swallow, and the evaluation's VM is dropped,
+which frees its memory. A nested evaluation is bounded by what is left of its parent's cap. Honest limits: the count
+is requested bytes, not resident memory (no allocator overhead or fragmentation); an allocation that is not at a
+checked site is only noticed at the next periodic check, and a growing list or string can briefly hold its old and new
+buffer, so the real peak can be up to about twice the cap; threads or processes the evaluated code starts are not
+counted; builtins that allocate outside the VM (file reads, network bodies, native libraries) are only caught by the
+periodic check afterwards; the caller's own memory is not counted. The cap protects against accidents and sloppy
+generated code, not against a determined attacker, who should be kept out by not evaluating untrusted text at all.

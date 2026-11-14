@@ -1,12 +1,14 @@
-//! `eval(code[, vars])` and `exec(code[, vars])`: compile and run Killer source given as text.
+//! `eval(code[, vars[, opts]])` and `exec(code[, vars[, opts]])`: compile and run Killer source given as text.
 //!
 //! The code runs in its own fresh virtual machine (it cannot see or change the caller's variables); `vars` is a dict
 //! of values handed in as variables (numbers, strings, booleans, null, lists and dicts of those; JSON-like data).
 //! It runs under the caller's capabilities, so it can do nothing a script could not already do: with files or
 //! network denied by the sandbox, `eval`-ed code is denied too (the fresh VM is given the caller's capability set,
 //! not the default trusted one). Nesting is limited to 8 levels. Every evaluation also runs under an instruction
-//! budget (50 million steps) and a wall-clock limit (30 s, shared by nested evaluations), so a loop in the text cannot hang
-//! the caller.
+//! budget (50 million steps), a wall-clock limit (30 s, shared by nested evaluations) and a memory cap (256 MB by
+//! default, see `crate::memcap`), so a loop or an allocation in the text cannot hang or exhaust the caller. The cap
+//! is set with `opts = {"max_memory_mb": N}` (1 to 2048) or the environment variable `KILLER_EVAL_MAX_MEMORY`;
+//! a nested evaluation can never exceed the cap of the evaluation that started it.
 //!
 //! WARNING: `eval` and `exec` run text as code with all the caller's powers. Never pass them text that came from
 //! an untrusted source (network, files, users, an LLM) unless the caller itself runs in a restricted sandbox.
@@ -107,6 +109,25 @@ fn run(who: &str, args: &[Value]) -> Result<Value, VmError> {
         }
         Some(other) => return err(format!("{}() variables must be a dict, got {}", who, other.type_name())),
     }
+    let mem_mb = match args.get(2) {
+        None | Some(Value::Null) => crate::memcap::resolve_mb(None),
+        Some(Value::Dict(o)) => {
+            if let Some(k) = o.keys().into_iter().find(|k| k != "max_memory_mb") {
+                return err(format!("{}(): unknown option \"{}\" (the only option is max_memory_mb)", who, k));
+            }
+            match o.get("max_memory_mb") {
+                None | Some(Value::Null) => crate::memcap::resolve_mb(None),
+                Some(Value::Integer(i)) => crate::memcap::resolve_mb(Some(i as f64)),
+                Some(Value::Number(n)) => crate::memcap::resolve_mb(Some(n)),
+                Some(other) => return err(format!("{}(): max_memory_mb must be a number, got {}", who, other.type_name())),
+            }
+        }
+        Some(other) => return err(format!("{}() options must be a dict, got {}", who, other.type_name())),
+    };
+    let mem_mb = match mem_mb {
+        Ok(m) => m,
+        Err(e) => return err(format!("{}(): {}", who, e)),
+    };
     let nested = prelude.matches('\n').count();
     let source = if who == "eval" {
         format!("{}__eval_result = ({})\n", prelude, code.trim())
@@ -126,12 +147,13 @@ fn run(who: &str, args: &[Value]) -> Result<Value, VmError> {
     };
     DEADLINE.with(|d| d.set(Some(deadline)));
     let wall_ms = (deadline.saturating_duration_since(now).as_millis() as u64).max(1);
+    let mem_guard = crate::memcap::enter(mem_mb);
     let result = (|| -> Result<Value, VmError> {
         let program = crate::compiler::compile_killer_default(&source).map_err(|e| shift(e, nested))?;
         let mut vm = crate::vm::VirtualMachine::new();
         // a fresh VM defaults to the trusted capability set: hand it the caller's instead, so eval cannot escalate
         vm.set_capabilities(crate::security::current_capabilities());
-        vm.set_execution_budget(Some(crate::security::ExecutionBudget { max_instruction_steps: MAX_STEPS, max_wall_ms: wall_ms, max_heap_bytes: 0 }));
+        vm.set_execution_budget(Some(crate::security::ExecutionBudget { max_instruction_steps: MAX_STEPS, max_wall_ms: wall_ms, max_heap_bytes: mem_mb * 1024 * 1024 }));
         vm.run(&program).map_err(|e| shift(e, nested))?;
         let globals = vm.get_globals();
         if who == "eval" {
@@ -153,6 +175,7 @@ fn run(who: &str, args: &[Value]) -> Result<Value, VmError> {
         }
         Ok(Value::Dict(SharedDict::new(out)))
     })();
+    drop(mem_guard);
     DEPTH.with(|d| d.set(depth));
     DEADLINE.with(|d| d.set(outer_deadline));
     result.map_err(|e| VmError::runtime_error(format!("{}(): {}", who, e)))

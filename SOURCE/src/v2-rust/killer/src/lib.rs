@@ -53,6 +53,11 @@ pub mod safe_mutex;
 // Cycle-collecting GC (tri-color mark-and-sweep on top of Rc<RefCell<>>)
 pub mod gc;
 
+// Optional per-evaluation memory cap (counting allocator used by `eval`/`exec`)
+pub mod memcap;
+#[global_allocator]
+static GLOBAL: memcap::CountingAlloc = memcap::CountingAlloc;
+
 // Module declarations (Week 3-5 focus)
 pub mod jit;
 pub mod benchmark;
