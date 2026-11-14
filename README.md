@@ -1,6 +1,6 @@
 # Killer
 
-Killer is a from-scratch scripting language with a bytecode VM, written in Rust with zero external crates.
+Killer is a from-scratch scripting language with a bytecode VM, written in Rust. It has zero external dependencies except the RustCrypto crates for encryption (`chacha20poly1305`, `sha2`, `pbkdf2`, `hmac`; `subtle` for constant-time comparison). `chacha20poly1305` had an independent NCC Group audit; `sha2`, `pbkdf2` and `hmac` are widely used and reviewed. Killer itself is not audited.
 It has Python-like syntax with braces, closures that share captured variables, classes, lazy generators,
 exceptions with file and line numbers, arbitrary-precision integers, a large builtin library, an optional
 x86-64 JIT for numeric code (other architectures use the interpreter) and a few unusual features (trits,

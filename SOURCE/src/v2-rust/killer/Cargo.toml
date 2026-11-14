@@ -57,8 +57,18 @@ cluster-demo-tests = []
 kore-engine = []
 
 [dependencies]
-# Ghost VM signing uses in-crate SHA-256 + HMAC (no extra crates.io deps).
-# JIT: src/jit_x86.rs — no default crates.io deps.
+# Cryptography: RustCrypto crates (the first external dependencies; see docs/CRYPTO.md).
+# JIT: src/jit_x86.rs - no crates.io deps.
+chacha20poly1305 = { version = "0.10", default-features = false, features = ["alloc"] }
+sha2 = { version = "0.10", default-features = false }
+hmac = { version = "0.12", default-features = false }
+pbkdf2 = { version = "0.12", default-features = false, features = ["hmac"] }
+subtle = { version = "2", default-features = false }
+
+[dev-dependencies]
+# RFC 8439 primitive vectors in src/aead.rs tests (already in the dependency tree via chacha20poly1305).
+chacha20 = "0.9"
+poly1305 = "0.8"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
