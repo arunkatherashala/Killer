@@ -688,7 +688,17 @@ println(returned, return_code, g())
 // ---------------------------------------------------------------------------------------------
 
 fn free_port() -> u16 {
-    std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port()
+    // Windows hands a just-released port to the next caller, so two parallel tests could be given the same one:
+    // remember every port this process has handed out and never return one twice.
+    static USED: std::sync::Mutex<Vec<u16>> = std::sync::Mutex::new(Vec::new());
+    let mut used = USED.lock().unwrap();
+    loop {
+        let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+        if !used.contains(&port) {
+            used.push(port);
+            return port;
+        }
+    }
 }
 
 fn start_todo_server(port: u16, data: &Path, max_requests: u32) -> std::process::Child {
