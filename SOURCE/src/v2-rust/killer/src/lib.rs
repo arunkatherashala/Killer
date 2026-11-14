@@ -55,6 +55,11 @@ pub mod gc;
 
 // Optional per-evaluation memory cap (counting allocator used by `eval`/`exec`)
 pub mod memcap;
+// Only with the optional `mem-cap` feature does the library install the counting allocator itself (for embedders
+// that want the eval memory cap and declare no allocator of their own). The Killer CLI binaries declare
+// `memcap::CountingAlloc` themselves (`#[cfg(not(feature = "mem-cap"))]`, so the two never both exist). An embedder
+// without either gets only the explicit pre-checks; see `memcap::is_installed`.
+#[cfg(feature = "mem-cap")]
 #[global_allocator]
 static GLOBAL: memcap::CountingAlloc = memcap::CountingAlloc;
 

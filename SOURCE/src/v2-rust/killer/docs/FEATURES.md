@@ -33,7 +33,7 @@ The row-by-row history is in the root `tracker.csv`; the Python comparison is in
 | Unicode names and text | yes | |
 | Fractions and complex numbers | yes | library written in Killer |
 | Macros | yes | `macro name(a) { ... }` and `name!(x)`, text expansion, hygienic (body-local names renamed per expansion, `$name` to capture) |
-| `eval` / `exec` of text | yes | fresh VM, same capabilities as the caller (no new power), 50M-step / 30 s / 256 MB memory limit (`max_memory_mb` option, `KILLER_EVAL_MAX_MEMORY`, 1 to 2048); WARNING: never eval untrusted text, it runs with all of the caller's powers |
+| `eval` / `exec` of text | yes | fresh VM, same capabilities as the caller (no new power), 50M-step / 30 s / 256 MB memory limit (`max_memory_mb` option, `KILLER_EVAL_MAX_MEMORY`, 1 to 2048); live-memory check only in the CLI binaries or with the `mem-cap` feature / `CountingAlloc` installed (without it the live-memory check does not exist, only the pre-checks, steps and time apply); WARNING: never eval untrusted text, it runs with all of the caller's powers |
 
 ## Standard library
 

@@ -1,7 +1,7 @@
 //! Per-evaluation memory cap used by `eval` / `exec`.
 //!
-//! A thin wrapper around the system allocator ([`CountingAlloc`], installed as the crate's global allocator)
-//! keeps a thread-local count of live bytes, but only while a cap is active on the thread (see [`enter`]); when no
+//! A thin wrapper around the system allocator ([`CountingAlloc`], an opt-in type: the library does NOT install it
+//! unless the `mem-cap` Cargo feature is on; the Killer CLI binaries declare it themselves) keeps a thread-local count of live bytes, but only while a cap is active on the thread (see [`enter`]); when no
 //! cap is active the cost is one thread-local read per allocation. The VM compares the count with the limit every
 //! 256 instructions, and the known big allocation sites (string repeat and concatenation, list repeat and
 //! concatenation, `range`) call [`reserve`] first, so one huge request fails before the memory is requested.
@@ -12,12 +12,16 @@
 //! Between two periodic checks the evaluation can overshoot the limit a little, and a growing `Vec` briefly holds
 //! both its old and new buffer, so treat the cap as a practical bound (plus up to a factor of about two), not as an
 //! exact limit.
-
-#![allow(unsafe_code)] // implementing `GlobalAlloc` is unsafe by definition; every method only forwards to `System`
+//!
+//! Without the counting allocator (an embedder that uses the library with its own global allocator and without the
+//! `mem-cap` feature) the live-byte counter never moves: [`is_installed`] returns false, the periodic [`check`] can
+//! never fire (no false "limit exceeded"), and only the explicit [`reserve`] pre-checks, the step and time budgets
+//! and the capability inheritance protect the caller.
 
 use crate::error::VmError;
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::Cell;
+use std::sync::atomic::{AtomicU8, Ordering};
 
 /// Default cap of one evaluation, in megabytes.
 pub const DEFAULT_MAX_MB: u64 = 256;
@@ -48,6 +52,9 @@ fn add(delta: i64) {
     });
 }
 
+// Implementing `GlobalAlloc` is unsafe by definition; every method only forwards to `System`. This is the only
+// place of this module that needs `unsafe`, so the allowance is scoped to the impl.
+#[allow(unsafe_code)]
 unsafe impl GlobalAlloc for CountingAlloc {
     #[inline]
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
@@ -163,4 +170,29 @@ pub fn resolve_mb(requested: Option<f64>) -> Result<u64, String> {
         return Err(format!("the memory cap must be a whole number of megabytes from {} to {}, got {}", MIN_MB, HARD_MAX_MB, raw));
     }
     Ok(raw as u64)
+}
+
+/// 0 = not probed yet, 1 = counting allocator is installed, 2 = it is not.
+static INSTALLED: AtomicU8 = AtomicU8::new(0);
+
+/// True when [`CountingAlloc`] is the process's global allocator, so the periodic live-byte check works. When it
+/// is false only the [`reserve`] pre-checks apply. Detected once by making a small allocation inside a temporary
+/// counted scope on the calling thread and seeing whether the counter moved (the thread's own cap state is
+/// restored afterwards).
+pub fn is_installed() -> bool {
+    match INSTALLED.load(Ordering::Relaxed) {
+        1 => return true,
+        2 => return false,
+        _ => {}
+    }
+    let (pl, pv) = (LIMIT.with(|l| l.get()), LIVE.with(|v| v.get()));
+    LIMIT.with(|l| l.set(i64::MAX));
+    LIVE.with(|v| v.set(0));
+    let b = std::hint::black_box(Box::new([0u8; 64]));
+    let moved = LIVE.with(|v| v.get()) >= 64;
+    drop(b);
+    LIMIT.with(|l| l.set(pl));
+    LIVE.with(|v| v.set(pv));
+    INSTALLED.store(if moved { 1 } else { 2 }, Ordering::Relaxed);
+    moved
 }

@@ -55,6 +55,8 @@ cluster-demo-tests = []
 # Link against the kore-ffi static library (kore_ffi.lib / libkore_ffi.a).
 # Build path is controlled by KORE_FFI_DIR env var (default: KoreRepo/target/release).
 kore-engine = []
+# Make the library install `memcap::CountingAlloc` as the global allocator (for embedders; enables the live-bytes check of the eval memory cap). Off by default; the CLI binaries declare the allocator themselves when this is off.
+mem-cap = []
 
 [dependencies]
 # Cryptography: RustCrypto crates (the first external dependencies; see docs/CRYPTO.md).

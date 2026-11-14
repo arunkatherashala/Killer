@@ -225,6 +225,12 @@ struct CacheStats {
     size_bytes: u64,
 }
 
+// The eval memory cap needs the counting allocator. The library does not install it (an embedder may have its own);
+// this binary does, unless the `mem-cap` feature already makes the library install it (two would not compile).
+#[cfg(not(feature = "mem-cap"))]
+#[global_allocator]
+static ALLOC: killer_native::memcap::CountingAlloc = killer_native::memcap::CountingAlloc;
+
 /// The interpreter recurses on the Rust stack for nested calls (callbacks, resumed generators,
 /// `toString` hooks), and the default 1 MB main-thread stack is too small for a few levels of that
 /// in a debug build, so everything runs on a thread with a large (lazily committed) stack.

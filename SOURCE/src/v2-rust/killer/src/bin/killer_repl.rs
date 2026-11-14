@@ -14,6 +14,12 @@ use std::io::{self, Write};
 use killer_native::compiler::compile_killer_subset;
 use killer_native::vm::VirtualMachine;
 
+// The eval memory cap needs the counting allocator. The library does not install it (an embedder may have its own);
+// this binary does, unless the `mem-cap` feature already makes the library install it (two would not compile).
+#[cfg(not(feature = "mem-cap"))]
+#[global_allocator]
+static ALLOC: killer_native::memcap::CountingAlloc = killer_native::memcap::CountingAlloc;
+
 fn main() {
     println!("Killer v2.1  REPL  —  type .help for commands, .exit to quit");
     println!("─────────────────────────────────────────────────────────────");

@@ -13,6 +13,11 @@ All notable changes to `killer-native` are documented here.
   API keys no longer on command lines.
 
 ### Changed
+- The eval memory cap's counting allocator is now declared by the Killer CLI binaries (`killer`, `killer_super`,
+  `killer-native`, `killer-repl`) instead of the library, so the library no longer conflicts with an embedder's own
+  `#[global_allocator]`; `unsafe` is allowed only in `memcap.rs` for it. Without the allocator (embedder, no
+  `mem-cap`) the live-memory check does not exist and only the pre-checks, step and time budgets apply;
+  `memcap::is_installed()` reports it.
 - Cryptography now uses the RustCrypto crates `chacha20poly1305`, `sha2`, `hmac`, `pbkdf2` and `subtle`
   instead of hand-written code. These are the first external dependencies of `killer-native` (the "zero
   external crates" claim no longer applies). The five duplicate SHA-256 implementations, the SHA-512,
@@ -28,6 +33,8 @@ All notable changes to `killer-native` are documented here.
   zero errors are unchanged; `x % inf` and `inf % x` follow Python.
 
 ### Added
+- Optional Cargo feature `mem-cap` (off by default): the library installs `memcap::CountingAlloc` as the global
+  allocator for embedders that want the eval live-memory cap.
 - `rem(a, b)`: the C-style truncated remainder (sign of the dividend, like Rust `%` / C `fmod`) for numbers
   and bigints; `mod(a, b)`: function form of `%`. A script-defined function of the same name wins.
 - `LICENSE` file (MIT)
