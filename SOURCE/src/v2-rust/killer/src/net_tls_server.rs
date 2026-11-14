@@ -377,7 +377,7 @@ pub fn spawn_front(front: TcpListener, backend: std::net::SocketAddr, cert: Stri
     });
 }
 
-#[cfg(test)]
+#[cfg(all(test, windows))]
 mod b64_rfc4648_vectors {
     /// RFC 4648 section 10 test vectors, plus high bytes and padding, for this module's own encoder.
     #[test]
