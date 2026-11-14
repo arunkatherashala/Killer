@@ -166,6 +166,7 @@ fn base64_decode(text: &str) -> Result<Vec<u8>, String> {
     let mut buf = 0u32;
     let mut bits = 0;
     let mut padding = 0;
+    let mut data_chars = 0usize;
     for c in text.bytes().filter(|c| !c.is_ascii_whitespace()) {
         let v = match c {
             b'A'..=b'Z' => c - b'A',
@@ -184,11 +185,23 @@ fn base64_decode(text: &str) -> Result<Vec<u8>, String> {
         }
         buf = (buf << 6) | v as u32;
         bits += 6;
+        data_chars += 1;
         if bits >= 8 {
             bits -= 8;
             out.push((buf >> bits) as u8);
             buf &= (1 << bits) - 1;
         }
+    }
+    // One leftover symbol carries only 6 bits, never a whole byte; padding, when present, must complete a group of 4;
+    // the unused low bits of the last symbol must be zero (RFC 4648 section 3.5, canonical encoding).
+    if data_chars % 4 == 1 {
+        return Err("invalid base64: truncated input".to_string());
+    }
+    if padding > 2 || (padding > 0 && (data_chars + padding) % 4 != 0) {
+        return Err("invalid base64: wrong padding".to_string());
+    }
+    if buf != 0 {
+        return Err("invalid base64: non-zero trailing bits".to_string());
     }
     Ok(out)
 }
@@ -709,15 +722,10 @@ pub fn call(name: &str, args: &[Value]) -> Option<Result<Value, VmError>> {
         })(),
         // uuid(): a random (version 4) UUID such as "3f2b8c1e-9a4d-4e0b-8c53-1d2f7a9b6e04"
         "uuid" => (|| {
-            use std::hash::{BuildHasher, Hasher};
             arity("uuid", args, 0, 0)?;
-            // RandomState is seeded from the operating system's random source for every instance
+            // 16 bytes from the operating system's cryptographic generator
             let mut bytes = [0u8; 16];
-            for (k, chunk) in bytes.chunks_mut(8).enumerate() {
-                let mut h = std::collections::hash_map::RandomState::new().build_hasher();
-                h.write_u64(k as u64);
-                chunk.copy_from_slice(&h.finish().to_le_bytes());
-            }
+            crate::os_random::fill(&mut bytes).map_err(|e| VmError::runtime_error(format!("uuid(): {}", e)))?;
             bytes[6] = (bytes[6] & 0x0f) | 0x40;
             bytes[8] = (bytes[8] & 0x3f) | 0x80;
             let hex: String = bytes.iter().map(|b| format!("{:02x}", b)).collect();

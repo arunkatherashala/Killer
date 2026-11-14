@@ -97,75 +97,64 @@ impl CompressionModule {
     
     // ==================== Simple Codec ====================
     
-    /// Encode text as base64 (simplified)
-    /// Uses basic ASCII mapping without padding
+    /// Encode text as RFC 4648 base64 (with `=` padding).
     pub fn base64_encode(data: &str) -> String {
         const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-        
-        let bytes = data.as_bytes();
+
         let mut result = String::new();
-        
-        for chunk in bytes.chunks(3) {
-            let b1 = chunk[0];
-            let b2 = chunk.get(1).copied().unwrap_or(0);
-            let b3 = chunk.get(2).copied().unwrap_or(0);
-            
-            let n = ((b1 as u32) << 16) | ((b2 as u32) << 8) | (b3 as u32);
-            
+        for chunk in data.as_bytes().chunks(3) {
+            let n = (chunk[0] as u32) << 16 | (*chunk.get(1).unwrap_or(&0) as u32) << 8 | *chunk.get(2).unwrap_or(&0) as u32;
             result.push(ALPHABET[((n >> 18) & 0x3f) as usize] as char);
             result.push(ALPHABET[((n >> 12) & 0x3f) as usize] as char);
-            
-            if chunk.len() > 1 {
-                result.push(ALPHABET[((n >> 6) & 0x3f) as usize] as char);
-            }
-            if chunk.len() > 2 {
-                result.push(ALPHABET[(n & 0x3f) as usize] as char);
-            }
+            result.push(if chunk.len() > 1 { ALPHABET[((n >> 6) & 0x3f) as usize] as char } else { '=' });
+            result.push(if chunk.len() > 2 { ALPHABET[(n & 0x3f) as usize] as char } else { '=' });
         }
-        
         result
     }
-    
-    /// Decode base64 string
+
+    /// Decode RFC 4648 base64 (padding required, strict). Returns None for invalid input or non-UTF-8 output.
     pub fn base64_decode(encoded: &str) -> Option<String> {
-        const ALPHABET: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-        
-        let chars: Vec<char> = encoded.chars().collect();
-        let mut result = Vec::new();
-        
-        for chunk in chars.chunks(4) {
-            let mut indices = Vec::new();
-            
-            for &ch in chunk {
-                if let Some(idx) = ALPHABET.find(ch) {
-                    indices.push(idx as u32);
-                } else {
-                    return None;
-                }
-            }
-            
-            if indices.is_empty() {
-                continue;
-            }
-            
-            let n = (indices[0] << 18) 
-                | (indices.get(1).unwrap_or(&0) << 12)
-                | (indices.get(2).unwrap_or(&0) << 6)
-                | indices.get(3).unwrap_or(&0);
-            
-            result.push(((n >> 16) & 0xff) as u8);
-            
-            if chunk.len() > 2 {
-                result.push(((n >> 8) & 0xff) as u8);
-            }
-            if chunk.len() > 3 {
-                result.push((n & 0xff) as u8);
+        fn val(c: u8) -> Option<u32> {
+            match c {
+                b'A'..=b'Z' => Some((c - b'A') as u32),
+                b'a'..=b'z' => Some((c - b'a' + 26) as u32),
+                b'0'..=b'9' => Some((c - b'0' + 52) as u32),
+                b'+' => Some(62),
+                b'/' => Some(63),
+                _ => None,
             }
         }
-        
+        let bytes = encoded.as_bytes();
+        if bytes.len() % 4 != 0 {
+            return None;
+        }
+        let groups = bytes.len() / 4;
+        let mut result = Vec::new();
+        for (gi, chunk) in bytes.chunks(4).enumerate() {
+            let pad = chunk.iter().rev().take_while(|&&c| c == b'=').count();
+            if pad > 2 || (pad > 0 && gi + 1 != groups) {
+                return None;
+            }
+            let mut n = 0u32;
+            for (k, &c) in chunk.iter().enumerate() {
+                let v = if k >= 4 - pad { 0 } else { val(c)? };
+                n = (n << 6) | v;
+            }
+            match pad {
+                0 => result.extend_from_slice(&[(n >> 16) as u8, (n >> 8) as u8, n as u8]),
+                1 => {
+                    if n & 0xff != 0 { return None; }
+                    result.extend_from_slice(&[(n >> 16) as u8, (n >> 8) as u8]);
+                }
+                _ => {
+                    if n & 0xffff != 0 { return None; }
+                    result.push((n >> 16) as u8);
+                }
+            }
+        }
         String::from_utf8(result).ok()
     }
-    
+
     // ==================== Hex Encoding ====================
     
     /// Encode as hexadecimal

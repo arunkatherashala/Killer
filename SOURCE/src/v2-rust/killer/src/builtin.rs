@@ -6044,26 +6044,35 @@ impl BuiltinFunctions {
         out
     }
 
+    /// Strict RFC 4648 base64: whitespace is skipped, the length must be a multiple of 4, `=` only as one or two
+    /// trailing pad characters, and the unused bits of the last symbol must be zero.
     fn standalone_b64_decode(input: &str) -> Option<String> {
         fn val(c: u8) -> Option<u32> {
             match c {
                 b'A'..=b'Z' => Some((c - b'A') as u32),
                 b'a'..=b'z' => Some((c - b'a' + 26) as u32),
                 b'0'..=b'9' => Some((c - b'0' + 52) as u32),
-                b'+' => Some(62), b'/' => Some(63), b'=' => Some(0),
+                b'+' => Some(62), b'/' => Some(63),
                 _ => None,
             }
         }
-        let bytes: Vec<u8> = input.bytes().filter(|&b| b != b'\n' && b != b'\r' && b != b' ').collect();
+        let bytes: Vec<u8> = input.bytes().filter(|b| !b.is_ascii_whitespace()).collect();
         if bytes.len() % 4 != 0 { return None; }
         let mut out = Vec::new();
-        for chunk in bytes.chunks(4) {
-            let a = val(chunk[0])?; let b = val(chunk[1])?;
-            let c = val(chunk[2])?; let d = val(chunk[3])?;
-            let triple = (a << 18) | (b << 12) | (c << 6) | d;
-            out.push((triple >> 16) as u8);
-            if chunk[2] != b'=' { out.push((triple >> 8) as u8); }
-            if chunk[3] != b'=' { out.push(triple as u8); }
+        let groups = bytes.len() / 4;
+        for (gi, chunk) in bytes.chunks(4).enumerate() {
+            let pad = chunk.iter().rev().take_while(|&&c| c == b'=').count();
+            if pad > 2 || (pad > 0 && gi + 1 != groups) { return None; }
+            let mut triple = 0u32;
+            for (k, &c) in chunk.iter().enumerate() {
+                let v = if k >= 4 - pad { if c != b'=' { return None; } 0 } else { val(c)? };
+                triple = (triple << 6) | v;
+            }
+            match pad {
+                0 => { out.push((triple >> 16) as u8); out.push((triple >> 8) as u8); out.push(triple as u8); }
+                1 => { if triple & 0xff != 0 { return None; } out.push((triple >> 16) as u8); out.push((triple >> 8) as u8); }
+                _ => { if triple & 0xffff != 0 { return None; } out.push((triple >> 16) as u8); }
+            }
         }
         String::from_utf8(out).ok()
     }
@@ -6073,12 +6082,11 @@ impl BuiltinFunctions {
     }
 
     fn standalone_hex_decode(input: &str) -> Option<String> {
-        let bytes: Vec<u8> = (0..input.len())
-            .step_by(2)
-            .map(|i| u8::from_str_radix(&input[i..i+2], 16))
-            .collect::<Result<Vec<_>, _>>()
-            .ok()?;
-        String::from_utf8(bytes).ok()
+        let b = input.as_bytes();
+        if b.len() % 2 != 0 { return None; }
+        let nib = |c: u8| (c as char).to_digit(16).map(|d| d as u8);
+        let bytes: Option<Vec<u8>> = b.chunks(2).map(|p| Some(nib(p[0])? << 4 | nib(p[1])?)).collect();
+        String::from_utf8(bytes?).ok()
     }
 
     // -- Internal base64 helpers for compress/decompress --

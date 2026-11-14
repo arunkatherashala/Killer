@@ -42,7 +42,7 @@ const SHA256_K: [u32; 64] = [
     0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
 ];
 
-fn sha256(data: &[u8]) -> [u8; 32] {
+pub fn sha256(data: &[u8]) -> [u8; 32] {
     let mut h: [u32; 8] = [
         0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
         0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
@@ -109,13 +109,24 @@ fn hex_encode(bytes: &[u8]) -> String {
     s
 }
 
+/// PBKDF2 rounds for the PIN hash (the PIN also has an escalating lockout after 3 wrong tries).
+const PIN_ITERATIONS: u32 = 10_000;
+
+/// Compare two byte strings without stopping at the first difference.
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    a.iter().zip(b).fold(0u8, |d, (x, y)| d | (x ^ y)) == 0
+}
+
 /// First bytes of data written by the current `secure_encrypt` (also authenticated as associated data).
 const FORMAT_MAGIC: &[u8] = b"KSE2";
 
 // ── Key derivation ───────────────────────────────────────────
 // PBKDF2-HMAC-SHA256 (checked against Python's hashlib.pbkdf2_hmac in the tests)
 
-fn pbkdf2_sha256(password: &[u8], salt: &[u8], iterations: u32) -> [u8; 32] {
+pub fn pbkdf2_sha256(password: &[u8], salt: &[u8], iterations: u32) -> [u8; 32] {
     // HMAC-SHA256
     fn hmac_sha256(key: &[u8], message: &[u8]) -> [u8; 32] {
         let mut k = [0u8; 64];
@@ -268,7 +279,8 @@ fn base64_decode(input: &str) -> Result<Vec<u8>, String> {
 
 // ── Security state ────────────────────────────────────────────
 struct SecurityState {
-    pin_hash: Option<String>,  // SHA-256 of PIN
+    pin_hash: Option<String>,  // PBKDF2-HMAC-SHA256 of the PIN (hex), with `pin_salt`
+    pin_salt: [u8; 16],
     is_locked: bool,
     failed_attempts: u32,
     lockout_until_ms: u64,
@@ -280,6 +292,7 @@ static SECURITY: OnceLock<Mutex<SecurityState>> = OnceLock::new();
 fn security_state() -> &'static Mutex<SecurityState> {
     SECURITY.get_or_init(|| Mutex::new(SecurityState {
         pin_hash: None,
+        pin_salt: [0; 16],
         is_locked: false,
         failed_attempts: 0,
         lockout_until_ms: 0,
@@ -418,12 +431,15 @@ pub fn builtin_secure_pin_set(args: &[Value]) -> Result<Value, VmError> {
         return Err(VmError::runtime_error("secure_pin_set: PIN must be at least 4 characters"));
     }
 
-    let hash = sha256(pin.as_bytes());
-    let hash_hex = hex_encode(&hash);
+    // A random salt and a slow hash: a bare SHA-256 of a 4-digit PIN falls to a 10,000-entry table.
+    let mut salt = [0u8; 16];
+    secure_random(&mut salt)?;
+    let hash_hex = hex_encode(&pbkdf2_sha256(pin.as_bytes(), &salt, PIN_ITERATIONS));
 
     let mut state = security_state().lock()
         .map_err(|e| VmError::runtime_error(format!("lock: {}", e)))?;
     state.pin_hash = Some(hash_hex);
+    state.pin_salt = salt;
     state.is_locked = true;
     Ok(Value::Bool(true))
 }
@@ -457,8 +473,8 @@ pub fn builtin_secure_pin_verify(args: &[Value]) -> Result<Value, VmError> {
 
     match &state.pin_hash {
         Some(stored_hash) => {
-            let input_hash = hex_encode(&sha256(pin.as_bytes()));
-            if input_hash == *stored_hash {
+            let input_hash = hex_encode(&pbkdf2_sha256(pin.as_bytes(), &state.pin_salt, PIN_ITERATIONS));
+            if constant_time_eq(input_hash.as_bytes(), stored_hash.as_bytes()) {
                 state.failed_attempts = 0;
                 state.is_locked = false;
                 Ok(Value::Bool(true))

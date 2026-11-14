@@ -642,3 +642,16 @@ fn base64_encode(data: &[u8]) -> String {
     }
     out
 }
+
+#[cfg(test)]
+mod b64_rfc4648_vectors {
+    /// RFC 4648 section 10 test vectors, plus high bytes and padding, for this module's own encoder.
+    #[test]
+    fn encoder_matches_rfc_4648() {
+        for (plain, enc) in [("", ""), ("f", "Zg=="), ("fo", "Zm8="), ("foo", "Zm9v"), ("foob", "Zm9vYg=="), ("fooba", "Zm9vYmE="), ("foobar", "Zm9vYmFy")] {
+            assert_eq!(super::base64_encode(plain.as_bytes()), enc);
+        }
+        assert_eq!(super::base64_encode(&[0xfb, 0xff, 0xfe]), "+//+");
+        assert_eq!(super::base64_encode(&[0, 0, 0, 0]), "AAAAAA==");
+    }
+}

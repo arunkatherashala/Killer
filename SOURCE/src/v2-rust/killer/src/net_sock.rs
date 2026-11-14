@@ -881,6 +881,30 @@ mod tests {
     }
 
     #[test]
+    fn sha1_fips_180_long_and_block_boundary_messages() {
+        let hex = |d: [u8; 20]| d.iter().map(|b| format!("{:02x}", b)).collect::<String>();
+        // FIPS 180 / NIST: 896-bit and one-million-'a' messages
+        assert_eq!(
+            hex(sha1(b"abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmnoijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu")),
+            "a49b2446a02c645bf419f995b67091253a04a259"
+        );
+        assert_eq!(hex(sha1(&vec![b'a'; 1_000_000])), "34aa973cd4c4daa4f61eeb2bdbad27316534016f");
+        // padding edges: 55, 56, 63, 64, 65 bytes (checked against Python hashlib)
+        assert_eq!(hex(sha1(&[b'a'; 55])), "c1c8bbdc22796e28c0e15163d20899b65621d65a");
+        assert_eq!(hex(sha1(&[b'a'; 56])), "c2db330f6083854c99d4b5bfb6e8f29f201be699");
+        assert_eq!(hex(sha1(&[b'a'; 63])), "03f09f5b158a7a8cdad920bddc29b81c18a551f5");
+        assert_eq!(hex(sha1(&[b'a'; 64])), "0098ba824b5c16427bd7a1122a5a442a25ec644d");
+        assert_eq!(hex(sha1(&[b'a'; 65])), "11655326c708d70319be2610e8a57d9a5b959d3b");
+    }
+
+    #[test]
+    fn base64_rfc_4648_section_10() {
+        for (plain, enc) in [("", ""), ("f", "Zg=="), ("fo", "Zm8="), ("foo", "Zm9v"), ("foob", "Zm9vYg=="), ("fooba", "Zm9vYmE="), ("foobar", "Zm9vYmFy")] {
+            assert_eq!(base64(plain.as_bytes()), enc);
+        }
+    }
+
+    #[test]
     fn websocket_accept_key_matches_rfc_6455() {
         assert_eq!(accept_key("dGhlIHNhbXBsZSBub25jZQ=="), "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=");
     }
