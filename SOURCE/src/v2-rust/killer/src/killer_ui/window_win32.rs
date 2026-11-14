@@ -399,7 +399,10 @@ pub fn pump_messages() -> bool {
 }
 
 /// Blit a framebuffer to the window's client area via StretchDIBits.
-pub fn blit_framebuffer(hwnd: HWND, fb: &Framebuffer) {
+///
+/// # Safety
+/// `hwnd` must be a valid window handle owned by the calling thread.
+pub unsafe fn blit_framebuffer(hwnd: HWND, fb: &Framebuffer) {
     unsafe {
         let mut ps = std::mem::zeroed::<PAINTSTRUCT>();
         let hdc = BeginPaint(hwnd, &mut ps);
@@ -415,7 +418,10 @@ pub fn blit_framebuffer(hwnd: HWND, fb: &Framebuffer) {
 }
 
 /// Blit using GetDC (for outside WM_PAINT).
-pub fn blit_with_getdc(hwnd: HWND, fb: &Framebuffer) {
+///
+/// # Safety
+/// `hwnd` must be a valid window handle owned by the calling thread.
+pub unsafe fn blit_with_getdc(hwnd: HWND, fb: &Framebuffer) {
     #[cfg(target_os = "windows")]
     extern "system" {
         fn GetDC(hWnd: HWND) -> HDC;

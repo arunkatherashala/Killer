@@ -116,10 +116,6 @@ pub fn toml_parse(input: &str) -> Result<SerValue, String> {
         } else {
             // Nested sections: [a.b] → a → b → entries
             let current = SerValue::Map(entries);
-            for part in parts.iter().rev().skip(0) {
-                // For simplicity, just use dotted key
-                let _ = part;
-            }
             root.push((section_name, current));
         }
     }

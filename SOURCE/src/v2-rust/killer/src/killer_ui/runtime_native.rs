@@ -3,6 +3,9 @@
 //! Uses Win32 API directly (zero external crates) for window creation + GDI blit.
 //! Software renderer: widget tree → framebuffer → StretchDIBits to screen.
 
+// The two blit calls below are `unsafe` (raw window handle); each has a SAFETY comment.
+#![allow(unsafe_code)]
+
 use super::framebuffer::Framebuffer;
 use super::graph::OperatorGraph;
 use super::patch::UiPatch;
@@ -62,7 +65,8 @@ pub fn run_window_with_patch(patch: Option<&UiPatch>, summary: &str) -> std::io:
 
         // Initial render
         render_widgets::render_patch(&mut fb, patch, &theme);
-        window_win32::blit_with_getdc(hwnd, &fb);
+        // SAFETY: `hwnd` comes from create_window on this thread and the window is still open.
+        unsafe { window_win32::blit_with_getdc(hwnd, &fb) };
 
         // Event loop
         while window_win32::pump_messages() {
@@ -93,7 +97,8 @@ pub fn run_window_with_patch(patch: Option<&UiPatch>, summary: &str) -> std::io:
                     fb = Framebuffer::new(w, h);
                 }
                 render_widgets::render_patch(&mut fb, patch, &theme);
-                window_win32::blit_with_getdc(hwnd, &fb);
+                // SAFETY: `hwnd` comes from create_window on this thread and the window is still open.
+                unsafe { window_win32::blit_with_getdc(hwnd, &fb) };
             }
         }
 

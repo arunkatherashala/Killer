@@ -35,3 +35,11 @@ Thumbs.db
 *.pdb
 *.dll.exp
 *.dll.lib
+
+# build outputs that were once committed by accident (kept on disk, no longer tracked)
+*.exe
+*.rcgu.o
+rustc*/
+*.rmeta
+# a test once wrote a Windows temp path as a file name in the crate root
+SOURCE/src/v2-rust/killer/C*test_unique.killer

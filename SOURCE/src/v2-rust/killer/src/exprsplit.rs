@@ -390,7 +390,7 @@ pub fn has_top_level_operator(expr: &str) -> bool {
         }
     }
     let t = expr.trim_start();
-    t.starts_with("not ") || t.starts_with("await ") || t.starts_with("spawn ") || t.starts_with("new ") && false
+    t.starts_with("not ") || t.starts_with("await ") || t.starts_with("spawn ")
 }
 
 #[cfg(test)]

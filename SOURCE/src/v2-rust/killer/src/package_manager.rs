@@ -38,11 +38,6 @@ impl Version {
         Ok(Version { major, minor, patch })
     }
 
-    /// Format to string
-    pub fn to_string(&self) -> String {
-        format!("{}.{}.{}", self.major, self.minor, self.patch)
-    }
-
     /// Check if compatible (same major version)
     pub fn is_compatible(&self, other: &Version) -> bool {
         self.major == other.major
