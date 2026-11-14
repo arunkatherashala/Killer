@@ -70,3 +70,40 @@ fn the_flag_detector_catches_the_known_spellings() {
         assert!(!is_insecure_flag(good), "{good}");
     }
 }
+
+/// Run a script with the killer binary; returns (stdout, stderr).
+fn run_script(name: &str, src: &str) -> (String, String) {
+    let dir = std::env::temp_dir().join(format!("killer_insecure_{}_{}", name, std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("t.killer");
+    std::fs::write(&file, src).unwrap();
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_killer")).arg("run").arg(&file).output().unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    (String::from_utf8_lossy(&out.stdout).to_string(), String::from_utf8_lossy(&out.stderr).to_string())
+}
+
+#[test]
+fn insecure_true_prints_a_warning_naming_the_host_only() {
+    let src = r#"try {
+  http_request({"url": "https://example.invalid/path?key=TOPSECRET", "insecure": true, "timeout": 3})
+} catch e {
+  println("failed")
+}
+"#;
+    let (_, err) = run_script("warn", src);
+    assert!(err.contains("warning: TLS certificate verification is DISABLED for example.invalid"), "{err}");
+    assert!(!err.contains("TOPSECRET"), "the warning must not echo the URL query: {err}");
+    assert_eq!(err.matches("DISABLED").count(), 1, "one warning per request: {err}");
+}
+
+#[test]
+fn normal_requests_print_no_warning() {
+    let src = r#"try {
+  http_request({"url": "https://example.invalid/", "timeout": 3})
+} catch e {
+  println("failed")
+}
+"#;
+    let (_, err) = run_script("quiet", src);
+    assert!(!err.contains("DISABLED"), "{err}");
+}

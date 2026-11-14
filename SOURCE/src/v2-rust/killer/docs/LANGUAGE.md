@@ -1777,7 +1777,7 @@ number of requests served. For HTTPS pass `tls: {cert, key}` (see the TLS sectio
 body is sent as JSON, and failures on connection errors or `5xx` are retried with exponential backoff.
 The client is a hardened wrapper around `curl` (which must be installed, especially for HTTPS): the URL,
 headers and body are passed on curl's **stdin**, never on its command line, so API keys do not show up
-in the process list; TLS certificates are verified by default (`insecure: true` opts out); plain `http://`
+in the process list; TLS certificates are verified by default (`insecure: true` opts out and prints a warning to stderr naming the host, once per request); plain `http://`
 is refused except for `localhost`, `127.0.0.1` and `::1` (or `allow_http: true`); header values with
 control characters are rejected; every request has a timeout.
 

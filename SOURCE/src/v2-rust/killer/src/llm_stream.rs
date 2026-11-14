@@ -353,6 +353,7 @@ impl StreamSource {
 
     pub fn start(plan: Plan) -> Result<Self, String> {
         let cfg = build_config(&plan.spec)?;
+        crate::http_req::warn_if_insecure(&plan.spec);
         let mut child = Command::new(crate::tool_path::curl()?)
             .args(stream_argv(&plan.spec))
             .stdin(Stdio::piped())

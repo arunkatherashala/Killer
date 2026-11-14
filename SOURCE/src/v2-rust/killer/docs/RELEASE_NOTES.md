@@ -37,7 +37,8 @@ Other security fixes in this release:
   password for its temporary certificate bundle.
 * `curl -k` (certificate checks off) is gone from the LLM web-search fetchers and from image download. Certificates are
   verified by default. Behind a proxy that replaces certificates, set `CURL_CA_BUNDLE` to the proxy's CA file. The
-  only way to turn checks off is the explicit `insecure: true` option of `http_request`.
+  only way to turn checks off is the explicit `insecure: true` option of `http_request` (also `embed` and streaming
+  calls), which prints a warning to stderr naming the host each time.
 * `hex_decode` panicked (crashing the interpreter) on odd-length or multi-byte input; malformed base64 was accepted;
   `uuid()` did not use the operating system's random generator; the PIN was an unsalted hash. All fixed.
 

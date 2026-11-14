@@ -128,6 +128,26 @@ pub fn cfg_quote(s: &str) -> String {
     out
 }
 
+/// The warning printed (to stderr, once per request) when `insecure: true` turns certificate checks off. It names
+/// the host only: the URL may carry a key in its query string.
+pub fn insecure_warning(spec: &ReqSpec) -> Option<String> {
+    if !spec.insecure {
+        return None;
+    }
+    let host = url_host(&spec.url).unwrap_or_else(|| "(unknown host)".to_string());
+    Some(format!(
+        "warning: TLS certificate verification is DISABLED for {} (insecure: true); the connection can be intercepted or altered",
+        host
+    ))
+}
+
+/// Print [`insecure_warning`] to stderr if it applies. Called once per request by every path that runs curl.
+pub fn warn_if_insecure(spec: &ReqSpec) {
+    if let Some(w) = insecure_warning(spec) {
+        eprintln!("{}", w);
+    }
+}
+
 /// Command-line arguments for curl. Contains no URL, header or body: only fixed flags and
 /// numeric limits, so nothing sensitive can leak through the process list.
 pub fn build_argv(spec: &ReqSpec) -> Vec<String> {
@@ -240,6 +260,7 @@ fn one_attempt(spec: &ReqSpec) -> Result<Resp, (String, bool)> {
 /// Execute a request with retries. Retries happen on connection errors and 5xx responses.
 pub fn exec(spec: &ReqSpec) -> Result<Resp, String> {
     validate_url(&spec.url, spec.allow_http)?;
+    warn_if_insecure(spec);
     let mut attempt = 0u32;
     loop {
         let result = one_attempt(spec);
@@ -412,6 +433,16 @@ mod tests {
         assert_eq!(r.status, 201);
         assert_eq!(r.body, "hello");
         assert_eq!(r.headers[0], ("content-type".to_string(), "text/plain".to_string()));
+    }
+
+    #[test]
+    fn insecure_warning_names_the_host_only_and_only_when_insecure() {
+        let mut s = ReqSpec::new("GET", "https://user:pw@Example.com:8443/p?key=SECRET");
+        assert!(insecure_warning(&s).is_none());
+        s.insecure = true;
+        let w = insecure_warning(&s).unwrap();
+        assert!(w.contains("example.com") && w.contains("DISABLED") && w.contains("insecure: true"), "{w}");
+        assert!(!w.contains("SECRET") && !w.contains("pw"), "{w}");
     }
 
     #[test]
