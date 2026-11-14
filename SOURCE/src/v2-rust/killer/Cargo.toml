@@ -57,8 +57,8 @@ cluster-demo-tests = []
 kore-engine = []
 
 [dependencies]
-# Cryptography: RustCrypto crates (the first external dependencies; see docs/CRYPTO.md).
-# JIT: src/jit_x86.rs - no crates.io deps.
+# Cryptography: RustCrypto crates (the first external dependencies apart from libc on Unix; see docs/CRYPTO.md).
+# JIT: src/jit_x86.rs uses libc on Unix (see [target.'cfg(unix)'.dependencies] below); no other crates.
 chacha20poly1305 = { version = "0.10", default-features = false, features = ["alloc"] }
 sha2 = { version = "0.10", default-features = false }
 hmac = { version = "0.12", default-features = false }

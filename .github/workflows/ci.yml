@@ -81,6 +81,22 @@ jobs:
         working-directory: SOURCE/src/v2-rust/killer
         run: python docs/check_links.py
 
+  audit:
+    name: Dependency audit (cargo audit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+      # Checks every package in Cargo.lock (the RustCrypto crates and their dependencies, and libc on Unix)
+      # against the RustSec advisory database. A known vulnerability fails the job; an 'unmaintained' notice only warns.
+      - name: cargo audit
+        working-directory: SOURCE/src/v2-rust/killer
+        run: cargo audit
+
   cross-check:
     name: Type-check ${{ matrix.target }}
     runs-on: ubuntu-latest

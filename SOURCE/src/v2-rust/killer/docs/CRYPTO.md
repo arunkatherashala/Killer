@@ -2,7 +2,7 @@
 
 Killer uses the RustCrypto crates `chacha20poly1305`, `sha2`, `hmac`, `pbkdf2` and `subtle` for every primitive below
 except SHA-1 and base64, which are still written in this crate (SHA-1 stays hand-written on purpose: it is used only for the WebSocket handshake accept key in `net_sock::accept_key`, and no builtin exposes it). These
-crates are the first external dependencies of the project. The code in this repository is a thin wrapper
+crates are the first external dependencies of the project apart from `libc` on Unix (system calls for the JIT). The code in this repository is a thin wrapper
 (`aead`, `encryption`, `android_security`, `ghost_vm_sha`); the duplicate hand-written SHA-256, HMAC, PBKDF2, ChaCha20
 and Poly1305 code was removed. Each primitive is checked against published test vectors in `tests/crypto_vectors.rs`
 (integration tests, run against both the Rust functions and the Killer builtins through the `killer` binary) and in
@@ -10,7 +10,7 @@ unit tests next to the code, so the wiring and the wire formats are verified her
 implementation (`tests/data/crypto_reference.py`: `hashlib`/`hmac` plus ChaCha20 and Poly1305 re-written from the RFC
 with big integers) cross-checks 258 more generated inputs; that test is skipped with a message when Python is absent.
 
-**Read this first.** The `chacha20poly1305` crate had an independent NCC Group security audit (2020, together with
+**Read this first.** The `chacha20poly1305` crate had an independent NCC Group security audit ([crate README](https://github.com/RustCrypto/AEADs/tree/master/chacha20poly1305#readme), [NCC report](https://research.nccgroup.com/2020/02/26/public-report-rustcrypto-aes-gcm-and-chacha20poly1305-implementation-review/); 2020, together with
 `aes-gcm`; it did not cover Killer, and the versions in use today are newer than the audited ones). `sha2`, `hmac`,
 `pbkdf2` and `subtle` are widely used and reviewed RustCrypto implementations; this document does not call them audited. Killer's own integration, its blob format and the interpreter around it
 have not been audited by a cryptographer, and this document makes no side-channel or key-wiping claims beyond what the

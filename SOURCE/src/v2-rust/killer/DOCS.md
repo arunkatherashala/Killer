@@ -1053,7 +1053,7 @@ the process:
 | `sha256(s)` | SHA-256 of string; returns hex string |
 | `sha256_bytes(s)` | SHA-256 of string; returns Bytes value |
 
-SHA-256, HMAC, PBKDF2 and ChaCha20-Poly1305 come from the RustCrypto crates (`sha2`, `hmac`, `pbkdf2`, `chacha20poly1305`). `chacha20poly1305` had an independent NCC Group audit; the others are widely used and reviewed. See [docs/CRYPTO.md](docs/CRYPTO.md).
+SHA-256, HMAC, PBKDF2 and ChaCha20-Poly1305 come from the RustCrypto crates (`sha2`, `hmac`, `pbkdf2`, `chacha20poly1305`). `chacha20poly1305` had an independent [NCC Group audit](https://github.com/RustCrypto/AEADs/tree/master/chacha20poly1305#readme); the others are widely used and reviewed. See [docs/CRYPTO.md](docs/CRYPTO.md).
 
 ### 7.12 Compression and encoding
 

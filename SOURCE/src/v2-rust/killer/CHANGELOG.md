@@ -14,7 +14,7 @@ All notable changes to `killer-native` are documented here.
 
 ### Changed
 - Cryptography now uses the RustCrypto crates `chacha20poly1305`, `sha2`, `hmac`, `pbkdf2` and `subtle`
-  instead of hand-written code. These are the first external dependencies of `killer-native` (the "zero
+  instead of hand-written code. These are the first external dependencies of `killer-native` apart from `libc` on Unix, which the JIT uses (the "zero
   external crates" claim no longer applies). The five duplicate SHA-256 implementations, the SHA-512,
   HMAC, PBKDF2, ChaCha20 and Poly1305 code were removed and replaced by thin wrappers. Builtins, error
   messages and the `KSE2` blob format are unchanged, and all RFC and FIPS test vectors still pass.
