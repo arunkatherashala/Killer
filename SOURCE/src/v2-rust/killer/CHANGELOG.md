@@ -4,6 +4,14 @@ All notable changes to `killer-native` are documented here.
 
 ## [Unreleased]
 
+### Security
+- **Warning: the old `encryption` module of the crate (XOR "AES-256-GCM"/"ChaCha20-Poly1305", unchecked tag, fake
+  SHA-256/PBKDF2) did not encrypt.** Treat anything it protected as unprotected and rotate those secrets; the new
+  real implementation cannot decrypt its output. Full details in `docs/RELEASE_NOTES.md`.
+- `eval`/`exec` inherit the caller's capabilities and have a step and time budget; `curl -k` removed from the
+  web-search fetchers and image download (certificates are verified); `openssl`/`curl` resolved to absolute paths;
+  API keys no longer on command lines.
+
 ### Changed
 - `%` is now **floor modulo** (Python) for plain numbers too: the result has the sign of the divisor, so
   `-7 % 3` is `2` (was `-1`), `7 % -3` is `-2`, `-5.5 % 2` is `0.5`. BigInt `%` already behaved this way.

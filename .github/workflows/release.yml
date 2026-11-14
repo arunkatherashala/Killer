@@ -143,6 +143,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: SOURCE/src/v2-rust/killer/docs/RELEASE_NOTES.md
+          sparse-checkout-cone-mode: false
       - uses: actions/download-artifact@v4
         with:
           path: dist
@@ -152,5 +156,7 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           files: dist/*
+          # the hand-written notes come first (they hold the security warning), GitHub appends the change list
+          body_path: SOURCE/src/v2-rust/killer/docs/RELEASE_NOTES.md
           generate_release_notes: true
           prerelease: ${{ contains(github.ref_name, '-') }}

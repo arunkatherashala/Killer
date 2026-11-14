@@ -666,7 +666,7 @@ fn curl_post_form(url: &str, body: &str, timeout_s: u64) -> Result<String, Strin
     let timeout_str = timeout_s.to_string();
     let curl_bin = crate::tool_path::curl()?;
     let output = Command::new(curl_bin)
-        .args(["-s", "-k", "--ssl-no-revoke", "--fail-with-body",
+        .args(["-s", "--ssl-no-revoke", "--fail-with-body",
                "-X", "POST",
                "--data", body,
                "--max-time", &timeout_str,
@@ -692,11 +692,12 @@ fn curl_get_with_ua(url: &str, timeout_s: u64, user_agent: &str) -> Result<Strin
     let timeout_str = timeout_s.to_string();
     let curl_bin = crate::tool_path::curl()?;
 
-    // --ssl-no-revoke: required on corporate/proxy networks where the proxy
-    // intercepts TLS and the certificate revocation check fails (CRYPT_E_NO_REVOCATION_CHECK).
-    // -k: additionally ignore cert validation errors for proxy-injected certs.
+    // --ssl-no-revoke: only skips the certificate REVOCATION check, which fails on corporate/proxy networks
+    // that intercept TLS (CRYPT_E_NO_REVOCATION_CHECK). The certificate chain and host name are still verified.
+    // There is no -k: behind a proxy that injects its own certificate, point curl at the proxy CA with the
+    // CURL_CA_BUNDLE (or SSL_CERT_FILE) environment variable instead of turning verification off.
     let output = Command::new(curl_bin)
-        .args(["-s", "-k", "--ssl-no-revoke", "--fail-with-body",
+        .args(["-s", "--ssl-no-revoke", "--fail-with-body",
                "--max-time", &timeout_str,
                "-H", "Accept: text/html,application/xhtml+xml,*/*",
                "-H", "Accept-Language: en-US,en;q=0.9",

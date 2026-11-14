@@ -215,10 +215,11 @@ fn download_image_as_data_uri(url: &str) -> Result<String, String> {
     let tmp = std::env::temp_dir().join(format!("kala_img_{}_{}.bin", std::process::id(), ts));
     let tmp_str = tmp.to_string_lossy().to_string();
 
-    // curl -sLk: silent + follow redirects + insecure (bypass SSL cert errors on Windows)
+    // curl -sL: silent + follow redirects. Certificates are verified (no -k); behind a TLS-intercepting proxy set
+    // CURL_CA_BUNDLE to the proxy CA.
     // --max-time 90: Pollinations AI image generation can take up to 90 seconds
     let status = Command::new(crate::tool_path::curl()?)
-        .args(["-sLk", "--max-time", "90", "--connect-timeout", "15", url, "-o", &tmp_str])
+        .args(["-sL", "--max-time", "90", "--connect-timeout", "15", url, "-o", &tmp_str])
         .status()
         .map_err(|e| format!("curl not found: {}", e))?;
 

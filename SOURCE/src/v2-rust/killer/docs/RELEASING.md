@@ -56,3 +56,9 @@ git push origin HEAD:refs/heads/dryrun-v1.0.0-beta
 The workflow builds every target, runs the smoke test and uploads the archives as workflow artifacts, labelled with
 the branch name. The publish job only runs for a pushed tag, so this never creates a release. Delete the branch
 afterwards: `git push origin --delete dryrun-v1.0.0-beta`.
+
+## Release notes
+
+The text of the GitHub release comes from `docs/RELEASE_NOTES.md` (the publish job checks it out and passes it as
+`body_path`; GitHub appends its generated change list). Update that file before tagging: it carries the security
+warning about the old fake `encryption` module, the behaviour changes and the "Not tested" list.
