@@ -118,7 +118,13 @@ impl<'a> Parser<'a> {
         if self.pos + 4 > self.bytes.len() {
             return self.fail("truncated \\u escape");
         }
-        let h = &self.src[self.pos..self.pos + 4];
+        let h = match self.bytes.get(self.pos..self.pos + 4) {
+            Some(b) if b.iter().all(|c| c.is_ascii_hexdigit()) => {
+                // all ASCII hex digits, so this is valid UTF-8 on a char boundary
+                std::str::from_utf8(b).unwrap_or("")
+            }
+            _ => return self.fail("invalid \\u escape"),
+        };
         match u32::from_str_radix(h, 16) {
             Ok(v) if h.bytes().all(|b| b.is_ascii_hexdigit()) => {
                 self.pos += 4;
@@ -420,6 +426,14 @@ pub fn builtin_stringify(args: &[Value]) -> Result<Value, VmError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bad_unicode_escape_is_error_not_panic() {
+        assert!(parse("\"\\u000\u{e9}\"").is_err());
+        assert!(parse("\"\\u00\u{e9}9\"").is_err());
+        assert!(parse("\"\\u12\"").is_err());
+        assert!(parse("\"\\u0041\"").is_ok());
+    }
 
     fn round(text: &str) -> String {
         stringify(&parse(text).unwrap(), 0).unwrap()
