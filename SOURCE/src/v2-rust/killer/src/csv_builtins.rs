@@ -71,8 +71,9 @@ fn records(text: &str, delim: char) -> Result<Vec<Vec<String>>, String> {
                 chars.next();
             }
             line += 1;
+            let was_quoted = quoted;
             finish(&mut field, &mut quoted, &mut row);
-            let blank = row.len() == 1 && row[0].is_empty();
+            let blank = row.len() == 1 && row[0].is_empty() && !was_quoted;
             if blank {
                 row.clear();
             } else {
@@ -86,8 +87,9 @@ fn records(text: &str, delim: char) -> Result<Vec<Vec<String>>, String> {
         return Err(format!("unterminated quoted field starting on line {}", quote_line));
     }
     if !field.is_empty() || quoted || !row.is_empty() {
+        let was_quoted = quoted;
         finish(&mut field, &mut quoted, &mut row);
-        let blank = row.len() == 1 && row[0].is_empty();
+        let blank = row.len() == 1 && row[0].is_empty() && !was_quoted;
         if !blank {
             out.push(row);
         }
@@ -110,6 +112,11 @@ pub fn parse_csv(args: &[Value]) -> Result<Value, VmError> {
         Some(h) => h,
         None => return Ok(Value::from(Vec::<Value>::new())),
     };
+    for (i, h) in headers.iter().enumerate() {
+        if headers[..i].contains(h) {
+            return err(format!("parse_csv(): duplicate header name '{}'", h));
+        }
+    }
     let mut rows = Vec::new();
     for rec in it {
         let mut pairs: Vec<(String, Value)> = Vec::with_capacity(headers.len());
@@ -143,13 +150,22 @@ fn cell(v: &Value) -> String {
     }
 }
 
+/// Join fields into one line; a lone empty field is written as `""` so the row is not
+/// mistaken for a blank line when read back.
+fn join_line(fields: Vec<String>, sep: &str) -> String {
+    if fields.len() == 1 && fields[0].is_empty() {
+        return "\"\"".to_string();
+    }
+    fields.join(sep)
+}
+
 fn quote(field: &str, delim: char) -> String {
     let needs = field.contains(delim)
         || field.contains('"')
         || field.contains('\n')
         || field.contains('\r')
-        || field.starts_with(' ')
-        || field.ends_with(' ');
+        || field.starts_with(char::is_whitespace)
+        || field.ends_with(char::is_whitespace);
     if needs {
         format!("\"{}\"", field.replace('"', "\"\""))
     } else {
@@ -172,7 +188,7 @@ pub fn to_csv(args: &[Value]) -> Result<Value, VmError> {
         for r in &rows {
             if let Value::Array(a) = r {
                 let line: Vec<String> = a.to_vec().iter().map(|v| quote(&cell(v), delim)).collect();
-                out.push_str(&line.join(&sep));
+                out.push_str(&join_line(line, &sep));
                 out.push('\n');
             }
         }
@@ -199,7 +215,7 @@ pub fn to_csv(args: &[Value]) -> Result<Value, VmError> {
     for r in &rows {
         if let Value::Dict(d) = r {
             let line: Vec<String> = headers.iter().map(|h| quote(&d.get(h).map(|v| cell(&v)).unwrap_or_default(), delim)).collect();
-            out.push_str(&line.join(&sep));
+            out.push_str(&join_line(line, &sep));
             out.push('\n');
         }
     }
@@ -225,6 +241,34 @@ mod tests {
     #[test]
     fn unterminated_quote_is_an_error() {
         assert!(records("a\n\"oops\n", ',').unwrap_err().contains("line 2"));
+    }
+
+    #[test]
+    fn quoted_empty_single_column_is_a_row() {
+        let r = records("a\n\"\"\n\"\"\nx\n", ',').unwrap();
+        assert_eq!(r, vec![vec!["a"], vec![""], vec![""], vec!["x"]]);
+    }
+
+    #[test]
+    fn round_trip_whitespace_and_empty() {
+        let rows = Value::from(vec![
+            Value::Dict(SharedDict::from_pairs(vec![("a".to_string(), Value::Str("".into()))])),
+            Value::Dict(SharedDict::from_pairs(vec![("a".to_string(), Value::Str("\tx".into()))])),
+            Value::Dict(SharedDict::from_pairs(vec![("a".to_string(), Value::Str("y\t".into()))])),
+        ]);
+        let text = match to_csv(&[rows]).unwrap() { Value::Str(s) => s, _ => panic!() };
+        let back = parse_csv(&[Value::Str(text)]).unwrap();
+        let arr = match back { Value::Array(a) => a.to_vec(), _ => panic!() };
+        let vals: Vec<String> = arr.iter().map(|d| match d {
+            Value::Dict(d) => format!("{}", d.get("a").unwrap()),
+            _ => panic!(),
+        }).collect();
+        assert_eq!(vals, vec!["", "\tx", "y\t"]);
+    }
+
+    #[test]
+    fn duplicate_headers_error() {
+        assert!(parse_csv(&[Value::Str("a,a\n1,2\n".into())]).is_err());
     }
 
     #[test]

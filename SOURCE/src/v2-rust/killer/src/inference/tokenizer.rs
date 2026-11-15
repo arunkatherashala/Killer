@@ -77,6 +77,14 @@ impl KillerTokenizer {
     /// NOTE: For BPE models (Qwen2, GPT-2), BOS is not used — the prompt template
     /// already starts with the appropriate special token (`<|im_start|>` etc.).
     pub fn encode(&self, text: &str, add_bos: bool) -> Vec<u32> {
+        self.encode_with_special(text, add_bos, false)
+    }
+
+    /// Like [`encode`], but when `parse_special` is true, literal special-token strings in
+    /// `text` (`<|im_start|>`, `</s>`, ...) are turned into their control token ids. With the
+    /// default (`false`) user text is always encoded as plain text, so untrusted input cannot
+    /// inject control tokens.
+    pub fn encode_with_special(&self, text: &str, add_bos: bool, parse_special: bool) -> Vec<u32> {
         let mut result = Vec::new();
         // Only add BOS for SentencePiece models; BPE models embed it in the template
         if add_bos && self.is_spm { result.push(self.bos_id); }
@@ -85,8 +93,8 @@ impl KillerTokenizer {
             // -- SentencePiece path (LLaMA 1/2, TinyLlama, Mistral, Gemma) --
             // SentencePiece: spaces → ▁ (U+2581), prepend one ▁ at start
             let normalized = format!("\u{2581}{}", text.replace(' ', "\u{2581}"));
-            let mut pieces = self.initial_tokenize(&normalized);
-            self.bpe_merge(&mut pieces);
+            let mut pieces = self.initial_tokenize(&normalized, parse_special);
+            self.bpe_merge(&mut pieces, parse_special);
             for piece in pieces {
                 match self.token_to_id.get(&piece) {
                     Some(&id) => result.push(id),
@@ -97,14 +105,20 @@ impl KillerTokenizer {
             // -- BPE path (Qwen2, GPT-2, LLaMA 3) --
             // Special tokens (enclosed in <| |> or similar) are found first,
             // then remaining text segments are tokenized with plain BPE.
-            self.encode_bpe(text, &mut result);
+            self.encode_bpe(text, &mut result, parse_special);
         }
 
         result
     }
 
+    /// True for control / user-defined tokens, which plain-text encoding must never produce
+    /// from literal text.
+    fn is_special_id(&self, id: u32) -> bool {
+        matches!(self.token_types.get(id as usize), Some(3) | Some(4))
+    }
+
     /// Initial tokenization: break text into characters/multi-char vocab entries (greedy longest match).
-    fn initial_tokenize(&self, text: &str) -> Vec<String> {
+    fn initial_tokenize(&self, text: &str, allow_special: bool) -> Vec<String> {
         let mut pieces = Vec::new();
         let mut remaining = text;
 
@@ -116,7 +130,11 @@ impl KillerTokenizer {
             for end in (1..=limit).rev() {
                 if !remaining.is_char_boundary(end) { continue; }
                 let candidate = &remaining[..end];
-                if self.token_to_id.contains_key(candidate) {
+                let usable = match self.token_to_id.get(candidate) {
+                    Some(&id) => allow_special || !self.is_special_id(id),
+                    None => false,
+                };
+                if usable {
                     pieces.push(candidate.to_string());
                     remaining = &remaining[end..];
                     found = true;
@@ -147,7 +165,7 @@ impl KillerTokenizer {
     // --- BPE helpers ---------------------------------------------------------
 
     /// Run BPE merges on a pre-tokenized piece list (SentencePiece model).
-    fn bpe_merge(&self, pieces: &mut Vec<String>) {
+    fn bpe_merge(&self, pieces: &mut Vec<String>, allow_special: bool) {
         loop {
             if pieces.len() < 2 { break; }
             let mut best_score = f32::NEG_INFINITY;
@@ -155,6 +173,7 @@ impl KillerTokenizer {
             for i in 0..pieces.len() - 1 {
                 let merged = format!("{}{}", pieces[i], pieces[i + 1]);
                 if let Some(&id) = self.token_to_id.get(&merged) {
+                    if !allow_special && self.is_special_id(id) { continue; }
                     let s = self.token_scores.get(id as usize).copied().unwrap_or(0.0);
                     if s > best_score { best_score = s; best_i = i; }
                 }
@@ -169,14 +188,14 @@ impl KillerTokenizer {
     /// BPE encoding for tiktoken/GPT-2 style models (Qwen2, LLaMA 3).
     /// Two-phase: first split on ONLY true special tokens (`<|...|>`, `<s>`, `</s>`),
     /// then apply GPT-2 byte-level encoding + BPE on each regular text segment.
-    fn encode_bpe(&self, text: &str, out: &mut Vec<u32>) {
+    fn encode_bpe(&self, text: &str, out: &mut Vec<u32>, parse_special: bool) {
         let n = text.len();
         let mut pos = 0usize;
 
         while pos < n {
-            // Phase 1: Try to match a SPECIAL token at the current position.
+            // Phase 1: Try to match a SPECIAL token at the current position (opt-in only).
             let rem = &text[pos..];
-            if rem.starts_with('<') {
+            if parse_special && rem.starts_with('<') {
                 if let Some(close) = rem.find('>') {
                     let candidate = &rem[..close + 1];
                     if let Some(&id) = self.token_to_id.get(candidate) {
@@ -185,17 +204,18 @@ impl KillerTokenizer {
                         continue;
                     }
                 }
-                // No matching special token (e.g. <think>, </think>, <br>, etc.).
-                // Advance past just the `<` so Phase 2 can encode it as plain text.
-                // Without this, pos never moves and we spin forever.
-                pos += 1;
             }
 
-            // Phase 2: Collect regular text until the next potential special token start.
+            // Phase 2: Collect regular text. The first character is always consumed (so a `<`
+            // that does not start a special token is kept as text and progress is guaranteed);
+            // after that stop at the next potential special token start.
             let seg_start = pos;
+            if let Some(c) = text[pos..].chars().next() {
+                pos += c.len_utf8();
+            }
             while pos < n {
                 let rem2 = &text[pos..];
-                if rem2.starts_with('<') && rem2.find('>').is_some() {
+                if parse_special && rem2.starts_with('<') && rem2.find('>').is_some() {
                     break;
                 }
                 if let Some(c) = text[pos..].chars().next() {
@@ -208,8 +228,8 @@ impl KillerTokenizer {
                 // Qwen2/GPT-2 stores tokens with bytes mapped to specific Unicode chars
                 // (e.g. '\n' → 'Ċ', ' ' → 'Ġ'). We must encode the text the same way.
                 let gpt2_seg: String = seg.bytes().map(|b| Self::byte_to_unicode(b)).collect();
-                let mut pieces = self.initial_tokenize(&gpt2_seg);
-                self.bpe_merge(&mut pieces);
+                let mut pieces = self.initial_tokenize(&gpt2_seg, parse_special);
+                self.bpe_merge(&mut pieces, parse_special);
                 for piece in pieces {
                     match self.token_to_id.get(&piece) {
                         Some(&id) => out.push(id),
@@ -239,14 +259,40 @@ impl KillerTokenizer {
 
     /// Decode a sequence of token IDs back to a String.
     pub fn decode(&self, tokens: &[u32]) -> String {
-        let mut out = String::new();
+        // Accumulate raw bytes across tokens first: a multi-byte UTF-8 character can be split
+        // over several byte-level tokens, and each token alone is not valid UTF-8.
+        let mut bytes: Vec<u8> = Vec::new();
         for &id in tokens {
             if id == self.bos_id || id == self.eos_id { continue; }
-            // Use token_str for GPT-2/tiktoken models (handles Ġ→space byte decoding).
-            // For SPM models token_str also handles ▁→space.
-            out.push_str(&self.token_str(id));
+            self.push_token_bytes(id, &mut bytes);
         }
+        let out = String::from_utf8_lossy(&bytes).into_owned();
         out.trim_start_matches(' ').to_string()
+    }
+
+    /// Append the raw bytes a token stands for (GPT-2 byte-level mapping, SPM `▁` and
+    /// `<0xXX>` byte-fallback pieces).
+    fn push_token_bytes(&self, id: u32, bytes: &mut Vec<u8>) {
+        let raw = match self.vocab.get(id as usize) { Some(r) => r, None => return };
+        if self.is_spm {
+            if raw.len() == 6 && raw.starts_with("<0x") && raw.ends_with('>') {
+                if let Ok(b) = u8::from_str_radix(&raw[3..5], 16) {
+                    bytes.push(b);
+                    return;
+                }
+            }
+            bytes.extend_from_slice(raw.replace('\u{2581}', " ").as_bytes());
+        } else {
+            for c in raw.chars() {
+                match Self::unicode_to_byte(c as u32) {
+                    Some(b) => bytes.push(b),
+                    None => {
+                        let mut buf = [0u8; 4];
+                        bytes.extend_from_slice(c.encode_utf8(&mut buf).as_bytes());
+                    }
+                }
+            }
+        }
     }
 
     /// Decode a single token ID (no special handling, for streaming).
@@ -344,6 +390,54 @@ mod tests {
         // Token 4 = "▁hello" → " hello" → strip leading space → "hello"
         let decoded = tok.decode(&[4]);
         assert_eq!(decoded, "hello");
+    }
+
+    fn make_bpe_tokenizer() -> KillerTokenizer {
+        let vocab: Vec<String> = ["<unk>", "<s>", "</s>", "<|im_start|>", "<", "a", "b", "\u{c3}", "\u{a9}"]
+            .iter().map(|s| s.to_string()).collect();
+        let vocab_size = vocab.len();
+        let mut token_to_id = HashMap::new();
+        for (i, v) in vocab.iter().enumerate() { token_to_id.insert(v.clone(), i as u32); }
+        let mut token_types = vec![1u32; vocab_size];
+        token_types[3] = 3;
+        KillerTokenizer {
+            token_scores: vec![0.0; vocab_size],
+            token_types,
+            vocab_size,
+            bos_id: 1, eos_id: 2, pad_id: 0, unk_id: 0,
+            vocab, token_to_id,
+            is_spm: false,
+        }
+    }
+
+    #[test]
+    fn lt_that_is_not_a_special_token_is_kept() {
+        let tok = make_bpe_tokenizer();
+        assert_eq!(tok.encode("a<b", false), vec![5, 4, 6]);
+        assert_eq!(tok.encode("a<b>", false).len(), 4); // '>' unknown -> unk, '<' kept
+        assert_eq!(tok.encode_with_special("a<b", false, true), vec![5, 4, 6]);
+    }
+
+    #[test]
+    fn literal_special_strings_are_plain_text_unless_opted_in() {
+        let tok = make_bpe_tokenizer();
+        assert!(!tok.encode("<|im_start|>a", false).contains(&3));
+        assert_eq!(tok.encode_with_special("<|im_start|>a", false, true), vec![3, 5]);
+    }
+
+    #[test]
+    fn decode_accumulates_bytes_across_tokens() {
+        let tok = make_bpe_tokenizer();
+        // 0xC3 0xA9 is "é": neither byte alone is valid UTF-8
+        assert_eq!(tok.decode(&[7, 8]), "\u{e9}");
+    }
+
+    #[test]
+    fn spm_byte_fallback_decodes_to_one_char() {
+        let mut tok = make_tokenizer();
+        tok.vocab.push("<0xC3>".to_string());
+        tok.vocab.push("<0xA9>".to_string());
+        assert_eq!(tok.decode(&[8, 9]), "\u{e9}");
     }
 
     #[test]

@@ -37,6 +37,8 @@ pub struct GenerateConfig {
     /// (~4× smaller KV RAM vs f32). Same *goal* as Google TurboQuant-style KV compression; this is a
     /// simpler training-free quant path (not bit-identical to Google's algorithm).
     pub kv_q8: bool,
+    /// RNG seed for sampling. `Some(n)` makes sampling reproducible; `None` seeds from the clock.
+    pub seed: Option<u64>,
 }
 
 impl GenerateConfig {
@@ -47,6 +49,7 @@ impl GenerateConfig {
             sampling:       SamplingStrategy::chat(),
             stop_tokens:    Vec::new(),
             kv_q8:          false,
+            seed:           None,
         }
     }
 
@@ -57,7 +60,14 @@ impl GenerateConfig {
             sampling:       SamplingStrategy::Greedy,
             stop_tokens:    Vec::new(),
             kv_q8:          false,
+            seed:           None,
         }
+    }
+
+    /// Fix the sampling seed (reproducible output).
+    pub fn with_seed(mut self, seed: u64) -> Self {
+        self.seed = Some(seed);
+        self
     }
 
     pub fn with_temperature(mut self, t: f32) -> Self {
@@ -83,6 +93,20 @@ impl GenerateConfig {
 /// `step` is used as a deterministic seed (no external RNG dependency).
 /// `recent` is a recent-token window used for repetition penalty and LCG mixing.
 pub fn sample(logits: &[f32], strategy: &SamplingStrategy, step: usize, recent: &[u32]) -> u32 {
+    sample_seeded(logits, strategy, step, recent, 0)
+}
+
+/// A seed derived from the system clock, for runs where the caller did not pick one.
+pub fn time_seed() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos() as u64)
+        .unwrap_or(0x9E37_79B9_7F4A_7C15)
+}
+
+/// [`sample`] with a per-run `base_seed`: the same seed, step and history always give the same
+/// token; different seeds give different streams.
+pub fn sample_seeded(logits: &[f32], strategy: &SamplingStrategy, step: usize, recent: &[u32], base_seed: u64) -> u32 {
     match strategy {
         SamplingStrategy::Greedy => {
             // Apply light repetition penalty even for greedy to avoid dead loops
@@ -93,6 +117,7 @@ pub fn sample(logits: &[f32], strategy: &SamplingStrategy, step: usize, recent: 
             let penalized = apply_rep_penalty(logits, recent, 1.3);
             // Mix last token into LCG seed for better variety across the sequence
             let seed = step ^ (recent.last().copied().unwrap_or(0) as usize).wrapping_mul(2654435761);
+            let seed = seed ^ (base_seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) as usize);
             sample_nucleus(&penalized, *temperature, *top_k, *top_p, seed)
         }
     }
@@ -169,7 +194,8 @@ fn lcg_f32(seed: usize) -> f32 {
     let x = (seed as u64)
         .wrapping_mul(6364136223846793005)
         .wrapping_add(1442695040888963407);
-    (x >> 33) as f32 / u32::MAX as f32
+    // top 24 bits / 2^24: exactly representable in f32, covers [0, 1) uniformly
+    (x >> 40) as f32 / (1u32 << 24) as f32
 }
 
 #[cfg(test)]
@@ -204,6 +230,31 @@ mod tests {
             let r = lcg_f32(seed);
             assert!(r >= 0.0 && r < 1.0, "lcg out of [0,1): {}", r);
         }
+    }
+
+    #[test]
+    fn lcg_covers_the_unit_interval() {
+        let mut max = 0.0f32;
+        for seed in 0..10_000 {
+            let r = lcg_f32(seed);
+            assert!(r >= 0.0 && r < 1.0);
+            if r > max { max = r; }
+        }
+        assert!(max > 0.95, "uniform sample never exceeded {}", max);
+    }
+
+    #[test]
+    fn seed_is_deterministic_and_varies() {
+        let logits = vec![1.0f32; 50];
+        let strat = SamplingStrategy::Sample { temperature: 1.0, top_k: 50, top_p: 1.0 };
+        let run = |seed: u64| -> Vec<u32> {
+            (0..30).map(|s| sample_seeded(&logits, &strat, s, &[], seed)).collect()
+        };
+        assert_eq!(run(7), run(7));
+        assert_ne!(run(7), run(8));
+        let cfg = GenerateConfig::new(8).with_seed(5);
+        assert_eq!(cfg.seed, Some(5));
+        assert!(GenerateConfig::new(8).seed.is_none());
     }
 
     #[test]

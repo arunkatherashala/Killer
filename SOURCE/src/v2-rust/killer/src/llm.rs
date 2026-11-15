@@ -572,12 +572,20 @@ fn curl_post(url: &str, headers: &[String], body: &str, timeout_s: u64) -> Resul
 
 /// Escape a string value for embedding in JSON.
 fn json_string(s: &str) -> String {
-    let escaped = s
-        .replace('\\', "\\\\")
-        .replace('"',  "\\\"")
-        .replace('\n', "\\n")
-        .replace('\r', "\\r")
-        .replace('\t', "\\t");
+    let mut escaped = String::with_capacity(s.len() + 2);
+    for c in s.chars() {
+        match c {
+            '\\' => escaped.push_str("\\\\"),
+            '"' => escaped.push_str("\\\""),
+            '\n' => escaped.push_str("\\n"),
+            '\r' => escaped.push_str("\\r"),
+            '\t' => escaped.push_str("\\t"),
+            '\u{08}' => escaped.push_str("\\b"),
+            '\u{0c}' => escaped.push_str("\\f"),
+            c if (c as u32) < 0x20 => escaped.push_str(&format!("\\u{:04x}", c as u32)),
+            c => escaped.push(c),
+        }
+    }
     format!("\"{}\"", escaped)
 }
 
@@ -5637,6 +5645,11 @@ mod tests {
         let s = json_string("Hello \"world\"\nline2");
         assert!(s.contains("\\\""));
         assert!(s.contains("\\n"));
+    }
+
+    #[test]
+    fn test_json_string_escapes_control_chars() {
+        assert_eq!(json_string("a\u{1}b\u{8}\u{c}\u{1f}"), r#""a\u0001b\b\f\u001f""#);
     }
 
     #[test]

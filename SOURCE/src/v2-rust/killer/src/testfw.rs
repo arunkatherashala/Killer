@@ -427,6 +427,10 @@ pub fn cmd_test(args: &[String]) -> i32 {
                 let p = Path::new(a);
                 if p.exists() {
                     paths.push(p.to_path_buf());
+                } else if a.contains('/') || a.contains('\\') || a.ends_with(".killer") || a.starts_with('.') || a.starts_with('~') {
+                    // written like a path but absent: an error, not a filter matching nothing
+                    eprintln!("killer test: path '{a}' does not exist");
+                    return 2;
                 } else {
                     filter = Some(a.to_string());
                 }
@@ -447,7 +451,7 @@ pub fn cmd_test(args: &[String]) -> i32 {
     }
     if files.is_empty() {
         println!("no test files found");
-        return 0;
+        return if paths.is_empty() { 0 } else { 1 };
     }
     if list {
         for f in &files {
@@ -480,6 +484,10 @@ pub fn cmd_test(args: &[String]) -> i32 {
         all.extend(results);
     }
     let failed = all.iter().filter(|r| !r.ok).count();
+    let none_found = all.is_empty() && !paths.is_empty();
+    if none_found {
+        eprintln!("killer test: no tests discovered in the given path(s)");
+    }
     println!(
         "\n{} passed, {} failed, {} total in {:.2}s",
         all.len() - failed,
@@ -493,12 +501,27 @@ pub fn cmd_test(args: &[String]) -> i32 {
             return 2;
         }
     }
-    if failed > 0 { 1 } else { 0 }
+    if failed > 0 || none_found { 1 } else { 0 }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn missing_path_argument_is_an_error() {
+        assert_eq!(cmd_test(&["no/such/dir_xyz".to_string()]), 2);
+        assert_eq!(cmd_test(&["gone_xyz.killer".to_string()]), 2);
+    }
+
+    #[test]
+    fn empty_directory_path_exits_nonzero() {
+        let tmp = std::env::temp_dir().join("killer_testfw_empty_dir_err");
+        let _ = std::fs::create_dir_all(&tmp);
+        let code = cmd_test(&[tmp.to_string_lossy().to_string()]);
+        let _ = std::fs::remove_dir(&tmp);
+        assert_eq!(code, 1);
+    }
 
     #[test]
     fn header_parsing() {

@@ -217,6 +217,45 @@ fn as_f64(o: &Operand) -> f64 {
     }
 }
 
+/// Scale `v` by 2^e without intermediate overflow of the exponent.
+fn ldexp(mut v: f64, mut e: i64) -> f64 {
+    while e > 1000 && v.is_finite() && v != 0.0 {
+        v *= 2f64.powi(1000);
+        e -= 1000;
+    }
+    while e < -1000 && v != 0.0 {
+        v *= 2f64.powi(-1000);
+        e += 1000;
+    }
+    v * 2f64.powi(e as i32)
+}
+
+/// Correct `x / y` as f64 for BigInts of any size (operands beyond f64 range included).
+fn big_ratio_f64(x: &BigInt, y: &BigInt) -> f64 {
+    let (fx, fy) = (x.to_f64(), y.to_f64());
+    if fx.is_finite() && fy.is_finite() {
+        return fx / fy;
+    }
+    let neg = x.is_negative() != y.is_negative();
+    let (ax, ay) = (x.abs(), y.abs());
+    // Scale so the integer quotient carries ~64 significant bits.
+    let shift = 64i64 + ay.bit_length() as i64 - ax.bit_length() as i64;
+    let two = BigInt::from_i64(2);
+    let q = if shift >= 0 {
+        match two.pow(shift as u64).and_then(|p| ax.mul(&p).divmod(&ay).ok_or_else(String::new)) {
+            Ok((q, _)) => q,
+            Err(_) => return f64::NAN,
+        }
+    } else {
+        match two.pow((-shift) as u64).and_then(|p| ax.divmod(&ay.mul(&p)).ok_or_else(String::new)) {
+            Ok((q, _)) => q,
+            Err(_) => return f64::NAN,
+        }
+    };
+    let r = ldexp(q.to_f64(), -shift);
+    if neg { -r } else { r }
+}
+
 /// `lhs op rhs` where at least one side is a `BigInt`.
 pub fn arith(op: Op, lhs: &Value, rhs: &Value) -> Result<Value, String> {
     let a = operand(lhs, op, "left")?;
@@ -234,7 +273,7 @@ pub fn arith(op: Op, lhs: &Value, rhs: &Value) -> Result<Value, String> {
             if r.is_zero() {
                 big(q)
             } else {
-                Value::Number(x.to_f64() / y.to_f64())
+                Value::Number(big_ratio_f64(x, y))
             }
         }
         Op::Mod => {
@@ -551,4 +590,29 @@ pub fn prepass(name: &str, args: &mut [Value]) -> Option<Result<Value, String>> 
         }
     }
     None
+}
+
+#[cfg(test)]
+mod huge_div_tests {
+    use super::*;
+
+    fn p10(n: u64) -> BigInt {
+        BigInt::from_i64(10).pow(n).unwrap()
+    }
+
+    #[test]
+    fn non_exact_division_beyond_f64_range() {
+        // (10^400 + 1) / 10^399 ~= 10 (operands both overflow f64)
+        let x = p10(400).add(&BigInt::one());
+        let r = big_ratio_f64(&x, &p10(399));
+        assert!((r - 10.0).abs() < 1e-9, "got {r}");
+        let r = big_ratio_f64(&x.neg(), &p10(399));
+        assert!((r + 10.0).abs() < 1e-9, "got {r}");
+        // tiny quotient
+        let r = big_ratio_f64(&p10(400).add(&BigInt::one()), &p10(401));
+        assert!((r - 0.1).abs() < 1e-12, "got {r}");
+        // via arith
+        let v = arith(Op::Div, &Value::BigInt(Rc::new(x)), &Value::BigInt(Rc::new(p10(399)))).unwrap();
+        match v { Value::Number(n) => assert!((n - 10.0).abs() < 1e-9), o => panic!("{:?}", o) }
+    }
 }
