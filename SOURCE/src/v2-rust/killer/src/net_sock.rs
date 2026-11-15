@@ -375,9 +375,18 @@ fn read_some(stream: &mut Conn, buf: &mut Vec<u8>, max: usize, ms: u64, who: &st
     }
 }
 
+/// Longest line `read_line` will buffer before giving up.
+const MAX_LINE: usize = 1024 * 1024;
+/// Largest reassembled WebSocket message (all fragments together).
+const MAX_WS_MESSAGE: usize = 64 * 1024 * 1024;
+
 fn read_line(stream: &mut Conn, buf: &mut Vec<u8>, ms: u64, who: &str) -> Result<Option<Vec<u8>>, VmError> {
     io(who, stream.set_read_timeout(timeout(ms)))?;
     loop {
+        if buf.len() > MAX_LINE && !buf[..MAX_LINE.min(buf.len())].contains(&b'\n') {
+            buf.clear();
+            return err(format!("{}(): line longer than {} bytes", who, MAX_LINE));
+        }
         if let Some(p) = buf.iter().position(|&b| b == b'\n') {
             let mut line: Vec<u8> = buf.drain(..=p).collect();
             line.pop();
@@ -577,7 +586,8 @@ fn dispatch(name: &str, args: &[Value]) -> Result<Value, VmError> {
                 Some(raw) => {
                     let mut stream = wrap_accepted(id, raw, name)?;
                     let mut buf = Vec::new();
-                    server_handshake(&mut stream, &mut buf)?;
+                    let allowed = opt_str(args, 2, "allowed_origins").unwrap_or_default();
+                    server_handshake(&mut stream, &mut buf, &allowed)?;
                     Ok(insert(Sock::Ws { stream, buf, client: false, closed: false }))
                 }
                 None => Ok(Value::Null),
@@ -656,16 +666,55 @@ fn ws_connect(url: &str, ca_file: Option<&str>) -> Result<Value, VmError> {
     Ok(insert(Sock::Ws { stream, buf, client: true, closed: false }))
 }
 
-fn server_handshake(stream: &mut Conn, buf: &mut Vec<u8>) -> Result<(), VmError> {
-    let head = read_head(stream, buf, "ws_accept")?;
-    let key = head
-        .lines()
-        .find_map(|l| l.split_once(':').filter(|(k, _)| k.trim().eq_ignore_ascii_case("sec-websocket-key")).map(|(_, v)| v.trim().to_string()));
+/// Validate a client WebSocket upgrade request; returns the Sec-WebSocket-Key.
+/// Requests without an `Origin` header (non-browser clients) are accepted. A browser's `Origin`
+/// must match the `Host` header (same origin) or appear in `allowed` (comma-separated, `*` = any).
+fn check_handshake(head: &str, allowed: &str) -> Result<String, String> {
+    let mut lines = head.lines();
+    let first = lines.next().unwrap_or("");
+    let mut it = first.split_whitespace();
+    if it.next() != Some("GET") {
+        return Err("400 the WebSocket handshake must be a GET request".to_string());
+    }
+    let (mut key, mut upgrade, mut conn_up, mut host, mut origin) = (None, false, false, None, None);
+    for l in lines {
+        if let Some((k, v)) = l.split_once(':') {
+            let v = v.trim();
+            match k.trim().to_ascii_lowercase().as_str() {
+                "sec-websocket-key" => key = Some(v.to_string()),
+                "upgrade" => upgrade = v.to_ascii_lowercase().split(',').any(|t| t.trim() == "websocket"),
+                "connection" => conn_up = v.to_ascii_lowercase().split(',').any(|t| t.trim() == "upgrade"),
+                "host" => host = Some(v.to_ascii_lowercase()),
+                "origin" => origin = Some(v.to_string()),
+                _ => {}
+            }
+        }
+    }
     let key = match key {
-        Some(k) => k,
-        None => {
-            let _ = stream.write_all(b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n");
-            return err("ws_accept(): the client sent no Sec-WebSocket-Key (not a WebSocket request)");
+        Some(k) if upgrade && conn_up => k,
+        _ => return Err("400 not a WebSocket request (needs Upgrade: websocket, Connection: Upgrade and Sec-WebSocket-Key)".to_string()),
+    };
+    if let Some(o) = origin {
+        let o_l = o.to_ascii_lowercase();
+        let authority = o_l.split_once("://").map(|(_, r)| r.trim_end_matches('/')).unwrap_or("");
+        let ok = allowed.split(',').map(|a| a.trim().to_ascii_lowercase()).any(|a| !a.is_empty() && (a == "*" || a.trim_end_matches('/') == o_l.trim_end_matches('/')))
+            || (host.is_some() && host.as_deref() == Some(authority));
+        if !ok {
+            return Err(format!("403 cross-origin WebSocket handshake from '{}' rejected (pass {{\"allowed_origins\": \"https://site\"}} to ws_accept to allow it)", o));
+        }
+    }
+    Ok(key)
+}
+
+fn server_handshake(stream: &mut Conn, buf: &mut Vec<u8>, allowed: &str) -> Result<(), VmError> {
+    let head = read_head(stream, buf, "ws_accept")?;
+    let key = match check_handshake(&head, allowed) {
+        Ok(k) => k,
+        Err(e) => {
+            let (code, msg) = e.split_once(' ').unwrap_or(("400", "Bad Request"));
+            let reason = if code == "403" { "Forbidden" } else { "Bad Request" };
+            let _ = stream.write_all(format!("HTTP/1.1 {} {}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n", code, reason).as_bytes());
+            return err(format!("ws_accept(): {}", msg));
         }
     };
     let resp = format!(
@@ -740,6 +789,7 @@ fn ws_read(stream: &mut Conn, buf: &mut Vec<u8>, client: bool, closed: &mut bool
         return Ok(Value::Null);
     }
     let mut message: Vec<u8> = Vec::new();
+    let mut started = false;
     loop {
         // a frame is consumed only when all of it has arrived, so a timeout never loses part of one
         if !fill(stream, buf, 2, ms)? {
@@ -766,6 +816,16 @@ fn ws_read(stream: &mut Conn, buf: &mut Vec<u8>, client: bool, closed: &mut bool
             }
             n => (n as usize, 2),
         };
+        if len > MAX_WS_MESSAGE || message.len() + len > MAX_WS_MESSAGE {
+            *closed = true;
+            let _ = stream.write_all(&frame(8, &1009u16.to_be_bytes(), client));
+            return err("ws_recv(): message larger than 64 MB");
+        }
+        if b0 & 0x08 != 0 && (len > 125 || b0 & 0x80 == 0) {
+            *closed = true;
+            let _ = stream.write_all(&frame(8, &1002u16.to_be_bytes(), client));
+            return err("ws_recv(): invalid control frame (payload over 125 bytes or fragmented)");
+        }
         let total = head + if masked { 4 } else { 0 } + len;
         if !fill(stream, buf, total, ms)? {
             return Ok(Value::Null);
@@ -781,6 +841,12 @@ fn ws_read(stream: &mut Conn, buf: &mut Vec<u8>, client: bool, closed: &mut bool
         let fin = b0 & 0x80 != 0;
         match b0 & 0x0F {
             0 | 1 | 2 => {
+                if b0 & 0x0F == 0 && !started {
+                    *closed = true;
+                    let _ = stream.write_all(&frame(8, &1002u16.to_be_bytes(), client));
+                    return err("ws_recv(): continuation frame without a start frame");
+                }
+                started = true;
                 message.extend_from_slice(&payload);
                 if fin {
                     return Ok(text(&message));
@@ -915,6 +981,82 @@ mod tests {
         assert_eq!(base64(b"f"), "Zg==");
         assert_eq!(base64(b"fo"), "Zm8=");
         assert_eq!(base64(b"foo"), "Zm9v");
+    }
+
+    #[test]
+    fn handshake_checks_method_headers_and_origin() {
+        let good = "GET /chat HTTP/1.1\r\nHost: localhost:9\r\nUpgrade: websocket\r\nConnection: keep-alive, Upgrade\r\nSec-WebSocket-Key: abc";
+        assert_eq!(check_handshake(good, "").unwrap(), "abc");
+        assert!(check_handshake(&good.replace("GET", "POST"), "").is_err());
+        assert!(check_handshake(&good.replace("Upgrade: websocket\r\n", ""), "").is_err());
+        let evil = format!("{}\r\nOrigin: http://evil.example", good);
+        assert!(check_handshake(&evil, "").unwrap_err().starts_with("403"));
+        assert!(check_handshake(&evil, "http://other.example").is_err());
+        assert!(check_handshake(&evil, "http://evil.example").is_ok());
+        let same = format!("{}\r\nOrigin: http://localhost:9", good);
+        assert!(check_handshake(&same, "").is_ok());
+    }
+
+    fn ws_pair() -> (Conn, Conn) {
+        let l = TcpListener::bind("127.0.0.1:0").unwrap();
+        let c = TcpStream::connect(l.local_addr().unwrap()).unwrap();
+        let (s, _) = l.accept().unwrap();
+        (Conn::Tcp(s), Conn::Tcp(c))
+    }
+
+    fn raw_frame(fin: bool, op: u8, payload: &[u8]) -> Vec<u8> {
+        let mut f = frame(op, payload, true);
+        if !fin {
+            f[0] &= 0x7F;
+        }
+        f
+    }
+
+    #[test]
+    fn ws_rejects_orphan_continuation_oversize_control_and_huge_fragment_sums() {
+        let (mut srv, mut cli) = ws_pair();
+        cli.write_all(&raw_frame(true, 0, b"x")).unwrap();
+        let (mut buf, mut closed) = (Vec::new(), false);
+        assert!(ws_read(&mut srv, &mut buf, false, &mut closed, 2000).is_err());
+
+        let (mut srv, mut cli) = ws_pair();
+        cli.write_all(&raw_frame(true, 9, &[0u8; 126])).unwrap();
+        let (mut buf, mut closed) = (Vec::new(), false);
+        assert!(ws_read(&mut srv, &mut buf, false, &mut closed, 2000).is_err());
+
+        // fragments that add up past the cap: 17 x 4 MB = 68 MB > 64 MB
+        let (mut srv, mut cli) = ws_pair();
+        let t = std::thread::spawn(move || {
+            let chunk = vec![b'a'; 4 * 1024 * 1024];
+            let _ = cli.write_all(&raw_frame(false, 1, &chunk));
+            for _ in 0..17 {
+                if cli.write_all(&raw_frame(false, 0, &chunk)).is_err() {
+                    break;
+                }
+            }
+        });
+        let (mut buf, mut closed) = (Vec::new(), false);
+        let e = ws_read(&mut srv, &mut buf, false, &mut closed, 20000).unwrap_err();
+        assert!(format!("{:?}", e).contains("64 MB"), "{:?}", e);
+        drop(srv);
+        let _ = t.join();
+    }
+
+    #[test]
+    fn read_line_has_a_maximum_length() {
+        let (mut srv, mut cli) = ws_pair();
+        let t = std::thread::spawn(move || {
+            let chunk = vec![b'a'; 64 * 1024];
+            for _ in 0..40 {
+                if cli.write_all(&chunk).is_err() {
+                    break;
+                }
+            }
+        });
+        let mut buf = Vec::new();
+        assert!(read_line(&mut srv, &mut buf, 5000, "t").is_err());
+        drop(srv);
+        let _ = t.join();
     }
 
     #[test]
