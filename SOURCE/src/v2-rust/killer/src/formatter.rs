@@ -161,12 +161,23 @@ impl Formatter {
         if !self.config.spaces_around_operators && !self.config.spaces_after_keywords {
             return Ok(source.to_string());
         }
-        let mut result = String::new();
-        for line in source.lines() {
-            result.push_str(&Self::format_line_ops(line, &self.config));
-            result.push('\n');
+        let pieces: Vec<&str> = source.split('\n').collect();
+        let lines: Vec<&str> = pieces.iter().map(|l| l.strip_suffix('\r').unwrap_or(l)).collect();
+        let kinds = scan_triple_lines(&lines);
+        let mut out: Vec<String> = Vec::with_capacity(pieces.len());
+        for (i, piece) in pieces.iter().enumerate() {
+            let line = lines[i];
+            let cr = &piece[line.len()..];
+            let formatted = match kinds[i] {
+                TripleKind::Plain => Self::format_line_ops(line, &self.config),
+                TripleKind::Opener(st) => {
+                    format!("{}{}", Self::format_line_ops(&line[..st], &self.config), &line[st..])
+                }
+                TripleKind::Inner | TripleKind::Closer(_) => line.to_string(),
+            };
+            out.push(format!("{}{}", formatted, cr));
         }
-        Ok(result.trim_end_matches('\n').to_string() + "\n")
+        Ok(out.join("\n"))
     }
 
     /// Character-level operator formatter — never modifies string literals or comments.
@@ -298,6 +309,32 @@ impl Formatter {
     /// True when the character position is in a binary-operator context
     /// (i.e., the previous non-space char is a value-producing token).
     fn is_binary_ctx(out: &str) -> bool {
+        let trimmed = out.trim_end_matches(' ');
+        // after a keyword the sign is unary: `return -1`
+        if matches!(
+            Self::last_word(trimmed).as_str(),
+            "return" | "throw" | "in" | "and" | "or" | "not" | "else" | "case" | "yield" | "await" | "typeof"
+        ) {
+            return false;
+        }
+        // exponent sign inside a number literal: `1e-5`, `2.5E+3`
+        if out.len() == trimmed.len() && (trimmed.ends_with('e') || trimmed.ends_with('E')) {
+            let tok: String = trimmed
+                .chars()
+                .rev()
+                .take_while(|c| c.is_alphanumeric() || *c == '_' || *c == '.')
+                .collect::<Vec<_>>()
+                .into_iter()
+                .rev()
+                .collect();
+            let lower = tok.to_ascii_lowercase();
+            if tok.starts_with(|c: char| c.is_ascii_digit())
+                && !lower.starts_with("0x")
+                && lower[..lower.len() - 1].chars().all(|c| c.is_ascii_digit() || c == '.' || c == '_')
+            {
+                return false;
+            }
+        }
         matches!(
             out.trim_end_matches(' ').chars().last(),
             Some(')' | ']' | '}' | '_'
@@ -398,6 +435,92 @@ pub fn mask_code(line: &str) -> String {
     out
 }
 
+/// Position of a line relative to multi-line triple-quoted strings (see `sugar.rs`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TripleKind {
+    /// Ordinary code line.
+    Plain,
+    /// Code, then a triple-quote opener that is still open at the end of the line (byte offset of the quotes).
+    Opener(usize),
+    /// Entirely inside a triple-quoted string.
+    Inner,
+    /// String content up to and including the closing quotes; code resumes at this byte offset.
+    Closer(usize),
+}
+
+/// Classify every line with respect to multi-line triple-quoted strings.
+pub fn scan_triple_lines(lines: &[&str]) -> Vec<TripleKind> {
+    let mut kinds = Vec::with_capacity(lines.len());
+    let mut open: Option<char> = None;
+    for line in lines {
+        let ch: Vec<(usize, char)> = line.char_indices().collect();
+        let n = ch.len();
+        let began_in_triple = open.is_some();
+        let mut opener_start: Option<usize> = None;
+        let mut closer_rest: Option<usize> = None;
+        let mut i = 0;
+        while i < n {
+            let c = ch[i].1;
+            if let Some(q) = open {
+                if c == '\\' {
+                    i += 2;
+                    continue;
+                }
+                if c == q && i + 2 < n && ch[i + 1].1 == q && ch[i + 2].1 == q {
+                    open = None;
+                    i += 3;
+                    closer_rest = Some(if i < n { ch[i].0 } else { line.len() });
+                    continue;
+                }
+                i += 1;
+                continue;
+            }
+            let comment = (c == '#' && (i == 0 || ch[i - 1].1.is_whitespace()))
+                || (c == '/' && i + 1 < n && ch[i + 1].1 == '/')
+                || (c == '-' && i + 1 < n && ch[i + 1].1 == '-');
+            if comment {
+                break;
+            }
+            if c == '"' || c == '\'' {
+                if c == '\'' && i > 0 && ch[i - 1].1.is_alphanumeric() {
+                    i += 1;
+                    continue;
+                }
+                if i + 2 < n && ch[i + 1].1 == c && ch[i + 2].1 == c {
+                    open = Some(c);
+                    opener_start = Some(ch[i].0);
+                    i += 3;
+                    continue;
+                }
+                // ordinary single-line string
+                i += 1;
+                while i < n {
+                    let d = ch[i].1;
+                    i += 1;
+                    if d == '\\' {
+                        i += 1;
+                    } else if d == c {
+                        break;
+                    }
+                }
+                continue;
+            }
+            i += 1;
+        }
+        kinds.push(if began_in_triple {
+            match closer_rest {
+                Some(r) => TripleKind::Closer(r),
+                None => TripleKind::Inner,
+            }
+        } else if open.is_some() {
+            TripleKind::Opener(opener_start.unwrap_or(0))
+        } else {
+            TripleKind::Plain
+        });
+    }
+    kinds
+}
+
 const BLOCK_KEYWORDS: &[&str] = &[
     "if", "else", "elif", "while", "for", "fn", "kfn", "akfn", "class", "try", "catch", "finally",
     "match", "switch", "do", "case", "default", "test",
@@ -446,7 +569,20 @@ fn is_indentation_sensitive(lines: &[&str]) -> bool {
 pub fn normalize_source(source: &str, config: &FormatterConfig) -> String {
     let crlf = source.contains("\r\n");
     let lines: Vec<&str> = source.split('\n').map(|l| l.strip_suffix('\r').unwrap_or(l)).collect();
-    let reindent = !is_indentation_sensitive(&lines);
+    let kinds = scan_triple_lines(&lines);
+    // code-only view of each line (string bodies removed) for the indentation analysis
+    let code_view: Vec<String> = lines
+        .iter()
+        .zip(&kinds)
+        .map(|(l, k)| match k {
+            TripleKind::Plain => l.to_string(),
+            TripleKind::Opener(st) => l[..*st].to_string(),
+            TripleKind::Inner => String::new(),
+            TripleKind::Closer(r) => l[*r..].to_string(),
+        })
+        .collect();
+    let code_refs: Vec<&str> = code_view.iter().map(|s| s.as_str()).collect();
+    let reindent = !is_indentation_sensitive(&code_refs);
     let unit = if config.indent_style == IndentStyle::Spaces { " ".repeat(config.indent_size) } else { "\t".to_string() };
     let mut out: Vec<String> = Vec::with_capacity(lines.len());
     // one entry per still-open bracket: the number of the line that opened it. Brackets opened on
@@ -455,7 +591,62 @@ pub fn normalize_source(source: &str, config: &FormatterConfig) -> String {
     let distinct = |v: &[usize]| -> usize { v.iter().enumerate().filter(|(i, l)| *i == 0 || v[*i - 1] != **l).count() };
     let mut blank_run = 0usize;
     let mut line_no = 0usize;
-    for line in &lines {
+    for (idx, line) in lines.iter().enumerate() {
+        match kinds[idx] {
+            TripleKind::Inner => {
+                // string content: byte-for-byte
+                out.push(line.to_string());
+                blank_run = 0;
+                continue;
+            }
+            TripleKind::Closer(r) => {
+                let rest = line[r..].trim_end();
+                if reindent {
+                    line_no += 1;
+                    for c in mask_code(rest).chars() {
+                        match c {
+                            '{' | '[' | '(' => open.push(line_no),
+                            '}' | ']' | ')' => {
+                                open.pop();
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                out.push(format!("{}{}", &line[..r], rest));
+                blank_run = 0;
+                continue;
+            }
+            TripleKind::Opener(st) => {
+                // code before the quotes is formatted; the string text after them is kept as is
+                blank_run = 0;
+                let body = line.trim_start();
+                let lead = line.len() - body.len();
+                let prefix = &line[lead..st];
+                let mut level = 0;
+                if reindent {
+                    let masked = mask_code(prefix);
+                    line_no += 1;
+                    let leading_closers = masked.chars().take_while(|c| matches!(c, '}' | ']' | ')')).count();
+                    level = distinct(&open[..open.len().saturating_sub(leading_closers)]);
+                    for c in masked.chars() {
+                        match c {
+                            '{' | '[' | '(' => open.push(line_no),
+                            '}' | ']' | ')' => {
+                                open.pop();
+                            }
+                            _ => {}
+                        }
+                    }
+                    out.push(format!("{}{}", unit.repeat(level), body));
+                } else {
+                    out.push(line.to_string());
+                }
+                let _ = level;
+                continue;
+            }
+            TripleKind::Plain => {}
+        }
         let trimmed = line.trim_end();
         if trimmed.trim().is_empty() {
             blank_run += 1;
@@ -499,11 +690,8 @@ pub fn normalize_source(source: &str, config: &FormatterConfig) -> String {
 
 /// Remove `,` directly before a closing bracket (outside strings and comments).
 fn remove_trailing_commas(source: &str) -> String {
-    let mut out = String::with_capacity(source.len());
-    for (i, line) in source.split('\n').enumerate() {
-        if i > 0 {
-            out.push('\n');
-        }
+    fn strip_line(line: &str) -> String {
+        let mut out = String::with_capacity(line.len());
         let masked: Vec<char> = mask_code(line).chars().collect();
         let chars: Vec<char> = line.chars().collect();
         for (j, &c) in chars.iter().enumerate() {
@@ -514,6 +702,24 @@ fn remove_trailing_commas(source: &str) -> String {
                 }
             }
             out.push(c);
+        }
+        out
+    }
+    let lines: Vec<&str> = source.split('\n').collect();
+    let stripped: Vec<&str> = lines.iter().map(|l| l.strip_suffix('\r').unwrap_or(l)).collect();
+    let kinds = scan_triple_lines(&stripped);
+    let mut out = String::with_capacity(source.len());
+    for (i, line) in lines.iter().enumerate() {
+        if i > 0 {
+            out.push('\n');
+        }
+        match kinds[i] {
+            TripleKind::Plain => out.push_str(&strip_line(line)),
+            TripleKind::Opener(st) => {
+                out.push_str(&strip_line(&line[..st]));
+                out.push_str(&line[st..]);
+            }
+            TripleKind::Inner | TripleKind::Closer(_) => out.push_str(line),
         }
     }
     out
@@ -664,6 +870,44 @@ mod tests {
         
         let result = formatter.format(source).unwrap();
         assert!(!result.is_empty());
+    }
+
+    const TRIPLE_SRC: &str = "fn f() {\n  let s = \"\"\"\n      keep   \n\n\n\n  (  a+b  ,]\n\"\"\"\nx()\n}\n";
+
+    #[test]
+    fn triple_string_lines_are_preserved() {
+        let mut f = Formatter::new();
+        let out = f.format(TRIPLE_SRC).unwrap();
+        assert!(out.contains("\"\"\"\n      keep   \n\n\n\n  (  a+b  ,]\n\"\"\"\n"), "{out:?}");
+        // brackets inside the string are not counted: x() sits at one indent level
+        assert!(out.contains("\n  x()\n}"), "{out:?}");
+        // idempotent
+        let again = Formatter::new().format(&out).unwrap();
+        assert_eq!(out, again);
+    }
+
+    #[test]
+    fn triple_string_lines_survive_opt_in_passes() {
+        let cfg = FormatterConfig {
+            spaces_around_operators: true,
+            spaces_after_keywords: true,
+            trailing_comma: TrailingCommaStyle::Never,
+            ..Default::default()
+        };
+        let out = Formatter::with_config(cfg.clone()).format(TRIPLE_SRC).unwrap();
+        assert!(out.contains("      keep   \n\n\n\n  (  a+b  ,]\n\"\"\"\n"), "{out:?}");
+        let again = Formatter::with_config(cfg).format(&out).unwrap();
+        assert_eq!(out, again);
+    }
+
+    #[test]
+    fn spacing_keeps_unary_minus_and_exponents() {
+        let cfg = FormatterConfig { spaces_around_operators: true, ..Default::default() };
+        let out = Formatter::with_config(cfg).format("fn f() {\nreturn -1\nlet a = 1e-5\nlet b = 2.5E+3\nlet c = x-1\n}\n").unwrap();
+        assert!(out.contains("return -1"), "{out}");
+        assert!(out.contains("1e-5"), "{out}");
+        assert!(out.contains("2.5E+3"), "{out}");
+        assert!(out.contains("x - 1"), "{out}");
     }
 
     #[test]
