@@ -10,7 +10,7 @@
 use std::collections::HashMap;
 use super::gguf::{GgufFile, GgmlType};
 use super::tokenizer::KillerTokenizer;
-use super::sampler::{GenerateConfig, sample as sample_token};
+use super::sampler::{GenerateConfig, sample_seeded, time_seed};
 use super::quant;
 
 // --- Architecture detect ------------------------------------------------------
@@ -575,6 +575,7 @@ impl KillerInference {
     /// Full-control generation with a `GenerateConfig`.
     pub fn generate(&mut self, prompt: &str, cfg: &GenerateConfig) -> String {
         let tokens = self.tokenizer.encode(prompt, true);
+        let base_seed = cfg.seed.unwrap_or_else(time_seed);
         eprintln!("[Killer] Prompt: {} tokens", tokens.len());
 
         // Cap KV cache to the tokens we will actually produce — NOT the model's full
@@ -641,7 +642,7 @@ impl KillerInference {
                 eprintln!("[dbg] logits range=[{:.1},{:.1}] top5=[{}]", min_l, max_l, top5.join(", "));
             }
 
-            let next_tok = sample_token(&logits, &cfg.sampling, step, &recent);
+            let next_tok = sample_seeded(&logits, &cfg.sampling, step, &recent, base_seed);
 
             if self.tokenizer.is_eos(next_tok) { break; }
             if cfg.stop_tokens.contains(&next_tok) { break; }
