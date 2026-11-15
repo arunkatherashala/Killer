@@ -33,82 +33,63 @@ impl KillerDateTime {
         UNIX_EPOCH + Duration::new(self.seconds as u64, self.nanos)
     }
 
+    /// Civil date (year, month, day) from days since 1970-01-01 (proleptic Gregorian).
+    fn civil_from_days(z: i64) -> (i64, i64, i64) {
+        let z = z + 719_468;
+        let era = z.div_euclid(146_097);
+        let doe = z.rem_euclid(146_097);
+        let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+        let y = yoe + era * 400;
+        let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+        let mp = (5 * doy + 2) / 153;
+        let d = doy - (153 * mp + 2) / 5 + 1;
+        let m = if mp < 10 { mp + 3 } else { mp - 9 };
+        (if m <= 2 { y + 1 } else { y }, m, d)
+    }
+
+    fn days_since_epoch(&self) -> i64 {
+        self.seconds.div_euclid(86400)
+    }
+
     /// Get year (0000-9999)
     pub fn year(&self) -> i32 {
-        // Convert Unix timestamp to year (simplified - not accounting for leap seconds)
-        // Unix epoch = 1970-01-01
-        let days_since_epoch = self.seconds / 86400;
-        let years_since_1970 = (days_since_epoch / 365) as i32;
-        1970 + years_since_1970
+        Self::civil_from_days(self.days_since_epoch()).0 as i32
     }
 
     /// Get month (1-12)
     pub fn month(&self) -> i32 {
-        let day_of_year = self.day_of_year();
-        
-        let days_in_month = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-        
-        let mut month = 1;
-        let mut days_passed = 0;
-        
-        // Simplified: assume not a leap year (better implementation would check)
-        for &days in &days_in_month {
-            if days_passed + days >= day_of_year {
-                return month;
-            }
-            days_passed += days;
-            month += 1;
-        }
-        month
+        Self::civil_from_days(self.days_since_epoch()).1 as i32
     }
 
     /// Get day of month (1-31)
     pub fn day(&self) -> i32 {
-        let day_of_year = self.day_of_year();
-        
-        let days_in_month = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-        
-        let mut days_passed = 0;
-        for &days in &days_in_month {
-            if days_passed + days >= day_of_year {
-                return (day_of_year - days_passed) as i32;
-            }
-            days_passed += days;
-        }
-        day_of_year as i32
+        Self::civil_from_days(self.days_since_epoch()).2 as i32
     }
 
     /// Get day of year (1-366)
     pub fn day_of_year(&self) -> i64 {
-        let days_since_epoch = self.seconds / 86400;
-        let year = self.year() as i64;
-        
-        // Calculate days at start of this year
-        let mut days_at_year_start = 0i64;
-        for y in 1970..year {
-            if Self::is_leap_year(y as i32) {
-                days_at_year_start += 366;
-            } else {
-                days_at_year_start += 365;
-            }
-        }
-        
-        (days_since_epoch - days_at_year_start) % 366 + 1
+        let days = self.days_since_epoch();
+        let (y, _, _) = Self::civil_from_days(days);
+        // days from 1970-01-01 to Jan 1 of year y
+        let y1 = y - 1;
+        let jan1 = (y - 1970) * 365 + (y1.div_euclid(4) - 1969 / 4) - (y1.div_euclid(100) - 1969 / 100)
+            + (y1.div_euclid(400) - 1969 / 400);
+        days - jan1 + 1
     }
 
     /// Get hour (0-23)
     pub fn hour(&self) -> i32 {
-        ((self.seconds % 86400) / 3600) as i32
+        (self.seconds.rem_euclid(86400) / 3600) as i32
     }
 
     /// Get minute (0-59)
     pub fn minute(&self) -> i32 {
-        ((self.seconds % 3600) / 60) as i32
+        (self.seconds.rem_euclid(3600) / 60) as i32
     }
 
     /// Get second (0-59)
     pub fn second(&self) -> i32 {
-        (self.seconds % 60) as i32
+        self.seconds.rem_euclid(60) as i32
     }
 
     /// Get millisecond (0-999)
@@ -119,8 +100,7 @@ impl KillerDateTime {
     /// Get weekday (0=Monday, 6=Sunday)
     pub fn weekday(&self) -> i32 {
         // Unix epoch (Jan 1, 1970) was a Thursday (3)
-        let days_since_epoch = self.seconds / 86400;
-        ((days_since_epoch + 3) % 7) as i32
+        (self.days_since_epoch() + 3).rem_euclid(7) as i32
     }
 
     /// Get day name
@@ -286,4 +266,33 @@ pub fn parse_datetime(input: &str) -> Result<KillerDateTime, String> {
 /// Calculate duration between two datetimes (result in milliseconds)
 pub fn duration_millis(dt1: &KillerDateTime, dt2: &KillerDateTime) -> i64 {
     (dt2.seconds - dt1.seconds) * 1000 + (dt2.nanos as i64 - dt1.nanos as i64) / 1_000_000
+}
+
+#[cfg(test)]
+mod civil_tests {
+    use super::*;
+
+    fn ymd(secs: i64) -> (i32, i32, i32, i64, i32, i32) {
+        let d = KillerDateTime { seconds: secs, nanos: 0 };
+        (d.year(), d.month(), d.day(), d.day_of_year(), d.weekday(), d.hour())
+    }
+
+    #[test]
+    fn known_timestamps() {
+        assert_eq!(ymd(0), (1970, 1, 1, 1, 3, 0));
+        assert_eq!(ymd(951_782_400), (2000, 2, 29, 60, 1, 0));
+        assert_eq!(ymd(1_763_000_000), (2025, 11, 13, 317, 3, 02));
+        assert_eq!(ymd(-86_400), (1969, 12, 31, 365, 2, 0));
+        assert_eq!(ymd(-1), (1969, 12, 31, 365, 2, 23));
+        assert_eq!(ymd(4_102_444_800), (2100, 1, 1, 1, 4, 0));
+        assert_eq!(ymd(4_107_542_400), (2100, 3, 1, 60, 0, 0));
+        assert_eq!(ymd(1_709_164_800), (2024, 2, 29, 60, 3, 0));
+        assert_eq!(ymd(-2_208_988_800), (1900, 1, 1, 1, 0, 0));
+    }
+
+    #[test]
+    fn negative_minute_second() {
+        let d = KillerDateTime { seconds: -1, nanos: 0 };
+        assert_eq!((d.minute(), d.second()), (59, 59));
+    }
 }
