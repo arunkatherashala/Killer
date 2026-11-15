@@ -107,11 +107,13 @@ pub fn unpack(bytes: &[u8]) -> Result<Vec<(String, Vec<u8>)>, String> {
             return Err(format!("unsafe path in package archive: {}", path));
         }
         let start = nl + 1;
-        if start + len + 1 > rest.len() || rest[start + len] != b'\n' {
+        let end = start.checked_add(len).ok_or_else(|| bad("bad length"))?;
+        let next = end.checked_add(1).ok_or_else(|| bad("bad length"))?;
+        if next > rest.len() || rest[end] != b'\n' {
             return Err(bad("truncated file"));
         }
-        out.push((path.to_string(), rest[start..start + len].to_vec()));
-        pos = start + len + 1;
+        out.push((path.to_string(), rest[start..end].to_vec()));
+        pos = next;
     }
     Ok(out)
 }
@@ -164,6 +166,15 @@ mod tests {
         let c = vec![("a.killer".to_string(), b"1".to_vec()), ("b.killer".to_string(), b"3".to_vec())];
         assert_ne!(content_hash(&a), content_hash(&c));
         assert_eq!(sha256_hex(b"abc"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+    }
+
+    #[test]
+    fn unpack_huge_length_is_error_not_overflow() {
+        for len in [usize::MAX, usize::MAX - 1, usize::MAX - 8] {
+            let mut a = b"KPK1\n".to_vec();
+            a.extend_from_slice(format!("{} a.killer\nx\n", len).as_bytes());
+            assert!(unpack(&a).is_err());
+        }
     }
 
     #[test]
