@@ -2200,6 +2200,7 @@ impl BuiltinFunctions {
         }
         match &args[0] {
             Value::Number(n) => Ok(Value::Number(n.floor())),
+            Value::Integer(i) => Ok(Value::Integer(*i)),
             _ => Err(VmError::runtime_error(
                 "floor() expects a number".to_string(),
             )),
@@ -2214,10 +2215,33 @@ impl BuiltinFunctions {
         }
         match &args[0] {
             Value::Number(n) => Ok(Value::Number(n.ceil())),
+            Value::Integer(i) => Ok(Value::Integer(*i)),
             _ => Err(VmError::runtime_error(
                 "ceil() expects a number".to_string(),
             )),
         }
+    }
+
+    /// Round `n` to `digits` decimals using the exact decimal value of the double
+    /// (so 1.005 -> 1.0 since it is really 1.00499999...), with exact ties away from zero.
+    fn round_decimal(n: f64, digits: usize) -> f64 {
+        if !n.is_finite() || digits > 300 {
+            return n;
+        }
+        // An exact tie is only possible when n * 10^digits is exactly representable.
+        let scale = 10f64.powi(digits as i32);
+        let scaled = n * scale;
+        if scaled.is_finite() && scaled.fract().abs() == 0.5 && scaled / scale == n {
+            // the decimal expansion with one more digit must be exactly ...5 to be a true tie
+            // (a double has at most 1074 fractional digits; 1100 shows its full exact expansion)
+            let exact = format!("{:.1100}", n.abs());
+            let frac = exact.split('.').nth(1).unwrap_or("");
+            let tail = frac.get(digits..).unwrap_or("");
+            if tail.starts_with('5') && tail[1..].bytes().all(|c| c == b'0') {
+                return scaled.round() / scale;
+            }
+        }
+        format!("{:.*}", digits, n).parse::<f64>().unwrap_or(n)
     }
 
     fn round(args: &[Value]) -> Result<Value, VmError> {
@@ -2234,14 +2258,13 @@ impl BuiltinFunctions {
             };
             return match &args[0] {
                 Value::BigInt(_) if digits >= 0 => Ok(args[0].clone()),
+                Value::Integer(_) if digits >= 0 => Ok(args[0].clone()),
                 Value::Number(n) if !n.is_finite() => Ok(Value::Number(*n)),
                 Value::Number(n) => {
-                    let scale = 10f64.powi(digits.abs());
                     let r = if digits >= 0 {
-                        // scaling can overflow for huge x; such values have no fraction to round anyway
-                        let s = n * scale;
-                        if s.is_finite() { s.round() / scale } else { *n }
+                        Self::round_decimal(*n, digits as usize)
                     } else {
+                        let scale = 10f64.powi(digits.abs());
                         (n / scale).round() * scale
                     };
                     Ok(Value::Number(r))
@@ -2251,6 +2274,7 @@ impl BuiltinFunctions {
         }
         match &args[0] {
             Value::Number(n) => Ok(Value::Number(n.round())),
+            Value::Integer(i) => Ok(Value::Integer(*i)),
             _ => Err(VmError::runtime_error(
                 "round() expects a number".to_string(),
             )),
@@ -2726,31 +2750,74 @@ impl BuiltinFunctions {
                 "parseInt() expects 1 or 2 arguments".to_string(),
             ));
         }
+        let nan = Ok(Value::Number(f64::NAN));
+        // radix: absent/0 -> 10 (or 16 with 0x prefix); valid range 2..=36 else NaN
+        let mut radix: u32 = 0;
+        if let Some(r) = args.get(1) {
+            match r {
+                Value::Number(n) if n.is_finite() => {
+                    let t = n.trunc();
+                    if t != 0.0 {
+                        if !(2.0..=36.0).contains(&t) { return nan; }
+                        radix = t as u32;
+                    }
+                }
+                Value::Integer(i) => {
+                    if *i != 0 {
+                        if !(2..=36).contains(i) { return nan; }
+                        radix = *i as u32;
+                    }
+                }
+                Value::Null => {}
+                _ => return nan,
+            }
+        }
         match &args[0] {
             Value::Str(s) => {
-                let trimmed = s.trim();
-                let mut num_str = String::new();
-                for ch in trimmed.chars() {
-                    if ch.is_ascii_digit() || (num_str.is_empty() && (ch == '+' || ch == '-')) {
-                        num_str.push(ch);
-                    } else {
-                        break;
+                let t = s.trim();
+                let (neg, rest) = match t.strip_prefix('-') {
+                    Some(r) => (true, r),
+                    None => (false, t.strip_prefix('+').unwrap_or(t)),
+                };
+                let mut rest = rest;
+                if (radix == 0 || radix == 16)
+                    && (rest.starts_with("0x") || rest.starts_with("0X"))
+                {
+                    rest = &rest[2..];
+                    radix = 16;
+                }
+                let radix = if radix == 0 { 10 } else { radix };
+                let mut acc: f64 = 0.0;
+                let mut exact: Option<i128> = Some(0);
+                let mut any = false;
+                for ch in rest.chars() {
+                    match ch.to_digit(radix) {
+                        Some(d) => {
+                            any = true;
+                            acc = acc * radix as f64 + d as f64;
+                            exact = exact
+                                .and_then(|e| e.checked_mul(radix as i128))
+                                .and_then(|e| e.checked_add(d as i128));
+                        }
+                        None => break,
                     }
                 }
-                if num_str.is_empty() || num_str == "+" || num_str == "-" {
-                    Ok(Value::Number(f64::NAN))
-                } else {
-                    match num_str.parse::<i64>() {
-                        Ok(n) => Ok(Value::Number(n as f64)),
-                        Err(_) => Ok(Value::Number(f64::NAN)),
-                    }
-                }
+                if !any { return nan; }
+                // Exact integer accumulation when it fits i128, else the f64 accumulation (Number rules).
+                let v = match exact {
+                    Some(e) => e as f64,
+                    None => acc,
+                };
+                Ok(Value::Number(if neg { -v } else { v }))
             }
-            Value::Number(n) => Ok(Value::Number(n.floor())),
-            _ => Ok(Value::Number(f64::NAN)),
+            Value::Number(n) => Ok(Value::Number(if n.is_finite() { n.trunc() } else { f64::NAN })),
+            Value::Integer(i) => Ok(Value::Integer(*i)),
+            _ => nan,
         }
     }
 
+    /// parseFloat: longest valid decimal prefix `[+-]digits[.digits][e[+-]digits]`
+    /// (e.g. "3.5abc" -> 3.5). Words like "inf"/"nan"/"Infinity" are NaN.
     fn parse_float(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 1 {
             return Err(VmError::runtime_error(
@@ -2759,12 +2826,34 @@ impl BuiltinFunctions {
         }
         match &args[0] {
             Value::Str(s) => {
-                match s.trim().parse::<f64>() {
-                    Ok(n) => Ok(Value::Number(n)),
-                    Err(_) => Ok(Value::Number(f64::NAN)),
+                let t = s.trim();
+                let b = t.as_bytes();
+                let mut i = 0;
+                if i < b.len() && (b[i] == b'+' || b[i] == b'-') { i += 1; }
+                let int_start = i;
+                while i < b.len() && b[i].is_ascii_digit() { i += 1; }
+                let mut digits = i - int_start;
+                if i < b.len() && b[i] == b'.' {
+                    let mut j = i + 1;
+                    while j < b.len() && b[j].is_ascii_digit() { j += 1; }
+                    let frac = j - i - 1;
+                    if digits > 0 || frac > 0 {
+                        digits += frac;
+                        i = j;
+                    }
                 }
+                if digits == 0 { return Ok(Value::Number(f64::NAN)); }
+                if i < b.len() && (b[i] == b'e' || b[i] == b'E') {
+                    let mut j = i + 1;
+                    if j < b.len() && (b[j] == b'+' || b[j] == b'-') { j += 1; }
+                    let es = j;
+                    while j < b.len() && b[j].is_ascii_digit() { j += 1; }
+                    if j > es { i = j; }
+                }
+                Ok(Value::Number(t[..i].parse::<f64>().unwrap_or(f64::NAN)))
             }
             Value::Number(n) => Ok(Value::Number(*n)),
+            Value::Integer(i) => Ok(Value::Number(*i as f64)),
             _ => Ok(Value::Number(f64::NAN)),
         }
     }
@@ -12536,3 +12625,46 @@ fn days_before_year(year: i32) -> i64 {
     y * 365 + leap_years
 }
 
+
+
+#[cfg(test)]
+mod fix_c_builtin_tests {
+    use super::*;
+
+    fn num(v: Result<Value, VmError>) -> f64 {
+        match v.unwrap() { Value::Number(n) => n, other => panic!("not number: {:?}", other) }
+    }
+
+    #[test]
+    fn parse_int_truncates_radix_and_big() {
+        assert_eq!(num(BuiltinFunctions::parse_int(&[Value::Number(-3.7)])), -3.0);
+        assert_eq!(num(BuiltinFunctions::parse_int(&[Value::Str("ff".into()), Value::Number(16.0)])), 255.0);
+        assert_eq!(num(BuiltinFunctions::parse_int(&[Value::Str("101".into()), Value::Number(2.0)])), 5.0);
+        assert!(num(BuiltinFunctions::parse_int(&[Value::Str("1".into()), Value::Number(37.0)])).is_nan());
+        let big = num(BuiltinFunctions::parse_int(&[Value::Str("99999999999999999999".into())]));
+        assert!(big > 9.9e19 && big < 1.1e20);
+        assert_eq!(num(BuiltinFunctions::parse_int(&[Value::Str("42abc".into())])), 42.0);
+    }
+
+    #[test]
+    fn parse_float_prefix_and_words() {
+        assert_eq!(num(BuiltinFunctions::parse_float(&[Value::Str("3.5abc".into())])), 3.5);
+        assert_eq!(num(BuiltinFunctions::parse_float(&[Value::Str("1e3".into())])), 1000.0);
+        assert!(num(BuiltinFunctions::parse_float(&[Value::Str("inf".into())])).is_nan());
+        assert!(num(BuiltinFunctions::parse_float(&[Value::Str("nan".into())])).is_nan());
+        assert!(num(BuiltinFunctions::parse_float(&[Value::Str("Infinity".into())])).is_nan());
+    }
+
+    #[test]
+    fn round_floor_ceil_integer_and_decimal() {
+        assert!(matches!(BuiltinFunctions::round(&[Value::Integer(5)]), Ok(Value::Integer(5))));
+        assert!(matches!(BuiltinFunctions::floor(&[Value::Integer(5)]), Ok(Value::Integer(5))));
+        assert!(matches!(BuiltinFunctions::ceil(&[Value::Integer(5)]), Ok(Value::Integer(5))));
+        assert_eq!(num(BuiltinFunctions::round(&[Value::Number(1.005), Value::Number(2.0)])), 1.0);
+        assert_eq!(num(BuiltinFunctions::round(&[Value::Number(1.255), Value::Number(2.0)])), 1.25);
+        assert_eq!(num(BuiltinFunctions::round(&[Value::Number(2.5), Value::Number(0.0)])), 3.0);
+        assert_eq!(num(BuiltinFunctions::round(&[Value::Number(0.125), Value::Number(2.0)])), 0.13);
+        assert_eq!(num(BuiltinFunctions::round(&[Value::Number(-0.125), Value::Number(2.0)])), -0.13);
+        assert_eq!(num(BuiltinFunctions::round(&[Value::Number(1.15), Value::Number(1.0)])), 1.1);
+    }
+}
