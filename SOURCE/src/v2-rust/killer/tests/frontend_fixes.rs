@@ -99,3 +99,12 @@ fn compound_assignment_and_chained_comparison_evaluate_once() {
                println(1 in [1, 2] == true)\n";
     assert_eq!(run(src), "15\n1\n16\n2\ntrue\n1\nfalse\n1\nfalse\n1\ntrue");
 }
+
+#[test]
+fn switch_empty_case_warns_and_does_not_fall_through() {
+    let src = "x = 1\nswitch x {\n  case 1:\n  case 2:\n    println(\"two\")\n}\nswitch 2 {\n  case 1, 2:\n    println(\"shared\")\n}\n";
+    let out = run(src);
+    assert!(out.contains("warning") && out.contains("no fall-through"), "{out}");
+    assert!(!out.contains("two"), "{out}");
+    assert!(out.contains("shared"), "{out}");
+}

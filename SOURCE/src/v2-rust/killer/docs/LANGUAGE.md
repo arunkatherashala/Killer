@@ -656,6 +656,14 @@ switch x {
 # expect: two
 ```
 
+`switch` never falls through: each `case` runs only its own body, so an empty `case 1:` body does
+nothing (the compiler prints a warning when an empty case is followed by another label). To share one
+body between values, list them together: `case 1, 2:`.
+
+An `if / else if / else` chain that is the last statement of a function, with a bare expression ending
+every branch, returns the value of the branch that ran (`kfn fib(n) { if n <= 1 { n } else { fib(n - 1) + fib(n - 2) } }`).
+Without a final `else`, or anywhere else in a function, the values are discarded.
+
 ## Scope
 
 Killer follows Python's rule. A plain assignment `x = ...` creates a variable for the whole function
