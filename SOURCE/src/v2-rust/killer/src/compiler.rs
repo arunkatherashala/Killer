@@ -3840,7 +3840,11 @@ fn compile_expr_str(
         // opening `(` closes early (e.g. `(a)*(b)`) and this is NOT a simple grouping.
         let mut depth = 0i32;
         let mut valid = true;
+        let in_string = crate::exprsplit::string_mask(expr);
         for (i, ch) in expr.char_indices() {
+            if in_string[i] {
+                continue;
+            }
             match ch {
                 '(' => depth += 1,
                 ')' => {
@@ -4082,7 +4086,7 @@ fn compile_expr_str(
         return Ok(());
     }
 
-    if let Ok(n) = expr.parse::<f64>() {
+    if let Some(n) = crate::exprsplit::parse_number_literal(expr) {
         state.instructions.push(Instruction::ConstNum(n));
         return Ok(());
     }
@@ -7309,6 +7313,10 @@ fn strip_trailing_line_comment(content: &str) -> &str {
             break;
         }
         match bytes[j] {
+            b'\\' if in_str => {
+                j += 2; // skip the escaped character (e.g. `\"`)
+                continue;
+            }
             b'"' => in_str = !in_str,
             39 if !in_str => in_sq = !in_sq, // single quote
             // Python-style trailing `# comment`: only after whitespace and some code, so `#[derive]`

@@ -141,7 +141,7 @@ pub fn silent_floor_division(source: &str) -> Option<usize> {
                 None => {
                     if c == b'"' || c == b'\'' || c == b'`' {
                         quote = Some(c);
-                    } else if c == b'#' {
+                    } else if c == b'#' || (c == b'-' && b.get(i + 1) == Some(&b'-')) {
                         break;
                     } else if c == b'/' && b.get(i + 1) == Some(&b'/') {
                         found = Some(i);

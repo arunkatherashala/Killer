@@ -152,10 +152,39 @@ impl Expander {
     /// Expand `source` (the file with index `file_idx`) into `out`, recording the origin of every
     /// line that ends in a newline. An unterminated last line is left for the caller to finish.
     fn expand(&mut self, source: &str, file_idx: u32, dir: &Path, depth: usize, out: &mut String) -> Result<(), String> {
+        let mut in_triple = false;
+        let mut poly_depth = 0i32;
         for (n, line) in source.split_inclusive('\n').enumerate() {
             let here = Loc { file: file_idx, line: n as u32 + 1 };
             let terminated = line.ends_with('\n');
-            let Some((path, quoted)) = import_target(line) else {
+            // `import` lines inside a multi-line string or an `@lang { }` block are text, not imports.
+            let verbatim = if poly_depth > 0 {
+                poly_depth += line.matches('{').count() as i32 - line.matches('}').count() as i32;
+                true
+            } else if in_triple {
+                if line.matches("\"\"\"").count() % 2 == 1 {
+                    in_triple = false;
+                }
+                true
+            } else {
+                let t = line.trim();
+                let head = match t.split_once('=') {
+                    Some((l, r)) if !l.trim().is_empty() && l.trim().chars().all(|c| c.is_alphanumeric() || c == '_') => r.trim_start(),
+                    _ => t,
+                };
+                if head.starts_with('@') && head.contains('{') {
+                    let open = head.matches('{').count() as i32 - head.matches('}').count() as i32;
+                    poly_depth = open.max(0);
+                    true
+                } else {
+                    if line.matches("\"\"\"").count() % 2 == 1 {
+                        in_triple = true;
+                    }
+                    false
+                }
+            };
+            let target = if verbatim { None } else { import_target(line) };
+            let Some((path, quoted)) = target else {
                 out.push_str(line);
                 if terminated {
                     self.locs.push(here);

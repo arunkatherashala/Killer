@@ -242,7 +242,7 @@ fn infer(expr: &str, env: &Env, fns: &HashMap<String, FnSig>) -> Ty {
     if chars[0] == '{' && matching(&chars, 0) == Some(chars.len() - 1) {
         return Ty::Dict;
     }
-    if e.parse::<f64>().is_ok() {
+    if crate::exprsplit::parse_number_literal(e).is_some() {
         return Ty::Number;
     }
     if let Some(rest) = e.strip_prefix('-') {
