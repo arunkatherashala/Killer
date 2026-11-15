@@ -67,7 +67,8 @@ def run_one(item):
 
 def main():
     if not os.path.exists(BIN):
-        sys.exit("build first: cargo build --release --bin killer_super")
+        print("build first: cargo build --release --bin killer_super (binary not found: %s)" % BIN, file=sys.stderr)
+        return 2
     with ThreadPoolExecutor(max_workers=8) as ex:
         results = list(ex.map(run_one, P))
     with open(os.path.join(HERE, "results.json"), "w", encoding="utf-8") as f:
@@ -84,7 +85,12 @@ def main():
         print("  %-16s %3d/%-3d" % (cat, p, len(rs)))
     if "--md" in sys.argv:
         write_md(results, by_cat, passed, total)
-    return 0
+    return exit_code(passed, total)
+
+
+def exit_code(passed, total):
+    """0 only when every probe passed; 1 otherwise (so CI can gate on it)."""
+    return 0 if total > 0 and passed == total else 1
 
 
 def write_md(results, by_cat, passed, total):
@@ -115,4 +121,10 @@ def write_md(results, by_cat, passed, total):
 
 
 if __name__ == "__main__":
+    if "--selftest" in sys.argv:
+        assert exit_code(3, 3) == 0
+        assert exit_code(2, 3) == 1
+        assert exit_code(0, 0) == 1
+        print("selftest ok")
+        sys.exit(0)
     sys.exit(main())

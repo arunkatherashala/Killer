@@ -53,6 +53,25 @@ documentation examples also pass on GitHub's Linux (x86-64), macOS (Apple Silico
 - **Quiet-machine timings:** the benchmarks were measured on a loaded machine; use CPU-time numbers in
   `bench/RESULTS.md` as indicative.
 
+## Archived code (not features)
+
+Dead code was moved out of `src/` with `git mv` (history kept, nothing deleted):
+
+- `archive/uncompiled/src/`: 12 files that were never declared as modules and so never compiled:
+  `contract_programming`, `dependent_types` (+ `_ast`, `_check`, `_integration`), `effect_handlers`,
+  `effect_system`, `message_passing`, `trait_system`, `type_checking_runtime`, `vm_integration`,
+  `vm_v2_components`. **Dependent types, an effect system, and the trait system described in older design docs are
+  not implemented.** `cluster_coordinator.rs` stayed in `src/` (still named by the feature-gated
+  `tests/cluster_demo.rs`, which does not compile because the module is not declared); `ghost_vm_sha.rs` and
+  `mcp_minjson.rs` stayed because `ghost_vm.rs` and `bin/killer_mcp.rs` include them with `#[path]`.
+- `archive/stubs/`: 33 declared-but-empty modules of 7-21 lines that nothing referenced (abac, concurrency_solver,
+  database_mongodb, database_postgresql, database_query, distributed_tracing, file_upload, game_theory, graphql,
+  hlc, io_solver, load_balancer, locks, math_impl, medical_biomedical, message_queue, middleware,
+  millennium_prize, network_science, oauth2, paxos, raft, rbac, request_response, service_discovery, sessions,
+  signal_processing, state_machines, statistics_solver, template_engine, time_solver, token_introspection,
+  type_solver). They exposed no working functions, so listing them as features was misleading. Their `pub mod`
+  lines were removed from `src/lib.rs`; to restore one, `git mv` it back and re-add the line.
+
 ## Known limits (honest list)
 
 - Indexing a very long ASCII string (`s[i]` plus `len(s)` in a loop over 200k characters) is linear per

@@ -75,7 +75,7 @@ Located in `/DOCS/` directory:
 │       ├── actor_model.rs           ← Concurrency (actors)
 │       ├── async_runtime.rs         ← Async/await support
 │       ├── type_system.rs           ← Type checking & inference
-│       ├── dependent_types.rs       ← Compile-time constraints
+│       ├── dependent_types.rs       ← not implemented (archived)
 │       ├── simd_ops.rs              ← Vector operations (2-4x)
 │       ├── seccomp.rs               ← Security (Assassin Layer)
 │       ├── ai.rs                    ← LLM integration
@@ -89,10 +89,10 @@ Located in `/DOCS/` directory:
 │       │   ├── phase_41_*.rs        (Templates - Mail-merge, Invoices)
 │       │   └── phase_42_*.rs        (Advanced Templates - Filters, Loops)
 │       ├── stdlib/                  ← Standard library (454 functions)
-│       │   ├── math_impl.rs         (75 functions)
-│       │   ├── statistics_solver.rs (34 functions)
+│       │   ├── math_impl.rs         (archived stub, not implemented)
+│       │   ├── statistics_solver.rs (archived stub, not implemented)
 │       │   ├── cryptography_*.rs    (35 functions)
-│       │   ├── io_solver.rs         (37 functions)
+│       │   ├── io_solver.rs         (archived stub, not implemented)
 │       │   └── 8+ more stdlib files
 │       └── tests/                   ← Unit tests (11,000+)
 │

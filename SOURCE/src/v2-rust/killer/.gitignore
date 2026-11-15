@@ -31,3 +31,28 @@ bench_spawn.ghst
 
 # Rewritten by every test run
 test_results.txt
+
+# Generated build/test logs at crate root (untracked; keep test.txt, test_data.txt, lines.txt which tests use)
+build*.txt
+check*.txt
+clippy_output.txt
+cluster_test.txt
+compile_output.txt
+full_test_run*.txt
+ghost_out3.txt
+profiler_results.txt
+spark_*_test*.txt
+t1.txt
+t2.txt
+test_all_fixed.txt
+test_errors.txt
+test_final*.txt
+test_log.txt
+test_memory.txt
+test_output*.txt
+test_results_*.txt
+test_scheduler.txt
+test_thermal*.txt
+test_tri.txt
+*_out.txt
+cargo_test*.log

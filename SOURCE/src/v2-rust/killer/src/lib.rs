@@ -210,65 +210,14 @@ pub mod stdlib_builder;
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Standard Library Implementation - Phase 21-28 Solvers (NOW IMPLEMENTED)
-// 600+ functions across all scientific, technical, and infrastructure domains
+// (33 tiny placeholder modules for these domains were archived to archive/stubs/ - see docs/STATUS.md)
 // ══════════════════════════════════════════════════════════════════════════════
-
-#[doc(hidden)]
-pub mod math_impl;
 
 #[doc(hidden)]
 pub mod linear_algebra;
 
-/// Statistics: 50+ functions (descriptive, distributions, hypothesis testing, correlation)
-pub mod statistics_solver;
-
-#[doc(hidden)]
-pub mod game_theory;
-
 #[doc(hidden)]
 pub mod cryptography_solver;
-
-/// Network Science: 40+ functions (centrality, clustering, algorithms, community detection)
-pub mod network_science;
-
-#[doc(hidden)]
-pub mod signal_processing;
-
-/// Medical & Biomedical: 43+ functions (pharmacokinetics, epidemiology, diagnostics, clinical metrics)
-pub mod medical_biomedical;
-
-/// Millennium Prize Problems: 20+ functions (P vs NP, Riemann hypothesis, Navier-Stokes, Yang-Mills)
-pub mod millennium_prize;
-
-#[doc(hidden)]
-pub mod io_solver;
-
-/// Time & Scheduling: 40+ functions (current time, calculations, scheduling, timers, formatting)
-pub mod time_solver;
-
-/// Type System: 40+ functions (type introspection, reflection, classification, constraints)
-pub mod type_solver;
-
-#[doc(hidden)]
-pub mod concurrency_solver;
-
-#[doc(hidden)]
-pub mod database_mongodb;
-
-#[doc(hidden)]
-pub mod database_postgresql;
-
-#[doc(hidden)]
-pub mod database_query;
-
-#[doc(hidden)]
-pub mod request_response;
-
-#[doc(hidden)]
-pub mod middleware;
-
-/// Template Engine: 55+ functions (parsing, variable interpolation, filters, loops, rendering, caching)
-pub mod template_engine;
 
 #[doc(hidden)]
 pub mod session;
@@ -277,58 +226,10 @@ pub mod session;
 pub mod auth;
 
 #[doc(hidden)]
-pub mod graphql;
-
-#[doc(hidden)]
-pub mod file_upload;
-
-#[doc(hidden)]
 pub mod streaming;
 
 /// Server-Sent Events: 50+ functions (connection management, event publishing, formats, client management, channels)
 pub mod sse;
-
-#[doc(hidden)]
-pub mod oauth2;
-
-#[doc(hidden)]
-pub mod rbac;
-
-#[doc(hidden)]
-pub mod abac;
-
-#[doc(hidden)]
-pub mod sessions;
-
-#[doc(hidden)]
-pub mod token_introspection;
-
-#[doc(hidden)]
-pub mod service_discovery;
-
-#[doc(hidden)]
-pub mod load_balancer;
-
-#[doc(hidden)]
-pub mod message_queue;
-
-#[doc(hidden)]
-pub mod distributed_tracing;
-
-#[doc(hidden)]
-pub mod raft;
-
-#[doc(hidden)]
-pub mod paxos;
-
-#[doc(hidden)]
-pub mod hlc;
-
-#[doc(hidden)]
-pub mod locks;
-
-#[doc(hidden)]
-pub mod state_machines;
 
 // Async/Await - Non-blocking I/O and async functions
 pub mod async_await;
