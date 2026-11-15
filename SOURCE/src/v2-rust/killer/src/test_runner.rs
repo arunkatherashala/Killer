@@ -17,14 +17,37 @@ use std::time::Instant;
 use crate::error::VmError;
 
 /// Discover and run test files, printing results in TAP-like format.
-pub fn run_test_suite(pattern: &str) -> Result<(), VmError> {
-    let search_dir = if std::path::Path::new(pattern).is_dir() {
+/// True when `arg` is written like a path (separator, `.killer` suffix or leading `.`/`~`)
+/// rather than a plain name filter.
+fn looks_like_path(arg: &str) -> bool {
+    arg != "."
+        && (arg.contains('/') || arg.contains('\\') || arg.ends_with(".killer") || arg.starts_with('.') || arg.starts_with('~'))
+}
+
+/// Resolve the CLI argument into the list of files to run. A path that does not exist is an
+/// error (not a filter that silently matches nothing); a path that yields no tests is an error.
+fn resolve_test_files(pattern: &str) -> Result<Vec<PathBuf>, String> {
+    let p = std::path::Path::new(pattern);
+    if p.is_file() {
+        return Ok(vec![p.to_path_buf()]);
+    }
+    if !p.exists() && looks_like_path(pattern) {
+        return Err(format!("test path '{pattern}' does not exist"));
+    }
+    let search_dir = if p.is_dir() {
         PathBuf::from(pattern)
     } else {
         std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
     };
-
     let files = discover_test_files(&search_dir, pattern);
+    if files.is_empty() && pattern != "." {
+        return Err(format!("no test files found matching '{pattern}'"));
+    }
+    Ok(files)
+}
+
+pub fn run_test_suite(pattern: &str) -> Result<(), VmError> {
+    let files = resolve_test_files(pattern).map_err(VmError::runtime_error)?;
 
     if files.is_empty() {
         println!("No test files found matching '{pattern}'");
@@ -119,6 +142,22 @@ fn discover_test_files(dir: &std::path::Path, pattern: &str) -> Vec<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn missing_path_is_an_error() {
+        assert!(resolve_test_files("no/such/dir_xyz").is_err());
+        assert!(resolve_test_files("missing_file_xyz.killer").is_err());
+        assert!(run_test_suite("no/such/dir_xyz").is_err());
+    }
+
+    #[test]
+    fn empty_dir_path_is_an_error() {
+        let tmp = std::env::temp_dir().join("killer_test_runner_empty_err");
+        let _ = std::fs::create_dir_all(&tmp);
+        let r = resolve_test_files(&tmp.to_string_lossy());
+        let _ = std::fs::remove_dir(&tmp);
+        assert!(r.is_err());
+    }
 
     #[test]
     fn test_discover_empty_dir() {
