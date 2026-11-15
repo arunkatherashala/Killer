@@ -612,9 +612,9 @@ pgo_engine.rs      - Profile-Guided Optimization
 ```
 async_runtime.rs   - Futures, tasks, non-blocking I/O
 actor_model.rs     - Actor spawning, message passing
-dependent_types.rs - Compile-time bounds checking
+dependent_types.rs - NOT IMPLEMENTED (archived, never compiled)
 type_system.rs     - Type inference, specialization
-effect_system.rs   - Effect tracking (!{ IO })
+effect_system.rs   - NOT IMPLEMENTED (archived, never compiled)
 ```
 
 **Enterprise Features** (Security, AI, Databases)
@@ -626,21 +626,23 @@ database.rs        - SQLite, Postgres support
 http_server.rs     - HTTP/WebSocket support
 ```
 
-### **Standard Library (454 Functions)**
+### **Standard Library**
+
+Note: the per-module function counts that used to be listed here were wrong for the modules marked ARCHIVED; those were 7-20 line placeholder stubs, now in `archive/stubs/`.
 
 ```
-math_impl           75 functions   (Trig, exp, stats, special)
+math_impl           ARCHIVED (placeholder stub, not implemented)  (Trig, exp, stats, special)
 linear_algebra      20 functions   (Matrix ops, decompositions)
-statistics_solver   34 functions   (Distributions, regression)
+statistics_solver   ARCHIVED (placeholder stub, not implemented)  (Distributions, regression)
 cryptography        35 functions   (RSA, ECDH, signatures)
-signal_processing   28 functions   (FFT, filtering, STFT)
-network_science     17 functions   (Graph algorithms)
-game_theory         20 functions   (Nash, auctions)
-medical_biomedical  43 functions   (Pharmacokinetics, genetics)
-io_solver           37 functions   (File, binary, serialization)
-time_solver         37 functions   (Unix time, scheduling)
-type_solver         38 functions   (Introspection, conversion)
-concurrency_solver  50 functions   (Atomics, synchronization)
+signal_processing   ARCHIVED (placeholder stub, not implemented)  (FFT, filtering, STFT)
+network_science     ARCHIVED (placeholder stub, not implemented)  (Graph algorithms)
+game_theory         ARCHIVED (placeholder stub, not implemented)  (Nash, auctions)
+medical_biomedical  ARCHIVED (placeholder stub, not implemented)  (Pharmacokinetics, genetics)
+io_solver           ARCHIVED (placeholder stub, not implemented)  (File, binary, serialization)
+time_solver         ARCHIVED (placeholder stub, not implemented)  (Unix time, scheduling)
+type_solver         ARCHIVED (placeholder stub, not implemented)  (Introspection, conversion)
+concurrency_solver  ARCHIVED (placeholder stub, not implemented)  (Atomics, synchronization)
 ```
 
 ---
