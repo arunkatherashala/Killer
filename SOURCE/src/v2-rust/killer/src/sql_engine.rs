@@ -301,10 +301,14 @@ enum Stmt {
     Delete { table: String, filter: Option<Expr> },
 }
 
+/// Deepest nesting of expressions the parser accepts (guards the stack).
+const MAX_EXPR_DEPTH: usize = 200;
+
 struct Parser {
     t: Vec<Tok>,
     p: usize,
     params: usize,
+    depth: usize,
 }
 
 fn kw(t: &Tok, word: &str) -> bool {
@@ -378,7 +382,20 @@ impl Parser {
         }
     }
 
+    fn enter(&mut self) -> Result<(), VmError> {
+        self.depth += 1;
+        if self.depth > MAX_EXPR_DEPTH {
+            return err(format!("sql: expression nested deeper than {} levels", MAX_EXPR_DEPTH));
+        }
+        Ok(())
+    }
     fn expr(&mut self) -> Result<Expr, VmError> {
+        self.enter()?;
+        let r = self.expr_inner();
+        self.depth -= 1;
+        r
+    }
+    fn expr_inner(&mut self) -> Result<Expr, VmError> {
         let mut l = self.and()?;
         while self.accept_kw("or") {
             l = Expr::Bin("or".into(), Box::new(l), Box::new(self.and()?));
@@ -394,7 +411,10 @@ impl Parser {
     }
     fn not(&mut self) -> Result<Expr, VmError> {
         if self.accept_kw("not") {
-            return Ok(Expr::Not(Box::new(self.not()?)));
+            self.enter()?;
+            let r = self.not();
+            self.depth -= 1;
+            return Ok(Expr::Not(Box::new(r?)));
         }
         self.cmp()
     }
@@ -466,7 +486,10 @@ impl Parser {
     }
     fn unary(&mut self) -> Result<Expr, VmError> {
         if self.accept_sym("-") {
-            return Ok(Expr::Neg(Box::new(self.unary()?)));
+            self.enter()?;
+            let r = self.unary();
+            self.depth -= 1;
+            return Ok(Expr::Neg(Box::new(r?)));
         }
         self.atom()
     }
@@ -562,7 +585,7 @@ impl Parser {
 }
 
 fn parse(sql: &str, given: usize) -> Result<Stmt, VmError> {
-    let mut p = Parser { t: tokenize(sql)?, p: 0, params: 0 };
+    let mut p = Parser { t: tokenize(sql)?, p: 0, params: 0, depth: 0 };
     let stmt = parse_stmt(&mut p)?;
     if p.p < p.t.len() {
         if p.peek_kw("union") || p.peek_kw("intersect") || p.peek_kw("except") {
@@ -968,15 +991,29 @@ fn cmp_op(op: &str, a: &Cell, b: &Cell) -> Option<bool> {
 fn like(text: &str, pat: &str) -> bool {
     let t: Vec<char> = text.to_lowercase().chars().collect();
     let p: Vec<char> = pat.to_lowercase().chars().collect();
-    fn go(t: &[char], p: &[char]) -> bool {
-        match p.first() {
-            None => t.is_empty(),
-            Some('%') => (0..=t.len()).any(|i| go(&t[i..], &p[1..])),
-            Some('_') => !t.is_empty() && go(&t[1..], &p[1..]),
-            Some(c) => t.first() == Some(c) && go(&t[1..], &p[1..]),
+    // iterative two-pointer match with backtracking to the last `%` (O(len(t) * len(p)) worst case)
+    let (mut i, mut j) = (0usize, 0usize);
+    let (mut star, mut mark): (Option<usize>, usize) = (None, 0);
+    while i < t.len() {
+        if j < p.len() && p[j] == '%' {
+            star = Some(j);
+            mark = i;
+            j += 1;
+        } else if j < p.len() && (p[j] == '_' || p[j] == t[i]) {
+            i += 1;
+            j += 1;
+        } else if let Some(sj) = star {
+            mark += 1;
+            i = mark;
+            j = sj + 1;
+        } else {
+            return false;
         }
     }
-    go(&t, &p)
+    while j < p.len() && p[j] == '%' {
+        j += 1;
+    }
+    j == p.len()
 }
 
 fn cell_text(c: &Cell) -> String {
@@ -1944,6 +1981,46 @@ mod tests {
         }
         assert!(matches!(exec(&mut db, "UPDATE u SET age = age + 1 WHERE name = 'Bo'", &[]), Value::Number(n) if n == 1.0));
         assert!(matches!(exec(&mut db, "DELETE FROM u WHERE age IS NULL", &[]), Value::Number(n) if n == 1.0));
+    }
+
+    #[test]
+    fn like_is_not_exponential() {
+        let text = "a".repeat(5000);
+        let pat = format!("{}b", "%a".repeat(40));
+        let t0 = std::time::Instant::now();
+        assert!(!like(&text, &pat));
+        assert!(like(&text, "%a%a%a%"));
+        assert!(like("", "%"));
+        assert!(!like("", "_"));
+        assert!(like("abcabc", "%c"));
+        assert!(t0.elapsed().as_secs() < 5);
+    }
+
+    #[test]
+    fn deeply_nested_expressions_are_rejected() {
+        // debug-build frames are large; the real interpreter thread has a 512 MB stack
+        std::thread::Builder::new()
+            .stack_size(64 * 1024 * 1024)
+            .spawn(|| {
+                let deep = format!("SELECT {}1{}", "(".repeat(5000), ")".repeat(5000));
+                assert!(parse(&deep, 0).is_err());
+                assert!(parse("SELECT ((1 + 2) * 3)", 0).is_ok());
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    #[test]
+    fn deep_not_rejected() {
+        let nots = format!("SELECT * FROM t WHERE {}1", "NOT ".repeat(5000));
+        assert!(parse(&nots, 0).is_err());
+    }
+
+    #[test]
+    fn deep_neg_rejected() {
+        let negs = format!("SELECT {}1", "-".repeat(5000));
+        assert!(parse(&negs, 0).is_err());
     }
 
     #[test]
