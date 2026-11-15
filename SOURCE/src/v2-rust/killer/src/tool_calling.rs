@@ -329,7 +329,7 @@ pub fn khlm_with_tools(prompt: &str) -> String {
                     tc.name,
                     serde_json_str(&tool_result)
                 ));
-                result_lines.push(format!("[Tool {} → {}]", tc.name, &tool_result[..tool_result.len().min(100)]));
+                result_lines.push(format!("[Tool {} → {}]", tc.name, crate::text_util::truncate_utf8(&tool_result, 100)));
             } else {
                 result_lines.push(line.to_string());
             }
@@ -369,7 +369,20 @@ fn serde_json_str(s: &str) -> String {
         .replace('\n', "\\n")
         .replace('\r', "\\r")
         .replace('\t', "\\t");
-    format!("\"{}\"", &escaped[..escaped.len().min(500)])
+    format!("\"{}\"", crate::text_util::truncate_utf8(&escaped, 500))
+}
+
+#[cfg(test)]
+mod utf8_tests {
+    use super::*;
+
+    #[test]
+    fn serde_json_str_truncates_on_char_boundary() {
+        // 'x' + 2-byte chars: byte 500 is mid-char
+        let s = format!("x{}", "\u{e9}".repeat(400));
+        let out = serde_json_str(&s);
+        assert!(out.starts_with('"'));
+    }
 }
 
 // --- Builtin dispatch functions -----------------------------------------------

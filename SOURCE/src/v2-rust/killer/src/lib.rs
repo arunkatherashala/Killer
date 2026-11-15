@@ -375,6 +375,7 @@ pub mod net_sock;              // real TCP / UDP / WebSocket sockets
 pub mod net_tls_server;       // TLS listener side (openssl s_server per connection)
 pub mod tool_path;               // absolute-path lookup of openssl / curl / powershell (no cwd, no relative PATH)
 pub mod lang_builtins;         // everyday builtins: ord/chr, padding, logs, stats, base64, sets
+pub mod text_util;             // UTF-8 safe truncation helpers
 pub mod text_methods;          // capitalize/title/find/count/zfill/is* and method-call fallback to builtins
 pub mod ordered_map;           // insertion-ordered map behind dictionaries
 pub mod controlflow;           // lowers match/switch/do-while/C-style for/destructuring for into core statements

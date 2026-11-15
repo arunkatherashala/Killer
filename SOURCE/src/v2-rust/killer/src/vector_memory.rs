@@ -390,7 +390,7 @@ pub fn builtin_vmem_search(args: &[Value]) -> Result<Value, VmError> {
         let mut out = format!("Vector Memory Search (top {} results):\n", results.len());
         for (i, r) in results.iter().enumerate() {
             let preview = if r.text.len() > 120 {
-                format!("{}...", &r.text[..120])
+                format!("{}...", crate::text_util::truncate_utf8(&r.text, 120))
             } else {
                 r.text.clone()
             };
@@ -470,5 +470,19 @@ pub fn builtin_vmem_set_threshold(args: &[Value]) -> Result<Value, VmError> {
         Ok(Value::Str(format!("Vector Memory: threshold set to {:.0}%", t * 100.0)))
     } else {
         Ok(Value::Str("Error: vector memory lock failed".to_string()))
+    }
+}
+
+#[cfg(test)]
+mod utf8_tests {
+    use super::*;
+
+    #[test]
+    fn search_preview_truncates_on_char_boundary() {
+        // 9 ASCII + 2-byte chars: byte 120 is mid-char
+        let text = format!("zebrazebr{}", "\u{e9}".repeat(100));
+        let _ = builtin_vmem_store(&[Value::Str("utf8k".into()), Value::Str(text)]).unwrap();
+        let out = builtin_vmem_search(&[Value::Str("zebrazebr".into()), Value::Number(5.0)]).unwrap();
+        assert!(matches!(out, Value::Str(_)));
     }
 }
