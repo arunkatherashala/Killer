@@ -1,17 +1,17 @@
+# TODO pin to SHA: third-party actions below are referenced by tag; SHAs could not be looked up offline.
 name: kpm CI
 
 on: [push, pull_request]
+
+permissions:
+  contents: read
 
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
+      - uses: dtolnay/rust-toolchain@stable
       - name: Test kpm
         working-directory: tools/kpm
-        run: cargo test --verbose
+        run: cargo test --verbose --locked

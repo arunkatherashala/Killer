@@ -1,3 +1,4 @@
+# TODO pin to SHA: third-party actions below are referenced by tag; SHAs could not be looked up offline.
 # Builds release binaries when a tag like v1.0.0 is pushed and attaches them
 # (plus SHA256 sums) to the GitHub release.
 # Manual dry run: Actions > release > Run workflow. It builds, tests and uploads the archives as
@@ -26,7 +27,7 @@ env:
   RELEASE_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || inputs.version || github.ref_name }}
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
@@ -78,7 +79,7 @@ jobs:
       # `killer` is the driver (run, fmt, test, ...); killer_super is the compiler pipeline.
       - name: Build killer and killer_super
         working-directory: SOURCE/src/v2-rust/killer
-        run: cargo build --release --bin killer --bin killer_super --target ${{ matrix.rust-target }}
+        run: cargo build --locked --release --bin killer --bin killer_super --target ${{ matrix.rust-target }}
 
       # macos-x64 is cross-compiled on an arm64 runner and cannot be executed there.
       - name: Smoke test
@@ -94,6 +95,12 @@ jobs:
           [ "$out" = "hello from killer" ]
           crate="$(sed -n 's/^version *= *"\([^"]*\)".*/\1/p' Cargo.toml | head -n 1)"
           "$bin" --version | grep -F "$crate"
+
+      # The header promises a dry run that tests, so run the library tests here (not on the cross-compiled macos-x64).
+      - name: Unit tests
+        if: matrix.target-name != 'macos-x64'
+        working-directory: SOURCE/src/v2-rust/killer
+        run: cargo test --locked --lib --target ${{ matrix.rust-target }}
 
       - name: Package (unix)
         if: matrix.archive == 'tar.gz'
@@ -138,6 +145,8 @@ jobs:
 
   publish:
     name: Publish release
+    permissions:
+      contents: write
     needs: build
     if: github.ref_type == 'tag'
     runs-on: ubuntu-latest

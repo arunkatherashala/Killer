@@ -1,3 +1,4 @@
+# TODO pin to SHA: third-party actions below are referenced by tag; SHAs could not be looked up offline.
 name: Killer CI
 
 on:
@@ -5,6 +6,9 @@ on:
     branches: [ main, develop, feature/assistant-ki ]
   pull_request:
     branches: [ main ]
+
+permissions:
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
@@ -27,12 +31,15 @@ jobs:
         working-directory: SOURCE/src/v2-rust/killer
         run: cargo check --all-targets
 
-      # Clippy and rustfmt are REPORT-ONLY: they never fail the build (the "|| true"
-      # is deliberate). Warnings are visible in the log but are not gating.
-      - name: Clippy lints (report-only, non-blocking)
+      # Clippy: correctness-level lints GATE the build (0 errors on the lib as of this change).
+      # The remaining style/complexity warnings (322 for `cargo clippy --lib`) are not gated.
+      # TODO: burn the 322 warnings down, then switch to `cargo clippy --all-targets -- -D warnings`.
+      - name: Clippy (correctness lints, blocking)
         working-directory: SOURCE/src/v2-rust/killer
-        run: cargo clippy 2>&1 || true
+        run: cargo clippy --lib --locked -- -D clippy::correctness
 
+      # rustfmt is still REPORT-ONLY: `cargo fmt --check` currently reports ~12000 diff lines because
+      # the tree was never formatted. TODO: run `cargo fmt` in one dedicated commit, then drop `|| true`.
       - name: Format check (report-only, non-blocking)
         working-directory: SOURCE/src/v2-rust/killer
         run: cargo fmt --check 2>&1 || true
@@ -54,7 +61,7 @@ jobs:
 
       - name: Run tests (lib + all integration tests)
         working-directory: SOURCE/src/v2-rust/killer
-        run: cargo test --tests --no-fail-fast
+        run: cargo test --locked --tests --no-fail-fast
         timeout-minutes: 40
 
       - name: Build debug binary for parity / docs checks
@@ -160,7 +167,7 @@ jobs:
 
       - name: Build release
         working-directory: SOURCE/src/v2-rust/killer
-        run: cargo build --release
+        run: cargo build --release --locked
 
       - name: Run performance baseline
         working-directory: SOURCE/src/v2-rust/killer
@@ -190,7 +197,7 @@ jobs:
 
       - name: Build release
         working-directory: SOURCE/src/v2-rust/killer
-        run: cargo build --release
+        run: cargo build --release --locked
 
       - name: Upload binary
         uses: actions/upload-artifact@v4
