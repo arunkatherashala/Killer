@@ -16,6 +16,8 @@ use std::io::{BufReader, Read, Seek, SeekFrom};
 
 pub const GGUF_MAGIC: u32 = 0x46554747;
 pub const GGUF_VERSION_MAX: u32 = 3;
+const MAX_TENSOR_DIMS: usize = 8;
+const MAX_ARRAY_DEPTH: usize = 4;
 
 // --- Value types -------------------------------------------------------------
 
@@ -193,21 +195,30 @@ pub struct TensorInfo {
 }
 
 impl TensorInfo {
-    pub fn n_elements(&self) -> u64 {
-        self.shape.iter().product()
+    /// Element count, `None` if the shape product overflows u64.
+    pub fn checked_n_elements(&self) -> Option<u64> {
+        self.shape.iter().try_fold(1u64, |acc, &d| acc.checked_mul(d))
     }
 
-    pub fn n_bytes(&self) -> u64 {
-        let n = self.n_elements() as usize;
-        let bpb = self.dtype.bytes_per_block();
-        let epb = self.dtype.elements_per_block();
+    /// Byte size of the tensor data, `None` on arithmetic overflow.
+    pub fn checked_n_bytes(&self) -> Option<u64> {
+        let n = self.checked_n_elements()?;
+        let bpb = self.dtype.bytes_per_block() as u64;
+        let epb = self.dtype.elements_per_block() as u64;
         match self.dtype {
-            GgmlType::F32 | GgmlType::F16 => (n * bpb) as u64,
-            _ => {
-                let n_blocks = (n + epb - 1) / epb;
-                (n_blocks * bpb) as u64
-            }
+            GgmlType::F32 | GgmlType::F16 => n.checked_mul(bpb),
+            _ => n.checked_add(epb - 1)?.checked_div(epb)?.checked_mul(bpb),
         }
+    }
+
+    /// Saturating element count (see `checked_n_elements`).
+    pub fn n_elements(&self) -> u64 {
+        self.checked_n_elements().unwrap_or(u64::MAX)
+    }
+
+    /// Saturating byte size (see `checked_n_bytes`).
+    pub fn n_bytes(&self) -> u64 {
+        self.checked_n_bytes().unwrap_or(u64::MAX)
     }
 }
 
@@ -226,6 +237,7 @@ impl GgufFile {
     /// Tensor data is NOT read into RAM — call `load_tensor_f32()` to load on demand.
     pub fn open(path: &str) -> Result<Self, String> {
         let file = File::open(path).map_err(|e| format!("Cannot open '{}': {}", path, e))?;
+        let file_len = file.metadata().map_err(|e| format!("Cannot stat '{}': {}", path, e))?.len();
         let mut r = BufReader::new(file);
 
         // Header
@@ -242,7 +254,10 @@ impl GgufFile {
         let n_kv      = read_u64(&mut r)? as usize;
 
         // Metadata
-        let mut metadata = HashMap::with_capacity(n_kv);
+        // Untrusted counts: never pre-allocate more than the file could possibly hold
+        // (every entry needs at least 8 bytes).
+        let max_entries = (file_len / 8) as usize;
+        let mut metadata = HashMap::with_capacity(n_kv.min(max_entries));
         for _ in 0..n_kv {
             let key = read_string(&mut r)?;
             let val = read_value(&mut r)?;
@@ -250,10 +265,13 @@ impl GgufFile {
         }
 
         // Tensor info
-        let mut tensors = HashMap::with_capacity(n_tensors);
+        let mut tensors = HashMap::with_capacity(n_tensors.min(max_entries));
         for _ in 0..n_tensors {
             let name   = read_string(&mut r)?;
             let n_dims = read_u32(&mut r)? as usize;
+            if n_dims > MAX_TENSOR_DIMS {
+                return Err(format!("Tensor '{}' has too many dimensions ({})", name, n_dims));
+            }
             let mut shape = Vec::with_capacity(n_dims);
             for _ in 0..n_dims { shape.push(read_u64(&mut r)?); }
             let type_id = read_u32(&mut r)?;
@@ -271,7 +289,26 @@ impl GgufFile {
             Some(GgufValue::U64(v)) => *v,
             _ => 32,
         };
-        let tensor_data_offset = (pos + alignment - 1) / alignment * alignment;
+        if alignment == 0 {
+            return Err("Invalid GGUF: general.alignment is 0".to_string());
+        }
+        let tensor_data_offset = pos
+            .checked_add(alignment - 1)
+            .map(|v| v / alignment * alignment)
+            .ok_or_else(|| "Invalid GGUF: alignment overflow".to_string())?;
+
+        // Validate every tensor against the real file size so later loads cannot
+        // overflow or allocate attacker-controlled amounts of memory.
+        for t in tensors.values() {
+            let n_bytes = t.checked_n_bytes()
+                .ok_or_else(|| format!("Tensor '{}' size overflows", t.name))?;
+            let end = tensor_data_offset.checked_add(t.offset)
+                .and_then(|v| v.checked_add(n_bytes))
+                .ok_or_else(|| format!("Tensor '{}' offset overflows", t.name))?;
+            if end > file_len {
+                return Err(format!("Tensor '{}' extends past end of file", t.name));
+            }
+        }
 
         Ok(GgufFile {
             metadata,
@@ -284,14 +321,25 @@ impl GgufFile {
 
     // -- Tensor loading ------------------------------------------------------
 
+    /// Checked (absolute offset, byte length) of a tensor in the file.
+    fn tensor_span(&self, info: &TensorInfo) -> Result<(u64, usize), String> {
+        let n_bytes = info.checked_n_bytes()
+            .ok_or_else(|| format!("Tensor '{}' size overflows", info.name))?;
+        let abs = self.tensor_data_offset.checked_add(info.offset)
+            .ok_or_else(|| format!("Tensor '{}' offset overflows", info.name))?;
+        abs.checked_add(n_bytes)
+            .ok_or_else(|| format!("Tensor '{}' extends past u64", info.name))?;
+        let n = usize::try_from(n_bytes).map_err(|_| format!("Tensor '{}' too large", info.name))?;
+        Ok((abs, n))
+    }
+
     /// Load raw quantized bytes for a tensor — no dequantization.
     /// Returns `(raw_bytes, dtype, shape)`.  Use for large weight matrices
     /// that you want to keep compact and dequantize one row at a time.
     pub fn load_tensor_raw(&self, name: &str) -> Result<(Vec<u8>, GgmlType, Vec<u64>), String> {
         let info = self.tensors.get(name)
             .ok_or_else(|| format!("Tensor '{}' not found", name))?;
-        let abs_offset = self.tensor_data_offset + info.offset;
-        let n_bytes    = info.n_bytes() as usize;
+        let (abs_offset, n_bytes) = self.tensor_span(info)?;
         let mut file = File::open(&self.file_path)
             .map_err(|e| format!("Reopen '{}': {}", self.file_path, e))?;
         file.seek(SeekFrom::Start(abs_offset))
@@ -307,8 +355,7 @@ impl GgufFile {
         let info = self.tensors.get(name)
             .ok_or_else(|| format!("Tensor '{}' not found", name))?;
 
-        let abs_offset = self.tensor_data_offset + info.offset;
-        let n_bytes    = info.n_bytes() as usize;
+        let (abs_offset, n_bytes) = self.tensor_span(info)?;
 
         let mut file = File::open(&self.file_path)
             .map_err(|e| format!("Reopen '{}': {}", self.file_path, e))?;
@@ -458,17 +505,21 @@ fn read_string<R: Read>(r: &mut R) -> Result<String, String> {
     if len > 4 * 1024 * 1024 {
         return Err(format!("String too long ({} bytes) — corrupt file?", len));
     }
-    let mut bytes = vec![0u8; len as usize];
-    r.read_exact(&mut bytes).map_err(|e| format!("read_string data: {}", e))?;
+    // read through `take` so a bogus length cannot force a large up-front allocation
+    let mut bytes = Vec::new();
+    Read::take(&mut *r, len).read_to_end(&mut bytes).map_err(|e| format!("read_string data: {}", e))?;
+    if bytes.len() as u64 != len {
+        return Err("read_string data: unexpected end of file".to_string());
+    }
     String::from_utf8(bytes).map_err(|e| format!("String UTF-8: {}", e))
 }
 
 fn read_value<R: Read>(r: &mut R) -> Result<GgufValue, String> {
     let type_id = read_u32(r)?;
-    read_typed_value(r, type_id)
+    read_typed_value(r, type_id, 0)
 }
 
-fn read_typed_value<R: Read>(r: &mut R, type_id: u32) -> Result<GgufValue, String> {
+fn read_typed_value<R: Read>(r: &mut R, type_id: u32, depth: usize) -> Result<GgufValue, String> {
     match type_id {
         0  => Ok(GgufValue::U8(read_u8(r)?)),
         1  => Ok(GgufValue::I8(read_i8(r)?)),
@@ -480,11 +531,14 @@ fn read_typed_value<R: Read>(r: &mut R, type_id: u32) -> Result<GgufValue, Strin
         7  => Ok(GgufValue::Bool(read_bool(r)?)),
         8  => Ok(GgufValue::String(read_string(r)?)),
         9  => {
+            if depth >= MAX_ARRAY_DEPTH {
+                return Err("GGUF array nesting too deep".to_string());
+            }
             let elem_type = read_u32(r)?;
             let count     = read_u64(r)? as usize;
-            let cap = count.min(500_000); // guard against corrupt
+            let cap = count.min(4096); // guard against corrupt; grows as data is really read
             let mut arr = Vec::with_capacity(cap);
-            for _ in 0..count { arr.push(read_typed_value(r, elem_type)?); }
+            for _ in 0..count { arr.push(read_typed_value(r, elem_type, depth + 1)?); }
             Ok(GgufValue::Array(arr))
         }
         10 => Ok(GgufValue::U64(read_u64(r)?)),
@@ -497,6 +551,71 @@ fn read_typed_value<R: Read>(r: &mut R, type_id: u32) -> Result<GgufValue, Strin
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn hdr(n_tensors: u64, n_kv: u64) -> Vec<u8> {
+        let mut b = Vec::new();
+        b.extend_from_slice(&GGUF_MAGIC.to_le_bytes());
+        b.extend_from_slice(&3u32.to_le_bytes());
+        b.extend_from_slice(&n_tensors.to_le_bytes());
+        b.extend_from_slice(&n_kv.to_le_bytes());
+        b
+    }
+    fn gstr(b: &mut Vec<u8>, s: &str) {
+        b.extend_from_slice(&(s.len() as u64).to_le_bytes());
+        b.extend_from_slice(s.as_bytes());
+    }
+    fn open_bytes(tag: &str, bytes: &[u8]) -> Result<GgufFile, String> {
+        let p = std::env::temp_dir().join(format!("killer_gguf_{}_{}.gguf", tag, std::process::id()));
+        std::fs::write(&p, bytes).unwrap();
+        let r = GgufFile::open(p.to_str().unwrap());
+        let _ = std::fs::remove_file(&p);
+        r
+    }
+
+    #[test]
+    fn rejects_zero_alignment() {
+        let mut b = hdr(0, 1);
+        gstr(&mut b, "general.alignment");
+        b.extend_from_slice(&4u32.to_le_bytes()); // U32
+        b.extend_from_slice(&0u32.to_le_bytes());
+        assert!(open_bytes("align0", &b).is_err());
+    }
+
+    #[test]
+    fn rejects_overflowing_tensor_shape() {
+        let mut b = hdr(1, 0);
+        gstr(&mut b, "t");
+        b.extend_from_slice(&2u32.to_le_bytes());
+        b.extend_from_slice(&(1u64 << 40).to_le_bytes());
+        b.extend_from_slice(&(1u64 << 40).to_le_bytes());
+        b.extend_from_slice(&0u32.to_le_bytes()); // F32
+        b.extend_from_slice(&0u64.to_le_bytes());
+        assert!(open_bytes("shape", &b).is_err());
+    }
+
+    #[test]
+    fn rejects_tensor_past_eof_and_huge_counts() {
+        let mut b = hdr(1, 0);
+        gstr(&mut b, "t");
+        b.extend_from_slice(&1u32.to_le_bytes());
+        b.extend_from_slice(&1_000_000u64.to_le_bytes());
+        b.extend_from_slice(&0u32.to_le_bytes());
+        b.extend_from_slice(&u64::MAX.to_le_bytes()); // offset overflow
+        assert!(open_bytes("eof", &b).is_err());
+        assert!(open_bytes("counts", &hdr(u64::MAX, u64::MAX)).is_err());
+    }
+
+    #[test]
+    fn rejects_deeply_nested_arrays() {
+        let mut b = hdr(0, 1);
+        gstr(&mut b, "k");
+        b.extend_from_slice(&9u32.to_le_bytes());
+        for _ in 0..10_000 {
+            b.extend_from_slice(&9u32.to_le_bytes()); // element type: array
+            b.extend_from_slice(&1u64.to_le_bytes()); // count 1
+        }
+        assert!(open_bytes("deep", &b).is_err());
+    }
 
     #[test]
     fn test_tensor_n_bytes_f32() {

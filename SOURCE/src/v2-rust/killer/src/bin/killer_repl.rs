@@ -77,7 +77,7 @@ fn main() {
                     println!("─── variables ───");
                     for (k, v) in &vars {
                         // Truncate long values for display
-                        let display = if v.len() > 80 { format!("{}…", &v[..80]) } else { v.clone() };
+                        let display = if v.len() > 80 { format!("{}…", killer_native::text_util::truncate_utf8(v, 80)) } else { v.clone() };
                         println!("  {} = {}", k, display);
                     }
                 }

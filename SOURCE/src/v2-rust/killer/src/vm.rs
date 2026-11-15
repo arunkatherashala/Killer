@@ -5730,10 +5730,10 @@ impl VirtualMachine {
                                 let delete_count = match &args[1] { Value::Number(n) => *n as usize, _ => 0 };
                                 let mut v = arr.to_vec();
                                 let s = start.min(v.len());
-                                let e = (s + delete_count).min(v.len());
+                                let e = s.saturating_add(delete_count).min(v.len());
                                 v.drain(s..e);
                                 for (offset, item) in args.iter().skip(2).cloned().enumerate() {
-                                    v.insert((s + offset).min(v.len()), item);
+                                    v.insert(s.saturating_add(offset).min(v.len()), item);
                                 }
                                 arr.replace_all(v);
                                 self.stack.push(Value::Array(arr.clone()));

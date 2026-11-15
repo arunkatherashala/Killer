@@ -105,6 +105,7 @@ pub struct Executor {
 impl Executor {
     /// Create a new executor with the given number of worker threads.
     pub fn new(num_workers: usize) -> Self {
+        let num_workers = num_workers.max(1); // 0 workers would never run any task
         let inner = Arc::new(Mutex::new(ExecutorInner {
             queue: VecDeque::new(),
             next_id: 1,
@@ -310,6 +311,8 @@ struct ChannelInner<T> {
 
 impl<T> AsyncChannel<T> {
     pub fn new(capacity: usize) -> Self {
+        // capacity 0 would make every send block forever (no rendezvous support): treat as 1
+        let capacity = capacity.max(1);
         Self {
             inner: Arc::new(ChannelInner {
                 buf: Mutex::new(VecDeque::with_capacity(capacity)),
@@ -371,7 +374,11 @@ impl<T> AsyncChannel<T> {
 
     /// Close the channel. Pending receivers will get Err.
     pub fn close(&self) {
-        self.inner.closed.store(true, Ordering::Relaxed);
+        // Set the flag and notify while holding the buffer lock: a waiter that has already
+        // checked `closed` is then guaranteed to be parked on the condvar before we notify
+        // (otherwise the wakeup is lost and recv()/send() block forever).
+        let _guard = self.inner.buf.lock().unwrap();
+        self.inner.closed.store(true, Ordering::SeqCst);
         self.inner.not_empty.notify_all();
         self.inner.not_full.notify_all();
     }
@@ -394,6 +401,34 @@ impl<T> Clone for AsyncChannel<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn zero_capacity_channel_and_zero_workers_do_not_hang() {
+        let ch: AsyncChannel<i32> = AsyncChannel::new(0);
+        assert!(ch.try_send(1).is_ok());
+        assert_eq!(ch.recv(), Ok(1));
+        let exec = Executor::new(0);
+        assert_eq!(exec.worker_count(), 1);
+        let h = exec.spawn_compute(|| 7.0);
+        let (tx, rx) = std::sync::mpsc::channel();
+        thread::spawn(move || { let _ = tx.send(h.join()); });
+        let st = rx.recv_timeout(Duration::from_secs(10)).expect("task never ran");
+        assert!(matches!(st, TaskState::Completed(TaskResult::Number(_))));
+        exec.shutdown();
+    }
+
+    #[test]
+    fn close_wakes_blocked_receivers() {
+        for _ in 0..300 {
+            let ch: AsyncChannel<i32> = AsyncChannel::new(1);
+            let rx = ch.clone();
+            let (tx, done) = std::sync::mpsc::channel();
+            thread::spawn(move || { let _ = tx.send(rx.recv()); });
+            ch.close();
+            let r = done.recv_timeout(Duration::from_secs(10)).expect("receiver missed the close wakeup");
+            assert!(r.is_err());
+        }
+    }
 
     #[test]
     fn executor_spawn_and_join() {

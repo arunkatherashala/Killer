@@ -338,7 +338,7 @@ fn parse_ollama_chat_response(raw: &str, model: &str) -> Result<LlmResponse, Str
     }
     let content = extract_nested_value(raw, "message", "content")
         .or_else(|| extract_json_string(raw, "content"))
-        .ok_or_else(|| format!("Failed to parse Ollama response: {}", &raw[..raw.len().min(200)]))?;
+        .ok_or_else(|| format!("Failed to parse Ollama response: {}", crate::text_util::truncate_utf8(raw, 200)))?;
 
     let prompt_tokens    = extract_json_usize(raw, "prompt_eval_count").unwrap_or(0);
     let completion_tokens = extract_json_usize(raw, "eval_count").unwrap_or(0);
@@ -465,7 +465,7 @@ fn parse_openai_response(raw: &str, model: &str) -> Result<LlmResponse, String> 
         }
     }
     let content = extract_deeply_nested(raw, "content")
-        .ok_or_else(|| format!("Cannot parse OpenAI response: {}", &raw[..raw.len().min(300)]))?;
+        .ok_or_else(|| format!("Cannot parse OpenAI response: {}", crate::text_util::truncate_utf8(raw, 300)))?;
     let prompt_tokens     = extract_json_usize(raw, "prompt_tokens").unwrap_or(0);
     let completion_tokens = extract_json_usize(raw, "completion_tokens").unwrap_or(0);
     let actual_model = extract_json_string(raw, "model").unwrap_or_else(|| model.to_string());
@@ -519,11 +519,11 @@ fn complete_anthropic(config: &LlmConfig, messages: &[LlmMessage]) -> Result<Llm
 fn parse_anthropic_response(raw: &str, model: &str) -> Result<LlmResponse, String> {
     // {"content":[{"type":"text","text":"..."}],"usage":{"input_tokens":X,"output_tokens":Y}}
     if raw.contains("\"error\"") {
-        let err = extract_json_string(raw, "message").unwrap_or_else(|| raw[..raw.len().min(200)].to_string());
+        let err = extract_json_string(raw, "message").unwrap_or_else(|| crate::text_util::truncate_utf8(raw, 200).to_string());
         return Err(format!("Anthropic API error: {}", err));
     }
     let content = extract_json_string(raw, "text")
-        .ok_or_else(|| format!("Cannot parse Anthropic response: {}", &raw[..raw.len().min(300)]))?;
+        .ok_or_else(|| format!("Cannot parse Anthropic response: {}", crate::text_util::truncate_utf8(raw, 300)))?;
     let prompt_tokens     = extract_json_usize(raw, "input_tokens").unwrap_or(0);
     let completion_tokens = extract_json_usize(raw, "output_tokens").unwrap_or(0);
     let actual_model = extract_json_string(raw, "model").unwrap_or_else(|| model.to_string());
@@ -661,7 +661,7 @@ fn url_encode(s: &str) -> String {
 /// Used for sites that require form POSTs (e.g. Zaubacorp director search).
 fn curl_post_form(url: &str, body: &str, timeout_s: u64) -> Result<String, String> {
     if !url.starts_with("https://") {
-        return Err(format!("URL must use HTTPS: {}", &url[..url.len().min(60)]));
+        return Err(format!("URL must use HTTPS: {}", crate::text_util::truncate_utf8(url, 60)));
     }
     let timeout_str = timeout_s.to_string();
     let curl_bin = crate::tool_path::curl()?;
@@ -687,7 +687,7 @@ fn curl_get(url: &str, timeout_s: u64) -> Result<String, String> {
 
 fn curl_get_with_ua(url: &str, timeout_s: u64, user_agent: &str) -> Result<String, String> {
     if !url.starts_with("https://") {
-        return Err(format!("URL must use HTTPS: {}", &url[..url.len().min(60)]));
+        return Err(format!("URL must use HTTPS: {}", crate::text_util::truncate_utf8(url, 60)));
     }
     let timeout_str = timeout_s.to_string();
     let curl_bin = crate::tool_path::curl()?;
@@ -5581,9 +5581,11 @@ fn unchunk(body: &str) -> String {
         let size = usize::from_str_radix(hex_str, 16).unwrap_or(0);
         if size == 0 { break; }
         let data_start = end_of_size + 2;
-        if data_start + size > rest.len() { break; }
-        result.push_str(&rest[data_start..data_start + size]);
-        rest = &rest[data_start + size..].trim_start_matches("\r\n");
+        let data_end = match data_start.checked_add(size) { Some(e) => e, None => break };
+        // `get` returns None on out-of-range or non-char-boundary offsets
+        let chunk = match rest.get(data_start..data_end) { Some(c) => c, None => break };
+        result.push_str(chunk);
+        rest = rest[data_end..].trim_start_matches("\r\n");
     }
     result
 }
@@ -5601,6 +5603,30 @@ fn resolve_api_key(config: &LlmConfig, env_var: &str) -> Result<String, String> 
 }
 
 // --- Tests --------------------------------------------------------------------
+
+#[cfg(test)]
+mod utf8_safety_tests {
+    use super::*;
+
+    #[test]
+    fn unchunk_does_not_split_utf8_or_overflow() {
+        // size 2 lands inside the 2-byte char at offset 1
+        assert_eq!(unchunk("2\r\na\u{e9}b\r\n0\r\n\r\n"), "");
+        assert_eq!(unchunk("ffffffffffffffff\r\nabc"), "");
+        assert_eq!(unchunk("3\r\nabc\r\n0\r\n\r\n"), "abc");
+    }
+
+    #[test]
+    fn error_paths_truncate_on_char_boundary() {
+        // leading 'x' shifts boundaries so offsets 200 and 300 fall mid-char
+        let odd = format!("x{}", "\u{e9}".repeat(300));
+        assert!(parse_ollama_chat_response(&odd, "m").is_err());
+        assert!(parse_openai_response(&odd, "m").is_err());
+        assert!(parse_anthropic_response(&odd, "m").is_err());
+        let err = format!("\"error\"{}", odd);
+        assert!(parse_anthropic_response(&err, "m").is_err());
+    }
+}
 
 #[cfg(test)]
 mod tests {
