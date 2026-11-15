@@ -16,6 +16,42 @@
 //! + -   then  * / % //   then  **   (handled by the compiler's own splitter)
 //! ```
 
+/// Parses a numeric literal (digits, one dot, exponent, optional sign). Unlike `str::parse::<f64>`
+/// this rejects `inf`, `infinity` and `nan`, which are ordinary variable names in Killer.
+pub fn parse_number_literal(s: &str) -> Option<f64> {
+    let t = s.strip_prefix(['-', '+']).unwrap_or(s);
+    match t.bytes().next() {
+        Some(c) if c.is_ascii_digit() || c == b'.' => s.parse::<f64>().ok(),
+        _ => None,
+    }
+}
+
+/// `mask[i]` is true when byte `i` is inside a double-quoted string literal (quotes included).
+pub fn string_mask(expr: &str) -> Vec<bool> {
+    let b = expr.as_bytes();
+    let mut mask = vec![false; b.len()];
+    let mut in_str = false;
+    let mut i = 0;
+    while i < b.len() {
+        if in_str {
+            mask[i] = true;
+            if b[i] == b'\\' && i + 1 < b.len() {
+                mask[i + 1] = true;
+                i += 2;
+                continue;
+            }
+            if b[i] == b'"' {
+                in_str = false;
+            }
+        } else if b[i] == b'"' {
+            in_str = true;
+            mask[i] = true;
+        }
+        i += 1;
+    }
+    mask
+}
+
 /// `mask[i]` is true when byte `i` is at bracket depth 0 and outside a string literal. The
 /// brackets themselves and the quote characters are false.
 pub fn top_level_mask(expr: &str) -> Vec<bool> {

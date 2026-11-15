@@ -749,6 +749,16 @@ fn lower_switch(src: &str, m: &[u8], at: usize, counter: &mut Counter) -> Option
     if cases.is_empty() {
         return None;
     }
+    // an empty body followed by another label looks like C fall-through, which does not exist here
+    for pair in cases.windows(2) {
+        if pair[0].stmts.trim().is_empty() {
+            let line = src[..at].matches('\n').count() + 1;
+            eprintln!(
+                "warning: switch near line {line}: an empty `case` body does nothing (switch has no fall-through); list the values together instead, e.g. `case 1, 2:`"
+            );
+            break;
+        }
+    }
 
     let indent = indent_of(src, at);
     let var = format!("__s_{}", counter.next());

@@ -244,6 +244,9 @@ struct CompilerState {
     lc_temps: u16,
     function_arities: HashMap<usize, usize>,
     functions: HashMap<String, FunctionMeta>,
+    /// Names of the function definitions currently being compiled (outermost first); nested
+    /// non-capturing functions are registered under `outer/inner` so two outers may reuse a name.
+    fn_scope: Vec<String>,
     pending_calls: Vec<PendingCall>,
     /// Bytecode start of the function wrapper made for each builtin used as a value.
     builtin_wrappers: HashMap<String, usize>,
@@ -312,6 +315,9 @@ struct CompileContext {
     tail_position: bool,
     /// The function body ended in a bare expression whose value was left on the stack.
     tail_value: bool,
+    /// Set by an `if` in tail position: the next block compiled treats its last statement as the
+    /// function's return value (see `compile_if_statement`).
+    tail_block: bool,
     runtime_scope_depth: usize,
     /// The function being compiled contains `yield` (it is a generator).
     in_generator: bool,
@@ -683,7 +689,7 @@ pub fn compile_statements(statements: &[crate::ast::Stmt]) -> Result<Program, Vm
     
     let mut function_names = std::collections::HashMap::new();
     for (name, func_meta) in &state.functions {
-        function_names.insert(func_meta.start, name.clone());
+        function_names.insert(func_meta.start, name.rsplit('/').next().unwrap_or(name).to_string());
     }
     
     Ok(Program {
@@ -1997,6 +2003,7 @@ fn compile_expr(
                 global_decls: Default::default(),
                 tail_position: false,
                 tail_value: false,
+                tail_block: false,
                 runtime_scope_depth: 0,
                 in_generator: false,
                 finally_stack: Vec::new(),
@@ -2392,6 +2399,9 @@ fn compile_block(
     let saved_slot_map = context.slot_map.clone();
     let saved_next_slot = context.next_slot;
     let let_mark = context.let_new.len();
+    // an `if` in tail position asks its branch blocks to return their last expression
+    let tail_block = std::mem::take(&mut context.tail_block);
+    let block_is_tail = (stop_on_closing_brace && !needs_runtime_scope) || tail_block;
 
     // Push runtime scope barrier for true blocks
     if needs_runtime_scope {
@@ -2485,7 +2495,8 @@ fn compile_block(
         }
 
         if line.starts_with("if ") || line.starts_with("if(") {
-            compile_if_statement(lines, cursor, state, context)?;
+            let tail = block_is_tail && context.in_function && !context.in_generator && if_chain_is_tail_value(lines, *cursor);
+            compile_if_statement(lines, cursor, state, context, tail)?;
             continue;
         }
 
@@ -2602,7 +2613,7 @@ fn compile_block(
             *cursor = end_phys + 1;
             continue;
         }
-        let is_fn_body = stop_on_closing_brace && !needs_runtime_scope;
+        let is_fn_body = block_is_tail;
         let next_is_close = lines.get(end_phys + 1).map_or(false, |(_, l)| l.trim() == "}");
         let last_piece = pieces.len().saturating_sub(1);
         for (index, piece) in pieces.iter().enumerate() {
@@ -2912,11 +2923,60 @@ fn compile_try_statement(
     Ok(())
 }
 
+/// True when the `if` at `start` is a complete `if / else if / else` chain that is the last
+/// statement of its block (the next line closes the block). Only then are its branch values the
+/// block's value; a chain without a final `else` could fall through without a value.
+fn if_chain_is_tail_value(lines: &[(usize, String)], start: usize) -> bool {
+    let mut i = start;
+    loop {
+        // header (possibly spread over several lines) up to its `{`
+        while i < lines.len() && lines[i].1.trim() != "{" {
+            i += 1;
+        }
+        if i >= lines.len() {
+            return false;
+        }
+        i = skip_braced_block(lines, i);
+        let Some((_, next)) = lines.get(i) else { return false };
+        let next = next.trim();
+        if next == "else" {
+            if lines.get(i + 1).map_or(true, |(_, l)| l.trim() != "{") {
+                return false;
+            }
+            let end = skip_braced_block(lines, i + 1);
+            return lines.get(end).map_or(false, |(_, l)| l.trim() == "}");
+        }
+        if next.starts_with("else if ") || next.starts_with("else if(") {
+            i += 1;
+            continue;
+        }
+        return false;
+    }
+}
+
+/// Compile one branch block of a tail-position `if`: its last bare expression is left on the
+/// stack as the value; a branch that ends otherwise (assignment, loop, `return`) yields null.
+fn compile_tail_branch(
+    lines: &[(usize, String)],
+    cursor: &mut usize,
+    state: &mut CompilerState,
+    context: &mut CompileContext,
+) -> Result<(), VmError> {
+    context.tail_block = true;
+    context.tail_value = false;
+    compile_block(lines, cursor, state, context, true, true)?;
+    if !context.tail_value {
+        state.instructions.push(Instruction::ConstNull);
+    }
+    Ok(())
+}
+
 fn compile_if_statement(
     lines: &[(usize, String)],
     cursor: &mut usize,
     state: &mut CompilerState,
     context: &mut CompileContext,
+    tail: bool,
 ) -> Result<(), VmError> {
     // An `else if` chain is compiled in a loop (not by recursion, and without copying the line
     // table per link), so a chain of thousands of branches is linear and cannot overflow the stack.
@@ -2940,7 +3000,11 @@ fn compile_if_statement(
         let jump_false_index = state.instructions.len();
         state.instructions.push(Instruction::JumpIfFalse(usize::MAX));
 
-        compile_block(lines, cursor, state, context, true, true)?;
+        if tail {
+            compile_tail_branch(lines, cursor, state, context)?;
+        } else {
+            compile_block(lines, cursor, state, context, true, true)?;
+        }
 
         if *cursor < lines.len() {
             let trimmed = lines[*cursor].1.trim();
@@ -2954,7 +3018,11 @@ fn compile_if_statement(
                 let else_target = state.instructions.len();
                 state.instructions[jump_false_index] = Instruction::JumpIfFalse(else_target);
 
-                compile_block(lines, cursor, state, context, true, true)?;
+                if tail {
+                    compile_tail_branch(lines, cursor, state, context)?;
+                } else {
+                    compile_block(lines, cursor, state, context, true, true)?;
+                }
                 end_pending_false = None;
                 break;
             } else if trimmed.starts_with("else if ") || trimmed.starts_with("else if(") {
@@ -2979,6 +3047,10 @@ fn compile_if_statement(
     }
     if let Some(j) = end_pending_false {
         state.instructions[j] = Instruction::JumpIfFalse(end_target);
+    }
+    if tail {
+        // every branch left exactly one value: it is the function's return value
+        context.tail_value = true;
     }
     Ok(())
 }
@@ -3840,7 +3912,11 @@ fn compile_expr_str(
         // opening `(` closes early (e.g. `(a)*(b)`) and this is NOT a simple grouping.
         let mut depth = 0i32;
         let mut valid = true;
+        let in_string = crate::exprsplit::string_mask(expr);
         for (i, ch) in expr.char_indices() {
+            if in_string[i] {
+                continue;
+            }
             match ch {
                 '(' => depth += 1,
                 ')' => {
@@ -4082,7 +4158,7 @@ fn compile_expr_str(
         return Ok(());
     }
 
-    if let Ok(n) = expr.parse::<f64>() {
+    if let Some(n) = crate::exprsplit::parse_number_literal(expr) {
         state.instructions.push(Instruction::ConstNum(n));
         return Ok(());
     }
@@ -4125,25 +4201,37 @@ fn compile_expr_str(
         }
     }
 
-    // `obj?.method(args)` / `obj?.field` — optional chaining: returns null if obj is null
+    // `obj?.rest` — optional chaining: null when `obj` is null, else `obj.rest`. The chain is split
+    // at its first `?.` and the remainder (which may contain further `?.`) is compiled against a
+    // hidden temporary holding `obj`, so `a?.b?.c` and `a?.b.c` short-circuit left to right.
     if let Some(qmark_pos) = find_top_level_op(expr, "?.") {
         let obj_part = expr[..qmark_pos].trim();
         let rest = expr[qmark_pos + 2..].trim();
-        compile_expr_str(obj_part, line_no, state, context)?;
-        if let Some(paren_start) = rest.find('(') {
-            let method_name = rest[..paren_start].trim().to_string();
-            let args_src = rest[paren_start + 1..rest.len().saturating_sub(1)].trim();
-            let args_list = split_arguments(args_src).unwrap_or_default();
-            for arg in &args_list {
-                compile_expr_str(arg.trim(), line_no, state, context)?;
-            }
-            state.instructions.push(Instruction::OptionalChain { method_name, arg_count: args_list.len() });
-        } else {
-            // Field access: obj?.field — emit OptionalChain with 0 args
-            let field = rest.trim().to_string();
-            state.instructions.push(Instruction::OptionalChain { method_name: field, arg_count: 0 });
+        if !obj_part.is_empty() && !rest.is_empty() {
+            compile_expr_str(obj_part, line_no, state, context)?;
+            let temps_base = state.lc_temps;
+            let slot = context.next_slot.saturating_add(state.lc_temps);
+            state.lc_temps += 1;
+            state.instructions.push(Instruction::StoreSlot(slot));
+            state.instructions.push(Instruction::LoadSlot(slot));
+            state.instructions.push(Instruction::ConstNull);
+            state.instructions.push(Instruction::Eq);
+            let to_access = state.instructions.len();
+            state.instructions.push(Instruction::JumpIfFalse(usize::MAX));
+            state.instructions.push(Instruction::ConstNull);
+            let to_end = state.instructions.len();
+            state.instructions.push(Instruction::Jump(usize::MAX));
+            state.instructions[to_access] = Instruction::JumpIfFalse(state.instructions.len());
+            let temp_name = format!("__oc{}", slot);
+            let mut scope = shadowed_context(context, &[]);
+            scope.slot_map.insert(temp_name.clone(), slot);
+            scope.current_function_name = context.current_function_name.clone();
+            let access = compile_expr_str(&format!("{}.{}", temp_name, rest), line_no, state, &scope);
+            state.lc_temps = temps_base;
+            access?;
+            state.instructions[to_end] = Instruction::Jump(state.instructions.len());
+            return Ok(());
         }
-        return Ok(());
     }
 
     // `obj.method(args)` — method call or `obj.field` — property access
@@ -4235,7 +4323,7 @@ fn compile_expr_str(
             compile_expr_str(arg, line_no, state, context)?;
         }
 
-        if let Some(meta) = state.functions.get(&name) {
+        if let Some(meta) = lookup_scoped_function(state, &name) {
             state.instructions.push(Instruction::Call {
                 target: meta.start,
                 arg_count: args.len(),
@@ -4601,6 +4689,7 @@ fn shadowed_context(context: &CompileContext, hide: &[String]) -> CompileContext
         global_decls: context.global_decls.clone(),
         tail_position: false,
         tail_value: false,
+        tail_block: false,
         runtime_scope_depth: context.runtime_scope_depth,
         in_generator: context.in_generator,
         finally_stack: Vec::new(),
@@ -5885,7 +5974,10 @@ fn compile_fn_definition(
     let (sig_line, end_phys) = merge_multiline_signature_header(lines, start)?;
     let (name, params, defaults) = parse_function_signature_full(&sig_line, line_no)?;
 
-    if state.functions.contains_key(&name) {
+    // a function nested in another function is keyed `outer/inner`
+    let nested = parent.as_deref().map_or(false, |p| p.in_function) && !state.fn_scope.is_empty();
+    let scoped_key = if nested { format!("{}/{}", state.fn_scope.join("/"), name) } else { name.clone() };
+    if state.functions.contains_key(&scoped_key) {
         return Err(VmError::parse_error_simple(format!(
             "Line {}: duplicate function `{}`",
             line_no, name
@@ -5943,14 +6035,15 @@ fn compile_fn_definition(
     let fn_start = state.instructions.len();
     state.function_arities.insert(fn_start, params.len());
     if !is_closure {
-        state.functions.insert(
-            name.clone(),
-            FunctionMeta {
-                start: fn_start,
-                arity: params.len(),
-            },
-        );
+        let meta = FunctionMeta { start: fn_start, arity: params.len() };
+        if nested {
+            // the plain name stays available (forward references, calls from elsewhere) unless
+            // another function already owns it
+            state.functions.entry(name.clone()).or_insert_with(|| meta.clone());
+        }
+        state.functions.insert(scoped_key, meta);
     }
+    state.fn_scope.push(name.clone());
     let arg_names: Vec<String> = (0..params.len()).map(|i| format!("arg{}", i)).collect();
 
     let mut fn_context = CompileContext {
@@ -5974,6 +6067,7 @@ fn compile_fn_definition(
         global_decls: Default::default(),
         tail_position: false,
         tail_value: false,
+        tail_block: false,
         runtime_scope_depth: 0,
         in_generator: false,
         finally_stack: Vec::new(),
@@ -5999,6 +6093,7 @@ fn compile_fn_definition(
         state.instructions.push(Instruction::MakeGenerator);
     }
     compile_block(lines, cursor, state, &mut fn_context, true, false)?;
+    state.fn_scope.pop();
 
     // Fall-through return. A body that ends in a bare expression returns that value (the value is
     // already on the stack); anything else returns null. This must be emitted even when the last
@@ -6201,6 +6296,7 @@ fn compile_class_definition(
                 global_decls: Default::default(),
                 tail_position: false,
                 tail_value: false,
+                tail_block: false,
                 runtime_scope_depth: 0,
                 in_generator: false,
                 finally_stack: Vec::new(),
@@ -6325,23 +6421,57 @@ fn compile_binary_operators(
                 });
             }
         } else {
-            // a < b < c  ==  (a < b) && (b < c)   (the middle operands are evaluated twice)
-            // The rewrite is textual: an operand with an unterminated string or unbalanced brackets
-            // would make the rewritten text split as a chain again, forever.
+            // a < b < c  ==  (a < b) && (b < c), each operand evaluated once
+            // An operand with an unterminated string or unbalanced brackets is rejected up front.
             if operands.iter().any(|o| !operand_is_balanced(o)) {
                 return Err(VmError::parse_error_simple(format!(
                     "Line {}: unterminated string or unbalanced brackets in comparison `{}`",
                     line_no, expr
                 )));
             }
-            let mut text = String::new();
+            // Each operand is evaluated once, left to right, into a hidden slot; a failed
+            // comparison skips the operands after it.
+            let temps_base = state.lc_temps;
+            let slot_of = |k: usize| context.next_slot.saturating_add(temps_base).saturating_add(k as u16);
+            state.lc_temps = temps_base.saturating_add(operands.len() as u16);
+            compile_expr_str(operands[0], line_no, state, context)?;
+            state.instructions.push(Instruction::StoreSlot(slot_of(0)));
+            let mut shorts: Vec<usize> = Vec::new();
             for (i, op) in ops.iter().enumerate() {
                 if i > 0 {
-                    text.push_str(" && ");
+                    shorts.push(state.instructions.len());
+                    state.instructions.push(Instruction::AndShort(usize::MAX));
                 }
-                text.push_str(&format!("({} {} {})", operands[i], op, operands[i + 1]));
+                compile_expr_str(operands[i + 1], line_no, state, context)?;
+                state.instructions.push(Instruction::StoreSlot(slot_of(i + 1)));
+                if *op == "in" || *op == "not in" {
+                    state.instructions.push(Instruction::LoadSlot(slot_of(i + 1)));
+                    state.instructions.push(Instruction::LoadSlot(slot_of(i)));
+                    state.instructions.push(Instruction::CallBuiltin("contains".to_string(), 2));
+                    if *op == "not in" {
+                        state.instructions.push(Instruction::Not);
+                    }
+                } else {
+                    state.instructions.push(Instruction::LoadSlot(slot_of(i)));
+                    state.instructions.push(Instruction::LoadSlot(slot_of(i + 1)));
+                    state.instructions.push(match *op {
+                        "==" => Instruction::Eq,
+                        "!=" => Instruction::Ne,
+                        ">=" => Instruction::Ge,
+                        "<=" => Instruction::Le,
+                        ">" => Instruction::Gt,
+                        _ => Instruction::Lt,
+                    });
+                }
+                if i > 0 {
+                    state.instructions.push(Instruction::And);
+                }
             }
-            compile_expr_str(&text, line_no, state, context)?;
+            let end = state.instructions.len();
+            for j in shorts {
+                state.instructions[j] = Instruction::AndShort(end);
+            }
+            state.lc_temps = temps_base;
         }
         return Ok(true);
     }
@@ -7167,6 +7297,17 @@ fn is_registered_builtin(name: &str) -> bool {
         || crate::builtin::BUILTIN_ID_TABLE.iter().any(|(n, _)| *n == name)
 }
 
+/// A function named `name` visible from the code being compiled: the innermost enclosing
+/// function's nested definition wins over outer ones, then the global registry.
+fn lookup_scoped_function<'a>(state: &'a CompilerState, name: &str) -> Option<&'a FunctionMeta> {
+    for n in (1..=state.fn_scope.len()).rev() {
+        if let Some(meta) = state.functions.get(&format!("{}/{}", state.fn_scope[..n].join("/"), name)) {
+            return Some(meta);
+        }
+    }
+    state.functions.get(name)
+}
+
 fn patch_pending_calls(state: &mut CompilerState) -> Result<(), VmError> {
     // All built-in function names recognised by BuiltinFunctions::call()
     // AI functions, stdlib, and core built-ins are all listed here so that
@@ -7309,6 +7450,10 @@ fn strip_trailing_line_comment(content: &str) -> &str {
             break;
         }
         match bytes[j] {
+            b'\\' if in_str => {
+                j += 2; // skip the escaped character (e.g. `\"`)
+                continue;
+            }
             b'"' => in_str = !in_str,
             39 if !in_str => in_sq = !in_sq, // single quote
             // Python-style trailing `# comment`: only after whitespace and some code, so `#[derive]`
