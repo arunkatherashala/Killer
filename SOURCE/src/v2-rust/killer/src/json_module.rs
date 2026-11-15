@@ -46,7 +46,12 @@ impl JsonModule {
     /// parse("{\"name\": \"John\", \"age\": 30}") => Ok(Object(...))
     pub fn parse(json: &str) -> JsonResult<JsonValue> {
         let mut parser = JsonParser::new(json);
-        parser.parse_value()
+        let v = parser.parse_value()?;
+        parser.skip_whitespace();
+        if parser.pos < parser.chars.len() {
+            return Err(JsonError::ParseError("Trailing characters after JSON value".to_string()));
+        }
+        Ok(v)
     }
     
     /// Parse JSON string to Killer Value
@@ -163,6 +168,9 @@ impl JsonModule {
                 '\n' => result.push_str("\\n"),
                 '\r' => result.push_str("\\r"),
                 '\t' => result.push_str("\\t"),
+                '\u{08}' => result.push_str("\\b"),
+                '\u{0c}' => result.push_str("\\f"),
+                c if (c as u32) < 0x20 => result.push_str(&format!("\\u{:04x}", c as u32)),
                 _ => result.push(ch),
             }
         }
@@ -294,9 +302,13 @@ impl JsonModule {
 
 // ==================== JSON Parser ====================
 
+/// Maximum nesting depth (matches json_lang).
+const MAX_JSON_DEPTH: usize = 512;
+
 struct JsonParser {
     chars: Vec<char>,
     pos: usize,
+    depth: usize,
 }
 
 impl JsonParser {
@@ -304,6 +316,7 @@ impl JsonParser {
         JsonParser {
             chars: input.chars().collect(),
             pos: 0,
+            depth: 0,
         }
     }
     
@@ -318,8 +331,15 @@ impl JsonParser {
             'n' => self.parse_null(),
             't' | 'f' => self.parse_bool(),
             '"' => self.parse_string().map(JsonValue::String),
-            '[' => self.parse_array(),
-            '{' => self.parse_object(),
+            '[' | '{' => {
+                if self.depth >= MAX_JSON_DEPTH {
+                    return Err(JsonError::ParseError("Maximum nesting depth exceeded".to_string()));
+                }
+                self.depth += 1;
+                let r = if self.chars[self.pos] == '[' { self.parse_array() } else { self.parse_object() };
+                self.depth -= 1;
+                r
+            }
             '-' | '0'..='9' => self.parse_number(),
             _ => Err(JsonError::ParseError("Unexpected character".to_string())),
         }
@@ -360,9 +380,36 @@ impl JsonParser {
                 match self.chars[self.pos] {
                     '"' => result.push('"'),
                     '\\' => result.push('\\'),
+                    '/' => result.push('/'),
+                    'b' => result.push('\u{08}'),
+                    'f' => result.push('\u{0c}'),
                     'n' => result.push('\n'),
                     'r' => result.push('\r'),
                     't' => result.push('\t'),
+                    'u' => {
+                        let hi = self.read_hex4()?;
+                        let cp = if (0xD800..0xDC00).contains(&hi) {
+                            // high surrogate: needs a following \uDC00..DFFF
+                            if self.chars.get(self.pos + 1) == Some(&'\\') && self.chars.get(self.pos + 2) == Some(&'u') {
+                                let save = self.pos;
+                                self.pos += 2;
+                                let lo = self.read_hex4()?;
+                                if (0xDC00..0xE000).contains(&lo) {
+                                    0x10000 + ((hi - 0xD800) << 10) + (lo - 0xDC00)
+                                } else {
+                                    self.pos = save;
+                                    0xFFFD
+                                }
+                            } else {
+                                0xFFFD
+                            }
+                        } else if (0xDC00..0xE000).contains(&hi) {
+                            0xFFFD
+                        } else {
+                            hi
+                        };
+                        result.push(char::from_u32(cp).unwrap_or('\u{FFFD}'));
+                    }
                     _ => result.push(self.chars[self.pos]),
                 }
             } else {
@@ -379,6 +426,22 @@ impl JsonParser {
         Ok(result)
     }
     
+    /// Reads 4 hex digits following the current `u` (pos on the `u`); leaves pos on the last digit.
+    fn read_hex4(&mut self) -> JsonResult<u32> {
+        let mut v = 0u32;
+        for _ in 0..4 {
+            self.pos += 1;
+            match self.chars.get(self.pos) {
+                Some(c) => match c.to_digit(16) {
+                    Some(d) => v = v * 16 + d,
+                    None => return Err(JsonError::ParseError("Invalid \\u escape".to_string())),
+                },
+                None => return Err(JsonError::UnexpectedEof),
+            }
+        }
+        Ok(v)
+    }
+
     fn parse_number(&mut self) -> JsonResult<JsonValue> {
         let start = self.pos;
         
@@ -566,6 +629,28 @@ mod tests {
         assert!(!JsonModule::is_valid("{invalid}"));
     }
     
+    #[test]
+    fn unicode_escapes_and_controls() {
+        let v = JsonModule::parse(r#""aA\b\f😀""#).unwrap();
+        match v { JsonValue::String(s) => assert_eq!(s, "aA\u{8}\u{c}\u{1F600}"), _ => panic!() }
+        assert_eq!(JsonModule::escape_string("a\u{1}\u{8}\u{c}"), "a\\u0001\\b\\f");
+    }
+
+    #[test]
+    fn trailing_garbage_rejected() {
+        assert!(JsonModule::parse("{} x").is_err());
+        assert!(JsonModule::parse("1 2").is_err());
+        assert!(JsonModule::parse(" [1] ").is_ok());
+    }
+
+    #[test]
+    fn depth_limit_errors() {
+        let deep = format!("{}{}", "[".repeat(100_000), "]".repeat(100_000));
+        assert!(JsonModule::parse(&deep).is_err());
+        let ok = format!("{}{}", "[".repeat(100), "]".repeat(100));
+        assert!(JsonModule::parse(&ok).is_ok());
+    }
+
     #[test]
     fn test_keys() {
         let json = JsonModule::parse("{\"a\": 1, \"b\": 2}").unwrap();
