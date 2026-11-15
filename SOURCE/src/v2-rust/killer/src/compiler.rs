@@ -244,6 +244,9 @@ struct CompilerState {
     lc_temps: u16,
     function_arities: HashMap<usize, usize>,
     functions: HashMap<String, FunctionMeta>,
+    /// Names of the function definitions currently being compiled (outermost first); nested
+    /// non-capturing functions are registered under `outer/inner` so two outers may reuse a name.
+    fn_scope: Vec<String>,
     pending_calls: Vec<PendingCall>,
     /// Bytecode start of the function wrapper made for each builtin used as a value.
     builtin_wrappers: HashMap<String, usize>,
@@ -683,7 +686,7 @@ pub fn compile_statements(statements: &[crate::ast::Stmt]) -> Result<Program, Vm
     
     let mut function_names = std::collections::HashMap::new();
     for (name, func_meta) in &state.functions {
-        function_names.insert(func_meta.start, name.clone());
+        function_names.insert(func_meta.start, name.rsplit('/').next().unwrap_or(name).to_string());
     }
     
     Ok(Program {
@@ -4239,7 +4242,7 @@ fn compile_expr_str(
             compile_expr_str(arg, line_no, state, context)?;
         }
 
-        if let Some(meta) = state.functions.get(&name) {
+        if let Some(meta) = lookup_scoped_function(state, &name) {
             state.instructions.push(Instruction::Call {
                 target: meta.start,
                 arg_count: args.len(),
@@ -5889,7 +5892,10 @@ fn compile_fn_definition(
     let (sig_line, end_phys) = merge_multiline_signature_header(lines, start)?;
     let (name, params, defaults) = parse_function_signature_full(&sig_line, line_no)?;
 
-    if state.functions.contains_key(&name) {
+    // a function nested in another function is keyed `outer/inner`
+    let nested = parent.as_deref().map_or(false, |p| p.in_function) && !state.fn_scope.is_empty();
+    let scoped_key = if nested { format!("{}/{}", state.fn_scope.join("/"), name) } else { name.clone() };
+    if state.functions.contains_key(&scoped_key) {
         return Err(VmError::parse_error_simple(format!(
             "Line {}: duplicate function `{}`",
             line_no, name
@@ -5947,14 +5953,15 @@ fn compile_fn_definition(
     let fn_start = state.instructions.len();
     state.function_arities.insert(fn_start, params.len());
     if !is_closure {
-        state.functions.insert(
-            name.clone(),
-            FunctionMeta {
-                start: fn_start,
-                arity: params.len(),
-            },
-        );
+        let meta = FunctionMeta { start: fn_start, arity: params.len() };
+        if nested {
+            // the plain name stays available (forward references, calls from elsewhere) unless
+            // another function already owns it
+            state.functions.entry(name.clone()).or_insert_with(|| meta.clone());
+        }
+        state.functions.insert(scoped_key, meta);
     }
+    state.fn_scope.push(name.clone());
     let arg_names: Vec<String> = (0..params.len()).map(|i| format!("arg{}", i)).collect();
 
     let mut fn_context = CompileContext {
@@ -6003,6 +6010,7 @@ fn compile_fn_definition(
         state.instructions.push(Instruction::MakeGenerator);
     }
     compile_block(lines, cursor, state, &mut fn_context, true, false)?;
+    state.fn_scope.pop();
 
     // Fall-through return. A body that ends in a bare expression returns that value (the value is
     // already on the stack); anything else returns null. This must be emitted even when the last
@@ -7169,6 +7177,17 @@ fn is_registered_builtin(name: &str) -> bool {
     BUILTINS.contains(&name)
         || crate::net_ai::is_builtin(name)
         || crate::builtin::BUILTIN_ID_TABLE.iter().any(|(n, _)| *n == name)
+}
+
+/// A function named `name` visible from the code being compiled: the innermost enclosing
+/// function's nested definition wins over outer ones, then the global registry.
+fn lookup_scoped_function<'a>(state: &'a CompilerState, name: &str) -> Option<&'a FunctionMeta> {
+    for n in (1..=state.fn_scope.len()).rev() {
+        if let Some(meta) = state.functions.get(&format!("{}/{}", state.fn_scope[..n].join("/"), name)) {
+            return Some(meta);
+        }
+    }
+    state.functions.get(name)
 }
 
 fn patch_pending_calls(state: &mut CompilerState) -> Result<(), VmError> {

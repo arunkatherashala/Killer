@@ -52,3 +52,9 @@ fn typecheck_class_method_does_not_shadow_builtin_arity() {
     let src = "class Box {\n  fn push(item: number) {\n    this.v = item\n  }\n}\nxs = [1]\npush(xs, 2)\nprintln(len(xs))\n";
     assert_eq!(run(src), "2");
 }
+
+#[test]
+fn nested_functions_with_the_same_name_in_two_outers() {
+    let src = "fn a() {\n  fn helper() {\n    return 1\n  }\n  return helper() + 10\n}\nfn b() {\n  fn helper() {\n    return 2\n  }\n  return helper() + 20\n}\nprintln(a())\nprintln(b())\n";
+    assert_eq!(run(src), "11\n22");
+}
