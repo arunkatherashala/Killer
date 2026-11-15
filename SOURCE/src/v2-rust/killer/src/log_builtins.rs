@@ -204,6 +204,8 @@ pub fn call(name: &str, args: &[Value]) -> Option<Result<Value, VmError>> {
         "load_env" => (|| match args {
             [Value::Str(path)] => {
                 crate::security::require_file_read()?;
+                // this mutates the process environment, so it needs the same capability as env_set
+                crate::security::require_process_spawn()?;
                 let text = std::fs::read_to_string(path).map_err(|e| VmError::runtime_error(format!("load_env: cannot read {}: {}", path, e)))?;
                 let mut set = Vec::new();
                 for (k, v) in parse_env(&text) {

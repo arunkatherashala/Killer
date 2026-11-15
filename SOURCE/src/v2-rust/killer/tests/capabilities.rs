@@ -241,6 +241,14 @@ fn process_and_native_builtins_require_their_capabilities() {
     assert_denied("polyglot_exec", vec![s("python"), s("print(1)")]);
     assert_denied("env_get", vec![s("PATH")]);
     assert_denied("env_set", vec![s("KILLER_X"), s("1")]);
+    assert_denied("env", vec![s("PATH")]);
+    assert_denied("args", vec![]);
+    let envf = std::env::temp_dir().join("killer_caps_loadenv.env");
+    std::fs::write(&envf, "KILLER_CAPS_LOADENV_X=1
+").unwrap();
+    assert_denied("load_env", vec![s(&fwd(&envf))]);
+    assert!(std::env::var_os("KILLER_CAPS_LOADENV_X").is_none());
+    let _ = std::fs::remove_file(&envf);
     assert_denied("process_exit", vec![Value::Number(3.0)]);
     assert_denied("ffi_open", vec![s("kernel32")]);
     assert_denied("ffi_alloc", vec![Value::Number(16.0)]);
