@@ -488,7 +488,10 @@ fn compile_normalized(lines: &[(usize, String)], map: &crate::sourcemap::SourceM
     let function_names: HashMap<usize, String> = state
         .functions
         .iter()
-        .map(|(name, meta)| (old_to_new[meta.start.min(n_old)], name.clone()))
+        // nested functions are keyed `outer/inner`; the VM exposes the plain name. The plain and the
+        // scoped entry share one start, so without stripping the scope the map kept whichever won the
+        // hash-iteration race and a function value could vanish (`Undefined variable __lambda_1`).
+        .map(|(name, meta)| (old_to_new[meta.start.min(n_old)], name.rsplit('/').next().unwrap_or(name).to_string()))
         .collect();
 
     // Remap method_bytecode indices through the optimization map too

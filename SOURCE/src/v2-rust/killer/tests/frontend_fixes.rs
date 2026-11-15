@@ -108,3 +108,16 @@ fn switch_empty_case_warns_and_does_not_fall_through() {
     assert!(!out.contains("two"), "{out}");
     assert!(out.contains("shared"), "{out}");
 }
+
+#[test]
+fn nested_function_and_lambda_values_survive_scoped_registration() {
+    // Nested functions are registered as `outer/inner` and under the plain name; both entries share
+    // one start, so a function-name table that kept the scoped spelling lost the value depending on
+    // hash-iteration order. Run several times (each process has its own hash seed).
+    let src = "fn outer() {\n  fn helper(x) {\n    return x + 1\n  }\n  return map([1, 2], helper)\n}\n\
+               fn other() {\n  return map([1, 2], x => x * 10)\n}\n\
+               println(outer())\nprintln(other())\n";
+    for _ in 0..8 {
+        assert_eq!(run(src), "[2, 3]\n[10, 20]");
+    }
+}
