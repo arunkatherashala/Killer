@@ -77,6 +77,20 @@ sha256_of() {
   fi
 }
 
+# Tags end up in URLs and file names: only [A-Za-z0-9._-] is accepted (no slashes, "..", spaces, quotes, ...).
+valid_tag() {
+  case "$1" in
+    ""|*[!A-Za-z0-9._-]*|.|..|-*) return 1 ;;
+  esac
+  case "$1" in *..*) return 1 ;; esac
+  return 0
+}
+
+if [ "$VERSION" != "latest" ] && ! valid_tag "$VERSION"; then
+  echo "invalid version '$VERSION': only letters, digits, '.', '_' and '-' are allowed" >&2
+  exit 2
+fi
+
 TARGET="$(detect_target)" || exit 1
 
 if [ "$VERSION" = "latest" ]; then
@@ -101,10 +115,19 @@ else
   TAG="$VERSION"
 fi
 
+if [ "$DRY_RUN" -eq 0 ] && ! valid_tag "$TAG"; then
+  echo "refusing release tag '$TAG': only letters, digits, '.', '_' and '-' are allowed" >&2
+  exit 1
+fi
+
 NAME="killer_super-$TAG-$TARGET"
 BASE="${KILLER_BASE_URL:-https://github.com/$REPO/releases/download/$TAG}"
 BIN_DIR="$PREFIX/bin"
 
+if [ -n "${KILLER_BASE_URL:-}" ]; then
+  echo "NOTE: KILLER_BASE_URL is set; downloading from $KILLER_BASE_URL instead of github.com/$REPO." >&2
+  echo "      The .sha256 file is fetched from the same place, so it detects corruption but does not prove the origin is trustworthy." >&2
+fi
 echo "target:   $TARGET"
 echo "tag:      $TAG"
 echo "archive:  $BASE/$NAME.tar.gz"

@@ -20,6 +20,10 @@ $arch = $env:PROCESSOR_ARCHITECTURE
 if ($arch -ne "AMD64") { throw "no prebuilt binary for Windows $arch; build from source with cargo" }
 $target = "windows-x64"
 
+# Tags end up in URLs and file names: only [A-Za-z0-9._-] is accepted.
+function Test-Tag([string]$t) { return ($t -match '^[A-Za-z0-9][A-Za-z0-9._-]*$') -and ($t -notmatch '\.\.') }
+if ($Version -ne "latest" -and -not (Test-Tag $Version)) { throw "invalid version '$Version': only letters, digits, '.', '_' and '-' are allowed" }
+
 if ($Version -eq "latest") {
   if ($DryRun) { $Tag = "<latest tag>" }
   else {
@@ -35,6 +39,10 @@ if ($Version -eq "latest") {
   }
 } else { $Tag = $Version }
 
+if (-not $DryRun -and -not (Test-Tag $Tag)) { throw "refusing release tag '$Tag': only letters, digits, '.', '_' and '-' are allowed" }
+if ($env:KILLER_BASE_URL) {
+  Write-Warning "KILLER_BASE_URL is set; downloading from $($env:KILLER_BASE_URL) instead of github.com/$Repo. The .sha256 file comes from the same place, so it detects corruption but does not prove the origin is trustworthy."
+}
 $name = "killer_super-$Tag-$target"
 $base = if ($env:KILLER_BASE_URL) { $env:KILLER_BASE_URL } else { "https://github.com/$Repo/releases/download/$Tag" }
 $binDir = Join-Path $Prefix "bin"
