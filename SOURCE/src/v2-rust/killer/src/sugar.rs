@@ -418,6 +418,47 @@ fn target_len(s: &str) -> Option<usize> {
     Some(b[..i].iter().map(|c| c.len_utf8()).sum())
 }
 
+/// `a[next()] += 1` expands to `a[next()] = a[next()] + (1)`, which would call `next()` twice. Every
+/// index that contains a call is evaluated once into a hidden variable first: returns the
+/// `tmp = index; ` prefix and the target with those indices replaced by the variables.
+fn hoist_index_calls(target: &str, masked: &str, counter: &mut usize) -> (String, String) {
+    let (t, m) = (target.as_bytes(), masked.as_bytes());
+    let mut pre = String::new();
+    let mut out = String::new();
+    let (mut i, mut last) = (0, 0);
+    while i < m.len() {
+        if m[i] == b'[' {
+            let mut depth = 0;
+            let mut j = i;
+            while j < m.len() {
+                match m[j] {
+                    b'[' => depth += 1,
+                    b']' => {
+                        depth -= 1;
+                        if depth == 0 {
+                            break;
+                        }
+                    }
+                    _ => {}
+                }
+                j += 1;
+            }
+            if j < m.len() && m[i + 1..j].contains(&b'(') {
+                let name = format!("__ci{}", *counter);
+                *counter += 1;
+                pre.push_str(&format!("{} = {}; ", name, String::from_utf8_lossy(&t[i + 1..j])));
+                out.push_str(&target[last..i + 1]);
+                out.push_str(&name);
+                last = j;
+            }
+            i = j;
+        }
+        i += 1;
+    }
+    out.push_str(&target[last..]);
+    (pre, out)
+}
+
 fn split_top_level_commas(masked: &str, original: &str) -> Vec<String> {
     // `masked` and `original` have identical byte layouts (see `mask_strings`), and commas are ASCII,
     // so every split position is a valid char boundary in both.
@@ -514,8 +555,8 @@ fn rewrite_line(line: &str, counter: &mut usize) -> String {
     if let Some(tl) = target_len(code) {
         let rest = code[tl..].trim();
         if rest == "++" {
-            let target = &code[..tl];
-            return format!("{}{} = {} + 1{}", indent, target, target, comment_part);
+            let (pre, target) = hoist_index_calls(&code[..tl], &masked_code[..tl], counter);
+            return format!("{}{}{} = {} + 1{}", indent, pre, target, target, comment_part);
         }
         // 2) x += e   x -= e   x *= e   x /= e   x %= e
         let rest_masked = masked_code[tl..].trim_start();
@@ -523,10 +564,10 @@ fn rewrite_line(line: &str, counter: &mut usize) -> String {
         let mut it = rest_masked.chars();
         if let (Some(op), Some('=')) = (it.next(), it.next()) {
             if matches!(op, '+' | '-' | '*' | '/' | '%') && !rest_masked[2..].starts_with('=') {
-                let target = &code[..tl];
                 let rhs = rest_orig[2..].trim();
                 if !rhs.is_empty() {
-                    return format!("{}{} = {} {} ({}){}", indent, target, target, op, rhs, comment_part);
+                    let (pre, target) = hoist_index_calls(&code[..tl], &masked_code[..tl], counter);
+                    return format!("{}{}{} = {} {} ({}){}", indent, pre, target, target, op, rhs, comment_part);
                 }
             }
         }

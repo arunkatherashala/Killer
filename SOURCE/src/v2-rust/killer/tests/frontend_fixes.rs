@@ -79,3 +79,23 @@ fn if_tail_value_keeps_other_behavior() {
                fn d(x) {\n  if x { 1 } else { 2 }\n  3\n}\nprintln(d(true))\n";
     assert_eq!(run(src), "null\nnull\n7\n8\n3");
 }
+
+#[test]
+fn optional_chaining_chains_left_to_right() {
+    let src = "d = {\"b\": {\"c\": 1}}\nn = null\nprintln(d?.b?.c)\nprintln(d?.b.c)\nprintln(n?.b?.c)\nprintln(n?.b.c)\nprintln(\"abc\"?.upper())\n\
+               fn f(o) {\n  return o?.b?.c\n}\nprintln(f(d))\nprintln(f(null))\n";
+    assert_eq!(run(src), "1\n1\nnull\nnull\nABC\n1\nnull");
+}
+
+#[test]
+fn compound_assignment_and_chained_comparison_evaluate_once() {
+    let src = "counter = [0]\nfn next() {\n  counter[0] = counter[0] + 1\n  return 0\n}\n\
+               xs = [10, 20]\nxs[next()] += 5\nprintln(xs[0])\nprintln(counter[0])\n\
+               xs[next()]++\nprintln(xs[0])\nprintln(counter[0])\n\
+               fn f() {\n  counter[0] = counter[0] + 1\n  return 5\n}\n\
+               counter[0] = 0\nprintln(0 < f() < 10)\nprintln(counter[0])\n\
+               counter[0] = 0\nprintln(10 < f() < 20)\nprintln(counter[0])\n\
+               counter[0] = 0\nprintln(0 < f() < 10 < 3 < f())\nprintln(counter[0])\n\
+               println(1 in [1, 2] == true)\n";
+    assert_eq!(run(src), "15\n1\n16\n2\ntrue\n1\nfalse\n1\nfalse\n1\ntrue");
+}

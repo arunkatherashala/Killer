@@ -4201,25 +4201,37 @@ fn compile_expr_str(
         }
     }
 
-    // `obj?.method(args)` / `obj?.field` — optional chaining: returns null if obj is null
+    // `obj?.rest` — optional chaining: null when `obj` is null, else `obj.rest`. The chain is split
+    // at its first `?.` and the remainder (which may contain further `?.`) is compiled against a
+    // hidden temporary holding `obj`, so `a?.b?.c` and `a?.b.c` short-circuit left to right.
     if let Some(qmark_pos) = find_top_level_op(expr, "?.") {
         let obj_part = expr[..qmark_pos].trim();
         let rest = expr[qmark_pos + 2..].trim();
-        compile_expr_str(obj_part, line_no, state, context)?;
-        if let Some(paren_start) = rest.find('(') {
-            let method_name = rest[..paren_start].trim().to_string();
-            let args_src = rest[paren_start + 1..rest.len().saturating_sub(1)].trim();
-            let args_list = split_arguments(args_src).unwrap_or_default();
-            for arg in &args_list {
-                compile_expr_str(arg.trim(), line_no, state, context)?;
-            }
-            state.instructions.push(Instruction::OptionalChain { method_name, arg_count: args_list.len() });
-        } else {
-            // Field access: obj?.field — emit OptionalChain with 0 args
-            let field = rest.trim().to_string();
-            state.instructions.push(Instruction::OptionalChain { method_name: field, arg_count: 0 });
+        if !obj_part.is_empty() && !rest.is_empty() {
+            compile_expr_str(obj_part, line_no, state, context)?;
+            let temps_base = state.lc_temps;
+            let slot = context.next_slot.saturating_add(state.lc_temps);
+            state.lc_temps += 1;
+            state.instructions.push(Instruction::StoreSlot(slot));
+            state.instructions.push(Instruction::LoadSlot(slot));
+            state.instructions.push(Instruction::ConstNull);
+            state.instructions.push(Instruction::Eq);
+            let to_access = state.instructions.len();
+            state.instructions.push(Instruction::JumpIfFalse(usize::MAX));
+            state.instructions.push(Instruction::ConstNull);
+            let to_end = state.instructions.len();
+            state.instructions.push(Instruction::Jump(usize::MAX));
+            state.instructions[to_access] = Instruction::JumpIfFalse(state.instructions.len());
+            let temp_name = format!("__oc{}", slot);
+            let mut scope = shadowed_context(context, &[]);
+            scope.slot_map.insert(temp_name.clone(), slot);
+            scope.current_function_name = context.current_function_name.clone();
+            let access = compile_expr_str(&format!("{}.{}", temp_name, rest), line_no, state, &scope);
+            state.lc_temps = temps_base;
+            access?;
+            state.instructions[to_end] = Instruction::Jump(state.instructions.len());
+            return Ok(());
         }
-        return Ok(());
     }
 
     // `obj.method(args)` — method call or `obj.field` — property access
@@ -6409,23 +6421,57 @@ fn compile_binary_operators(
                 });
             }
         } else {
-            // a < b < c  ==  (a < b) && (b < c)   (the middle operands are evaluated twice)
-            // The rewrite is textual: an operand with an unterminated string or unbalanced brackets
-            // would make the rewritten text split as a chain again, forever.
+            // a < b < c  ==  (a < b) && (b < c), each operand evaluated once
+            // An operand with an unterminated string or unbalanced brackets is rejected up front.
             if operands.iter().any(|o| !operand_is_balanced(o)) {
                 return Err(VmError::parse_error_simple(format!(
                     "Line {}: unterminated string or unbalanced brackets in comparison `{}`",
                     line_no, expr
                 )));
             }
-            let mut text = String::new();
+            // Each operand is evaluated once, left to right, into a hidden slot; a failed
+            // comparison skips the operands after it.
+            let temps_base = state.lc_temps;
+            let slot_of = |k: usize| context.next_slot.saturating_add(temps_base).saturating_add(k as u16);
+            state.lc_temps = temps_base.saturating_add(operands.len() as u16);
+            compile_expr_str(operands[0], line_no, state, context)?;
+            state.instructions.push(Instruction::StoreSlot(slot_of(0)));
+            let mut shorts: Vec<usize> = Vec::new();
             for (i, op) in ops.iter().enumerate() {
                 if i > 0 {
-                    text.push_str(" && ");
+                    shorts.push(state.instructions.len());
+                    state.instructions.push(Instruction::AndShort(usize::MAX));
                 }
-                text.push_str(&format!("({} {} {})", operands[i], op, operands[i + 1]));
+                compile_expr_str(operands[i + 1], line_no, state, context)?;
+                state.instructions.push(Instruction::StoreSlot(slot_of(i + 1)));
+                if *op == "in" || *op == "not in" {
+                    state.instructions.push(Instruction::LoadSlot(slot_of(i + 1)));
+                    state.instructions.push(Instruction::LoadSlot(slot_of(i)));
+                    state.instructions.push(Instruction::CallBuiltin("contains".to_string(), 2));
+                    if *op == "not in" {
+                        state.instructions.push(Instruction::Not);
+                    }
+                } else {
+                    state.instructions.push(Instruction::LoadSlot(slot_of(i)));
+                    state.instructions.push(Instruction::LoadSlot(slot_of(i + 1)));
+                    state.instructions.push(match *op {
+                        "==" => Instruction::Eq,
+                        "!=" => Instruction::Ne,
+                        ">=" => Instruction::Ge,
+                        "<=" => Instruction::Le,
+                        ">" => Instruction::Gt,
+                        _ => Instruction::Lt,
+                    });
+                }
+                if i > 0 {
+                    state.instructions.push(Instruction::And);
+                }
             }
-            compile_expr_str(&text, line_no, state, context)?;
+            let end = state.instructions.len();
+            for j in shorts {
+                state.instructions[j] = Instruction::AndShort(end);
+            }
+            state.lc_temps = temps_base;
         }
         return Ok(true);
     }
