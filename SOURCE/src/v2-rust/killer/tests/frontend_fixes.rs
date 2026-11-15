@@ -58,3 +58,24 @@ fn nested_functions_with_the_same_name_in_two_outers() {
     let src = "fn a() {\n  fn helper() {\n    return 1\n  }\n  return helper() + 10\n}\nfn b() {\n  fn helper() {\n    return 2\n  }\n  return helper() + 20\n}\nprintln(a())\nprintln(b())\n";
     assert_eq!(run(src), "11\n22");
 }
+
+#[test]
+fn if_as_last_statement_returns_branch_value() {
+    let src = "kfn fib(n) { if n <= 1 { n } else { fib(n - 1) + fib(n - 2) } }\nprintln(fib(10))\n\
+               fn sign(x) {\n  if x < 0 {\n    \"neg\"\n  } else if x == 0 {\n    \"zero\"\n  } else {\n    \"pos\"\n  }\n}\n\
+               println(sign(-3))\nprintln(sign(0))\nprintln(sign(5))\n\
+               fn nested(a, b) {\n  if a {\n    if b { 1 } else { 2 }\n  } else {\n    3\n  }\n}\n\
+               println(nested(true, false))\nprintln(nested(false, false))\n";
+    assert_eq!(run(src), "55\nneg\nzero\npos\n2\n3");
+}
+
+#[test]
+fn if_tail_value_keeps_other_behavior() {
+    // no final else: still null; branch ending in an assignment: null; explicit return: unchanged;
+    // an `if` that is not the last statement: its value is discarded
+    let src = "fn a(x) {\n  if x { 1 }\n}\nprintln(a(false))\n\
+               fn b(x) {\n  y = 0\n  if x { y = 5 } else { y = 6 }\n}\nprintln(b(true))\n\
+               fn c(x) {\n  if x { return 7 } else { return 8 }\n}\nprintln(c(true))\nprintln(c(false))\n\
+               fn d(x) {\n  if x { 1 } else { 2 }\n  3\n}\nprintln(d(true))\n";
+    assert_eq!(run(src), "null\nnull\n7\n8\n3");
+}

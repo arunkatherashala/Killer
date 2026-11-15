@@ -315,6 +315,9 @@ struct CompileContext {
     tail_position: bool,
     /// The function body ended in a bare expression whose value was left on the stack.
     tail_value: bool,
+    /// Set by an `if` in tail position: the next block compiled treats its last statement as the
+    /// function's return value (see `compile_if_statement`).
+    tail_block: bool,
     runtime_scope_depth: usize,
     /// The function being compiled contains `yield` (it is a generator).
     in_generator: bool,
@@ -2000,6 +2003,7 @@ fn compile_expr(
                 global_decls: Default::default(),
                 tail_position: false,
                 tail_value: false,
+                tail_block: false,
                 runtime_scope_depth: 0,
                 in_generator: false,
                 finally_stack: Vec::new(),
@@ -2395,6 +2399,9 @@ fn compile_block(
     let saved_slot_map = context.slot_map.clone();
     let saved_next_slot = context.next_slot;
     let let_mark = context.let_new.len();
+    // an `if` in tail position asks its branch blocks to return their last expression
+    let tail_block = std::mem::take(&mut context.tail_block);
+    let block_is_tail = (stop_on_closing_brace && !needs_runtime_scope) || tail_block;
 
     // Push runtime scope barrier for true blocks
     if needs_runtime_scope {
@@ -2488,7 +2495,8 @@ fn compile_block(
         }
 
         if line.starts_with("if ") || line.starts_with("if(") {
-            compile_if_statement(lines, cursor, state, context)?;
+            let tail = block_is_tail && context.in_function && !context.in_generator && if_chain_is_tail_value(lines, *cursor);
+            compile_if_statement(lines, cursor, state, context, tail)?;
             continue;
         }
 
@@ -2605,7 +2613,7 @@ fn compile_block(
             *cursor = end_phys + 1;
             continue;
         }
-        let is_fn_body = stop_on_closing_brace && !needs_runtime_scope;
+        let is_fn_body = block_is_tail;
         let next_is_close = lines.get(end_phys + 1).map_or(false, |(_, l)| l.trim() == "}");
         let last_piece = pieces.len().saturating_sub(1);
         for (index, piece) in pieces.iter().enumerate() {
@@ -2915,11 +2923,60 @@ fn compile_try_statement(
     Ok(())
 }
 
+/// True when the `if` at `start` is a complete `if / else if / else` chain that is the last
+/// statement of its block (the next line closes the block). Only then are its branch values the
+/// block's value; a chain without a final `else` could fall through without a value.
+fn if_chain_is_tail_value(lines: &[(usize, String)], start: usize) -> bool {
+    let mut i = start;
+    loop {
+        // header (possibly spread over several lines) up to its `{`
+        while i < lines.len() && lines[i].1.trim() != "{" {
+            i += 1;
+        }
+        if i >= lines.len() {
+            return false;
+        }
+        i = skip_braced_block(lines, i);
+        let Some((_, next)) = lines.get(i) else { return false };
+        let next = next.trim();
+        if next == "else" {
+            if lines.get(i + 1).map_or(true, |(_, l)| l.trim() != "{") {
+                return false;
+            }
+            let end = skip_braced_block(lines, i + 1);
+            return lines.get(end).map_or(false, |(_, l)| l.trim() == "}");
+        }
+        if next.starts_with("else if ") || next.starts_with("else if(") {
+            i += 1;
+            continue;
+        }
+        return false;
+    }
+}
+
+/// Compile one branch block of a tail-position `if`: its last bare expression is left on the
+/// stack as the value; a branch that ends otherwise (assignment, loop, `return`) yields null.
+fn compile_tail_branch(
+    lines: &[(usize, String)],
+    cursor: &mut usize,
+    state: &mut CompilerState,
+    context: &mut CompileContext,
+) -> Result<(), VmError> {
+    context.tail_block = true;
+    context.tail_value = false;
+    compile_block(lines, cursor, state, context, true, true)?;
+    if !context.tail_value {
+        state.instructions.push(Instruction::ConstNull);
+    }
+    Ok(())
+}
+
 fn compile_if_statement(
     lines: &[(usize, String)],
     cursor: &mut usize,
     state: &mut CompilerState,
     context: &mut CompileContext,
+    tail: bool,
 ) -> Result<(), VmError> {
     // An `else if` chain is compiled in a loop (not by recursion, and without copying the line
     // table per link), so a chain of thousands of branches is linear and cannot overflow the stack.
@@ -2943,7 +3000,11 @@ fn compile_if_statement(
         let jump_false_index = state.instructions.len();
         state.instructions.push(Instruction::JumpIfFalse(usize::MAX));
 
-        compile_block(lines, cursor, state, context, true, true)?;
+        if tail {
+            compile_tail_branch(lines, cursor, state, context)?;
+        } else {
+            compile_block(lines, cursor, state, context, true, true)?;
+        }
 
         if *cursor < lines.len() {
             let trimmed = lines[*cursor].1.trim();
@@ -2957,7 +3018,11 @@ fn compile_if_statement(
                 let else_target = state.instructions.len();
                 state.instructions[jump_false_index] = Instruction::JumpIfFalse(else_target);
 
-                compile_block(lines, cursor, state, context, true, true)?;
+                if tail {
+                    compile_tail_branch(lines, cursor, state, context)?;
+                } else {
+                    compile_block(lines, cursor, state, context, true, true)?;
+                }
                 end_pending_false = None;
                 break;
             } else if trimmed.starts_with("else if ") || trimmed.starts_with("else if(") {
@@ -2982,6 +3047,10 @@ fn compile_if_statement(
     }
     if let Some(j) = end_pending_false {
         state.instructions[j] = Instruction::JumpIfFalse(end_target);
+    }
+    if tail {
+        // every branch left exactly one value: it is the function's return value
+        context.tail_value = true;
     }
     Ok(())
 }
@@ -4608,6 +4677,7 @@ fn shadowed_context(context: &CompileContext, hide: &[String]) -> CompileContext
         global_decls: context.global_decls.clone(),
         tail_position: false,
         tail_value: false,
+        tail_block: false,
         runtime_scope_depth: context.runtime_scope_depth,
         in_generator: context.in_generator,
         finally_stack: Vec::new(),
@@ -5985,6 +6055,7 @@ fn compile_fn_definition(
         global_decls: Default::default(),
         tail_position: false,
         tail_value: false,
+        tail_block: false,
         runtime_scope_depth: 0,
         in_generator: false,
         finally_stack: Vec::new(),
@@ -6213,6 +6284,7 @@ fn compile_class_definition(
                 global_decls: Default::default(),
                 tail_position: false,
                 tail_value: false,
+                tail_block: false,
                 runtime_scope_depth: 0,
                 in_generator: false,
                 finally_stack: Vec::new(),
