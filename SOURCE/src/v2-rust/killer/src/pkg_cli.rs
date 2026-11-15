@@ -298,14 +298,28 @@ impl Index {
         let target = pinned.as_deref().or(reference);
         let _ = std::fs::remove_dir_all(&dest);
         std::fs::create_dir_all(dest.parent().unwrap()).map_err(|e| e.to_string())?;
-        run_git(None, &["clone", "--quiet", url, &dest.to_string_lossy()])?;
+        validate_git_value(url, "git url")?;
         if let Some(t) = target {
-            run_git(Some(&dest), &["checkout", "--quiet", t])?;
+            validate_git_value(t, "git ref")?;
+        }
+        run_git(None, &["clone", "--quiet", "--", url, &dest.to_string_lossy()])?;
+        if let Some(t) = target {
+            // `checkout <ref> --` forces <ref> to be read as a revision, never as an option
+            run_git(Some(&dest), &["checkout", "--quiet", t, "--"])?;
         }
         let commit = run_git(Some(&dest), &["rev-parse", "HEAD"])?.trim().to_string();
         self.git_dirs.insert(name.to_string(), dest.clone());
         Ok((dest, commit))
     }
+}
+
+/// Reject git URLs / refs that could be parsed by git as options (`--upload-pack=...`) or that
+/// contain whitespace or control characters.
+fn validate_git_value(v: &str, what: &str) -> Result<(), String> {
+    if v.is_empty() || v.starts_with('-') || v.chars().any(|c| c.is_control() || c.is_whitespace()) {
+        return Err(format!("refusing unsafe {} '{}': must not be empty, start with '-' or contain whitespace/control characters", what, v.escape_debug()));
+    }
+    Ok(())
 }
 
 fn run_git(dir: Option<&Path>, args: &[&str]) -> Result<String, String> {
@@ -581,5 +595,24 @@ mod tests {
         assert_eq!(a.flag("--dir"), Some("d"));
         assert!(a.has("--dev"));
         assert!(parse_args(&["--token".to_string()]).is_err());
+    }
+
+    #[test]
+    fn git_option_injection_is_rejected() {
+        assert!(validate_git_value("--upload-pack=touch /tmp/x", "git url").is_err());
+        assert!(validate_git_value("-c", "git ref").is_err());
+        assert!(validate_git_value("main branch", "git ref").is_err());
+        assert!(validate_git_value("a
+b", "git ref").is_err());
+        assert!(validate_git_value("https://example.com/r.git", "git url").is_ok());
+        assert!(validate_git_value("v1.2.3", "git ref").is_ok());
+        let proj = std::env::temp_dir().join(format!("killer_gitinj_{}", std::process::id()));
+        std::fs::create_dir_all(&proj).unwrap();
+        let mut idx = Index { project: proj.clone(), default_registry: None, locked_git: HashMap::new(), registries: HashMap::new(), git_dirs: HashMap::new() };
+        let e = idx.checkout("dep", "--upload-pack=touch /tmp/pwn", None).unwrap_err();
+        assert!(e.contains("unsafe"), "{}", e);
+        let e = idx.checkout("dep", "https://example.com/r.git", Some("--output=x")).unwrap_err();
+        assert!(e.contains("unsafe"), "{}", e);
+        let _ = std::fs::remove_dir_all(&proj);
     }
 }
