@@ -199,6 +199,11 @@ fn infer(expr: &str, env: &Env, fns: &HashMap<String, FnSig>) -> Ty {
     if e.is_empty() {
         return Ty::Any;
     }
+    // `c ? a : b` / `a if c else b` binds looser than every binary operator
+    if let Some((_, a, b)) = crate::exprsplit::split_ternary(e).or_else(|| crate::exprsplit::split_python_conditional(e)) {
+        let (at, bt) = (infer(a, env, fns), infer(b, env, fns));
+        return if at == bt { at } else { Ty::Any };
+    }
     if let Some((pos, len)) = find_binary(e) {
         let chars: Vec<char> = e.chars().collect();
         let l: String = chars[..pos].iter().collect();
@@ -454,7 +459,9 @@ fn check_calls(line: &str, lineno: usize, env: &Env, fns: &HashMap<String, FnSig
                         if let Some(close) = matching(&chars, j) {
                             let inner: String = chars[j + 1..close].iter().collect();
                             let args = split_args(&inner);
-                            if args.len() < sig.required || args.len() > sig.params.len() {
+                            if args.iter().any(|a| a.starts_with("...")) {
+                                // spread call: the argument count is only known at run time
+                            } else if args.len() < sig.required || args.len() > sig.params.len() {
                                 errs.push(format!(
                                     "type error (line {}): {}() takes {} argument(s), got {}",
                                     lineno,
@@ -492,11 +499,25 @@ pub fn process(source: &str) -> Result<String, VmError> {
     let mut fns: HashMap<String, FnSig> = HashMap::new();
     let mut any_annotation = false;
     let mut errs: Vec<String> = Vec::new();
+    let mut class_indent: Option<usize> = None;
     for (idx, line) in lines.iter().enumerate() {
         let trimmed = line.trim_start();
+        if !trimmed.is_empty() {
+            if let Some(ci) = class_indent {
+                if indent_of(line) <= ci && !trimmed.starts_with('}') {
+                    class_indent = None;
+                }
+            }
+            if class_indent.is_none() && trimmed.starts_with("class ") {
+                class_indent = Some(indent_of(line));
+            }
+        }
         match parse_header(trimmed) {
             Some(Ok(h)) => {
                 any_annotation |= h.annotated;
+                if class_indent.is_some() {
+                    continue; // a method, not a free function: it must not shadow builtins like push(list, x)
+                }
                 fns.insert(
                     h.name.clone(),
                     FnSig {
@@ -620,6 +641,17 @@ pub fn process(source: &str) -> Result<String, VmError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn spread_call_is_not_an_arity_error() {
+        let e = err("fn add(a: number, b: number) -> number {
+  return a + b
+}
+args = [1, 2]
+println(add(...args))
+");
+        assert!(e.is_empty(), "{}", e);
+    }
 
     fn err(src: &str) -> String {
         match process(src) {

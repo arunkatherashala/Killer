@@ -40,3 +40,15 @@ fn import_inside_string_or_polyglot_block_is_not_resolved() {
     let out = run("@python {\nimport nonexistent_pkg_zz\n}\nprintln(1)\n");
     assert!(!out.contains("cannot find import"), "{out}");
 }
+
+#[test]
+fn typecheck_ternary_does_not_report_false_errors() {
+    let src = "fn f(n: number) -> number { return n <= 1 ? n : f(n - 1) }\nn = 3\ns: string = n > 0 ? \"a\" : \"b\"\nprintln(f(3))\nprintln(s)\n";
+    assert_eq!(run(src), "1\na");
+}
+
+#[test]
+fn typecheck_class_method_does_not_shadow_builtin_arity() {
+    let src = "class Box {\n  fn push(item: number) {\n    this.v = item\n  }\n}\nxs = [1]\npush(xs, 2)\nprintln(len(xs))\n";
+    assert_eq!(run(src), "2");
+}
