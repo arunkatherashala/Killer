@@ -427,6 +427,7 @@ fn cmd_install(a: &Args, dir: &Path, update: bool, only: Option<&str>) -> Result
                 let reg = open_registry(url, dir)?;
                 let rel = reg.fetch(&r.name, &r.version)?;
                 let files = pkg_files::unpack(&rel.pack)?;
+                pkg_registry::verify_manifest_matches_archive(&rel.manifest, &files).map_err(|e| format!("{} {}: {}", r.name, r.version, e))?;
                 let actual = pkg_files::content_hash(&files);
                 if actual != rel.sha256 {
                     return Err(format!("checksum mismatch for {} {}: the registry says {} but the downloaded archive hashes to {}", r.name, r.version, rel.sha256, actual));

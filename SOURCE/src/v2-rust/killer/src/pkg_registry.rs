@@ -125,6 +125,7 @@ pub fn open(url: &str) -> Result<Registry, String> {
             Some((h, p)) => (h.to_string(), p.parse::<u16>().map_err(|_| format!("bad registry port in '{}'", u))?),
             None => (hostport.to_string(), 80),
         };
+        check_http_allowed(&host)?;
         return Ok(Registry::Http { host, port, url: format!("http://{}", hostport) });
     }
     if u.starts_with("https://") {
@@ -138,6 +139,32 @@ pub fn open(url: &str) -> Result<Registry, String> {
         u.to_string()
     };
     Ok(Registry::Dir(PathBuf::from(path)))
+}
+
+/// Plain-HTTP registries give no integrity guarantee (the checksum comes from the same server),
+/// and this crate has no TLS client. Loopback is allowed; anything else needs an explicit opt-in
+/// through `KILLER_ALLOW_INSECURE_REGISTRY=1`, and then a warning is printed.
+fn check_http_allowed(host: &str) -> Result<(), String> {
+    let h = host.trim_start_matches('[').trim_end_matches(']');
+    if h.eq_ignore_ascii_case("localhost") || h == "127.0.0.1" || h == "::1" {
+        return Ok(());
+    }
+    let optin = std::env::var("KILLER_ALLOW_INSECURE_REGISTRY").map(|v| v == "1" || v.eq_ignore_ascii_case("true")).unwrap_or(false);
+    if !optin {
+        return Err(format!("refusing plain-http registry '{}': the checksum would come from the same unauthenticated server. Use file:// or a loopback registry, or set KILLER_ALLOW_INSECURE_REGISTRY=1 to accept the risk", host));
+    }
+    eprintln!("warning: using plain-http registry '{}' (KILLER_ALLOW_INSECURE_REGISTRY=1); downloads are NOT authenticated", host);
+    Ok(())
+}
+
+/// The manifest the registry served for resolution must be the `killer.toml` inside the archive.
+pub fn verify_manifest_matches_archive(manifest: &str, files: &[(String, Vec<u8>)]) -> Result<(), String> {
+    let inner = files.iter().find(|(n, _)| n == "killer.toml").ok_or("archive has no killer.toml")?;
+    let norm = |b: &[u8]| String::from_utf8_lossy(b).replace("\r\n", "\n").trim().to_string();
+    if norm(&inner.1) != norm(manifest.as_bytes()) {
+        return Err("the manifest served by the registry differs from the killer.toml inside the downloaded archive".to_string());
+    }
+    Ok(())
 }
 
 impl Registry {
@@ -254,7 +281,22 @@ pub fn http_request(host: &str, port: u16, method: &str, path: &str, headers: &[
     req.push_str("\r\n");
     s.write_all(req.as_bytes()).and_then(|_| s.write_all(body)).map_err(|e| format!("registry write failed: {}", e))?;
     let mut raw = Vec::new();
-    s.read_to_end(&mut raw).map_err(|e| format!("registry read failed: {}", e))?;
+    // cap the response (a hostile server could stream forever) and bound the total time
+    let deadline = std::time::Instant::now() + Duration::from_secs(120);
+    let mut chunk = [0u8; 65536];
+    loop {
+        match s.read(&mut chunk) {
+            Ok(0) => break,
+            Ok(n) => raw.extend_from_slice(&chunk[..n]),
+            Err(e) => return Err(format!("registry read failed: {}", e)),
+        }
+        if raw.len() > MAX_BODY + 64 * 1024 {
+            return Err("registry response too large".to_string());
+        }
+        if std::time::Instant::now() > deadline {
+            return Err("registry response timed out".to_string());
+        }
+    }
     let split = raw.windows(4).position(|w| w == b"\r\n\r\n").ok_or("malformed registry response")?;
     let head = String::from_utf8_lossy(&raw[..split]).to_string();
     let status = head.lines().next().and_then(|l| l.split_whitespace().nth(1)).and_then(|c| c.parse::<u16>().ok()).ok_or("malformed registry status line")?;
@@ -348,8 +390,12 @@ pub fn handle(root: &Path, tokens: &[String], method: &str, path: &str, auth: Op
     }
 }
 
+const MAX_CONNECTIONS: usize = 64;
+const REQUEST_DEADLINE: Duration = Duration::from_secs(120);
+
 fn serve_connection(mut s: TcpStream, root: &Path, tokens: &[String]) {
     let _ = s.set_read_timeout(Some(Duration::from_secs(30)));
+    let started = std::time::Instant::now();
     let mut buf = Vec::new();
     let mut chunk = [0u8; 8192];
     let header_end = loop {
@@ -360,7 +406,7 @@ fn serve_connection(mut s: TcpStream, root: &Path, tokens: &[String]) {
             Ok(0) | Err(_) => return,
             Ok(n) => buf.extend_from_slice(&chunk[..n]),
         }
-        if buf.len() > 64 * 1024 {
+        if buf.len() > 64 * 1024 || started.elapsed() > REQUEST_DEADLINE {
             return;
         }
     };
@@ -385,6 +431,9 @@ fn serve_connection(mut s: TcpStream, root: &Path, tokens: &[String]) {
     } else {
         let mut body = buf[header_end + 4..].to_vec();
         while body.len() < len {
+            if started.elapsed() > REQUEST_DEADLINE {
+                return;
+            }
             match s.read(&mut chunk) {
                 Ok(0) | Err(_) => break,
                 Ok(n) => body.extend_from_slice(&chunk[..n]),
@@ -437,14 +486,23 @@ pub fn spawn_server(root: PathBuf, tokens: Vec<String>, bind: &str) -> Result<Se
     let flag = stop.clone();
     let root = Arc::new(root);
     let tokens = Arc::new(tokens);
+    let active = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let thread = std::thread::spawn(move || {
         for conn in listener.incoming() {
             if flag.load(Ordering::SeqCst) {
                 break;
             }
-            if let Ok(s) = conn {
-                let (r, t) = (root.clone(), tokens.clone());
-                std::thread::spawn(move || serve_connection(s, &r, &t));
+            if let Ok(mut s) = conn {
+                if active.fetch_add(1, Ordering::SeqCst) >= MAX_CONNECTIONS {
+                    active.fetch_sub(1, Ordering::SeqCst);
+                    let _ = s.write_all(b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+                    continue;
+                }
+                let (r, t, a) = (root.clone(), tokens.clone(), active.clone());
+                std::thread::spawn(move || {
+                    serve_connection(s, &r, &t);
+                    a.fetch_sub(1, Ordering::SeqCst);
+                });
             }
         }
     });
@@ -521,6 +579,45 @@ mod tests {
         assert_eq!(reg.names().unwrap(), vec!["net".to_string()]);
         srv.stop();
         let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn plain_http_registry_needs_opt_in_unless_loopback() {
+        assert!(open("http://127.0.0.1:1").is_ok());
+        assert!(open("http://localhost:1").is_ok());
+        let e = open("http://registry.example.com").unwrap_err();
+        assert!(e.contains("KILLER_ALLOW_INSECURE_REGISTRY"), "{}", e);
+    }
+
+    #[test]
+    fn archive_manifest_must_match_served_manifest() {
+        let files = pkg_files::unpack(&pack_of("lib", "1.0.0")).unwrap();
+        let ok = "[package]\nname = \"lib\"\nversion = \"1.0.0\"\n";
+        assert!(verify_manifest_matches_archive(ok, &files).is_ok());
+        let evil = "[package]\nname = \"lib\"\nversion = \"1.0.0\"\n[dependencies]\nx = \"1\"\n";
+        assert!(verify_manifest_matches_archive(evil, &files).is_err());
+    }
+
+    #[test]
+    fn client_caps_response_size() {
+        let l = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = l.local_addr().unwrap().port();
+        let t = std::thread::spawn(move || {
+            if let Ok((mut c, _)) = l.accept() {
+                let mut b = [0u8; 1024];
+                let _ = c.read(&mut b);
+                let _ = c.write_all(b"HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n");
+                let chunk = vec![0u8; 1 << 20];
+                for _ in 0..80 {
+                    if c.write_all(&chunk).is_err() {
+                        break;
+                    }
+                }
+            }
+        });
+        let e = http_request("127.0.0.1", port, "GET", "/x", &[], &[]).unwrap_err();
+        assert!(e.contains("too large"), "{}", e);
+        let _ = t.join();
     }
 
     #[test]
