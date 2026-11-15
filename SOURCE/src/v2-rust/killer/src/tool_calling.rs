@@ -223,9 +223,51 @@ fn extract_json_str_array(json: &str, key: &str) -> Option<Vec<String>> {
 
 // --- Tool Dispatcher ----------------------------------------------------------
 
+/// Tools that touch the network or the file system. Model output can request any tool by name, so
+/// these are denied unless the caller enabled them: `enable_tool(name)` from Rust, or the
+/// `KILLER_TOOL_ALLOW` environment variable (comma-separated names, or `*`).
+const SENSITIVE_TOOLS: &[&str] = &[
+    "http_get", "http_post_json", "http_status", "http_head", "http_download", "readFile",
+];
+
+static ENABLED_TOOLS: OnceLock<Mutex<std::collections::HashSet<String>>> = OnceLock::new();
+
+/// Explicitly allow a sensitive tool to be called by `tool_call` / `khlm_with_tools`.
+pub fn enable_tool(name: &str) {
+    if let Ok(mut s) = ENABLED_TOOLS.get_or_init(|| Mutex::new(Default::default())).lock() {
+        s.insert(name.to_string());
+    }
+}
+
+/// Withdraw a previous `enable_tool`.
+pub fn disable_tool(name: &str) {
+    if let Ok(mut s) = ENABLED_TOOLS.get_or_init(|| Mutex::new(Default::default())).lock() {
+        s.remove(name);
+    }
+}
+
+fn tool_allowed_in(name: &str, env_list: &str, enabled: &std::collections::HashSet<String>) -> bool {
+    if !SENSITIVE_TOOLS.contains(&name) {
+        return true;
+    }
+    enabled.contains(name) || env_list.split(',').map(|t| t.trim()).any(|t| t == "*" || t == name)
+}
+
+fn tool_allowed(name: &str) -> bool {
+    let env_list = std::env::var("KILLER_TOOL_ALLOW").unwrap_or_default();
+    let set = ENABLED_TOOLS.get_or_init(|| Mutex::new(Default::default()));
+    match set.lock() {
+        Ok(g) => tool_allowed_in(name, &env_list, &g),
+        Err(_) => false,
+    }
+}
+
 /// Dispatch a tool call by name+args to the corresponding Killer builtin.
 /// Returns the tool result as a String.
 pub fn dispatch_tool(name: &str, args: &[String]) -> String {
+    if !tool_allowed(name) {
+        return format!("Error: tool '{}' is not enabled (it reaches the network or the file system; enable it with KILLER_TOOL_ALLOW={} or tool_calling::enable_tool)", name, name);
+    }
     let val_args: Vec<Value> = args.iter()
         .map(|a| {
             // Try to parse as number, otherwise string
@@ -465,5 +507,38 @@ pub fn builtin_khlm_tool_clear(args: &[Value]) -> Result<Value, VmError> {
         Ok(Value::Str("Tool registry cleared".to_string()))
     } else {
         Ok(Value::Str("Error: tool registry lock failed".to_string()))
+    }
+}
+
+#[cfg(test)]
+mod allowlist_tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    #[test]
+    fn sensitive_tools_are_denied_by_default() {
+        let none = HashSet::new();
+        for t in ["http_download", "readFile", "http_get", "http_post_json"] {
+            assert!(!tool_allowed_in(t, "", &none), "{}", t);
+        }
+        assert!(tool_allowed_in("vmem_search", "", &none));
+        assert!(tool_allowed_in("polyglot_list", "", &none));
+        let mut on = HashSet::new();
+        on.insert("readFile".to_string());
+        assert!(tool_allowed_in("readFile", "", &on));
+        assert!(!tool_allowed_in("http_download", "", &on));
+        assert!(tool_allowed_in("http_download", "http_get, http_download", &none));
+        assert!(tool_allowed_in("http_head", "*", &none));
+    }
+
+    #[test]
+    fn dispatch_refuses_a_disabled_download_without_side_effects() {
+        let dest = std::env::temp_dir().join(format!("killer_tool_dl_{}.bin", std::process::id()));
+        let _ = std::fs::remove_file(&dest);
+        let r = dispatch_tool("http_download", &["http://127.0.0.1:9/x".to_string(), dest.to_string_lossy().to_string()]);
+        assert!(r.contains("not enabled"), "{}", r);
+        assert!(!dest.exists());
+        let r = dispatch_tool("readFile", &["Cargo.toml".to_string()]);
+        assert!(r.contains("not enabled"), "{}", r);
     }
 }

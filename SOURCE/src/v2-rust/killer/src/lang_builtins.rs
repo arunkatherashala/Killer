@@ -911,6 +911,7 @@ pub fn call(name: &str, args: &[Value]) -> Option<Result<Value, VmError>> {
 
         // ---- environment and process ----
         "env" => (|| {
+            crate::security::require_process_spawn()?;
             let a = arity("env", args, 1, 2)?;
             let key = string(&a[0], "env")?;
             match std::env::var(key) {
@@ -919,6 +920,7 @@ pub fn call(name: &str, args: &[Value]) -> Option<Result<Value, VmError>> {
             }
         })(),
         "args" => (|| {
+            crate::security::require_process_spawn()?;
             arity("args", args, 0, 0)?;
             // arguments after the script path (flags such as --run are not the program's own)
             let all: Vec<String> = std::env::args().collect();

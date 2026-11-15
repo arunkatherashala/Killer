@@ -142,6 +142,123 @@ pub fn builtin_http_status(args: &[Value]) -> Result<Value, VmError> {
     })
 }
 
+/// Lower-cased path components with `.`/`..` resolved; accepts both separators and drops a drive/UNC prefix.
+fn dest_components(p: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let p = p.trim_start_matches("\\\\?\\");
+    for c in p.replace('\\', "/").split('/') {
+        let c = c.trim().to_lowercase();
+        match c.as_str() {
+            "" | "." => {}
+            ".." => {
+                out.pop();
+            }
+            _ => out.push(c),
+        }
+    }
+    if out.first().map_or(false, |c| c.len() == 2 && c.ends_with(':')) {
+        out.remove(0);
+    }
+    out
+}
+
+fn home_dir_components() -> Option<Vec<String>> {
+    std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME")).ok().map(|h| dest_components(&h))
+}
+
+/// Pure policy check on a normalized destination (components as from `dest_components`).
+fn dest_components_denied(c: &[String], home: Option<&[String]>) -> Option<&'static str> {
+    const SYSTEM_TOP: &[&str] = &[
+        "etc", "bin", "sbin", "usr", "lib", "lib32", "lib64", "boot", "sys", "proc", "dev", "root", "system", "library", "windows", "winnt",
+        "program files", "program files (x86)", "programdata", "efi",
+    ];
+    const RC_FILES: &[&str] = &[
+        ".bashrc", ".bash_profile", ".bash_login", ".bash_logout", ".profile", ".zshrc", ".zshenv", ".zprofile", ".zlogin", ".cshrc", ".tcshrc",
+        ".kshrc", ".inputrc", "authorized_keys", "known_hosts", ".netrc", ".npmrc", ".pypirc", "microsoft.powershell_profile.ps1",
+        "profile.ps1", "microsoft.vscode_profile.ps1", "config.fish", ".gitconfig", "crontab",
+    ];
+    const SENSITIVE_DIRS: &[&str] = &[".ssh", ".gnupg", ".aws", ".kube", ".docker", "startup", "autostart", "cron.d", "cron.daily", "sudoers.d"];
+    if let Some(t) = c.first() {
+        if SYSTEM_TOP.contains(&t.as_str()) {
+            return Some("system directory");
+        }
+    }
+    if c.iter().any(|x| x.contains("system32") || x.contains("syswow64")) {
+        return Some("system directory");
+    }
+    if c.len() >= 2 && c[0] == "var" && (c[1] == "spool" || c[1] == "run" || c[1] == "lib") {
+        return Some("system directory");
+    }
+    if c.len() >= 2 && c[0] == "private" && (c[1] == "etc" || c[1] == "var") {
+        return Some("system directory");
+    }
+    // the final component is the file; every earlier one is a directory
+    if let Some((file, dirs)) = c.split_last() {
+        if dirs.iter().any(|d| SENSITIVE_DIRS.contains(&d.as_str())) {
+            return Some("startup or credential folder");
+        }
+        if RC_FILES.contains(&file.as_str()) || file.starts_with("id_rsa") || file.starts_with("id_ecdsa") || file.starts_with("id_ed25519") {
+            return Some("shell startup or credential file");
+        }
+        if let Some(h) = home {
+            if c.len() > h.len() && c.starts_with(h) && SENSITIVE_DIRS.contains(&c[h.len()].as_str()) {
+                return Some("startup or credential folder");
+            }
+        }
+        if dirs.windows(2).any(|w| w[0] == "start menu" && w[1] == "programs") {
+            return Some("startup folder");
+        }
+    }
+    None
+}
+
+/// Resolve `path` (`~`, relative parts, `..`, symlinks in the existing part) and refuse destinations
+/// under system directories, startup folders, credential folders or shell startup files.
+fn download_dest_check(path: &str) -> Result<(), &'static str> {
+    let home = home_dir_components();
+    let mut expanded = path.to_string();
+    if expanded == "~" || expanded.starts_with("~/") || expanded.starts_with("~\\") {
+        if let Ok(h) = std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME")) {
+            expanded = format!("{}{}", h, &expanded[1..]);
+        }
+    }
+    // 1. lexical check of what the script wrote, relative paths resolved against the cwd
+    let lexical = if std::path::Path::new(&expanded).is_absolute() || expanded.starts_with('/') || expanded.starts_with('\\') {
+        dest_components(&expanded)
+    } else {
+        let cwd = std::env::current_dir().map(|d| d.to_string_lossy().to_string()).unwrap_or_default();
+        dest_components(&format!("{}/{}", cwd, expanded))
+    };
+    if let Some(w) = dest_components_denied(&lexical, home.as_deref()) {
+        return Err(w);
+    }
+    // 2. check again after resolving symlinks in the deepest existing ancestor
+    let abs = std::path::PathBuf::from(&expanded);
+    let abs = if abs.is_absolute() { abs } else { std::env::current_dir().map(|d| d.join(&abs)).unwrap_or(abs) };
+    let mut tail: Vec<std::ffi::OsString> = Vec::new();
+    let mut cur = abs.as_path();
+    loop {
+        if let Ok(real) = cur.canonicalize() {
+            let mut full = real;
+            for t in tail.iter().rev() {
+                full.push(t);
+            }
+            let comps = dest_components(&full.to_string_lossy());
+            if let Some(w) = dest_components_denied(&comps, home.as_deref()) {
+                return Err(w);
+            }
+            return Ok(());
+        }
+        match (cur.file_name(), cur.parent()) {
+            (Some(n), Some(par)) => {
+                tail.push(n.to_os_string());
+                cur = par;
+            }
+            _ => return Ok(()),
+        }
+    }
+}
+
 /// http_download(url, dest_path [, headers] [, secs]) → String  ("Downloaded to: ..." or error)
 pub fn builtin_http_download(args: &[Value]) -> Result<Value, VmError> {
     crate::security::require_network()?;
@@ -151,9 +268,8 @@ pub fn builtin_http_download(args: &[Value]) -> Result<Value, VmError> {
         Some(Value::Str(s)) => s.clone(),
         _ => return Ok(Value::Str("Error: http_download(url, path) requires a destination path".to_string())),
     };
-    let lp = path.to_lowercase();
-    if lp.contains("system32") || lp.contains("/etc/") || lp.contains("/bin/") {
-        return Ok(err_str(format!("Download destination blocked: {}", path)));
+    if let Err(why) = download_dest_check(&path) {
+        return Ok(err_str(format!("Download destination blocked: {} ({})", path, why)));
     }
     let (h, t) = extras(args, 2, 120.0);
     let mut s = spec("GET", &url, h, None, t);
@@ -296,3 +412,37 @@ fn split_json_items(s: &str) -> Vec<&str> {
     items
 }
 
+
+#[cfg(test)]
+mod download_dest_tests {
+    use super::*;
+
+    #[test]
+    fn dangerous_destinations_are_refused() {
+        for p in [
+            "~/.ssh/authorized_keys",
+            "/usr/lib/x",
+            "\\etc\\x",
+            "/etc/passwd",
+            "/tmp/../etc/cron.d/x",
+            "C:\\Windows\\System32\\x.dll",
+            "c:/WINDOWS/x.exe",
+            "C:\\Users\\bob\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\evil.bat",
+            "~/.bashrc",
+            "/home/u/.zshrc",
+            "foo/../../../../../../../../../../../../../../../../../../../../etc/x",
+            "C:\\Users\\bob\\Documents\\WindowsPowerShell\\Microsoft.PowerShell_profile.ps1",
+            "/Library/x",
+        ] {
+            assert!(download_dest_check(p).is_err(), "{} should be blocked", p);
+        }
+    }
+
+    #[test]
+    fn ordinary_destinations_are_allowed() {
+        let d = std::env::temp_dir().join("killer_dl_ok.bin");
+        assert!(download_dest_check(&d.to_string_lossy()).is_ok());
+        assert!(download_dest_check("out.bin").is_ok());
+        assert!(download_dest_check("data/etcetera/x.txt").is_ok());
+    }
+}

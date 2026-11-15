@@ -279,6 +279,19 @@ pub fn reap(child: &mut Child, grace: Duration) {
     let _ = child.wait();
 }
 
+/// Most simultaneous TLS client connections `spawn_front` serves; further ones are dropped at once.
+pub const MAX_TLS_CONNECTIONS: usize = 128;
+/// A client must deliver its first request bytes (handshake included) within this long.
+const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(30);
+/// A connection with no traffic for this long is closed.
+const IDLE_TIMEOUT: Duration = Duration::from_secs(300);
+
+/// Reserve a connection slot; false when `max` are already in use.
+pub fn admit(active: &std::sync::atomic::AtomicUsize, max: usize) -> bool {
+    use std::sync::atomic::Ordering;
+    active.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| if n >= max { None } else { Some(n + 1) }).is_ok()
+}
+
 /// A TLS front for plain-text servers: listens on `front`, and for every connection terminates TLS and forwards the
 /// plain text to `backend` (a loopback address). Used by `serve(..., {tls: {cert, key}})`. Stops when `stop` is set;
 /// `active` counts the connections still being served, so the caller can let them finish before it exits.
@@ -289,6 +302,11 @@ pub fn spawn_front(front: TcpListener, backend: std::net::SocketAddr, cert: Stri
         while !stop.load(Ordering::SeqCst) {
             match front.accept() {
                 Ok((raw, _)) => {
+                    if !admit(&active, MAX_TLS_CONNECTIONS) {
+                        tdbg!("too many TLS connections; dropping one");
+                        drop(raw);
+                        continue;
+                    }
                     let (cert, key) = (cert.clone(), key.clone());
                     struct Active(std::sync::Arc<std::sync::atomic::AtomicUsize>);
                     impl Drop for Active {
@@ -296,10 +314,37 @@ pub fn spawn_front(front: TcpListener, backend: std::net::SocketAddr, cert: Stri
                             self.0.fetch_sub(1, Ordering::SeqCst);
                         }
                     }
-                    active.fetch_add(1, Ordering::SeqCst);
                     let token = Active(active.clone());
+                    // watchdog: closes the client socket when the handshake stalls or the connection goes idle
+                    let last = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)); // ms since `born` of the last traffic
+                    let got_first = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+                    let born = Instant::now();
+                    let finished = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+                    if let Ok(wd) = raw.try_clone() {
+                        let (last, got_first, finished) = (last.clone(), got_first.clone(), finished.clone());
+                        std::thread::spawn(move || {
+                            while !finished.load(Ordering::SeqCst) {
+                                std::thread::sleep(Duration::from_millis(500));
+                                let now = born.elapsed();
+                                let quiet = now.saturating_sub(Duration::from_millis(last.load(Ordering::SeqCst)));
+                                let limit = if got_first.load(Ordering::SeqCst) { IDLE_TIMEOUT } else { HANDSHAKE_TIMEOUT };
+                                if quiet > limit {
+                                    let _ = wd.shutdown(Shutdown::Both);
+                                    return;
+                                }
+                            }
+                        });
+                    }
+                    let (w_last, w_first) = (last.clone(), got_first.clone());
                     std::thread::spawn(move || {
                         let _token = token;
+                        struct Fin(std::sync::Arc<std::sync::atomic::AtomicBool>);
+                        impl Drop for Fin {
+                            fn drop(&mut self) {
+                                self.0.store(true, Ordering::SeqCst);
+                            }
+                        }
+                        let _fin = Fin(finished);
                         let t = match terminate(raw, &cert, &key, "serve") {
                             Ok(t) => t,
                             Err(_) => return,
@@ -330,6 +375,8 @@ pub fn spawn_front(front: TcpListener, backend: std::net::SocketAddr, cert: Stri
                                 return;
                             }
                         };
+                        w_first.store(true, Ordering::SeqCst);
+                        w_last.store(born.elapsed().as_millis() as u64, Ordering::SeqCst);
                         let back = match TcpStream::connect(backend) {
                             Ok(b) => b,
                             Err(_) => {
@@ -349,12 +396,14 @@ pub fn spawn_front(front: TcpListener, backend: std::net::SocketAddr, cert: Stri
                             return;
                         }
                         // client -> backend
+                        let up_last = w_last.clone();
                         let up = std::thread::spawn(move || {
                             let mut b = [0u8; 16384];
                             while let Ok(n) = stdout.read(&mut b) {
                                 if n == 0 || back_w.write_all(&b[..n]).is_err() {
                                     break;
                                 }
+                                up_last.store(born.elapsed().as_millis() as u64, Ordering::SeqCst);
                             }
                             let _ = back_w.shutdown(Shutdown::Write);
                         });
@@ -364,6 +413,7 @@ pub fn spawn_front(front: TcpListener, backend: std::net::SocketAddr, cert: Stri
                             if n == 0 || stdin.write_all(&b[..n]).is_err() || stdin.flush().is_err() {
                                 break;
                             }
+                            w_last.store(born.elapsed().as_millis() as u64, Ordering::SeqCst);
                         }
                         drop(stdin); // EOF: s_server finishes the connection
                         reap(&mut child, Duration::from_secs(20));
@@ -375,6 +425,24 @@ pub fn spawn_front(front: TcpListener, backend: std::net::SocketAddr, cert: Stri
             }
         }
     });
+}
+
+#[cfg(test)]
+mod conn_cap_tests {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    #[test]
+    fn admit_caps_concurrent_connections() {
+        let n = AtomicUsize::new(0);
+        for _ in 0..3 {
+            assert!(super::admit(&n, 3));
+        }
+        assert!(!super::admit(&n, 3));
+        assert_eq!(n.load(Ordering::SeqCst), 3);
+        n.fetch_sub(1, Ordering::SeqCst);
+        assert!(super::admit(&n, 3));
+        assert!(super::MAX_TLS_CONNECTIONS > 0);
+    }
 }
 
 #[cfg(all(test, windows))]
