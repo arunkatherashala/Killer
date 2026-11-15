@@ -717,29 +717,30 @@ pub fn dequant_iq3_xxs(data: &[u8], n: usize) -> Vec<f32> {
         let gas  = &data[src + 66 .. src + 98]; // gas = grid+sign bytes
 
         let base = b * QK;
-        // 32 groups of 8 elements
-        for g in 0..32usize {
-            // gas[g*?] packs: 8 bits = 8 sign bits; preceding 8 bits = hi grid index
-            let gas_off  = g * 2; // two bytes per group: [sign_u8, grid_high_u8? — actually in ggml it's reversed]
-            // ggml packs u32 the[g] = gas[4g..4g+4]: low 24 bits = 3 grid indices, high 8 = sign byte
-            let packed   = u32::from_le_bytes([gas[g*4], gas[g*4+1], gas[g*4+2], gas[g*4+3]]);
-            let signs    = (packed >> 24) as u8;
-            let gidx     = packed & 0x00FFFFFF;  // 3 × 8-bit grid indices → 3 entries × 8 floats/entry = 24? no, 8 elem per group
-            // Simpler: 8 elements from 4 packed 2-bit qs bytes + sign byte
-            let signs_u8 = signs;
-            for i in 0..8usize {
-                let qs_byte  = qs[(g * 8 + i) >> 2];
-                let q2       = (qs_byte >> ((i & 3) * 2)) & 3;
-                let grid_val = IQ3XXS_GRID[q2 as usize | ((gidx as usize >> (i * 3)) & 7) << 2];
-                let nibble   = ((grid_val >> ((i & 3) * 8)) & 0xFF) as u8;
-                let sign     = (signs_u8 >> i) & 1;
-                let mag      = match nibble {
-                    1 => 1.0f32, 2 => 3.0, 4 => 5.0, 5 | _ => 7.0,
-                };
-                let idx = base + g * 8 + i;
-                if idx < n { out[idx] = d * if sign != 0 { -mag } else { mag }; }
+        // ggml layout: `gas` holds 8 little-endian u32 words, one per 32-element sub-block.
+        // Each word packs four 7-bit sign selectors (bits 0..28) and a 4-bit scale (bits 28..32).
+        for ib32 in 0..8usize {
+            let w = ib32 * 4;
+            let aux = u32::from_le_bytes([gas[w], gas[w + 1], gas[w + 2], gas[w + 3]]);
+            let db = d * (0.5 + (aux >> 28) as f32) * 0.5;
+            for l in 0..4usize {
+                let sel = (aux >> (7 * l)) & 127;
+                // 8th sign bit is the parity of the 7 selector bits
+                let signs = sel | ((sel.count_ones() & 1) << 7);
+                let q0 = qs[ib32 * 8 + 2 * l] as usize;
+                let q1 = qs[ib32 * 8 + 2 * l + 1] as usize;
+                let g1 = IQ3XXS_GRID[q0];
+                let g2 = IQ3XXS_GRID[q1];
+                for j in 0..4usize {
+                    let m1 = ((g1 >> (j * 8)) & 0xFF) as f32;
+                    let m2 = ((g2 >> (j * 8)) & 0xFF) as f32;
+                    let s1 = if (signs >> j) & 1 != 0 { -1.0 } else { 1.0 };
+                    let s2 = if (signs >> (j + 4)) & 1 != 0 { -1.0 } else { 1.0 };
+                    let idx = base + ib32 * 32 + l * 8 + j;
+                    if idx < n { out[idx] = db * m1 * s1; }
+                    if idx + 4 < n { out[idx + 4] = db * m2 * s2; }
+                }
             }
-            let _ = gas_off; // suppress unused warning
         }
     }
     out
@@ -1028,6 +1029,16 @@ pub fn dequant_tq2_0(data: &[u8], n: usize) -> Vec<f32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn dequant_iq3_xxs_does_not_panic() {
+        let block = vec![0xA5u8; 98 * 2];
+        let out = dequant_iq3_xxs(&block, 512);
+        assert_eq!(out.len(), 512);
+        // short / odd sizes must also be safe
+        assert_eq!(dequant_iq3_xxs(&block[..97], 256).len(), 256);
+        assert_eq!(dequant_iq3_xxs(&block, 100).len(), 100);
+    }
 
     #[test]
     fn test_f16_to_f32_one() {
