@@ -187,3 +187,30 @@ live-memory check does not exist: there is no periodic live-bytes check at all, 
 (string and list repeat and concatenation, `range`, padding), the step budget, the time limit and the capability
 inheritance apply; nothing panics and no false "limit exceeded" is reported. `memcap::is_installed()` reports which
 case applies. `tests/eval_memory_embedded.rs` covers the no-allocator case.
+
+## Hardening notes (security branch)
+
+- *Package manager.* Git dependency URLs and refs that start with `-` or contain whitespace/control characters are
+  rejected, and `--` precedes positional arguments to `git clone`/`checkout`. Plain-HTTP registries are only accepted on
+  loopback; any other host needs `KILLER_ALLOW_INSECURE_REGISTRY=1` (a warning is printed). There is no TLS client in the
+  crate, so `https://` registries are still unsupported. The manifest served for resolution must equal the `killer.toml`
+  inside the downloaded archive. The registry client caps responses at 64 MB and 120 s; the server caps concurrent
+  connections (64) and per-request time (120 s).
+- *Sockets.* `ws_recv` caps a reassembled message at 64 MB, rejects continuation frames without a start and control
+  frames over 125 bytes; line reads are capped at 1 MB. `ws_accept(listener, ms, {"allowed_origins": "https://a,https://b"})`:
+  a handshake carrying an `Origin` header is refused unless it matches the `Host` (same origin) or the list (`*` = any);
+  clients without `Origin` are unaffected. The handshake must be a GET with `Upgrade: websocket` and `Connection: Upgrade`.
+- *SQL.* `LIKE` is iterative (no exponential backtracking); expressions nested deeper than 200 levels are an error.
+- *TLS front (`serve(..., {tls})`, `tls_listen`).* At most 128 concurrent connections; 30 s to deliver the first request,
+  300 s idle limit. Known limitation: the `serve` loop is single threaded, so a streaming (SSE) reply occupies it until the
+  stream ends or its time limit passes; one slow SSE client delays other requests. Not fixed (the VM is not shared across
+  threads).
+- *Capabilities.* `env()`, `args()` and `load_env()` need the process capability, like `env_get`/`env_set`.
+- *`http_download`.* Destinations are resolved (`~`, `..`, symlinks) and refused under system directories, startup folders,
+  `.ssh`/`.gnupg`/`.aws` and similar, and shell/PowerShell profile files.
+- *Kala UI.* Requests need a loopback `Host` and, when sent, a same-origin `Origin`; wildcard CORS was removed; at most
+  32 concurrent connections.
+- *Tool calling.* `http_*` and `readFile` tools are denied unless enabled with `tool_calling::enable_tool(name)` or
+  `KILLER_TOOL_ALLOW=name1,name2` (or `*`).
+- *Installers.* Version tags must match `[A-Za-z0-9._-]`; setting `KILLER_BASE_URL` prints a notice. Release archives are
+  checked against a SHA256 file from the same location; there are no signatures.
