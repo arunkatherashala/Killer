@@ -248,6 +248,20 @@ pub fn parse_datetime(input: &str) -> Result<KillerDateTime, String> {
         (0, 0, 0)
     };
 
+    if !(0..=9999).contains(&year) {
+        return Err("Year out of range (0-9999)".to_string());
+    }
+    if !(1..=12).contains(&month) {
+        return Err("Month out of range (1-12)".to_string());
+    }
+    let max_day = [31, if KillerDateTime::is_leap_year(year) { 29 } else { 28 }, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][(month - 1) as usize];
+    if day < 1 || day > max_day {
+        return Err("Day out of range for month".to_string());
+    }
+    if !(0..=23).contains(&hour) || !(0..=59).contains(&minute) || !(0..=59).contains(&second) {
+        return Err("Time out of range (HH 0-23, MM 0-59, SS 0-59)".to_string());
+    }
+
     // Simple calculation: days from 1970-01-01 to given date
     let mut total_days = 0i64;
     
@@ -286,4 +300,20 @@ pub fn parse_datetime(input: &str) -> Result<KillerDateTime, String> {
 /// Calculate duration between two datetimes (result in milliseconds)
 pub fn duration_millis(dt1: &KillerDateTime, dt2: &KillerDateTime) -> i64 {
     (dt2.seconds - dt1.seconds) * 1000 + (dt2.nanos as i64 - dt1.nanos as i64) / 1_000_000
+}
+
+#[cfg(test)]
+mod parse_range_tests {
+    use super::*;
+
+    #[test]
+    fn parse_datetime_rejects_out_of_range_fields() {
+        for bad in ["2020-13-01", "2020-00-01", "2000000000-01-01", "2020-02-30", "2021-02-29",
+                    "2020-01-00", "2020-01-32", "2020-01-01 24:00:00", "2020-01-01 00:60:00",
+                    "2020-01-01 00:00:60", "-5-01-01", "10000-01-01"] {
+            assert!(parse_datetime(bad).is_err(), "{bad} should be rejected");
+        }
+        assert!(parse_datetime("2020-02-29 23:59:59").is_ok());
+        assert!(parse_datetime("1970-01-01").unwrap().seconds == 0);
+    }
 }

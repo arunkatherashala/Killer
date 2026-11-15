@@ -2303,7 +2303,7 @@ impl BuiltinFunctions {
     fn cmp_sortable(a: &Value, b: &Value) -> std::cmp::Ordering {
         use std::cmp::Ordering;
         match (a, b) {
-            (Value::Number(x), Value::Number(y)) => x.partial_cmp(y).unwrap_or(Ordering::Equal),
+            (Value::Number(x), Value::Number(y)) => x.total_cmp(y),
             (Value::Str(x), Value::Str(y)) => x.cmp(y),
             (Value::Bool(x), Value::Bool(y)) => x.cmp(y),
             (Value::Array(x), Value::Array(y)) => {
@@ -2379,7 +2379,7 @@ impl BuiltinFunctions {
                         }
                         out.sort_by(|a, b| match (a, b) {
                             (Value::Number(x), Value::Number(y)) => {
-                                x.partial_cmp(y).unwrap_or(std::cmp::Ordering::Equal)
+                                x.total_cmp(y)
                             }
                             _ => std::cmp::Ordering::Equal,
                         });
@@ -2402,7 +2402,7 @@ impl BuiltinFunctions {
                         out.sort_by(|a, b| {
                             crate::bigint_ops::compare(a, b)
                                 .or_else(|| match (a, b) {
-                                    (Value::Number(x), Value::Number(y)) => x.partial_cmp(y),
+                                    (Value::Number(x), Value::Number(y)) => Some(x.total_cmp(y)),
                                     _ => None,
                                 })
                                 .unwrap_or(std::cmp::Ordering::Equal)
@@ -3688,7 +3688,7 @@ impl BuiltinFunctions {
         }
         let a = secs(&args[0])?;
         let b = secs(&args[1])?;
-        let diff = (a - b).abs() as f64;
+        let diff = (a as f64 - b as f64).abs();
         let unit = match args.get(2) { Some(Value::Str(s)) => s.as_str(), _ => "seconds" };
         let result = match unit {
             "minutes" => diff / 60.0,
@@ -3721,7 +3721,7 @@ impl BuiltinFunctions {
             "days"    => (amount * 86400.0) as i64,
             _         => amount as i64,
         };
-        let new_secs = secs_base + delta_s;
+        let new_secs = secs_base.saturating_add(delta_s);
         let mut d = std::collections::HashMap::new();
         d.insert("seconds".to_string(), Value::Number(new_secs as f64));
         d.insert("nanos".to_string(), Value::Number(0.0));
@@ -12493,46 +12493,31 @@ The fact that you shared this means something. What's underneath it  what are 
 
 // ── Date helpers (no external crates) ────────────────────────────────────
 
+/// Civil date (year, month 1-12, day 1-31) from days since 1970-01-01 (O(1), proleptic Gregorian).
+fn civil_from_days(days: i64) -> (i64, u32, u32) {
+    // Clamp so the arithmetic below cannot overflow for absurd inputs.
+    let z = days.clamp(-1_000_000_000_000, 1_000_000_000_000) + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
+    let y = yoe + era * 400 + if m <= 2 { 1 } else { 0 };
+    (y, m, d)
+}
+
 fn secs_to_year(secs: i64) -> i32 {
-    let days = secs / 86400;
-    let mut year = 1970i32;
-    let mut remaining = days;
-    loop {
-        let in_year = if is_leap(year) { 366 } else { 365 };
-        if remaining < in_year { break; }
-        remaining -= in_year;
-        year += 1;
-    }
-    year
+    let y = civil_from_days(secs.div_euclid(86400)).0;
+    y.clamp(i32::MIN as i64, i32::MAX as i64) as i32
 }
 
 fn secs_to_month(secs: i64) -> u32 {
-    let year = secs_to_year(secs);
-    let mut day_of_year = (secs / 86400 - days_before_year(year)) as u32;
-    let months = [31u32, if is_leap(year) { 29 } else { 28 }, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-    for (i, &m) in months.iter().enumerate() {
-        if day_of_year < m { return (i + 1) as u32; }
-        day_of_year -= m;
-    }
-    12
+    civil_from_days(secs.div_euclid(86400)).1
 }
 
 fn secs_to_day(secs: i64) -> u32 {
-    let year = secs_to_year(secs);
-    let mut day_of_year = (secs / 86400 - days_before_year(year)) as u32;
-    let months = [31u32, if is_leap(year) { 29 } else { 28 }, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-    for &m in &months {
-        if day_of_year < m { return day_of_year + 1; }
-        day_of_year -= m;
-    }
-    day_of_year + 1
-}
-
-fn is_leap(y: i32) -> bool { y % 4 == 0 && (y % 100 != 0 || y % 400 == 0) }
-
-fn days_before_year(year: i32) -> i64 {
-    let y = (year - 1970) as i64;
-    let leap_years = (1970..year as i64).filter(|&y| is_leap(y as i32)).count() as i64;
-    y * 365 + leap_years
+    civil_from_days(secs.div_euclid(86400)).2
 }
 
