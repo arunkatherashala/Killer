@@ -2510,7 +2510,17 @@ pub fn builtin_kala_serve(args: &[Value]) -> Result<Value, VmError> {
 
     for stream in listener.incoming() {
         match stream {
-            Ok(s) => { thread::spawn(move || handle_conn(s)); }
+            Ok(s) => {
+                if ACTIVE_CONNS.fetch_add(1, std::sync::atomic::Ordering::SeqCst) >= MAX_CONNS {
+                    ACTIVE_CONNS.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+                    drop(s);
+                    continue;
+                }
+                thread::spawn(move || {
+                    handle_conn(s);
+                    ACTIVE_CONNS.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+                });
+            }
             Err(_) => break,
         }
     }
@@ -2529,6 +2539,35 @@ fn open_browser(url: &str) {
 }
 
 // ─── Connection handler ───────────────────────────────────────────────────────
+static ACTIVE_CONNS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+const MAX_CONNS: usize = 32;
+
+fn is_loopback_host(authority: &str) -> bool {
+    let a = authority.trim().to_ascii_lowercase();
+    let host = if let Some(rest) = a.strip_prefix('[') {
+        rest.split(']').next().unwrap_or("").to_string()
+    } else {
+        a.rsplit_once(':').map(|(h, _)| h.to_string()).unwrap_or(a.clone())
+    };
+    host == "127.0.0.1" || host == "localhost" || host == "::1"
+}
+
+/// DNS-rebinding / cross-site guard: the Host header must be loopback and an Origin header, if the
+/// browser sent one, must be the same origin (`http://<Host>`).
+fn request_origin_ok(host: Option<&str>, origin: Option<&str>) -> bool {
+    let host = match host {
+        Some(h) if is_loopback_host(h) => h.trim().to_ascii_lowercase(),
+        _ => return false,
+    };
+    match origin {
+        None => true,
+        Some(o) => {
+            let o = o.trim().to_ascii_lowercase();
+            o.strip_prefix("http://").map_or(false, |a| a.trim_end_matches('/') == host)
+        }
+    }
+}
+
 fn handle_conn(stream: TcpStream) {
     use std::time::Duration;
     let _ = stream.set_read_timeout(Some(Duration::from_secs(30)));
@@ -2542,11 +2581,22 @@ fn handle_conn(stream: TcpStream) {
 
     // Read headers — extract Content-Length
     let mut content_len: usize = 0;
+    let (mut host_hdr, mut origin_hdr): (Option<String>, Option<String>) = (None, None);
+    let mut hdr_count = 0;
     loop {
         let mut hdr = String::new();
-        if reader.read_line(&mut hdr).is_err() { break; }
+        if reader.by_ref().take(16 * 1024).read_line(&mut hdr).is_err() { break; }
         let h = hdr.trim();
         if h.is_empty() { break; }
+        hdr_count += 1;
+        if hdr_count > 100 { return; }
+        if let Some((k, v)) = h.split_once(':') {
+            match k.trim().to_ascii_lowercase().as_str() {
+                "host" => host_hdr = Some(v.trim().to_string()),
+                "origin" => origin_hdr = Some(v.trim().to_string()),
+                _ => {}
+            }
+        }
         if h.to_lowercase().starts_with("content-length:") {
             content_len = h[15..].trim().parse().unwrap_or(0);
         }
@@ -2564,6 +2614,11 @@ fn handle_conn(stream: TcpStream) {
 
     // Recover stream from reader now that all reading is done
     let mut stream = reader.into_inner();
+
+    if !request_origin_ok(host_hdr.as_deref(), origin_hdr.as_deref()) {
+        let _ = stream.write_all(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+        return;
+    }
 
     // Capture peer IP for logging
     let peer_ip = stream.peer_addr().map(|a| a.ip().to_string()).unwrap_or_else(|_| "-".into());
@@ -2600,7 +2655,6 @@ fn handle_conn(stream: TcpStream) {
         let header = format!(
             "HTTP/1.1 200 OK\r\n\
              Content-Type: application/json\r\n\
-             Access-Control-Allow-Origin: *\r\n\
              Content-Length: {}\r\n\
              \r\n",
             json_body.len()
@@ -2631,7 +2685,6 @@ fn handle_conn(stream: TcpStream) {
         let header = format!(
             "HTTP/1.1 200 OK\r\n\
              Content-Type: application/json\r\n\
-             Access-Control-Allow-Origin: *\r\n\
              Content-Length: {}\r\n\
              \r\n",
             json_body.len()
@@ -2733,7 +2786,6 @@ fn handle_api(stream: &mut TcpStream, body: &str, peer_ip: &str) {
     let header = format!(
         "HTTP/1.1 200 OK\r\n\
          Content-Type: application/json\r\n\
-         Access-Control-Allow-Origin: *\r\n\
          Content-Length: {}\r\n\
          \r\n",
         json_body.len()
@@ -2752,7 +2804,7 @@ fn handle_llm_config(stream: &mut TcpStream, body: &str) {
     if !valid {
         let err = r#"{"ok":false,"error":"Invalid provider"}"#;
         let h = format!(
-            "HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: {}\r\n\r\n",
+            "HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n",
             err.len()
         );
         let _ = stream.write_all(h.as_bytes());
@@ -2782,7 +2834,7 @@ fn handle_llm_config(stream: &mut TcpStream, body: &str) {
 
     let json_body = r#"{"ok":true}"#;
     let header = format!(
-        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: {}\r\n\r\n",
+        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n",
         json_body.len()
     );
     let _ = stream.write_all(header.as_bytes());
@@ -2814,7 +2866,7 @@ fn handle_llm_test(stream: &mut TcpStream, body: &str) {
         _ => {
             let err = r#"{"ok":false,"error":"Invalid provider"}"#;
             let h = format!(
-                "HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: {}\r\n\r\n",
+                "HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n",
                 err.len()
             );
             let _ = stream.write_all(h.as_bytes());
@@ -2843,7 +2895,7 @@ fn handle_llm_test(stream: &mut TcpStream, body: &str) {
     };
 
     let header = format!(
-        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: {}\r\n\r\n",
+        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n",
         json_body.len()
     );
     let _ = stream.write_all(header.as_bytes());
@@ -3473,5 +3525,33 @@ fn run_ghost_assembly_for_chat(source: &str) -> String {
             "\u{1f527} Ghost program error:\n```\n{}\n```\nOutput before error:\n```\n{}\n```",
             e, if output.is_empty() { "(none)" } else { output.trim_end() }
         ),
+    }
+}
+
+#[cfg(test)]
+mod origin_guard_tests {
+    use super::*;
+
+    #[test]
+    fn host_and_origin_must_be_loopback_same_origin() {
+        assert!(request_origin_ok(Some("127.0.0.1:8080"), None));
+        assert!(request_origin_ok(Some("localhost:8080"), Some("http://localhost:8080")));
+        assert!(request_origin_ok(Some("[::1]:8080"), Some("http://[::1]:8080")));
+        // DNS rebinding: attacker name resolves to 127.0.0.1
+        assert!(!request_origin_ok(Some("evil.example:8080"), None));
+        assert!(!request_origin_ok(Some("evil.example:8080"), Some("http://evil.example:8080")));
+        // cross-site browser request
+        assert!(!request_origin_ok(Some("127.0.0.1:8080"), Some("https://evil.example")));
+        assert!(!request_origin_ok(Some("127.0.0.1:8080"), Some("http://127.0.0.1:9999")));
+        assert!(!request_origin_ok(Some("127.0.0.1:8080"), Some("null")));
+        assert!(!request_origin_ok(None, None));
+    }
+
+    #[test]
+    fn no_wildcard_cors_on_state_changing_endpoints() {
+        let src = include_str!("kala_ui.rs");
+        let needle = ["Access-Control-Allow-Origin", ": *"].concat();
+        let hits = src.lines().filter(|l| l.contains(&needle) && !l.contains("needle")).count();
+        assert_eq!(hits, 0);
     }
 }
