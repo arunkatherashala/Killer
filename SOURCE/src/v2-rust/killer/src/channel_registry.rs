@@ -45,10 +45,17 @@ pub fn send(id: i64, val: Value) -> Result<(), String> {
     tx.send(val.detached()).map_err(|_| "channel closed".to_string())
 }
 
+/// How long `recv` waits before giving up (a deadlock guard). 30 s by default;
+/// `KILLER_CHAN_RECV_TIMEOUT_SECS` (1 to 3600) changes it, e.g. for test harnesses.
+fn recv_guard() -> Duration {
+    let secs = std::env::var("KILLER_CHAN_RECV_TIMEOUT_SECS").ok().and_then(|v| v.trim().parse::<u64>().ok()).filter(|n| (1..=3600).contains(n)).unwrap_or(30);
+    Duration::from_secs(secs)
+}
+
 pub fn recv(id: i64) -> Result<Value, String> {
     let rx = receiver(id)?;
     let rx = rx.lock().map_err(|_| "channel poisoned".to_string())?;
-    rx.recv_timeout(Duration::from_secs(30)).map_err(|e| match e {
+    rx.recv_timeout(recv_guard()).map_err(|e| match e {
         mpsc::RecvTimeoutError::Timeout => format!("channel {} recv timed out", id),
         mpsc::RecvTimeoutError::Disconnected => format!("channel {} is closed", id),
     })

@@ -324,6 +324,8 @@ fn fuzz_seed(default: u64) -> u64 {
 }
 
 fn run_fuzz(iters: usize, seed: u64) {
+    // mutated channel programs may wait on a receive nobody answers: let the deadlock guard fire well inside the hang timeout
+    std::env::set_var("KILLER_CHAN_RECV_TIMEOUT_SECS", "3");
     let seeds = load_seeds();
     assert!(seeds.len() > 10, "expected real .killer seeds, found {}", seeds.len());
     let mut rng = Rng::new(seed);
