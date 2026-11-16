@@ -72,11 +72,11 @@ The row-by-row history is in the root `tracker.csv`; the Python comparison is in
 |---|---|---|
 | Interpreter (bytecode VM) | yes | |
 | x86-64 JIT | partial | falls back to the VM on other CPUs |
-| Formatter, linter, test runner, profiler, REPL | yes | `killer fmt`, `lint`, `test`, `profile`, `repl` |
-| Package manager | partial | local registry; no public registry |
-| Language server | partial | `killer lsp` |
+| Formatter, linter, test runner, profiler, REPL | yes | `killer fmt`, `lint`, `test`, `profile`, `repl`; `fmt` is idempotent over `examples/` and keeps comments, `lint` has rule ids and `lint:ignore` suppression (`tests/killer_cli.rs`, `tests/formatter_corpus.rs`) |
+| Package manager | yes | `killer new/add/install/update/remove/list/check`; `killer.toml` plus `killer.lock` with sha256 checksums, verified on install against the lockfile (`tests/pkg_driver.rs`, `tests/packages.rs`); file, path and git dependencies; a missing import is a hard error; no public registry (a self-hosted one works) |
+| Language server | yes | `killer lsp` and `killer_lsp`: diagnostics from the real compiler, completion (keywords, builtins, symbols in the file), hover, go-to-definition for functions, classes and variables in the same file, document symbols; single-file only, no cross-file index (`tests/lsp_roundtrip.rs`) |
 | Step debugger | yes | `killer debug`: step, next, finish, breakpoints, call stack; locals by slot |
-| Editor support | partial | VS Code grammar |
+| Editor support | partial | VS Code extension in `editors/vscode` (grammar, snippets, language configuration, client that launches the server); the files are validated by `tests/vscode_extension.rs`, but the extension has not been packaged or run inside VS Code in CI |
 | Installers and release workflow | partial | `install.sh` verified locally against a served archive (checksum pass and fail); the workflow has a manual dry-run mode; a real tag run and `install.ps1` are still untested; see [RELEASING.md](RELEASING.md) |
 | CI on Linux, macOS, Windows | yes | |
 

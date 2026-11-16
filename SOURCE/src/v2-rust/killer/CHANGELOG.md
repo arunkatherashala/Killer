@@ -4,6 +4,9 @@ All notable changes to `killer-native` are documented here.
 
 ## [Unreleased]
 
+### Added
+- Tooling: `killer new|init|add|remove|install|update|list|publish|check` in the `killer` driver (same code as `killer_pkg`); tests for `killer lsp` (hover, completion, definition of classes and variables), the VS Code extension files (`tests/vscode_extension.rs`), lockfile checksum verification when a registry and its checksum are both rewritten, `fmt` convergence over `examples/` with comments kept, and every lint suppression form.
+
 ### Security
 - **Warning: the old `encryption` module of the crate (XOR "AES-256-GCM"/"ChaCha20-Poly1305", unchecked tag, fake
   SHA-256/PBKDF2) did not encrypt.** Treat anything it protected as unprotected and rotate those secrets; the new
