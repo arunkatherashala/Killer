@@ -170,3 +170,39 @@ needs a new instruction in bytecode.rs (outside the allowed files). Comprehensio
 (`Load("i")`), turning them into slots needs the compiler to rewrite every body reference. The remaining
 per-call cost in closures/methods is hashing and dispatch (about 15 ns per instruction), which needs frame
 slots for call parameters to improve.
+
+## Round 4 (branch wt-speed4: non-numeric VM paths, honest account)
+
+CPU seconds (kernel+user via GetProcessTimes, median of 5-9 alternating runs, includes about 0.03 s start-up).
+The machine was shared with other cargo builds, so the noise floor was about +-10%; a change was kept only
+when it showed more than 10% and all tests passed. Before = tip 2b0926e, after = this branch.
+
+| Benchmark | CPU before (s) | CPU after (s) | Verdict |
+|-----------|---------------:|--------------:|---------|
+| nested_data | 0.375 / 0.438 | 0.328 / 0.359 | -12% / -18% (two runs), kept |
+| 300k `{"a": i, "b": 2}` literals | 0.156 / 0.203 | 0.125 / 0.172 | -15..-20%, kept |
+| closures | 0.438 | 0.406 | noise |
+| list_comp | 0.312 | 0.312 | unchanged |
+| obj_methods | 0.453 | 0.469 | noise |
+| recursion_objects | 0.703 | 0.703 | unchanged |
+| dict_ops | 0.422 | 0.453 | noise (large dicts: same hash-index path as before) |
+| fib(32) / 5M-iteration loop | 0.062 / 0.609 | 0.062 / 0.594 | unchanged (JIT untouched) |
+
+Kept: **small dictionaries have no hash index** (`ordered_map.rs`). Up to 8 entries the map is a vector scanned
+linearly; the index (and the second copy of every key it held) is built when the ninth key arrives. A 4-key
+dictionary literal used to allocate an index table plus four extra key strings.
+
+Tried and reverted (no gain above the noise floor, so not kept):
+- A word-at-a-time (Fx-style) hasher in place of FNV-1a for scope/object/dict-index maps: closures, obj_methods
+  and recursion_objects unchanged.
+- One hash probe instead of two in `lookup_mut` (needed an `unsafe` raw pointer): unchanged.
+- `NewObjectN` skipping the `classes` probe when `init_cache` hits: unchanged.
+- Scopes as a linear-scan vector for up to 8 names (`VarMap`, no hashing for call frames): 4 closure/method
+  micro-benchmarks and closures/obj_methods all within +-5%.
+
+Finding: a sampling profile of a method-call loop put under 2% of the time in malloc/memcmp/memcpy/clone and
+spread the rest evenly over the roughly 400 KB `run_loop_inner` function, so the remaining cost of closures,
+list comprehensions and method calls is per-instruction dispatch (about 70 ns for the loop skeleton plus a
+store, 5-15 ns per instruction), not allocation or name hashing. Further gains need fewer instructions per
+operation (fused `Load; GetField` / `Load; ConstStr; IndexRead`, frame slots for call parameters), which
+needs new instructions in bytecode.rs; not done here.
