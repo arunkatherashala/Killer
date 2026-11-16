@@ -418,6 +418,8 @@ pub struct VirtualMachine {
     method_ic: crate::fast_hash::FastMap<usize, (String, usize, usize)>,
     /// Emptied scope tables kept for reuse by `push_scope` (one is created per call).
     scope_pool: Vec<Scope>,
+    /// Key strings recycled from popped scope tables (a call binds the same few names each time).
+    key_pool: Vec<String>,
     /// GC: allocation counter — triggers gc_collect every GC_INTERVAL array allocs.
     gc_alloc_epoch: u64,
     /// (number of methods when computed, any `get x()` / `set x(v)` property method exists): lets field reads and
@@ -441,6 +443,7 @@ impl Default for VirtualMachine {
             stack: Vec::new(),
             scopes: Vec::new(),
             scope_pool: Vec::new(),
+            key_pool: Vec::new(),
             call_stack: Vec::new(),
             ip: 0,
             locals_stack: vec![Vec::new()],  // start with one frame for top-level code
@@ -486,7 +489,7 @@ impl Default for VirtualMachine {
             uses_args: true,
             init_cache: Default::default(),
             method_ic: Default::default(),
-            gc_alloc_epoch: 0,
+            gc_alloc_epoch: crate::gc::GC_INTERVAL,
             accessor_cache: std::cell::Cell::new((usize::MAX, false)),
             repl_mode: false,
         }
@@ -579,6 +582,7 @@ impl VirtualMachine {
             stack: Vec::with_capacity(32),
             scopes: Vec::with_capacity(4),
             scope_pool: Vec::new(),
+            key_pool: Vec::new(),
             call_stack: Vec::new(),
             ip: 0,
             locals_stack: vec![Vec::with_capacity(8)],
@@ -624,7 +628,7 @@ impl VirtualMachine {
             uses_args: true,
             init_cache: Default::default(),
             method_ic: Default::default(),
-            gc_alloc_epoch: 0,
+            gc_alloc_epoch: crate::gc::GC_INTERVAL,
             accessor_cache: std::cell::Cell::new((usize::MAX, false)),
             repl_mode: false,
         }
@@ -973,7 +977,7 @@ impl VirtualMachine {
             let params: Vec<String> = (0..arity).map(|i| format!("arg{i}")).collect();
             let _ = self.store_var(
                 name,
-                Value::Function { params, bytecode_start: *start, captured: Default::default() },
+                Value::Function { params: params.into(), bytecode_start: *start, captured: Default::default() },
             );
         }
 
@@ -1083,15 +1087,19 @@ impl VirtualMachine {
             // (polled every 256 instructions; the interval is 50,000 allocations).
             gc_poll = gc_poll.wrapping_add(1);
             if gc_poll & 0xFF == 0 {
-                let current_epoch = crate::gc::GC_ALLOC_COUNT.with(|c| *c.borrow() / crate::gc::GC_INTERVAL);
-                if current_epoch > self.gc_alloc_epoch {
-                    self.gc_alloc_epoch = current_epoch;
+                let allocs = crate::gc::GC_ALLOC_COUNT.with(|c| *c.borrow());
+                if allocs >= self.gc_alloc_epoch {
                     // Collect all live values as roots.
                     let roots = self.stack.iter()
                         .chain(self.scopes.iter().flat_map(|s| s.values()))
                         .chain(self.locals_stack.iter().flat_map(|f| f.iter()))
                         .cloned();
                     crate::gc::gc_collect(roots);
+                    // Each collection walks every live array, so wait for at least as many new
+                    // allocations as there are live arrays (amortised O(1) per allocation; a fixed
+                    // interval made building N nested lists quadratic).
+                    let (tracked, now) = crate::gc::gc_stats();
+                    self.gc_alloc_epoch = now + crate::gc::GC_INTERVAL.max(tracked as u64);
                 }
             }
 
@@ -1199,7 +1207,7 @@ impl VirtualMachine {
 
                     // Push a function value onto the stack
                     let func = Value::Function {
-                        params: params.clone(),
+                        params: params.clone().into(),
                         bytecode_start: *bytecode_start,
                         captured: captured.clone(),
                     };
@@ -1217,7 +1225,7 @@ impl VirtualMachine {
                     let value = match self.load_var(name) {
                         Ok(v) => v,
                         Err(_) => Value::Function {
-                            params: (0..*arity).map(|i| format!("arg{}", i)).collect(),
+                            params: (0..*arity).map(|i| format!("arg{}", i)).collect::<Vec<_>>().into(),
                             bytecode_start: *start,
                             captured: Default::default(),
                         },
@@ -3031,14 +3039,14 @@ impl VirtualMachine {
                     self.value_buffer_pool.return_buffer(values);
                 }
                 Instruction::BuildArray(count) => {
-                    // OPTIMIZATION: Use buffer pool for array construction
-                    let mut elements = self.value_buffer_pool.get_buffer();
-                    elements.clear();
-                    elements.reserve(*count);
-                    for _ in 0..*count {
-                        elements.push(self.pop_value()?);
+                    // The elements become the array's own storage, so take them off the stack with
+                    // exactly the capacity needed (the pooled 256-slot buffer this used to take was
+                    // moved into the array and never returned: ~18 KB per `[a, b]`).
+                    if self.stack.len() < *count {
+                        return Err(VmError::runtime_error("Stack underflow".to_string()));
                     }
-                    elements.reverse();
+                    let at = self.stack.len() - *count;
+                    let elements = self.stack.split_off(at);
                     self.stack.push(Value::from(elements));
                 }
                 Instruction::BuildDict(count) => {
@@ -4450,6 +4458,24 @@ impl VirtualMachine {
                     let result = BuiltinFunctions::call_by_id(*id, std::slice::from_ref(&a))
                         .map_err(|e| wrap_builtin_error(e, instr_idx))?;
                     self.stack.push(result);
+                }
+                // `push(list, value)` on a list (the comprehension / append loop): move the value in,
+                // and when the result is discarded (`Pop` follows) do not build it at all.
+                Instruction::CallBuiltinId(4, 2)
+                    if matches!(
+                        self.stack.len().checked_sub(2).and_then(|i| self.stack.get(i)),
+                        Some(Value::Array(_))
+                    ) && !matches!(self.stack.last(), Some(Value::Generator(_))) =>
+                {
+                    let v = self.stack.pop().unwrap_or(Value::Null);
+                    if let Some(Value::Array(a)) = self.stack.last() {
+                        a.push(v);
+                    }
+                    if matches!(program.instructions.get(self.ip + 1), Some(Instruction::Pop)) {
+                        self.stack.pop();
+                        self.ip += 2;
+                        continue;
+                    }
                 }
                 Instruction::CallBuiltinId(id, 2) => {
                     let b = self.pop_value()?;
@@ -6194,7 +6220,7 @@ impl VirtualMachine {
                     // Synthesise a Value::Function using argN param names (call_function_sync binds these)
                     let params: Vec<String> = (0..args.len()).map(|i| format!("arg{i}")).collect();
                     let func = Value::Function {
-                        params,
+                        params: params.into(),
                         bytecode_start,
                         captured: Default::default(),
                     };
@@ -7020,7 +7046,10 @@ impl VirtualMachine {
             match scope.get_mut(name) {
                 Some(slot) => *slot = value,
                 None => {
-                    scope.insert(name.to_string(), value);
+                    let mut key = self.key_pool.pop().unwrap_or_default();
+                    key.clear();
+                    key.push_str(name);
+                    scope.insert(key, value);
                 }
             }
         }
@@ -7052,7 +7081,11 @@ impl VirtualMachine {
         if let Some(mut scope) = self.scopes.pop() {
             // recycle the table (keeps its capacity) for the next call
             if self.scope_pool.len() < 64 {
-                scope.clear();
+                for (k, _) in scope.map.drain() {
+                    if self.key_pool.len() < 256 {
+                        self.key_pool.push(k);
+                    }
+                }
                 scope.frame = false;
                 self.scope_pool.push(scope);
             }
@@ -7874,7 +7907,7 @@ impl VirtualMachine {
                             // Synthesise a Value::Function and recurse into call_function_sync
                             let params: Vec<String> = (0..exp_arity).map(|i| format!("arg{i}")).collect();
                             let callee = Value::Function {
-                                params,
+                                params: params.into(),
                                 bytecode_start: *target,
                                 captured: Default::default(),
                             };
@@ -7891,7 +7924,7 @@ impl VirtualMachine {
                             call_args.reverse();
                             let params: Vec<String> = (0..exp_arity).map(|i| format!("arg{i}")).collect();
                             let callee = Value::Function {
-                                params,
+                                params: params.into(),
                                 bytecode_start: *target,
                                 captured: Default::default(),
                             };

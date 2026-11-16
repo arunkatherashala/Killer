@@ -607,7 +607,7 @@ pub enum Value {
     Object(SharedObject),
     Class(Box<ClassDef>),
     Function {
-        params: Vec<String>,
+        params: std::rc::Rc<[String]>,
         bytecode_start: usize,  // Index in VM's function bytecode
         captured: Captures,  // Variables captured from the enclosing function (closures); shared, persists across calls
     },
@@ -1116,7 +1116,7 @@ impl Value {
                     let copy = Captures::new(HashMap::new());
                     memo.insert(
                         key,
-                        Value::Function { params: Vec::new(), bytecode_start: 0, captured: copy.clone() },
+                        Value::Function { params: std::rc::Rc::from(Vec::<String>::new()), bytecode_start: 0, captured: copy.clone() },
                     );
                     work.push(DetachJob::Captures(captured.clone(), copy.clone()));
                     copy

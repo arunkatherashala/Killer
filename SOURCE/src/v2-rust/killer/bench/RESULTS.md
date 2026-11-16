@@ -127,3 +127,46 @@ ASCII flag / char-offset table inside the value, i.e. changing `Value::Str(Strin
 about 1500 `Value::Str` construction/match sites across src/ and tests/, not done here. Strings are
 no longer copied on load for `len(s)` / `s[i]` (named, parameter, global and slot strings), and
 non-ASCII `s[i]`, `len`, `slice` and `charAt` use a vectorised lead-byte scan instead of decoding.
+
+## Round 3 (branch perf-round3: closures, list_comp, nested_data, objects)
+
+CPU seconds (kernel+user via GetProcessTimes, best of 3, same machine, includes about 0.03 s
+process start-up), baseline = 514fab5 release build, after = this branch.
+
+| Benchmark | CPU before (s) | CPU after (s) | Change |
+|-----------|---------------:|--------------:|-------:|
+| closures | 0.656 | 0.375 | -43% |
+| list_comp | 0.938 | 0.266 | -72% |
+| nested_data | 0.641 | 0.344 | -46% |
+| obj_methods | 0.453 | 0.375 | -17% |
+| recursion_objects | 0.438 | 0.375 | -14% |
+| dict_ops | 0.453 | 0.391 | noise |
+| list_ops | 0.234 | 0.188 | noise |
+| str_index / try_catch / sorted_key / split_join | 0.078 / 0.109 / 0.141 / 0.203 | 0.062 / 0.094 / 0.109 / 0.156 | noise |
+| fib(32) / 5M-iteration loop | 0.047 / 0.484 | 0.031 / 0.516 | unchanged |
+
+Wall ratio Killer/Python on the same machine after the first three changes (n=3): closures 3.5,
+obj_methods 3.1, nested_data 2.4, dict_ops 2.3, recursion_objects 2.2, list_comp 1.9, split_join 1.8.
+
+What changed:
+1. **`BuildArray` allocated ~18 KB per array literal** (biggest win: list_comp, nested_data). It took a buffer
+   from the VM's `ValueBufferPool` (256 `Value` slots), moved it into the new array and never returned it.
+   It now splits the elements off the value stack with exact capacity. Building 200k `[i, i*i]` pairs:
+   664 ms -> 83 ms.
+2. **GC trigger scales with live arrays.** `gc_collect` walks every live array, and it ran every 50,000
+   allocations, so building N nested lists was quadratic. The next collection now waits for
+   `max(50_000, live arrays)` further allocations (amortised O(1)); cycles are still collected, only later.
+3. **`push(list, v)` fast path** in `CallBuiltinId(4, 2)`: the value is moved in, and the result is not built
+   when a `Pop` follows (comprehension bodies).
+4. **Closures/calls:** `Value::Function.params` is `Rc<[String]>` (loading a function value used to clone a
+   `Vec<String>`: two allocations), and scope tables recycle their key strings (`key_pool`) instead of
+   allocating a `String` for every `arg0` / captured name / `this` per call.
+
+Checked and not hot: the `format!("{other:?}").contains("args")` scan and the optimizer structures built in
+`run()` execute once per program run (about 0.03 s total start-up), not per instruction.
+
+Not done / rejected: field writes still push a `ConstStr` key (an allocation per `this.x = v`); removing it
+needs a new instruction in bytecode.rs (outside the allowed files). Comprehension variables are still named
+(`Load("i")`), turning them into slots needs the compiler to rewrite every body reference. The remaining
+per-call cost in closures/methods is hashing and dispatch (about 15 ns per instruction), which needs frame
+slots for call parameters to improve.
