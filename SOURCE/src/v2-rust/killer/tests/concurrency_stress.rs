@@ -576,3 +576,49 @@ println("done")
 "#;
     assert_eq!(run(src), "2\ntimeout\ndone");
 }
+
+#[test]
+fn big_integers_and_functions_cross_threads_safely() {
+    // BigInt and Function values hold Rc's; each thread must get its own, or the non-atomic
+    // reference counts are updated concurrently (crashed with a freed-Rc assertion)
+    let src = r#"
+fn digits(n, f) {
+  return len(str(f(n)))
+}
+fn ident(x) { return x }
+big = factorial(40)
+hs = []
+for round in range(10) {
+  for i in range(40) {
+    push(hs, async_spawn(digits, big, ident))
+  }
+  for h in hs {
+    async_await(h)
+  }
+  hs = []
+}
+ch = chan_new()
+fn echo(c, v) {
+  chan_send(c, v)
+  chan_send(c, v + 1n)
+  return v * 2
+}
+workers = []
+for i in range(20) {
+  push(workers, async_spawn(echo, ch, big))
+}
+t = 0
+for w in workers {
+  t = t + len(str(async_await(w)))
+}
+n = 0
+for i in range(40) {
+  chan_recv(ch)
+  n = n + 1
+}
+println(t)
+println(n)
+println(async_await(async_spawn(ident, big)) == big)
+"#;
+    assert_eq!(run(src), "980\n40\ntrue");
+}

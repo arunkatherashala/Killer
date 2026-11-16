@@ -1164,6 +1164,8 @@ impl Value {
                 work.push(DetachJob::Cell(c.clone(), copy.clone()));
                 Value::Cell(copy)
             }
+            // a fresh allocation: cloning the `Rc` would share a non-atomic count with the other thread
+            Value::BigInt(b) => Value::BigInt(Rc::new((**b).clone())),
             other => other.clone(),
         }
     }
