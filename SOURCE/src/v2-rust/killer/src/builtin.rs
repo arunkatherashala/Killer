@@ -3446,14 +3446,11 @@ impl BuiltinFunctions {
         }
         match &args[0] {
             Value::Future(handle) => {
-                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+                // no deadline: a long task must not turn into a silent null (see async_timeout)
                 let mut sleep_ms = 1u64;
                 loop {
                     if let Some(result) = handle.poll() {
                         return Self::task_outcome(result);
-                    }
-                    if std::time::Instant::now() >= deadline {
-                        return Ok(Value::Null);
                     }
                     std::thread::sleep(std::time::Duration::from_millis(sleep_ms));
                     sleep_ms = (sleep_ms * 2).min(50);

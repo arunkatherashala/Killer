@@ -6232,9 +6232,9 @@ impl VirtualMachine {
                     let val = self.pop_value()?;
                     match val {
                         Value::Future(handle) => {
-                            // Spin-wait with exponential backoff (max 30s timeout)
-                            let deadline = std::time::Instant::now()
-                                + std::time::Duration::from_secs(30);
+                            // Wait for the task (exponential backoff). There is no deadline: a task that
+                            // computes for longer than any fixed limit must not yield a silent null;
+                            // use async_timeout(future, ms) to bound a wait.
                             let mut sleep_ms = 1u64;
                             loop {
                                 if let Some(result) = handle.poll() {
@@ -6245,10 +6245,6 @@ impl VirtualMachine {
                                         return Err(VmError::runtime_error(message));
                                     }
                                     self.stack.push(result);
-                                    break;
-                                }
-                                if std::time::Instant::now() >= deadline {
-                                    self.stack.push(Value::Null);  // timeout → null
                                     break;
                                 }
                                 std::thread::sleep(std::time::Duration::from_millis(sleep_ms));
