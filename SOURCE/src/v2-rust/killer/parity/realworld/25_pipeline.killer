@@ -1,0 +1,161 @@
+// Concurrent pipeline: a map/reduce word count over worker tasks, a channel-fed worker pool with a
+// results channel, a shared-counter audit and error propagation out of a failing stage
+docs = [
+  "the quick brown fox jumps over the lazy dog",
+  "the dog barks and the fox runs away",
+  "a quick brown dog outpaces a quick fox",
+  "lazy days and quick nights",
+  "over and over and over again"
+]
+
+fn count_words(text) {
+  counts = {}
+  for w in split(text, " ") {
+    counts[w] = (w in counts ? counts[w] : 0) + 1
+  }
+  return counts
+}
+
+// map: one task per document; reduce: merge in order
+handles = []
+for d in docs {
+  push(handles, async_spawn(count_words, d))
+}
+total = {}
+for h in handles {
+  part = async_await(h)
+  for w in keys(part) {
+    total[w] = (w in total ? total[w] : 0) + part[w]
+  }
+}
+ranked = sorted(keys(total), fn(w) {
+  return [0 - total[w], w]
+})
+for w in slice(ranked, 0, 5) {
+  println(f"{pad_right(w, 6, ' ')}{total[w]}")
+}
+println("distinct=" + str(len(total)) + " words=" + str(sum(values(total))))
+
+// worker pool: jobs channel in, results channel out, a sentinel per worker
+jobs = chan_new()
+results = chan_new()
+tally = mutex_new(0)
+fn is_prime(n) {
+  if n < 2 {
+    return false
+  }
+  i = 2
+  while i * i <= n {
+    if n % i == 0 {
+      return false
+    }
+    i = i + 1
+  }
+  return true
+}
+fn worker(id, jobs, results, tally) {
+  handled = 0
+  while true {
+    job = chan_recv(jobs)
+    if job == null {
+      break
+    }
+    chan_send(results, [job, is_prime(job)])
+    mutex_add(tally, 1)
+    handled = handled + 1
+  }
+  return handled
+}
+workers = []
+for id in range(4) {
+  push(workers, async_spawn(worker, id, jobs, results, tally))
+}
+for n in range(1, 201) {
+  chan_send(jobs, n)
+}
+for id in range(4) {
+  chan_send(jobs, null)
+}
+handled = 0
+for h in workers {
+  handled = handled + async_await(h)
+}
+primes = []
+for i in range(200) {
+  r = chan_recv(results)
+  if r[1] {
+    push(primes, r[0])
+  }
+}
+primes = sorted(primes)
+println("handled=" + str(handled) + " tally=" + str(mutex_get(tally)))
+println("primes=" + str(len(primes)) + " first=" + str(slice(primes, 0, 8)) + " last=" + str(primes[len(primes) - 1]))
+println("results channel empty: " + str(chan_try_recv(results) == null))
+
+// a pipeline of stages connected by channels
+fn stage_double(inp, out) {
+  while true {
+    v = chan_recv(inp)
+    if v == -1 {
+      chan_send(out, -1)
+      return "double done"
+    }
+    chan_send(out, v * 2)
+  }
+}
+fn stage_inc(inp, out) {
+  n = 0
+  while true {
+    v = chan_recv(inp)
+    if v == -1 {
+      chan_send(out, -1)
+      return n
+    }
+    chan_send(out, v + 1)
+    n = n + 1
+  }
+}
+a = chan_new()
+b = chan_new()
+c = chan_new()
+s1 = async_spawn(stage_double, a, b)
+s2 = async_spawn(stage_inc, b, c)
+for i in range(1, 11) {
+  chan_send(a, i)
+}
+chan_send(a, -1)
+outs = []
+while true {
+  v = chan_recv(c)
+  if v == -1 {
+    break
+  }
+  push(outs, v)
+}
+println(outs)
+println(async_await(s1) + ", " + str(async_await(s2)))
+
+// failing stage: the error surfaces at the await and the other tasks are unaffected
+fn risky(x) {
+  if x == 3 {
+    throw "bad input " + str(x)
+  }
+  return x * 10
+}
+hs = []
+for x in range(1, 6) {
+  push(hs, async_spawn(risky, x))
+}
+good = []
+errors = []
+for h in hs {
+  try {
+    push(good, async_await(h))
+  } catch e {
+    push(errors, str(e))
+  }
+}
+println(good)
+println(errors)
+println(async_all([async_spawn(risky, 1), async_spawn(risky, 2)]))
+chan_close(jobs)

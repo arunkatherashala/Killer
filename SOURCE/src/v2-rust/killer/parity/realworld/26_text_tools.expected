@@ -1,0 +1,38 @@
+act: cat,act,tac
+dgo: dog,god,odg
+eggloo: google,gogole
+eilnst: listen,silent,enlist
+[aaabccdddd] -> [a3b1c2d4] -> true
+[abc] -> [a1b1c1] -> true
+[zzzzzzzzzzzz] -> [z12] -> true
+[] -> [] -> true
+Khoor, Zruog! Nloohu urfnv.
+Hello, World! Killer rocks.
+rot13 is an involution
+Hello, World! Killer rocks.
+MCMXCIV MMXXIV MMMCMXCIX 1994 roundtrip=true
+0 = zero
+7 = seven
+13 = thirteen
+21 = twenty-one
+99 = ninety-nine
+100 = one hundred
+101 = one hundred and one
+342 = three hundred and forty-two
+1000 = one thousand
+1001 = one thousand and one
+12345 = twelve thousand three hundred and forty-five
+90000 = ninety thousand
+'A man, a plan, a canal: Panama' -> true
+'Not a palindrome' -> false
+'Was it a car or a cat I saw?' -> true
+'' -> true
+Dear Ada, you owe 12.5 by Friday. Thanks, Ada!
+item         |  qty | price
+widget       |    4 |  3.50
+gizmo, large |   12 | 10.00
+nut          | 1000 |  0.05
+-------------+------+------
+STRASSE
+11
+The Quick Brown Fox

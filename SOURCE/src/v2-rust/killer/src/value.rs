@@ -1133,7 +1133,9 @@ impl Value {
                     work.push(DetachJob::Captures(captured.clone(), copy.clone()));
                     copy
                 };
-                Value::Function { params: params.clone(), bytecode_start: *bytecode_start, captured: copy }
+                // a fresh parameter list: sharing the `Rc` would share a non-atomic reference count with the
+                // thread the value came from
+                Value::Function { params: std::rc::Rc::from(params.to_vec()), bytecode_start: *bytecode_start, captured: copy }
             }
             Value::Signal { value, confidence, reason } => {
                 if depth >= 1000 {

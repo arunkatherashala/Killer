@@ -1,0 +1,77 @@
+// JSON in, CSV and JSON out: parse an order feed, aggregate it, render a report
+feed = """[
+  {"id": 1001, "customer": "acme", "items": [{"sku": "A1", "qty": 3, "price": 9.99}, {"sku": "B2", "qty": 1, "price": 100}], "paid": true},
+  {"id": 1002, "customer": "globex", "items": [{"sku": "A1", "qty": 10, "price": 9.99}], "paid": false},
+  {"id": 1003, "customer": "acme", "items": [{"sku": "C3", "qty": 2, "price": 24.5}, {"sku": "B2", "qty": 2, "price": 100}], "paid": true},
+  {"id": 1004, "customer": "initech", "items": [], "paid": false},
+  {"id": 1005, "customer": "globex", "items": [{"sku": "C3", "qty": 1, "price": 24.5}], "paid": true}
+]"""
+
+orders = json_parse(feed)
+println("orders: " + str(len(orders)))
+
+fn order_total(o) {
+  t = 0
+  for it in o["items"] {
+    t = t + it["qty"] * it["price"]
+  }
+  return round(t * 100) / 100
+}
+
+by_customer = {}
+sku_units = {}
+for o in orders {
+  c = o["customer"]
+  if !(c in by_customer) {
+    by_customer[c] = {"orders": 0, "total": 0, "paid": 0}
+  }
+  entry = by_customer[c]
+  entry["orders"] = entry["orders"] + 1
+  t = order_total(o)
+  entry["total"] = round((entry["total"] + t) * 100) / 100
+  if o["paid"] {
+    entry["paid"] = round((entry["paid"] + t) * 100) / 100
+  }
+  for it in o["items"] {
+    sku_units[it["sku"]] = (it["sku"] in sku_units ? sku_units[it["sku"]] : 0) + it["qty"]
+  }
+}
+
+// CSV with quoting
+fn csv_cell(v) {
+  s = str(v)
+  if contains(s, ",") || contains(s, "\"") {
+    return "\"" + replace(s, "\"", "\"\"") + "\""
+  }
+  return s
+}
+lines = ["customer,orders,total,paid,outstanding"]
+names = sorted(keys(by_customer))
+for name in names {
+  e = by_customer[name]
+  outstanding = round((e["total"] - e["paid"]) * 100) / 100
+  push(lines, join([csv_cell(name), csv_cell(e["orders"]), csv_cell(e["total"]), csv_cell(e["paid"]), csv_cell(outstanding)], ","))
+}
+push(lines, join([csv_cell("weird, \"name\""), "0", "0", "0", "0"], ","))
+println(join(lines, "\n"))
+
+println("units per sku:")
+for sku in sorted(keys(sku_units)) {
+  println(f"  {pad_right(sku, 4, ' ')}{pad_left(str(sku_units[sku]), 4, ' ')}")
+}
+
+best = null
+for name in names {
+  if best == null || by_customer[name]["total"] > by_customer[best]["total"] {
+    best = name
+  }
+}
+println("top customer: " + best)
+
+report = {"generated_orders": len(orders), "customers": names, "top": best, "units": sku_units}
+text = json_stringify(report)
+println(text)
+back = json_parse(text)
+println(back["units"]["C3"] + back["generated_orders"])
+println(json_stringify(json_parse("[1, 2.5, \"x\", null, true, {\"a\": []}]")))
+println(json_pretty({"a": 1, "b": [1, 2]}))

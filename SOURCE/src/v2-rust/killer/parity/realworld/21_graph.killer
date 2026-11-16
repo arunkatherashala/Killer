@@ -1,0 +1,226 @@
+// Graph algorithms: BFS, DFS, Dijkstra with a binary heap, topological sort, union-find, Floyd-Warshall
+edges = [
+  ["A", "B", 7], ["A", "C", 9], ["A", "F", 14], ["B", "C", 10], ["B", "D", 15],
+  ["C", "D", 11], ["C", "F", 2], ["D", "E", 6], ["E", "F", 9]
+]
+adj = {}
+for e in edges {
+  for pair in [[e[0], e[1]], [e[1], e[0]]] {
+    if !(pair[0] in adj) {
+      adj[pair[0]] = []
+    }
+    push(adj[pair[0]], [pair[1], e[2]])
+  }
+}
+nodes = sorted(keys(adj))
+println(nodes)
+
+fn bfs(start) {
+  seen = {}
+  seen[start] = 0
+  queue = [start]
+  head = 0
+  order = []
+  while head < len(queue) {
+    u = queue[head]
+    head = head + 1
+    push(order, u + ":" + str(seen[u]))
+    nbrs = sorted(map(adj[u], fn(p) {
+      return p[0]
+    }))
+    for v in nbrs {
+      if !(v in seen) {
+        seen[v] = seen[u] + 1
+        push(queue, v)
+      }
+    }
+  }
+  return order
+}
+println(bfs("A"))
+
+fn dfs(u, seen, out) {
+  seen[u] = true
+  push(out, u)
+  for v in sorted(map(adj[u], fn(p) {
+    return p[0]
+  })) {
+    if !(v in seen) {
+      dfs(v, seen, out)
+    }
+  }
+  return out
+}
+println(dfs("A", {}, []))
+
+// binary min-heap of [priority, value]
+class Heap {
+  fn init() {
+    this.a = []
+  }
+  fn size() {
+    return len(this.a)
+  }
+  fn push_item(item) {
+    push(this.a, item)
+    i = len(this.a) - 1
+    while i > 0 {
+      parent = floor((i - 1) / 2)
+      if this.a[parent][0] <= this.a[i][0] {
+        break
+      }
+      tmp = this.a[parent]
+      this.a[parent] = this.a[i]
+      this.a[i] = tmp
+      i = parent
+    }
+  }
+  fn pop_item() {
+    top = this.a[0]
+    last = pop(this.a)
+    n = len(this.a)
+    if n > 0 {
+      this.a[0] = last
+      i = 0
+      while true {
+        l = 2 * i + 1
+        r = l + 1
+        m = i
+        if l < n && this.a[l][0] < this.a[m][0] {
+          m = l
+        }
+        if r < n && this.a[r][0] < this.a[m][0] {
+          m = r
+        }
+        if m == i {
+          break
+        }
+        tmp = this.a[m]
+        this.a[m] = this.a[i]
+        this.a[i] = tmp
+        i = m
+      }
+    }
+    return top
+  }
+}
+
+fn dijkstra(src) {
+  dist = {}
+  prev = {}
+  for n in nodes {
+    dist[n] = 1000000
+  }
+  dist[src] = 0
+  h = new Heap()
+  h.push_item([0, src])
+  while h.size() > 0 {
+    item = h.pop_item()
+    d = item[0]
+    u = item[1]
+    if d > dist[u] {
+      continue
+    }
+    for p in adj[u] {
+      nd = d + p[1]
+      if nd < dist[p[0]] {
+        dist[p[0]] = nd
+        prev[p[0]] = u
+        h.push_item([nd, p[0]])
+      }
+    }
+  }
+  return [dist, prev]
+}
+res = dijkstra("A")
+for n in nodes {
+  path = [n]
+  cur = n
+  while cur in res[1] {
+    cur = res[1][cur]
+    insert(path, 0, cur)
+  }
+  println(f"A->{n}: {res[0][n]} via {join(path, '>')}")
+}
+
+// topological sort (Kahn) on a build graph
+deps = {"app": ["lib", "util"], "lib": ["core"], "util": ["core"], "core": [], "docs": ["app"]}
+indeg = {}
+for k in keys(deps) {
+  indeg[k] = len(deps[k])
+}
+ready = sorted(filter(keys(deps), fn(k) {
+  return indeg[k] == 0
+}))
+order = []
+while len(ready) > 0 {
+  cur = ready[0]
+  ready = slice(ready, 1, len(ready))
+  push(order, cur)
+  for k in sorted(keys(deps)) {
+    if cur in deps[k] {
+      indeg[k] = indeg[k] - 1
+      if indeg[k] == 0 {
+        push(ready, k)
+        ready = sorted(ready)
+      }
+    }
+  }
+}
+println(order)
+
+// union-find with path compression
+parent = {}
+fn find(x) {
+  if !(x in parent) {
+    parent[x] = x
+  }
+  while parent[x] != x {
+    parent[x] = parent[parent[x]]
+    x = parent[x]
+  }
+  return x
+}
+fn union(a, b) {
+  ra = find(a)
+  rb = find(b)
+  if ra == rb {
+    return false
+  }
+  parent[ra] = rb
+  return true
+}
+links = [[1, 2], [3, 4], [2, 3], [5, 6], [1, 4], [7, 7], [6, 8]]
+merged = 0
+for l in links {
+  if union(l[0], l[1]) {
+    merged = merged + 1
+  }
+}
+groups = {}
+for x in [1, 2, 3, 4, 5, 6, 7, 8] {
+  r = find(x)
+  if !(r in groups) {
+    groups[r] = []
+  }
+  push(groups[r], x)
+}
+println(f"merged={merged} components={len(groups)}")
+println(sorted(values(groups)))
+
+// Floyd-Warshall on a small matrix
+INF = 99999
+w = [[0, 3, INF, 7], [8, 0, 2, INF], [5, INF, 0, 1], [2, INF, INF, 0]]
+n = 4
+for k in range(n) {
+  for i in range(n) {
+    for j in range(n) {
+      if w[i][k] + w[k][j] < w[i][j] {
+        w[i][j] = w[i][k] + w[k][j]
+      }
+    }
+  }
+}
+for row in w {
+  println(row)
+}

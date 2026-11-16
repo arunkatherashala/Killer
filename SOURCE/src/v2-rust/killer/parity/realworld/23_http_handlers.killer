@@ -1,0 +1,160 @@
+// HTTP handler logic with in-process requests: raw request parsing, routing with path params,
+// JSON bodies, validation, status codes, auth middleware and response serialisation
+store = {"1": {"id": 1, "title": "write docs", "done": false}, "2": {"id": 2, "title": "ship it", "done": true}}
+next_id = 3
+tokens = {"s3cret": "admin", "t0ken": "guest"}
+
+fn parse_request(raw) {
+  parts = split(raw, "\r\n\r\n")
+  head = split(parts[0], "\r\n")
+  line = split(head[0], " ")
+  headers = {}
+  for i in range(1, len(head)) {
+    idx = index_of(head[i], ":")
+    headers[lower(slice(head[i], 0, idx))] = trim(slice(head[i], idx + 1, len(head[i])))
+  }
+  target = line[1]
+  query = {}
+  path = target
+  qi = index_of(target, "?")
+  if qi >= 0 {
+    path = slice(target, 0, qi)
+    for kv in split(slice(target, qi + 1, len(target)), "&") {
+      p = split(kv, "=")
+      query[p[0]] = len(p) > 1 ? p[1] : ""
+    }
+  }
+  body = len(parts) > 1 ? parts[1] : ""
+  return {"method": line[0], "path": path, "query": query, "headers": headers, "body": body}
+}
+
+fn response(status, data) {
+  reasons = {200: "OK", 201: "Created", 400: "Bad Request", 401: "Unauthorized", 403: "Forbidden", 404: "Not Found", 405: "Method Not Allowed"}
+  return {"status": status, "reason": reasons[status], "body": json_stringify(data)}
+}
+
+fn list_todos(req, params) {
+  items = values(store)
+  if "done" in req["query"] {
+    want = req["query"]["done"] == "true"
+    items = filter(items, fn(t) {
+      return t["done"] == want
+    })
+  }
+  return response(200, {"count": len(items), "items": items})
+}
+
+fn get_todo(req, params) {
+  if !(params["id"] in store) {
+    return response(404, {"error": "no such todo " + params["id"]})
+  }
+  return response(200, store[params["id"]])
+}
+
+fn create_todo(req, params) {
+  data = null
+  try {
+    data = json_parse(req["body"])
+  } catch e {
+    return response(400, {"error": "invalid json"})
+  }
+  if type(data) != "dict" || !("title" in data) || len(str(data["title"])) == 0 {
+    return response(400, {"error": "title required"})
+  }
+  todo = {"id": next_id, "title": data["title"], "done": false}
+  store[str(next_id)] = todo
+  next_id = next_id + 1
+  return response(201, todo)
+}
+
+fn delete_todo(req, params) {
+  if req["headers"]["authorization"] != "Bearer s3cret" {
+    return response(403, {"error": "admin only"})
+  }
+  if !(params["id"] in store) {
+    return response(404, {"error": "no such todo " + params["id"]})
+  }
+  delete(store, params["id"])
+  return response(200, {"deleted": params["id"]})
+}
+
+routes = [
+  ["GET", "/todos", list_todos],
+  ["POST", "/todos", create_todo],
+  ["GET", "/todos/:id", get_todo],
+  ["DELETE", "/todos/:id", delete_todo]
+]
+
+fn match_path(pattern, path) {
+  a = split(pattern, "/")
+  b = split(path, "/")
+  if len(a) != len(b) {
+    return null
+  }
+  params = {}
+  for i in range(len(a)) {
+    if starts_with(a[i], ":") {
+      params[slice(a[i], 1, len(a[i]))] = b[i]
+    } else if a[i] != b[i] {
+      return null
+    }
+  }
+  return params
+}
+
+fn dispatch(req) {
+  auth = get(req["headers"], "authorization", "")
+  if !starts_with(auth, "Bearer ") || !(slice(auth, 7, len(auth)) in tokens) {
+    return response(401, {"error": "missing or bad token"})
+  }
+  path_found = false
+  for r in routes {
+    params = match_path(r[1], req["path"])
+    if params == null {
+      continue
+    }
+    path_found = true
+    if r[0] == req["method"] {
+      return r[2](req, params)
+    }
+  }
+  if path_found {
+    return response(405, {"error": "method not allowed"})
+  }
+  return response(404, {"error": "not found"})
+}
+
+fn raw(method, target, token, body) {
+  s = method + " " + target + " HTTP/1.1\r\nHost: example.test\r\nAccept: */*"
+  if token != "" {
+    s = s + "\r\nAuthorization: Bearer " + token
+  }
+  if body != "" {
+    s = s + "\r\nContent-Length: " + str(len(body))
+  }
+  return s + "\r\n\r\n" + body
+}
+
+requests = [
+  raw("GET", "/todos", "t0ken", ""),
+  raw("GET", "/todos?done=true", "t0ken", ""),
+  raw("GET", "/todos/2", "t0ken", ""),
+  raw("GET", "/todos/9", "t0ken", ""),
+  raw("POST", "/todos", "t0ken", "{\"title\": \"buy milk\"}"),
+  raw("POST", "/todos", "t0ken", "{\"title\": \"\"}"),
+  raw("POST", "/todos", "t0ken", "not json"),
+  raw("DELETE", "/todos/1", "t0ken", ""),
+  raw("DELETE", "/todos/1", "s3cret", ""),
+  raw("DELETE", "/todos/1", "s3cret", ""),
+  raw("PUT", "/todos/2", "t0ken", ""),
+  raw("GET", "/nothing", "t0ken", ""),
+  raw("GET", "/todos", "", ""),
+  raw("GET", "/todos", "wrong", ""),
+  raw("GET", "/todos", "s3cret", "")
+]
+for text in requests {
+  req = parse_request(text)
+  res = dispatch(req)
+  println(f"{req['method']} {req['path']} -> {res['status']} {res['reason']} {res['body']}")
+}
+println(sorted(keys(store)))

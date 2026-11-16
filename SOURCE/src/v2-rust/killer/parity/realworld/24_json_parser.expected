@@ -1,0 +1,28 @@
+OK same=true {"name":"killer","tags":["vm","jit"],"stats":{"loc":120000,"ratio":0.75,"neg":-3,"exp":1500}}
+OK same=true [1,[2,[3,[4,[]]]],{},null,true,false]
+OK same=true {"a":"line\nbreak\ttab \"quoted\"","b":[]}
+OK same=true "just a string"
+OK same=true -12.5
+ERR parse error at 6: unexpected ']'
+ERR parse error at 8: expected '}'
+ERR parse error at 7: trailing characters
+ERR parse error at 6: unexpected '}'
+{
+  "name": "killer",
+  "tags": [
+    "vm",
+    "jit"
+  ],
+  "stats": {
+    "loc": 120000,
+    "ratio": 0.75,
+    "neg": -3,
+    "exp": 1500
+  }
+}
+{
+  "a": "line\nbreak	tab "quoted"",
+  "b": []
+}
+1081
+true

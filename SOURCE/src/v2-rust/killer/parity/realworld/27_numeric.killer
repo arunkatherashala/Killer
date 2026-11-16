@@ -1,0 +1,148 @@
+// Number crunching: big factorials and Fibonacci, modular exponentiation, gcd/lcm, a sieve,
+// Collatz lengths, base conversion, running statistics and fixed-point money arithmetic
+fn factorial(n) {
+  r = 1
+  for i in range(2, n + 1) {
+    r = r * i
+  }
+  return r
+}
+println(factorial(20))
+println(factorial(25))
+println(factorial(30))
+
+fn fib(n) {
+  a = 0
+  b = 1
+  for i in range(n) {
+    t = a + b
+    a = b
+    b = t
+  }
+  return a
+}
+println(fib(90))
+println(fib(100))
+println(fib(150))
+
+fn modpow(base, exp, m) {
+  result = 1
+  base = base % m
+  while exp > 0 {
+    if exp % 2 == 1 {
+      result = (result * base) % m
+    }
+    exp = floor(exp / 2)
+    base = (base * base) % m
+  }
+  return result
+}
+println(modpow(2, 100, 1000000007))
+println(modpow(7, 12345, 998244353))
+println(modpow(3, 200, 13))
+
+fn gcd(a, b) {
+  while b != 0 {
+    t = a % b
+    a = b
+    b = t
+  }
+  return a
+}
+fn lcm(a, b) {
+  return a / gcd(a, b) * b
+}
+println(gcd(1071, 462))
+l = 1
+for i in range(1, 21) {
+  l = lcm(l, i)
+}
+println(l)
+
+fn sieve(n) {
+  flags = []
+  for i in range(n + 1) {
+    push(flags, true)
+  }
+  flags[0] = false
+  flags[1] = false
+  i = 2
+  while i * i <= n {
+    if flags[i] {
+      j = i * i
+      while j <= n {
+        flags[j] = false
+        j = j + i
+      }
+    }
+    i = i + 1
+  }
+  out = []
+  for k in range(n + 1) {
+    if flags[k] {
+      push(out, k)
+    }
+  }
+  return out
+}
+ps = sieve(10000)
+println(len(ps))
+println(ps[len(ps) - 1])
+println(sum(slice(ps, 0, 100)))
+
+fn collatz_len(n) {
+  steps = 1
+  while n != 1 {
+    n = n % 2 == 0 ? n / 2 : 3 * n + 1
+    steps = steps + 1
+  }
+  return steps
+}
+best = 1
+best_len = 1
+for n in range(1, 3000) {
+  c = collatz_len(n)
+  if c > best_len {
+    best = n
+    best_len = c
+  }
+}
+println(f"collatz best under 3000: {best} ({best_len} terms)")
+
+fn to_base(n, b) {
+  digits = "0123456789abcdefghijklmnopqrstuvwxyz"
+  if n == 0 {
+    return "0"
+  }
+  out = ""
+  while n > 0 {
+    out = digits[n % b] + out
+    n = floor(n / b)
+  }
+  return out
+}
+println(to_base(255, 2) + " " + to_base(255, 16) + " " + to_base(123456789, 36) + " " + to_base(0, 7))
+println(int("ff", 16) + int("101", 2))
+
+xs = [2, 4, 4, 4, 5, 5, 7, 9]
+mean = sum(xs) / len(xs)
+var = 0
+for x in xs {
+  var = var + (x - mean) * (x - mean)
+}
+var = var / len(xs)
+println(f"mean={mean} var={var} sd={sqrt(var)}")
+sorted_xs = sorted([9, 1, 8, 2, 7, 3])
+mid = len(sorted_xs) / 2
+println("median=" + str((sorted_xs[mid - 1] + sorted_xs[mid]) / 2))
+
+// money in integer cents avoids float drift
+cents = 0
+for price in [1999, 2999, 1, 499, 10000] {
+  cents = cents + price
+}
+println(f"total ${floor(cents / 100)}.{pad_left(str(cents % 100), 2, '0')}")
+println(0.1 + 0.2)
+println(round(0.1 + 0.2, 2))
+println(7 % 3, -7 % 3, 2 ** 10, 10 / 4, floor(-2.5), abs(-4.5), min(3, 1, 2), max([4, 9, 2]))
+println(1e3, 1.5e-3, 123456789 * 1000, 2 ** 0.5)

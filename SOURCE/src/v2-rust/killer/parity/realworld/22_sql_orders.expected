@@ -1,0 +1,22 @@
+-- totals by customer (paid only)
+Ann  n=2 total=100
+Cy   n=1 total=99.99
+Bo   n=1 total=5.25
+-- by city
+Oslo 5
+Rome 2
+Lima 0
+-- filters
+4
+[105, 104, 103, 102]
+[{name: Di}]
+-- update and delete
+1
+1
+n=6 lo=5.25 hi=99.99
+-- average and having
+1 46.67
+2 7.63
+-- distinct and limit
+[open, paid]
+[103, 101, 106]

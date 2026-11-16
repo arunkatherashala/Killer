@@ -1,0 +1,39 @@
+> look
+[hall] A dusty entrance hall.
+  you see: coin
+  exits: down, north
+> go west
+You can't go west.
+> take sword
+There is no sword here.
+> take coin
+Taken: coin
+> go north
+[library] Shelves of mouldy books.
+  you see: book, candle
+  exits: south
+> take candle
+Taken: candle
+> dance
+I don't understand 'dance'.
+> go south
+[hall] A dusty entrance hall.
+  exits: down, north
+> go down
+[cellar] A damp cellar.
+  you see: key
+  exits: east, up
+> go east
+The way east is locked. You need the key.
+> take key
+Taken: key
+> inv
+You carry: coin, candle, key
+> drop coin
+Dropped: coin
+> go east
+You unlock the way east with the key.
+[vault] Gold glitters everywhere!
+  exits: 
+state=won moves=4 log=37
+[candle, key]

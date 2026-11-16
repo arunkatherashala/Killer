@@ -1,0 +1,206 @@
+// A recursive-descent JSON parser and pretty printer written in Killer, cross-checked against json_parse
+class Parser {
+  fn init(text) {
+    this.s = text
+    this.i = 0
+    this.n = len(text)
+  }
+  fn fail(msg) {
+    throw "parse error at " + str(this.i) + ": " + msg
+  }
+  fn skip_ws() {
+    while this.i < this.n && contains(" \t\r\n", this.s[this.i]) {
+      this.i = this.i + 1
+    }
+  }
+  fn expect(ch) {
+    if this.i >= this.n || this.s[this.i] != ch {
+      this.fail("expected '" + ch + "'")
+    }
+    this.i = this.i + 1
+  }
+  fn parse_value() {
+    this.skip_ws()
+    if this.i >= this.n {
+      this.fail("unexpected end")
+    }
+    c = this.s[this.i]
+    if c == "{" {
+      return this.parse_object()
+    }
+    if c == "[" {
+      return this.parse_array()
+    }
+    if c == "\"" {
+      return this.parse_string()
+    }
+    if starts_with(slice(this.s, this.i, this.n), "true") {
+      this.i = this.i + 4
+      return true
+    }
+    if starts_with(slice(this.s, this.i, this.n), "false") {
+      this.i = this.i + 5
+      return false
+    }
+    if starts_with(slice(this.s, this.i, this.n), "null") {
+      this.i = this.i + 4
+      return null
+    }
+    return this.parse_number()
+  }
+  fn parse_number() {
+    start = this.i
+    while this.i < this.n && contains("+-0123456789.eE", this.s[this.i]) {
+      this.i = this.i + 1
+    }
+    if start == this.i {
+      this.fail("unexpected '" + this.s[this.i] + "'")
+    }
+    return float(slice(this.s, start, this.i))
+  }
+  fn parse_string() {
+    this.expect("\"")
+    out = []
+    while this.i < this.n && this.s[this.i] != "\"" {
+      c = this.s[this.i]
+      if c == "\\" {
+        this.i = this.i + 1
+        e = this.s[this.i]
+        if e == "n" {
+          push(out, "\n")
+        } else if e == "t" {
+          push(out, "\t")
+        } else {
+          push(out, e)
+        }
+      } else {
+        push(out, c)
+      }
+      this.i = this.i + 1
+    }
+    this.expect("\"")
+    return join(out, "")
+  }
+  fn parse_array() {
+    this.expect("[")
+    items = []
+    this.skip_ws()
+    if this.s[this.i] == "]" {
+      this.i = this.i + 1
+      return items
+    }
+    while true {
+      push(items, this.parse_value())
+      this.skip_ws()
+      if this.i < this.n && this.s[this.i] == "," {
+        this.i = this.i + 1
+      } else {
+        break
+      }
+    }
+    this.expect("]")
+    return items
+  }
+  fn parse_object() {
+    this.expect("{")
+    obj = {}
+    this.skip_ws()
+    if this.s[this.i] == "}" {
+      this.i = this.i + 1
+      return obj
+    }
+    while true {
+      this.skip_ws()
+      key = this.parse_string()
+      this.skip_ws()
+      this.expect(":")
+      obj[key] = this.parse_value()
+      this.skip_ws()
+      if this.i < this.n && this.s[this.i] == "," {
+        this.i = this.i + 1
+      } else {
+        break
+      }
+    }
+    this.expect("}")
+    return obj
+  }
+}
+
+fn parse(text) {
+  p = new Parser(text)
+  v = p.parse_value()
+  p.skip_ws()
+  if p.i != p.n {
+    p.fail("trailing characters")
+  }
+  return v
+}
+
+fn render(v, indent) {
+  pad = repeat("  ", indent)
+  t = type(v)
+  if t == "dict" {
+    if len(v) == 0 {
+      return "{}"
+    }
+    parts = []
+    for k in keys(v) {
+      push(parts, pad + "  \"" + k + "\": " + render(v[k], indent + 1))
+    }
+    return "{\n" + join(parts, ",\n") + "\n" + pad + "}"
+  }
+  if t == "array" {
+    if len(v) == 0 {
+      return "[]"
+    }
+    parts = []
+    for x in v {
+      push(parts, pad + "  " + render(x, indent + 1))
+    }
+    return "[\n" + join(parts, ",\n") + "\n" + pad + "]"
+  }
+  if t == "string" {
+    return "\"" + replace(replace(v, "\\", "\\\\"), "\n", "\\n") + "\""
+  }
+  if v == null {
+    return "null"
+  }
+  return str(v)
+}
+
+docs = [
+  "{\"name\": \"killer\", \"tags\": [\"vm\", \"jit\"], \"stats\": {\"loc\": 120000, \"ratio\": 0.75, \"neg\": -3, \"exp\": 1.5e3}}",
+  "[1, [2, [3, [4, []]]], {}, null, true, false]",
+  "  {\"a\" : \"line\\nbreak\\ttab \\\"quoted\\\"\" , \"b\":[ ] }  ",
+  "\"just a string\"",
+  "-12.5",
+  "[1, 2,]",
+  "{\"a\": 1 \"b\": 2}",
+  "[1, 2] extra",
+  "{\"k\": }"
+]
+for d in docs {
+  try {
+    v = parse(d)
+    ref = json_parse(d)
+    same = json_stringify(v) == json_stringify(ref)
+    println("OK same=" + str(same) + " " + json_stringify(v))
+  } catch e {
+    println("ERR " + str(e))
+  }
+}
+println(render(parse(docs[0]), 0))
+println(render(parse(docs[2]), 0))
+
+// round trip a generated structure
+fn build(depth) {
+  if depth == 0 {
+    return "leaf"
+  }
+  return {"d": depth, "kids": [build(depth - 1), build(depth - 1)], "ok": depth % 2 == 0}
+}
+tree = build(5)
+text = json_stringify(tree)
+println(len(text))
+println(json_stringify(parse(text)) == text)

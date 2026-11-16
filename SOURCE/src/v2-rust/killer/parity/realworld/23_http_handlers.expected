@@ -1,0 +1,16 @@
+GET /todos -> 200 OK {"count":2,"items":[{"id":1,"title":"write docs","done":false},{"id":2,"title":"ship it","done":true}]}
+GET /todos -> 200 OK {"count":1,"items":[{"id":2,"title":"ship it","done":true}]}
+GET /todos/2 -> 200 OK {"id":2,"title":"ship it","done":true}
+GET /todos/9 -> 404 Not Found {"error":"no such todo 9"}
+POST /todos -> 201 Created {"id":3,"title":"buy milk","done":false}
+POST /todos -> 400 Bad Request {"error":"title required"}
+POST /todos -> 400 Bad Request {"error":"invalid json"}
+DELETE /todos/1 -> 403 Forbidden {"error":"admin only"}
+DELETE /todos/1 -> 200 OK {"deleted":"1"}
+DELETE /todos/1 -> 404 Not Found {"error":"no such todo 1"}
+PUT /todos/2 -> 405 Method Not Allowed {"error":"method not allowed"}
+GET /nothing -> 404 Not Found {"error":"not found"}
+GET /todos -> 401 Unauthorized {"error":"missing or bad token"}
+GET /todos -> 401 Unauthorized {"error":"missing or bad token"}
+GET /todos -> 200 OK {"count":2,"items":[{"id":2,"title":"ship it","done":true},{"id":3,"title":"buy milk","done":false}]}
+[2, 3]

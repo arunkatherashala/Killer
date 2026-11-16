@@ -296,9 +296,9 @@ fn bad_str() { throw "plain" }
 fn bad_dict() { throw {"code": 7} }
 fn bad_var() { return nosuch + 1 }
 fn bad_div() { return 1 / 0 }
-fn bad_index() {
-  xs = [1]
-  return xs[5]
+fn bad_call() {
+  f = 5
+  return f(1)
 }
 fn ok(x) { return x }
 caught = 0
@@ -307,7 +307,7 @@ for round in range(10) {
   try { async_await(async_spawn(bad_dict)) } catch e { if e["code"] == 7 { caught = caught + 1 } }
   try { async_await(async_spawn(bad_var)) } catch e { caught = caught + 1 }
   try { async_await(async_spawn(bad_div)) } catch e { caught = caught + 1 }
-  try { async_await(async_spawn(bad_index)) } catch e { caught = caught + 1 }
+  try { async_await(async_spawn(bad_call)) } catch e { caught = caught + 1 }
   if async_await(async_spawn(ok, round)) != round { caught = caught - 100 }
 }
 println(caught)
@@ -455,7 +455,7 @@ for h in hs {
   s = s + await h
 }
 println(s)
-println(await spawn adder(5))
+println(await async_spawn(adder, 5))
 async fn double(x) {
   return x * 2
 }

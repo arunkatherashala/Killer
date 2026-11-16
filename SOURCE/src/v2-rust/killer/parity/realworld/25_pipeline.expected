@@ -1,0 +1,14 @@
+and   4
+over  4
+quick 4
+the   4
+dog   3
+distinct=17 words=36
+handled=200 tally=200
+primes=46 first=[2, 3, 5, 7, 11, 13, 17, 19] last=199
+results channel empty: true
+[3, 5, 7, 9, 11, 13, 15, 17, 19, 21]
+double done, 10
+[10, 20, 40, 50]
+[bad input 3]
+[10, 20]

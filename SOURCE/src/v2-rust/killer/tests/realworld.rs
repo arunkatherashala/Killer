@@ -136,6 +136,51 @@ fn test_runner() {
     program("18_test_runner");
 }
 
+#[test]
+fn text_adventure_state_machine() {
+    program("19_adventure");
+}
+
+#[test]
+fn json_order_report() {
+    program("20_json_report");
+}
+
+#[test]
+fn graph_algorithms() {
+    program("21_graph");
+}
+
+#[test]
+fn sql_orders() {
+    program("22_sql_orders");
+}
+
+#[test]
+fn http_handlers_in_process() {
+    program("23_http_handlers");
+}
+
+#[test]
+fn json_parser_in_killer() {
+    program("24_json_parser");
+}
+
+#[test]
+fn concurrent_pipeline() {
+    program("25_pipeline");
+}
+
+#[test]
+fn text_tools() {
+    program("26_text_tools");
+}
+
+#[test]
+fn numeric_programs() {
+    program("27_numeric");
+}
+
 // ---------------------------------------------------------------- regressions
 
 #[test]

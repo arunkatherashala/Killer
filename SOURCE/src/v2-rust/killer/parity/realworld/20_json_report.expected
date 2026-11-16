@@ -1,0 +1,21 @@
+orders: 5
+customer,orders,total,paid,outstanding
+acme,2,378.97,378.97,0
+globex,2,124.4,24.5,99.9
+initech,1,0,0,0
+"weird, ""name""",0,0,0,0
+units per sku:
+  A1    13
+  B2     3
+  C3     3
+top customer: acme
+{"generated_orders":5,"customers":["acme","globex","initech"],"top":"acme","units":{"A1":13,"B2":3,"C3":3}}
+8
+[1,2.5,"x",null,true,{"a":[]}]
+{
+  "a": 1,
+  "b": [
+    1,
+    2
+  ]
+}

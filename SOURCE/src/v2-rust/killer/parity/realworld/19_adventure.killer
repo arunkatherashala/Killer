@@ -1,0 +1,153 @@
+// Text adventure: a state machine with rooms, an inventory, locked doors and a scripted playthrough
+class Room {
+  fn init(name, desc) {
+    this.name = name
+    this.desc = desc
+    this.exits = {}
+    this.items = []
+    this.locked = {}
+  }
+  fn connect(direction, other) {
+    this.exits[direction] = other
+    return this
+  }
+}
+
+class Game {
+  fn init() {
+    this.rooms = {}
+    this.here = null
+    this.bag = []
+    this.moves = 0
+    this.state = "playing"
+    this.log = []
+  }
+  fn add_room(room) {
+    this.rooms[room.name] = room
+    return room
+  }
+  fn say(text) {
+    push(this.log, text)
+    println(text)
+  }
+  fn look() {
+    r = this.here
+    this.say("[" + r.name + "] " + r.desc)
+    if len(r.items) > 0 {
+      this.say("  you see: " + join(sorted(r.items), ", "))
+    }
+    ex = sorted(keys(r.exits))
+    this.say("  exits: " + join(ex, ", "))
+  }
+  fn go(direction) {
+    r = this.here
+    if !(direction in r.exits) {
+      this.say("You can't go " + direction + ".")
+      return false
+    }
+    if direction in r.locked {
+      needed = r.locked[direction]
+      if !(needed in this.bag) {
+        this.say("The way " + direction + " is locked. You need the " + needed + ".")
+        return false
+      }
+      delete(r.locked, direction)
+      this.say("You unlock the way " + direction + " with the " + needed + ".")
+    }
+    this.here = r.exits[direction]
+    this.moves = this.moves + 1
+    if this.here.name == "vault" {
+      this.state = "won"
+    }
+    this.look()
+    return true
+  }
+  fn take(item) {
+    r = this.here
+    if item in r.items {
+      r.items = filter(r.items, fn(x) {
+        return x != item
+      })
+      push(this.bag, item)
+      this.say("Taken: " + item)
+      return true
+    }
+    this.say("There is no " + item + " here.")
+    return false
+  }
+  fn drop(item) {
+    if !(item in this.bag) {
+      this.say("You don't have " + item + ".")
+      return false
+    }
+    this.bag = filter(this.bag, fn(x) {
+      return x != item
+    })
+    push(this.here.items, item)
+    this.say("Dropped: " + item)
+    return true
+  }
+  fn inventory() {
+    if len(this.bag) == 0 {
+      this.say("You carry nothing.")
+    } else {
+      this.say("You carry: " + join(this.bag, ", "))
+    }
+  }
+  fn execute(line) {
+    words = split(trim(line))
+    if len(words) == 0 {
+      return null
+    }
+    verb = lower(words[0])
+    arg = len(words) > 1 ? words[1] : ""
+    this.say("> " + line)
+    match verb {
+      "look" => this.look()
+      "go" => this.go(arg)
+      "take" => this.take(arg)
+      "drop" => this.drop(arg)
+      "inv" => this.inventory()
+      _ => this.say("I don't understand '" + verb + "'.")
+    }
+  }
+}
+
+g = new Game()
+hall = g.add_room(new Room("hall", "A dusty entrance hall."))
+library = g.add_room(new Room("library", "Shelves of mouldy books."))
+cellar = g.add_room(new Room("cellar", "A damp cellar."))
+vault = g.add_room(new Room("vault", "Gold glitters everywhere!"))
+hall.connect("north", library).connect("down", cellar)
+library.connect("south", hall)
+cellar.connect("up", hall).connect("east", vault)
+cellar.locked["east"] = "key"
+library.items = ["book", "candle"]
+hall.items = ["coin"]
+cellar.items = ["key"]
+g.here = hall
+
+script = [
+  "look",
+  "go west",
+  "take sword",
+  "take coin",
+  "go north",
+  "take candle",
+  "dance",
+  "go south",
+  "go down",
+  "go east",
+  "take key",
+  "inv",
+  "drop coin",
+  "go east"
+]
+for line in script {
+  if g.state != "playing" {
+    break
+  }
+  g.execute(line)
+}
+println("state=" + g.state + " moves=" + str(g.moves) + " log=" + str(len(g.log)))
+println(g.bag)

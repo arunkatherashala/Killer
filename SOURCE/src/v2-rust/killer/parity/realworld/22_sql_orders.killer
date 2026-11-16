@@ -1,0 +1,57 @@
+// SQL engine use: schema, parameterised inserts, joins, grouping, updates and a transaction-like batch
+db = sql_open(":memory:")
+sql_exec(db, "CREATE TABLE customers (id INTEGER, name TEXT, city TEXT)")
+sql_exec(db, "CREATE TABLE orders (id INTEGER, customer_id INTEGER, amount REAL, status TEXT)")
+
+customers = [[1, "Ann", "Oslo"], [2, "Bo", "Rome"], [3, "Cy", "Oslo"], [4, "Di", "Lima"]]
+for c in customers {
+  sql_exec(db, "INSERT INTO customers VALUES (?, ?, ?)", c)
+}
+orders = [
+  [100, 1, 25.5, "paid"], [101, 1, 74.5, "paid"], [102, 2, 10.0, "open"],
+  [103, 3, 99.99, "paid"], [104, 2, 5.25, "paid"], [105, 3, 0.01, "refunded"], [106, 1, 40.0, "open"]
+]
+for o in orders {
+  sql_exec(db, "INSERT INTO orders VALUES (?, ?, ?, ?)", o)
+}
+
+println("-- totals by customer (paid only)")
+rows = sql_query(db, "SELECT c.name AS name, COUNT(*) AS n, SUM(o.amount) AS total FROM customers c JOIN orders o ON o.customer_id = c.id WHERE o.status = 'paid' GROUP BY c.name ORDER BY total DESC")
+for r in rows {
+  println(f"{pad_right(r['name'], 4, ' ')} n={r['n']} total={r['total']}")
+}
+
+println("-- by city")
+rows = sql_query(db, "SELECT c.city AS city, COUNT(o.id) AS orders FROM customers c LEFT JOIN orders o ON o.customer_id = c.id GROUP BY c.city ORDER BY orders DESC, city")
+for r in rows {
+  println(r["city"] + " " + str(r["orders"]))
+}
+
+println("-- filters")
+println(len(sql_query(db, "SELECT * FROM orders WHERE amount > ? AND status <> ?", [20, "refunded"])))
+ids = sql_query(db, "SELECT id FROM orders WHERE customer_id IN (2, 3) ORDER BY id DESC")
+println(map(ids, fn(r) {
+  return r["id"]
+}))
+println(sql_query(db, "SELECT name FROM customers WHERE name LIKE '%i' ORDER BY name"))
+
+println("-- update and delete")
+println(sql_exec(db, "UPDATE orders SET status = 'paid' WHERE status = 'open' AND amount >= 40"))
+println(sql_exec(db, "DELETE FROM orders WHERE status = 'refunded'"))
+r = sql_query(db, "SELECT COUNT(*) AS n, MIN(amount) AS lo, MAX(amount) AS hi FROM orders")[0]
+println(f"n={r['n']} lo={r['lo']} hi={r['hi']}")
+
+println("-- average and having")
+rows = sql_query(db, "SELECT customer_id, AVG(amount) AS avg_amt FROM orders GROUP BY customer_id HAVING COUNT(*) > 1 ORDER BY customer_id")
+for r in rows {
+  println(str(r["customer_id"]) + " " + str(round(r["avg_amt"] * 100) / 100))
+}
+
+println("-- distinct and limit")
+println(map(sql_query(db, "SELECT DISTINCT status FROM orders ORDER BY status"), fn(r) {
+  return r["status"]
+}))
+println(map(sql_query(db, "SELECT id FROM orders ORDER BY amount DESC LIMIT 3"), fn(r) {
+  return r["id"]
+}))
+sql_close(db)

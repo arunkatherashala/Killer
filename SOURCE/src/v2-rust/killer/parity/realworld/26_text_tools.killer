@@ -1,0 +1,165 @@
+// Text utilities: anagram groups, run-length encoding, Caesar/Vigenere, roman numerals, number words,
+// palindromes, a tiny template engine and column formatting
+words = ["listen", "silent", "enlist", "google", "gogole", "cat", "act", "tac", "dog", "god", "odg", "bird"]
+groups = {}
+for w in words {
+  key = join(sorted(split(w, "")), "")
+  if !(key in groups) {
+    groups[key] = []
+  }
+  push(groups[key], w)
+}
+for key in sorted(keys(groups)) {
+  if len(groups[key]) > 1 {
+    println(key + ": " + join(groups[key], ","))
+  }
+}
+
+fn rle(s) {
+  if len(s) == 0 {
+    return ""
+  }
+  out = []
+  cur = s[0]
+  n = 1
+  for i in range(1, len(s)) {
+    if s[i] == cur {
+      n = n + 1
+    } else {
+      push(out, cur + str(n))
+      cur = s[i]
+      n = 1
+    }
+  }
+  push(out, cur + str(n))
+  return join(out, "")
+}
+fn unrle(s) {
+  out = []
+  i = 0
+  while i < len(s) {
+    ch = s[i]
+    j = i + 1
+    digits = ""
+    while j < len(s) && contains("0123456789", s[j]) {
+      digits = digits + s[j]
+      j = j + 1
+    }
+    push(out, repeat(ch, int(digits)))
+    i = j
+  }
+  return join(out, "")
+}
+for s in ["aaabccdddd", "abc", "zzzzzzzzzzzz", ""] {
+  e = rle(s)
+  println("[" + s + "] -> [" + e + "] -> " + str(unrle(e) == s))
+}
+
+fn shift_char(ch, k) {
+  code = ord(ch)
+  if code >= 97 && code <= 122 {
+    return chr((code - 97 + k) % 26 + 97)
+  }
+  if code >= 65 && code <= 90 {
+    return chr((code - 65 + k) % 26 + 65)
+  }
+  return ch
+}
+fn caesar(text, k) {
+  return join(map(split(text, ""), fn(c) {
+    return shift_char(c, k)
+  }), "")
+}
+msg = "Hello, World! Killer rocks."
+enc = caesar(msg, 3)
+println(enc)
+println(caesar(enc, 23))
+println(caesar(caesar(msg, 13), 13) == msg ? "rot13 is an involution" : "rot13 broken")
+println(caesar(caesar(msg, 13), 13))
+
+fn to_roman(n) {
+  vals = [1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1]
+  syms = ["M", "CM", "D", "CD", "C", "XC", "L", "XL", "X", "IX", "V", "IV", "I"]
+  out = ""
+  for i in range(len(vals)) {
+    while n >= vals[i] {
+      out = out + syms[i]
+      n = n - vals[i]
+    }
+  }
+  return out
+}
+fn from_roman(s) {
+  v = {"I": 1, "V": 5, "X": 10, "L": 50, "C": 100, "D": 500, "M": 1000}
+  total = 0
+  for i in range(len(s)) {
+    cur = v[s[i]]
+    nxt = i + 1 < len(s) ? v[s[i + 1]] : 0
+    total = cur < nxt ? total - cur : total + cur
+  }
+  return total
+}
+ok = true
+for n in range(1, 400) {
+  if from_roman(to_roman(n)) != n {
+    ok = false
+  }
+}
+println(f"{to_roman(1994)} {to_roman(2024)} {to_roman(3999)} {from_roman('MCMXCIV')} roundtrip={ok}")
+
+ones = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen"]
+tens = ["", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"]
+fn words_of(n) {
+  if n < 20 {
+    return ones[n]
+  }
+  if n < 100 {
+    r = n % 10
+    return tens[floor(n / 10)] + (r > 0 ? "-" + ones[r] : "")
+  }
+  if n < 1000 {
+    r = n % 100
+    return ones[floor(n / 100)] + " hundred" + (r > 0 ? " and " + words_of(r) : "")
+  }
+  r = n % 1000
+  return words_of(floor(n / 1000)) + " thousand" + (r > 0 ? (r < 100 ? " and " : " ") + words_of(r) : "")
+}
+for n in [0, 7, 13, 21, 99, 100, 101, 342, 1000, 1001, 12345, 90000] {
+  println(str(n) + " = " + words_of(n))
+}
+
+fn is_palindrome(s) {
+  clean = filter(split(lower(s), ""), fn(c) {
+    return (c >= "a" && c <= "z") || (c >= "0" && c <= "9")
+  })
+  return clean == reversed(clean)
+}
+for s in ["A man, a plan, a canal: Panama", "Not a palindrome", "Was it a car or a cat I saw?", ""] {
+  println("'" + s + "' -> " + str(is_palindrome(s)))
+}
+
+fn render(template, vars) {
+  out = template
+  for k in keys(vars) {
+    out = replace(out, "{{" + k + "}}", str(vars[k]))
+  }
+  return out
+}
+println(render("Dear {{name}}, you owe {{amount}} by {{due}}. Thanks, {{name}}!", {"name": "Ada", "amount": 12.5, "due": "Friday"}))
+
+rows = [["item", "qty", "price"], ["widget", "4", "3.50"], ["gizmo, large", "12", "10.00"], ["nut", "1000", "0.05"]]
+widths = [0, 0, 0]
+for r in rows {
+  for i in range(3) {
+    widths[i] = max(widths[i], len(r[i]))
+  }
+}
+for r in rows {
+  println(pad_right(r[0], widths[0], " ") + " | " + pad_left(r[1], widths[1], " ") + " | " + pad_left(r[2], widths[2], " "))
+}
+println(join(map(widths, fn(w) {
+  return repeat("-", w)
+}), "-+-"))
+println(upper("straße"))
+println(len("héllo wörld"))
+println(title("the quick brown fox"))
