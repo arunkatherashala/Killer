@@ -526,6 +526,18 @@ impl PartialEq for SharedObject {
 #[derive(Debug, Clone)]
 pub struct FutureHandle(pub std::sync::Arc<std::sync::Mutex<Option<Box<Value>>>>);
 impl PartialEq for FutureHandle { fn eq(&self, _: &Self) -> bool { false } }
+impl FutureHandle {
+    /// The task's outcome if it has finished (`None` while it still runs). A future can be awaited
+    /// any number of times: the result stays in the slot and every caller gets its own copy; only
+    /// the last holder of the handle moves it out without copying.
+    pub fn poll(&self) -> Option<Value> {
+        let mut slot = self.0.lock().unwrap_or_else(|e| e.into_inner());
+        if std::sync::Arc::strong_count(&self.0) <= 1 {
+            return slot.take().map(|b| *b);
+        }
+        slot.as_ref().map(|v| v.detached())
+    }
+}
 // Safety: Arc<Mutex<_>> provides interior synchronisation; Value contains no
 // thread-local pointers.  All primitive fields (f64/bool/String/Vec/HashMap)
 // are Send.  Raw-pointer JIT types live only in VirtualMachine, not in Value.

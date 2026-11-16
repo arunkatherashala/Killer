@@ -6237,18 +6237,15 @@ impl VirtualMachine {
                                 + std::time::Duration::from_secs(30);
                             let mut sleep_ms = 1u64;
                             loop {
-                                {
-                                    let mut slot = handle.0.lock().unwrap();
-                                    if let Some(result) = slot.take() {
-                                        // a failed task re-raises its error in the awaiting thread
-                                        if let Value::TaskError(thrown) = *result {
-                                            let message = format!("{}", thrown);
-                                            self.pending_throw = Some(*thrown);
-                                            return Err(VmError::runtime_error(message));
-                                        }
-                                        self.stack.push(*result);
-                                        break;
+                                if let Some(result) = handle.poll() {
+                                    // a failed task re-raises its error in the awaiting thread
+                                    if let Value::TaskError(thrown) = result {
+                                        let message = format!("{}", thrown);
+                                        self.pending_throw = Some(*thrown);
+                                        return Err(VmError::runtime_error(message));
                                     }
+                                    self.stack.push(result);
+                                    break;
                                 }
                                 if std::time::Instant::now() >= deadline {
                                     self.stack.push(Value::Null);  // timeout → null

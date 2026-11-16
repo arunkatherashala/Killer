@@ -4,7 +4,9 @@ use std::time::Duration;
 use crate::value::Value;
 
 struct ChannelEntry {
-    tx: mpsc::Sender<Value>,
+    // None once the channel is closed: queued messages can still be received, then `recv` reports
+    // "closed" (dropping the only sender is what wakes receivers that are blocked in `recv`)
+    tx: Option<mpsc::Sender<Value>>,
     // shared so that `recv` can wait without holding the registry lock (a blocked receiver
     // must not stop other threads from sending, or closing, any channel)
     rx: Arc<Mutex<mpsc::Receiver<Value>>>,
@@ -21,7 +23,7 @@ static NEXT_ID: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new
 pub fn register(tx: mpsc::Sender<Value>, rx: mpsc::Receiver<Value>) -> i64 {
     let id = NEXT_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     if let Ok(mut map) = registry().lock() {
-        map.insert(id, ChannelEntry { tx, rx: Arc::new(Mutex::new(rx)) });
+        map.insert(id, ChannelEntry { tx: Some(tx), rx: Arc::new(Mutex::new(rx)) });
     }
     id
 }
@@ -36,7 +38,8 @@ fn receiver(id: i64) -> Result<Arc<Mutex<mpsc::Receiver<Value>>>, String> {
 pub fn send(id: i64, val: Value) -> Result<(), String> {
     let tx = {
         let map = registry().lock().map_err(|_| "channel registry poisoned".to_string())?;
-        map.get(&id).ok_or_else(|| format!("channel {} not found", id))?.tx.clone()
+        let entry = map.get(&id).ok_or_else(|| format!("channel {} not found", id))?;
+        entry.tx.clone().ok_or_else(|| format!("channel {} is closed", id))?
     };
     // the receiving thread gets its own copy: values must not share reference counts across threads
     tx.send(val.detached()).map_err(|_| "channel closed".to_string())
@@ -45,8 +48,10 @@ pub fn send(id: i64, val: Value) -> Result<(), String> {
 pub fn recv(id: i64) -> Result<Value, String> {
     let rx = receiver(id)?;
     let rx = rx.lock().map_err(|_| "channel poisoned".to_string())?;
-    rx.recv_timeout(Duration::from_secs(30))
-        .map_err(|_| format!("channel {} recv timed out or closed", id))
+    rx.recv_timeout(Duration::from_secs(30)).map_err(|e| match e {
+        mpsc::RecvTimeoutError::Timeout => format!("channel {} recv timed out", id),
+        mpsc::RecvTimeoutError::Disconnected => format!("channel {} is closed", id),
+    })
 }
 
 pub fn try_recv(id: i64) -> Option<Value> {
@@ -57,6 +62,8 @@ pub fn try_recv(id: i64) -> Option<Value> {
 
 pub fn close(id: i64) {
     if let Ok(mut map) = registry().lock() {
-        map.remove(&id);
+        if let Some(entry) = map.get_mut(&id) {
+            entry.tx = None;
+        }
     }
 }

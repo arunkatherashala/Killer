@@ -3449,11 +3449,8 @@ impl BuiltinFunctions {
                 let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
                 let mut sleep_ms = 1u64;
                 loop {
-                    {
-                        let mut slot = handle.0.lock().unwrap();
-                        if let Some(result) = slot.take() {
-                            return Ok(*result);
-                        }
+                    if let Some(result) = handle.poll() {
+                        return Self::task_outcome(result);
                     }
                     if std::time::Instant::now() >= deadline {
                         return Ok(Value::Null);
@@ -3473,6 +3470,14 @@ impl BuiltinFunctions {
                 ))
             }
             other => Ok(other.clone()),
+        }
+    }
+
+    /// A finished task's value, or its error re-raised in the waiting thread.
+    fn task_outcome(result: Value) -> Result<Value, VmError> {
+        match result {
+            Value::TaskError(thrown) => Err(VmError::runtime_error(format!("{}", thrown))),
+            v => Ok(v),
         }
     }
 
@@ -3519,12 +3524,8 @@ impl BuiltinFunctions {
                 let deadline = std::time::Instant::now()
                     + std::time::Duration::from_millis(timeout_ms);
                 loop {
-                    {
-                        let guard = handle.0.lock()
-                            .map_err(|e| VmError::runtime_error(format!("Future lock: {}", e)))?;
-                        if let Some(v) = guard.as_ref() {
-                            return Ok(v.detached());
-                        }
+                    if let Some(v) = handle.poll() {
+                        return Self::task_outcome(v);
                     }
                     if std::time::Instant::now() >= deadline {
                         return Ok(Value::Str("timeout".to_string()));
@@ -3549,13 +3550,10 @@ impl BuiltinFunctions {
             match fut {
                 Value::Future(handle) => {
                     loop {
-                        let guard = handle.0.lock()
-                            .map_err(|e| VmError::runtime_error(format!("Future lock: {}", e)))?;
-                        if let Some(v) = guard.as_ref() {
-                            results.push(v.detached());
+                        if let Some(v) = handle.poll() {
+                            results.push(Self::task_outcome(v)?);
                             break;
                         }
-                        drop(guard);
                         std::thread::sleep(std::time::Duration::from_millis(2));
                     }
                 }
@@ -3580,10 +3578,8 @@ impl BuiltinFunctions {
             for i in 0..len {
                 match arr.get(i).unwrap_or(Value::Null) {
                     Value::Future(handle) => {
-                        let guard = handle.0.lock()
-                            .map_err(|e| VmError::runtime_error(format!("{}", e)))?;
-                        if let Some(v) = guard.as_ref() {
-                            return Ok(v.detached());
+                        if let Some(v) = handle.poll() {
+                            return Self::task_outcome(v);
                         }
                     }
                     other => return Ok(other),
