@@ -29,7 +29,8 @@ def default_bin():
 
 def run(cmd, cwd):
     t = time.perf_counter()
-    r = subprocess.run(cmd, cwd=cwd, capture_output=True, timeout=300)
+    env = dict(os.environ, PYTHONIOENCODING="utf-8")  # CPython's stdout must not use the Windows code page
+    r = subprocess.run(cmd, cwd=cwd, capture_output=True, timeout=300, env=env)
     dt = time.perf_counter() - t
     out = r.stdout.decode("utf-8", "replace").replace("\r\n", "\n").strip()
     return dt, out, r.returncode, r.stderr.decode("utf-8", "replace")
