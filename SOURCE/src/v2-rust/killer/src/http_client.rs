@@ -189,7 +189,11 @@ fn dest_components_denied(c: &[String], home: Option<&[String]>) -> Option<&'sta
     if c.len() >= 2 && c[0] == "var" && (c[1] == "spool" || c[1] == "run" || c[1] == "lib") {
         return Some("system directory");
     }
-    if c.len() >= 2 && c[0] == "private" && (c[1] == "etc" || c[1] == "var") {
+    // macOS: /etc and /var are links into /private; /private/var/folders (the user temp area) stays allowed
+    if c.len() >= 2 && c[0] == "private" && c[1] == "etc" {
+        return Some("system directory");
+    }
+    if c.len() >= 3 && c[0] == "private" && c[1] == "var" && matches!(c[2].as_str(), "spool" | "run" | "lib" | "root" | "db" | "at" | "log") {
         return Some("system directory");
     }
     // the final component is the file; every earlier one is a directory
@@ -223,7 +227,10 @@ fn download_dest_check(path: &str) -> Result<(), &'static str> {
         }
     }
     // 1. lexical check of what the script wrote, relative paths resolved against the cwd
-    let lexical = if std::path::Path::new(&expanded).is_absolute() || expanded.starts_with('/') || expanded.starts_with('\\') {
+    // a drive-letter path (C:/x, c:\x) is absolute for this check on every OS, so Linux/macOS do not glue it to the cwd
+    let eb = expanded.as_bytes();
+    let drive = eb.len() >= 3 && eb[0].is_ascii_alphabetic() && eb[1] == b':' && (eb[2] == b'/' || eb[2] == 92);
+    let lexical = if drive || std::path::Path::new(&expanded).is_absolute() || expanded.starts_with('/') || expanded.starts_with('\\') {
         dest_components(&expanded)
     } else {
         let cwd = std::env::current_dir().map(|d| d.to_string_lossy().to_string()).unwrap_or_default();
@@ -436,6 +443,18 @@ mod download_dest_tests {
         ] {
             assert!(download_dest_check(p).is_err(), "{} should be blocked", p);
         }
+    }
+
+    #[test]
+    fn policy_is_the_same_on_every_os() {
+        let c = |p: &str| dest_components(p);
+        // macOS temp area stays allowed, the real system spots under /private stay blocked
+        assert!(dest_components_denied(&c("/private/var/folders/ab/xyz/T/out.bin"), None).is_none());
+        assert!(dest_components_denied(&c("/private/etc/passwd"), None).is_some());
+        assert!(dest_components_denied(&c("/private/var/root/x"), None).is_some());
+        // a drive-letter path is blocked even where it would look relative
+        assert!(download_dest_check("c:/WINDOWS/x.exe").is_err());
+        assert!(download_dest_check("D:\\Windows\\System32\\x.dll").is_err());
     }
 
     #[test]
