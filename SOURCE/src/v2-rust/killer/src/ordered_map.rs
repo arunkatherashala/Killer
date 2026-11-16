@@ -7,15 +7,22 @@
 
 use crate::fast_hash::FastMap;
 
+/// Up to this many entries the map is a plain vector scanned linearly: no hash table, no second
+/// copy of every key (a 4-key dictionary literal used to cost a table plus four extra strings).
+const SMALL: usize = 8;
+
 #[derive(Clone)]
 pub struct OrderedMap<V> {
     entries: Vec<Option<(String, V)>>,
+    /// key -> position in `entries`; only maintained once `indexed` is set.
     index: FastMap<String, usize>,
+    /// False while the map is small: then `entries` has no tombstones and `index` is empty.
+    indexed: bool,
 }
 
 impl<V> Default for OrderedMap<V> {
     fn default() -> Self {
-        OrderedMap { entries: Vec::new(), index: Default::default() }
+        OrderedMap { entries: Vec::new(), index: Default::default(), indexed: false }
     }
 }
 
@@ -25,45 +32,70 @@ impl<V> OrderedMap<V> {
     }
 
     #[inline]
+    fn find(&self, key: &str) -> Option<usize> {
+        if self.indexed {
+            self.index.get(key).copied()
+        } else {
+            self.entries.iter().position(|e| matches!(e, Some((k, _)) if k == key))
+        }
+    }
+
+    #[inline]
     pub fn len(&self) -> usize {
-        self.index.len()
+        if self.indexed { self.index.len() } else { self.entries.len() }
     }
 
     #[inline]
     pub fn is_empty(&self) -> bool {
-        self.index.is_empty()
+        self.len() == 0
     }
 
     #[inline]
     pub fn contains_key(&self, key: &str) -> bool {
-        self.index.contains_key(key)
+        self.find(key).is_some()
     }
 
     #[inline]
     pub fn get(&self, key: &str) -> Option<&V> {
-        let &i = self.index.get(key)?;
+        let i = self.find(key)?;
         self.entries[i].as_ref().map(|(_, v)| v)
     }
 
     #[inline]
     pub fn get_mut(&mut self, key: &str) -> Option<&mut V> {
-        let &i = self.index.get(key)?;
+        let i = self.find(key)?;
         self.entries[i].as_mut().map(|(_, v)| v)
     }
 
     /// Insert or replace; a replaced key keeps its original position.
     pub fn insert(&mut self, key: String, value: V) -> Option<V> {
-        if let Some(&i) = self.index.get(&key) {
+        if let Some(i) = self.find(&key) {
             if let Some((_, slot)) = self.entries[i].as_mut() {
                 return Some(std::mem::replace(slot, value));
             }
         }
-        self.index.insert(key.clone(), self.entries.len());
+        if !self.indexed && self.entries.len() >= SMALL {
+            self.index.reserve(self.entries.len() * 2);
+            for (i, e) in self.entries.iter().enumerate() {
+                if let Some((k, _)) = e {
+                    self.index.insert(k.clone(), i);
+                }
+            }
+            self.indexed = true;
+        }
+        if self.indexed {
+            self.index.insert(key.clone(), self.entries.len());
+        }
         self.entries.push(Some((key, value)));
         None
     }
 
     pub fn remove(&mut self, key: &str) -> Option<V> {
+        if !self.indexed {
+            let i = self.find(key)?;
+            let (_, value) = self.entries.remove(i)?;
+            return Some(value);
+        }
         let i = self.index.remove(key)?;
         let (_, value) = self.entries[i].take()?;
         // compact once the dead entries dominate, so a queue-like use stays O(1) amortised
@@ -86,12 +118,14 @@ impl<V> OrderedMap<V> {
     /// Move every live value out (in insertion order), leaving the map empty.
     pub fn take_values(&mut self) -> Vec<V> {
         self.index.clear();
+        self.indexed = false;
         std::mem::take(&mut self.entries).into_iter().flatten().map(|(_, v)| v).collect()
     }
 
     pub fn clear(&mut self) {
         self.entries.clear();
         self.index.clear();
+        self.indexed = false;
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (&String, &V)> {
@@ -167,5 +201,30 @@ mod tests {
         assert_eq!(first, ["k150", "k151"]);
         m.insert("k3".to_string(), 3);
         assert_eq!(m.keys().last().map(|k| k.as_str()), Some("k3"));
+    }
+
+    #[test]
+    fn small_map_removes_in_place_and_grows_into_an_index() {
+        let mut m = OrderedMap::new();
+        for i in 0..6 {
+            m.insert(format!("k{i}"), i);
+        }
+        assert_eq!(m.remove("k2"), Some(2));
+        assert_eq!(m.remove("nope"), None);
+        let keys: Vec<&str> = m.keys().map(|k| k.as_str()).collect();
+        assert_eq!(keys, ["k0", "k1", "k3", "k4", "k5"]);
+        assert_eq!(m.len(), 5);
+        for i in 10..30 {
+            m.insert(format!("k{i}"), i);
+        }
+        assert_eq!(m.len(), 25);
+        assert_eq!(m.get("k3"), Some(&3));
+        assert_eq!(m.get("k29"), Some(&29));
+        assert_eq!(m.get("k2"), None);
+        assert_eq!(m.remove("k0"), Some(0));
+        assert_eq!(m.keys().next().map(|k| k.as_str()), Some("k1"));
+        m.clear();
+        m.insert("z".to_string(), 1);
+        assert_eq!(m.get("z"), Some(&1));
     }
 }
