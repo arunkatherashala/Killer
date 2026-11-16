@@ -418,6 +418,8 @@ pub struct VirtualMachine {
     method_ic: crate::fast_hash::FastMap<usize, (String, usize, usize)>,
     /// Emptied scope tables kept for reuse by `push_scope` (one is created per call).
     scope_pool: Vec<Scope>,
+    /// Key strings recycled from popped scope tables (a call binds the same few names each time).
+    key_pool: Vec<String>,
     /// GC: allocation counter — triggers gc_collect every GC_INTERVAL array allocs.
     gc_alloc_epoch: u64,
     /// (number of methods when computed, any `get x()` / `set x(v)` property method exists): lets field reads and
@@ -441,6 +443,7 @@ impl Default for VirtualMachine {
             stack: Vec::new(),
             scopes: Vec::new(),
             scope_pool: Vec::new(),
+            key_pool: Vec::new(),
             call_stack: Vec::new(),
             ip: 0,
             locals_stack: vec![Vec::new()],  // start with one frame for top-level code
@@ -579,6 +582,7 @@ impl VirtualMachine {
             stack: Vec::with_capacity(32),
             scopes: Vec::with_capacity(4),
             scope_pool: Vec::new(),
+            key_pool: Vec::new(),
             call_stack: Vec::new(),
             ip: 0,
             locals_stack: vec![Vec::with_capacity(8)],
@@ -973,7 +977,7 @@ impl VirtualMachine {
             let params: Vec<String> = (0..arity).map(|i| format!("arg{i}")).collect();
             let _ = self.store_var(
                 name,
-                Value::Function { params, bytecode_start: *start, captured: Default::default() },
+                Value::Function { params: params.into(), bytecode_start: *start, captured: Default::default() },
             );
         }
 
@@ -1199,7 +1203,7 @@ impl VirtualMachine {
 
                     // Push a function value onto the stack
                     let func = Value::Function {
-                        params: params.clone(),
+                        params: params.clone().into(),
                         bytecode_start: *bytecode_start,
                         captured: captured.clone(),
                     };
@@ -1217,7 +1221,7 @@ impl VirtualMachine {
                     let value = match self.load_var(name) {
                         Ok(v) => v,
                         Err(_) => Value::Function {
-                            params: (0..*arity).map(|i| format!("arg{}", i)).collect(),
+                            params: (0..*arity).map(|i| format!("arg{}", i)).collect::<Vec<_>>().into(),
                             bytecode_start: *start,
                             captured: Default::default(),
                         },
@@ -6194,7 +6198,7 @@ impl VirtualMachine {
                     // Synthesise a Value::Function using argN param names (call_function_sync binds these)
                     let params: Vec<String> = (0..args.len()).map(|i| format!("arg{i}")).collect();
                     let func = Value::Function {
-                        params,
+                        params: params.into(),
                         bytecode_start,
                         captured: Default::default(),
                     };
@@ -7020,7 +7024,10 @@ impl VirtualMachine {
             match scope.get_mut(name) {
                 Some(slot) => *slot = value,
                 None => {
-                    scope.insert(name.to_string(), value);
+                    let mut key = self.key_pool.pop().unwrap_or_default();
+                    key.clear();
+                    key.push_str(name);
+                    scope.insert(key, value);
                 }
             }
         }
@@ -7052,7 +7059,11 @@ impl VirtualMachine {
         if let Some(mut scope) = self.scopes.pop() {
             // recycle the table (keeps its capacity) for the next call
             if self.scope_pool.len() < 64 {
-                scope.clear();
+                for (k, _) in scope.map.drain() {
+                    if self.key_pool.len() < 256 {
+                        self.key_pool.push(k);
+                    }
+                }
                 scope.frame = false;
                 self.scope_pool.push(scope);
             }
@@ -7874,7 +7885,7 @@ impl VirtualMachine {
                             // Synthesise a Value::Function and recurse into call_function_sync
                             let params: Vec<String> = (0..exp_arity).map(|i| format!("arg{i}")).collect();
                             let callee = Value::Function {
-                                params,
+                                params: params.into(),
                                 bytecode_start: *target,
                                 captured: Default::default(),
                             };
@@ -7891,7 +7902,7 @@ impl VirtualMachine {
                             call_args.reverse();
                             let params: Vec<String> = (0..exp_arity).map(|i| format!("arg{i}")).collect();
                             let callee = Value::Function {
-                                params,
+                                params: params.into(),
                                 bytecode_start: *target,
                                 captured: Default::default(),
                             };
