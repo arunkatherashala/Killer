@@ -127,3 +127,95 @@ fn run_resolves_imports_next_to_the_script_and_names_it_in_errors() {
     assert_eq!(out.trim(), "5");
     assert!(err.contains("main.killer:3"), "{err}");
 }
+
+fn copy_dir(from: &std::path::Path, to: &std::path::Path) {
+    std::fs::create_dir_all(to).unwrap();
+    for e in std::fs::read_dir(from).unwrap().flatten() {
+        let p = e.path();
+        let t = to.join(e.file_name());
+        if p.is_dir() {
+            copy_dir(&p, &t);
+        } else if p.extension().map_or(false, |x| x == "killer") {
+            std::fs::copy(&p, &t).unwrap();
+        }
+    }
+}
+
+fn comment_lines(dir: &std::path::Path, out: &mut Vec<String>) {
+    let mut entries: Vec<_> = std::fs::read_dir(dir).unwrap().flatten().map(|e| e.path()).collect();
+    entries.sort();
+    for p in entries {
+        if p.is_dir() {
+            comment_lines(&p, out);
+        } else if let Ok(s) = std::fs::read_to_string(&p) {
+            for l in s.lines() {
+                let t = l.trim();
+                if t.starts_with('#') || t.starts_with("//") || t.starts_with("--") {
+                    out.push(t.to_string());
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn fmt_over_examples_converges_and_check_is_idempotent_and_keeps_comments() {
+    let d = Dir::new();
+    let examples = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("examples");
+    let work = d.0.join("ex");
+    copy_dir(&examples, &work);
+    let mut before = Vec::new();
+    comment_lines(&work, &mut before);
+    assert!(!before.is_empty(), "examples should contain comments");
+
+    let (code, out, err) = d.killer(&["fmt", "ex"]);
+    assert_eq!(code, 0, "fmt failed: {out}{err}");
+    // after one pass the tree is stable: --check passes and a second pass changes nothing
+    let (code, out, err) = d.killer(&["fmt", "--check", "ex"]);
+    assert_eq!(code, 0, "fmt --check must pass after formatting: {out}{err}");
+    let mut after = Vec::new();
+    comment_lines(&work, &mut after);
+    assert_eq!(before, after, "formatting must keep every comment line");
+
+    // and --check reports an unformatted file with exit code 1 without touching it
+    d.write("ex/messy.killer", "fn f(a) {\nreturn a   \n}\n");
+    let (code, out, _) = d.killer(&["fmt", "--check", "ex/messy.killer"]);
+    assert_eq!(code, 1, "{out}");
+    assert!(out.contains("would reformat"), "{out}");
+    assert_eq!(std::fs::read_to_string(d.0.join("ex/messy.killer")).unwrap(), "fn f(a) {\nreturn a   \n}\n");
+}
+
+#[test]
+fn lint_rule_ids_and_every_suppression_comment_form() {
+    let d = Dir::new();
+    // each rule fires with its id
+    d.write("a.killer", "prnt(1)\n");
+    assert!(d.killer(&["lint", "a.killer"]).1.contains("[undefined-function]"));
+    d.write("b.killer", "fn f() {\n  unused_thing = 1\n  return 2\n}\nprint(f())\n");
+    assert!(d.killer(&["lint", "b.killer"]).1.contains("[unused-variable]"));
+    d.write("c.killer", "fn f() {\n  return 1\n  print(2)\n}\nprint(f())\n");
+    assert!(d.killer(&["lint", "c.killer"]).1.contains("[unreachable-code]"));
+    d.write("e.killer", "len = 3\nprint(len)\n");
+    assert!(d.killer(&["lint", "e.killer"]).1.contains("[shadowed-builtin]"));
+
+    // suppression with `#`, `//` and `--` comment markers, same line and line above, and whole file
+    for (i, src) in [
+        "prnt(1) # lint:ignore undefined-function\n",
+        "prnt(1) // lint:ignore undefined-function\n",
+        "prnt(1) -- lint:ignore undefined-function\n",
+        "// lint:ignore undefined-function\nprnt(1)\n",
+        "-- lint:ignore-file undefined-function\nprnt(1)\nprnt(2)\n",
+        "# lint:ignore\nprnt(1)\n",
+    ]
+    .iter()
+    .enumerate()
+    {
+        let name = format!("s{i}.killer");
+        d.write(&name, src);
+        let (code, out, _) = d.killer(&["lint", &name]);
+        assert_eq!(code, 0, "suppression form {src:?} should silence the rule: {out}");
+    }
+    // suppressing another rule id does not silence this one
+    d.write("t.killer", "prnt(1) # lint:ignore unused-variable\n");
+    assert_eq!(d.killer(&["lint", "t.killer"]).0, 1);
+}

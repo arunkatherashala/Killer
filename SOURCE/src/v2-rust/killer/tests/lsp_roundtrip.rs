@@ -11,7 +11,18 @@ struct Client {
 
 impl Client {
     fn start() -> Client {
-        let mut child = Command::new(env!("CARGO_BIN_EXE_killer_lsp"))
+        Client::spawn(Command::new(env!("CARGO_BIN_EXE_killer_lsp")))
+    }
+
+    /// The same server through the unified driver: `killer lsp`.
+    fn start_driver() -> Client {
+        let mut cmd = Command::new(env!("CARGO_BIN_EXE_killer"));
+        cmd.arg("lsp");
+        Client::spawn(cmd)
+    }
+
+    fn spawn(mut cmd: Command) -> Client {
+        let mut child = cmd
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
@@ -107,4 +118,56 @@ fn initialize_diagnostics_completion_definition_shutdown() {
     c.send(r#"{"jsonrpc":"2.0","method":"exit"}"#);
     let status = c.child.wait().unwrap();
     assert!(status.success(), "exit code after clean shutdown must be 0");
+}
+
+fn req(id: i64, method: &str, uri: &str, line: usize, ch: usize) -> String {
+    format!(
+        r#"{{"jsonrpc":"2.0","id":{id},"method":"{method}","params":{{"textDocument":{{"uri":"{uri}"}},"position":{{"line":{line},"character":{ch}}}}}}}"#
+    )
+}
+
+#[test]
+fn killer_lsp_subcommand_hover_builtins_and_definitions_of_classes_and_variables() {
+    let mut c = Client::start_driver();
+    c.send(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}"#);
+    let init = c.read();
+    assert!(init.contains("\"hoverProvider\""), "{init}");
+    c.send(r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#);
+
+    let uri = "file:///tmp/defs.killer";
+    // 0: class Animal {  1: fn speak() {  2: return 1  3: }  4: }  5: counter = 10
+    // 6: pet = new Animal()  7: print(counter)  8: n = len("abc")
+    let text = "class Animal {\\n  fn speak() {\\n    return 1\\n  }\\n}\\ncounter = 10\\npet = new Animal()\\nprint(counter)\\nn = len([1, 2])\\n";
+    c.send(&format!(
+        r#"{{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{{"textDocument":{{"uri":"{uri}","languageId":"killer","version":1,"text":"{text}"}}}}}}"#
+    ));
+    let diag = c.read();
+    assert!(diag.contains("\"diagnostics\":[]"), "valid file must have no diagnostics: {diag}");
+
+    // class: `Animal` in `pet = new Animal()` -> line 0
+    c.send(&req(2, "textDocument/definition", uri, 6, 12));
+    let d = c.read();
+    assert!(d.contains("\"line\":0"), "{d}");
+    // variable: `counter` in print(counter) -> line 5
+    c.send(&req(3, "textDocument/definition", uri, 7, 8));
+    let d = c.read();
+    assert!(d.contains("\"line\":5"), "{d}");
+    // hover on a builtin gives its documentation / signature
+    c.send(&req(4, "textDocument/hover", uri, 8, 5));
+    let h = c.read();
+    assert!(h.contains("len"), "{h}");
+    assert!(h.contains("\"value\""), "{h}");
+    // hover on a class
+    c.send(&req(5, "textDocument/hover", uri, 6, 12));
+    assert!(c.read().contains("class Animal"));
+    // completion offers file symbols, keywords and builtins
+    c.send(&req(6, "textDocument/completion", uri, 8, 0));
+    let comp = c.read();
+    for l in ["\"Animal\"", "\"counter\"", "\"pet\"", "\"class\"", "\"len\""] {
+        assert!(comp.contains(l), "completion lacks {l}: {comp}");
+    }
+    c.send(r#"{"jsonrpc":"2.0","id":7,"method":"shutdown","params":null}"#);
+    assert!(c.read().contains("\"result\":null"));
+    c.send(r#"{"jsonrpc":"2.0","method":"exit"}"#);
+    assert!(c.child.wait().unwrap().success());
 }

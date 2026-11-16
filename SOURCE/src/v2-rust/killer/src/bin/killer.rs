@@ -29,7 +29,23 @@ const COMMANDS: &[(&str, &str, Handler)] = &[
     ("test", "run tests: killer test [--junit FILE] [filter] [paths]", testfw::cmd_test),
     ("repl", "interactive prompt", cli_tools::cmd_repl),
     ("lsp", "language server over stdio", |_| lsp_core::serve_stdio()),
+    ("new", "create a project: killer new <name> [--lib]", |a| pkg_cmd("new", a)),
+    ("init", "create killer.toml in the current directory", |a| pkg_cmd("init", a)),
+    ("add", "add a dependency: killer add <name>[@req] [--path DIR | --git URL]", |a| pkg_cmd("add", a)),
+    ("remove", "remove a dependency", |a| pkg_cmd("remove", a)),
+    ("install", "resolve, verify checksums, write killer.lock", |a| pkg_cmd("install", a)),
+    ("update", "re-resolve dependencies", |a| pkg_cmd("update", a)),
+    ("list", "show dependencies", |a| pkg_cmd("list", a)),
+    ("publish", "publish this package to a registry", |a| pkg_cmd("publish", a)),
+    ("check", "check manifest and lockfile", |a| pkg_cmd("check", a)),
 ];
+
+/// Package manager commands share one implementation with the `killer_pkg` binary.
+fn pkg_cmd(name: &str, args: &[String]) -> i32 {
+    let mut full = vec![name.to_string()];
+    full.extend_from_slice(args);
+    killer_native::pkg_cli::run(&full)
+}
 
 fn version_line() -> String {
     format!("killer {}", env!("CARGO_PKG_VERSION"))
@@ -38,7 +54,7 @@ fn version_line() -> String {
 fn print_help() {
     println!("{}\n\nUSAGE:\n    killer <command> [args]\n    killer <file.killer>          same as `killer run`\n\nCOMMANDS:", version_line());
     for (name, help, _) in COMMANDS {
-        println!("    {name:<6} {help}");
+        println!("    {name:<8} {help}");
     }
     println!("\nOPTIONS:\n    -V, --version   print the version\n    -h, --help      print this help");
 }
