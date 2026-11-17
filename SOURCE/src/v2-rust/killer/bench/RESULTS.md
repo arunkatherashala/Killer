@@ -281,7 +281,7 @@ What was done:
    nested_data within noise, so below the bar on their own; kept because they are small and obj_methods is the one target
    that passes with them (-16% in total).
 
-Tests: tests/fusion_diff.rs runs 14 programs (break/continue/return in nested scope-less blocks, closures over loop
+Tests: tests/fusion_diff.rs runs 13 programs (break/continue/return in nested scope-less blocks, closures over loop
 variables, `let`, try/catch in loops, generators, runtime error lines, range shapes incl. floats, negatives, huge, script
 `range`, objects/methods) twice, normally and with `KILLER_NO_FUSION=1`, and requires identical output (the
 "at instruction N" number is masked: it legitimately differs).
