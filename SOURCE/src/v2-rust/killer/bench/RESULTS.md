@@ -237,3 +237,58 @@ Not done, with reason: caching an ASCII flag / char count / offset index needs t
 `Value::Str(KStr)` (or `Rc<str>` plus cached flag, which would also remove the Load clone of point 2) is a mechanical but
 repo-wide change that would conflict with the concurrent VM/bytecode work. A cache keyed by (pointer, length) outside the
 value was rejected: a freed string and a new one with different content can share both, so it is unsound.
+
+
+## Round 5 (branch wt-fuse: fewer instructions per operation)
+
+CPU seconds (kernel+user via GetProcessTimes, median of 9 alternating runs, quiet machine, includes about
+0.03 s start-up). base = tip f352154 release build, new = this branch. "no shortcuts" is the same binary run
+with `KILLER_NO_FUSION=1` (compiles without any of the changes below).
+
+| Benchmark | base | new | no shortcuts (same binary) | Change vs base |
+|-----------|-----:|----:|---------------------------:|---------------:|
+| obj_methods | 0.500 | 0.422 | 0.500 | -16% (kept) |
+| recursion_objects | 0.453 | 0.422 | 0.469 | -7% |
+| closures | 0.438 | 0.422 | 0.453 | -4% (below the 10% bar) |
+| list_comp | 0.344 | 0.344 | 0.328 | none |
+| nested_data | 0.344 | 0.344 | 0.375 | none |
+| dict_ops | 0.469 | 0.453 | 0.484 | noise |
+| try_catch | 0.125 | 0.094 | 0.125 | noise (one 15 ms tick) |
+| fib(32) | 0.062 | 0.062 | 0.062 | unchanged |
+| 5M-iteration while loop | 0.438 | 0.453 | | unchanged |
+
+Micro-benchmarks, 2M iterations of a loop body (same alternating protocol): empty `for` body 0.266 -> 0.141 (-47%),
+`s = s + i` 0.422 -> 0.297 (-30%), a call `s = f(s)` 0.641 -> 0.484 (-25%), a method call 0.625 -> 0.500 (-20%).
+The headline benchmarks gain much less because their time is in the call path itself, not in the loop skeleton.
+
+What was done:
+1. **Blocks that bind no names have no runtime scope.** A loop/`if` body made only of instructions that cannot create
+   or inspect a name in the innermost scope (slots, loads, arithmetic, calls, field reads, `return`/`break`/`continue`,
+   ...) no longer executes `EnterScope`/`ExitScope` (a scope table was popped from a pool, pushed, drained and pushed back
+   on every iteration). The compiler turns the pair and the `ExitScope`s that `break`/`continue`/`return` emit for that
+   block into `Nop`; the optimizer deletes `Nop` with the usual address remap. Blocks with `let`, named stores, `for`,
+   `try`, closures, debugger hooks keep their scope. Bodies of `while` loops are excluded on purpose: the loop-native
+   recognizers in jit_x86 depend on the exact instruction layout (without the exclusion a hot accumulator loop past 2^53
+   was recognized and printed garbage; caught by tests/python_gap.rs).
+2. **`for x in range(a)` / `range(a, b)` counts instead of building the array** (`RangeInit` in front of the unchanged
+   builtin sequence; `ForNext` counts through two `Integer` slots). Only for integral arguments within the builtin's size
+   limit and memory cap; everything else (floats, errors, huge ranges, a script-defined `range`) runs the old path and
+   gives the old error. `range(2M)` alone cost 0.095 s of allocation. The function JIT treats `RangeInit` as a no-op, so
+   numeric functions compile exactly as before.
+3. **Look-ahead shortcuts** `LoadField`/`LoadSlotField` (`x.f` = Load, GetField, CallMethodDynamic) and
+   `LoadIndexStr`/`LoadSlotIndexStr` (`d["k"]`). They replace the first instruction only and leave the originals in place, so
+   jumps and error paths are unchanged. Effect (same binary, `KILLER_X_NOLOOK` on/off): obj_methods 0.453 -> 0.422 (-7%),
+   nested_data within noise, so below the bar on their own; kept because they are small and obj_methods is the one target
+   that passes with them (-16% in total).
+
+Tests: tests/fusion_diff.rs runs 14 programs (break/continue/return in nested scope-less blocks, closures over loop
+variables, `let`, try/catch in loops, generators, runtime error lines, range shapes incl. floats, negatives, huge, script
+`range`, objects/methods) twice, normally and with `KILLER_NO_FUSION=1`, and requires identical output (the
+"at instruction N" number is masked: it legitimately differs).
+
+Not done (measured to be the next cost, not attempted): a profile (sampling RIP + line table, release build with
+line tables) of `closures` shows about 25% in hash probes for `argN`/captured names, 15-20% in scope-table moves and
+drains, 6% in the capture write-back at `Ret`. Removing that needs parameter and capture slots in the call frame (a
+change to every place that reads `argN` by name: captures, generators, debugger, nested calls), and the list-comprehension
+loop variable in a frame slot (`for` fast path duplicated for a slot target, and the comprehension variable then no longer
+leaks into the enclosing scope as it does today). Neither was started.
