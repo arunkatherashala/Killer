@@ -205,5 +205,8 @@ probe("Killer-specific", "three-valued comparison", "believe a = 10 ± 1\nprintl
 probe("Killer-specific", "gauss quadrature", "println(gauss(10, 3) + gauss(20, 4))", "30 ± 5σ")
 probe("Killer-specific", "trit constants", "println(T_POS)\nprintln(trit_and(T_POS, T_ZERO))", "T_POS\nT_ZERO")
 probe("Killer-specific", "native JIT result matches", "fn fib(n) {\n  if n <= 1 {\n    return n\n  }\n  return fib(n - 1) + fib(n - 2)\n}\nprintln(fib(25))", "75025")
-probe("Killer-specific", "C FFI call", 'lib = ffi_open("msvcrt.dll")\nprintln(ffi_call(lib, "strlen", "s>l", "killer"))', "6")
+# the C library has a different file name on each OS (same choice as the unit tests in src/cffi.rs)
+import sys as _sys
+_LIBC = "msvcrt.dll" if _sys.platform.startswith("win") else ("libc.dylib" if _sys.platform == "darwin" else "libc.so.6")
+probe("Killer-specific", "C FFI call", 'lib = ffi_open("' + _LIBC + '")\nprintln(ffi_call(lib, "strlen", "s>l", "killer"))', "6")
 probe("Killer-specific", "statistics builtins", "println(mean([1, 2, 3, 4]))", "2.5")
