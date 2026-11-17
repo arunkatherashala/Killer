@@ -90,8 +90,9 @@ fn index_str(s: &str, idx: f64) -> Value {
             return Value::Str((bytes[u] as char).to_string());
         }
     }
-    let len = crate::lang_builtins::char_len(s) as i64;
-    let i = if i < 0 { i + len } else { i };
+    // non-negative index: char_at is a single block-skipping scan and already yields None when
+    // out of range, so the total length is only needed for negative indices
+    let i = if i < 0 { i + crate::lang_builtins::char_len(s) as i64 } else { i };
     let ch = if i >= 0 { crate::lang_builtins::char_at(s, i as usize) } else { None };
     ch.map(Value::Str).unwrap_or(Value::Null)
 }
@@ -3938,17 +3939,13 @@ impl VirtualMachine {
                             }
                             match (&args[0], &args[1]) {
                                 (Value::Str(s), Value::Number(idx)) => {
-                                    let char_count = s.chars().count();
+                                    let char_count = crate::lang_builtins::char_len(s);
                                     let i = array_index(*idx, char_count);
-                                    if i < char_count {
-                                        if let Some(ch) = s.chars().nth(i) {
-                                            Value::Str(ch.to_string())
-                                        } else {
-                                            Value::Str(String::new())
-                                        }
+                                    Value::Str(if i < char_count {
+                                        crate::lang_builtins::char_at(s, i).unwrap_or_default()
                                     } else {
-                                        Value::Str(String::new())
-                                    }
+                                        String::new()
+                                    })
                                 }
                                 _ => return Err(VmError::runtime_error(
                                     "charAt() expects string and number".to_string(),
@@ -3963,10 +3960,10 @@ impl VirtualMachine {
                             }
                             match (&args[0], &args[1]) {
                                 (Value::Str(s), Value::Number(idx)) => {
-                                    let char_count = s.chars().count();
+                                    let char_count = crate::lang_builtins::char_len(s);
                                     let i = array_index(*idx, char_count);
                                     if i < char_count {
-                                        if let Some(ch) = s.chars().nth(i) {
+                                        if let Some(ch) = crate::lang_builtins::char_at(s, i).and_then(|c| c.chars().next()) {
                                             let code = ch as u32 as f64;
                                             Value::Number(code)
                                         } else {
@@ -5329,7 +5326,7 @@ impl VirtualMachine {
                                         ));
                                     }
                                     // Count characters, not bytes (for Unicode support)
-                                    Value::Number(s.chars().count() as f64)
+                                    Value::Number(crate::lang_builtins::char_len(s) as f64)
                                 }
                                 "upper" => {
                                     if !args.is_empty() {
@@ -5439,11 +5436,11 @@ impl VirtualMachine {
                                         Value::Number(n) => *n as usize,
                                         _ => s.chars().count(),
                                     };
-                                    let len = s.chars().count();
+                                    let len = crate::lang_builtins::char_len(s);
                                     let from = start.min(len);
                                     let to = end.min(len);
                                     let (begin, finish) = if from <= to { (from, to) } else { (to, from) };
-                                    Value::Str(s.chars().skip(begin).take(finish - begin).collect())
+                                    Value::Str(crate::lang_builtins::char_slice(s, begin, finish))
                                 }
                                 "charAt" => {
                                     if args.len() != 1 {
@@ -5459,7 +5456,7 @@ impl VirtualMachine {
                                             ))
                                         }
                                     };
-                                    Value::Str(s.chars().nth(idx).map(|c| c.to_string()).unwrap_or_default())
+                                    Value::Str(crate::lang_builtins::char_at(s, idx).unwrap_or_default())
                                 }
                                 "substring" => {
                                     if args.len() != 2 {
@@ -5475,11 +5472,11 @@ impl VirtualMachine {
                                         Value::Number(n) => *n as usize,
                                         _ => s.len(),
                                     };
-                                    let len = s.chars().count();
+                                    let len = crate::lang_builtins::char_len(s);
                                     let from = start.min(len);
                                     let to = end.min(len);
                                     let (begin, finish) = if from <= to { (from, to) } else { (to, from) };
-                                    Value::Str(s.chars().skip(begin).take(finish - begin).collect())
+                                    Value::Str(crate::lang_builtins::char_slice(s, begin, finish))
                                 }
                                 "replace" => {
                                     if args.len() != 2 {
