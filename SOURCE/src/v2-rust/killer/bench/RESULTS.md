@@ -292,3 +292,33 @@ drains, 6% in the capture write-back at `Ret`. Removing that needs parameter and
 change to every place that reads `argN` by name: captures, generators, debugger, nested calls), and the list-comprehension
 loop variable in a frame slot (`for` fast path duplicated for a slot target, and the comprehension variable then no longer
 leaks into the enclosing scope as it does today). Neither was started.
+
+## Round 6 (branch wt-slots: call parameters in frame slots)
+
+CPU seconds (kernel+user via GetProcessTimes, median of 9 alternating runs, release build, loaded shared box so the
+noise floor is about +-10%). base = tip 0703376, new = this branch. Design: docs/call_frames.md.
+
+| Benchmark | base | new | Change |
+|-----------|-----:|----:|-------:|
+| closures | 0.406 | 0.344 | -15% (kept) |
+| recursion_objects | 0.469 | 0.406 | -13% (kept) |
+| obj_methods | 0.438 | 0.438 | none |
+| list_comp | 0.344 | 0.328 | noise |
+| calls (1M numeric calls + loop fn, JIT) | 0.203 | 0.203 | unchanged |
+| fib(38) | 0.578 | 0.531 | unchanged (JIT still compiles it) |
+| 5M-iteration while loop | 0.578 | 0.578 | unchanged |
+
+What was done: the text compiler gives parameter i of a function the frame slot i (`LoadSlot`/`StoreSlot`/
+`IndexWriteSlot`), local slots start after the parameters; callers fill those slots (`bind_call_args`,
+`bind_args_owned`) instead of inserting `argN` into a hash map; locals frames are recycled (`frame_pool`). The function
+JIT reads `LoadSlot(i < arity)` as argument i and rejects stores to parameter slots (as it rejected `Store("argN")`).
+`killer debug locals` and the DAP adapter recover the names from the declaration. `KILLER_NO_PARAM_SLOTS=1` switches the
+compiler back to the named scheme; tests/slots_diff.rs runs 13 programs both ways (recursion, mutual recursion,
+closures sharing state, closures in loops, defaults/rest, methods/this/super, generators, spawn/await, errors and
+finally, arity mismatch, higher-order calls, deep recursion, eval, hot accumulator loops).
+
+Not done (analysis only, no measurement): captured variables are still copied into the call scope by name and written
+back at `Ret`. Making read-only captures skip the write-back, or giving captured by-value variables slots after the
+parameters (needs an ordered `Captures`), is the remaining cost in `closures` (about 2.9x Python on a quiet run of
+`bench/run.py -n 1`). The list-comprehension loop variable was left alone (it would change leaking behaviour).
+Each release build took about an hour on the loaded machine, so only this one step was measured.
