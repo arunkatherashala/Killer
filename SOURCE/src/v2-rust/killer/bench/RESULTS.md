@@ -206,3 +206,34 @@ list comprehensions and method calls is per-instruction dispatch (about 70 ns fo
 store, 5-15 ns per instruction), not allocation or name hashing. Further gains need fewer instructions per
 operation (fused `Load; GetField` / `Load; ConstStr; IndexRead`, frame slots for call parameters), which
 needs new instructions in bytecode.rs; not done here.
+
+## Strings (branch wt-str)
+
+CPU time (kernel+user via GetProcessTimes, median of 5 alternating runs, release build, noisy Windows box).
+Benchmarks are scratch scripts over an 852,000-character string (`"a..z"` doubled 15 times); idx_* do 200,000 / 20,000 indexes.
+
+| Case | before (s) | after (s) | verdict |
+|---|---|---|---|
+| `s[i]` non-ASCII string (1 leading `é`), `i < 20000`, 20k iterations | 0.781 | 0.125 | kept (6.2x): non-negative index no longer runs `char_len` (a full scan) before `char_at` |
+| `s[i]` ASCII string, `i < 200000` | 0.703 | 0.672 | unchanged (already a prefix `is_ascii` scan at ~30 GB/s) |
+| `s[i*40]` on non-ASCII string (expression index, not fused) | 2.875 | 2.234 | side effect of the same change; dominated by the clone below |
+
+Measured but not changed (baseline CPU, same string): `s[i*4]` ASCII, 200k iterations 15.8 s; `len(s)` 200k times 6.9 s;
+slicing 300 x 50k chars 0.27 s; find 0.14 s; split 0.25 s; join 0.30 s; upper+lower 0.16 s; replace 0.17 s; `in` 0.17 s;
+`s < u` 1000 times 0.70 s; 100k `x = x + "ab"` 0.13 s; 100k f-strings 0.23 s. Process start-up and building the string are about 0.1 s of each.
+
+What the profile says:
+
+1. `s[i]`/`len(s)` on a plain variable are fused (`fused_str_op`) and borrow the string: the ASCII case is O(i)
+   per index at memory speed (3.5 us at i = 100k), `len` is O(n) (about 30 us at 852k chars). That is still O(n^2)
+   over a 1M-character loop.
+2. Any other shape (`s[i*4]`, `s < u`, passing `s` to a function, `s == t`) executes `Load`, which **clones the whole
+   string**: 79 us per index at 852k chars. This, not the character scan, is the dominant cost for long strings.
+3. The builtin string functions (find, split, join, upper, replace, `in`, concat, format) show no O(n^2) behaviour and
+   nothing measuring more than 10% to gain at this size.
+
+Not done, with reason: caching an ASCII flag / char count / offset index needs the metadata stored with the string.
+`Value::Str(String)` is constructed or matched at 1481 sites in 90 files (vm.rs, builtin.rs, nova.rs, ...), so a
+`Value::Str(KStr)` (or `Rc<str>` plus cached flag, which would also remove the Load clone of point 2) is a mechanical but
+repo-wide change that would conflict with the concurrent VM/bytecode work. A cache keyed by (pointer, length) outside the
+value was rejected: a freed string and a new one with different content can share both, so it is unsound.
