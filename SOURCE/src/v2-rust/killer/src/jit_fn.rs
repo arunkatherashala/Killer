@@ -69,6 +69,9 @@ pub struct FnJit {
     // [0] = bail flag, [1] = recursion depth, [2] = remaining loop iterations.
     state: Box<[i64; 3]>,
     pub native_calls: u64,
+    /// The program passes call parameters in frame slots `0..arity` (`Program::param_slots`):
+    /// `LoadSlot(i)` with `i < arity` reads argument `i` instead of a local.
+    param_slots: bool,
     /// Calls to skip before trying native code again after a native run bailed out (recursion
     /// deeper than `MAX_DEPTH`, loop budget). Without it every level of a deep recursion re-ran
     /// `MAX_DEPTH` native frames before falling back, which made depth-10,000 recursion quadratic.
@@ -87,8 +90,13 @@ impl FnJit {
             pages: Vec::new(),
             state: Box::new([0; 3]),
             native_calls: 0,
+            param_slots: false,
             cooldown: 0,
         }
+    }
+
+    pub fn set_param_slots(&mut self, on: bool) {
+        self.param_slots = on;
     }
 
     pub fn reset(&mut self) {
@@ -147,7 +155,7 @@ impl FnJit {
                 // called once); loop-free functions wait until they are hot.
                 let loopy = match self.loopy.get(&key) {
                     Some(l) => *l,
-                    None => match analyze(instrs, arities, key) {
+                    None => match analyze(instrs, arities, key, self.param_slots) {
                         Some(an) => {
                             let l = an.at.keys().any(|&i| {
                                 matches!(&instrs[i], Instruction::Jump(t) | Instruction::JumpIfFalse(t) if *t <= i)
@@ -237,7 +245,7 @@ impl FnJit {
     #[cfg(target_arch = "x86_64")]
     fn compile(&mut self, instrs: &[Instruction], arities: &HashMap<usize, usize>, root: Key) -> bool {
         let state_ptr = self.state.as_ptr() as usize;
-        let Some((code, thunk_off, writes, names)) = compile_group(instrs, arities, root, state_ptr) else { return false };
+        let Some((code, thunk_off, writes, names)) = compile_group(instrs, arities, root, state_ptr, self.param_slots) else { return false };
         let size = (code.len() + 4095) & !4095;
         let Some(mut page) = ExecPage::alloc(size) else { return false };
         unsafe { page.write(&code) };
@@ -278,7 +286,7 @@ struct Analysis {
 }
 
 /// Abstract-interpret one function specialised for `mask`; `None` if anything is unsupported.
-fn analyze(instrs: &[Instruction], arities: &HashMap<usize, usize>, key: Key) -> Option<Analysis> {
+fn analyze(instrs: &[Instruction], arities: &HashMap<usize, usize>, key: Key, ps: bool) -> Option<Analysis> {
     let (entry, mask) = key;
     let arity = *arities.get(&entry)?;
     if arity > MAX_ARGS {
@@ -362,6 +370,10 @@ fn analyze(instrs: &[Instruction], arities: &HashMap<usize, usize>, key: Key) ->
         l >= 2 && st.stack[l - 1] == Ty::Num && st.stack[l - 2] == Ty::Num
     }
     let arg_ty = |i: usize| if mask & (1 << i) != 0 { Ty::Arr } else { Ty::Num };
+    // type of slot `s`: with parameters in slots, the first `arity` slots are the arguments
+    let sty = |st: &State, s: usize| -> Option<Ty> {
+        if ps && s < arity { Some(arg_ty(s)) } else { slot_ty(st, s) }
+    };
 
     while let Some(ip0) = work.pop() {
         let mut ip = ip0;
@@ -415,13 +427,13 @@ fn analyze(instrs: &[Instruction], arities: &HashMap<usize, usize>, key: Key) ->
                     }
                 }
                 Instruction::LoadSlot(s) => {
-                    let ty = slot_ty(&st, *s as usize)?;
+                    let ty = sty(&st, *s as usize)?;
                     st.stack.push(ty);
                 }
                 Instruction::StoreSlot(s) => {
                     let s = *s as usize;
                     let ty = st.stack.pop()?;
-                    if s >= MAX_SLOTS || ty == Ty::Bool {
+                    if s >= MAX_SLOTS || ty == Ty::Bool || (ps && s < arity) {
                         return None;
                     }
                     if st.slots.len() <= s {
@@ -431,14 +443,14 @@ fn analyze(instrs: &[Instruction], arities: &HashMap<usize, usize>, key: Key) ->
                     nslots = nslots.max(s + 1);
                 }
                 Instruction::AddSlotConst(s, _) | Instruction::SubSlotConst(s, _) => {
-                    if slot_ty(&st, *s as usize) != Some(Ty::Num) {
+                    if slot_ty(&st, *s as usize) != Some(Ty::Num) || (ps && (*s as usize) < arity) {
                         return None;
                     }
                 }
                 Instruction::LtSlotConst(s, _) | Instruction::GtSlotConst(s, _)
                 | Instruction::GeSlotConst(s, _) | Instruction::LeSlotConst(s, _)
                 | Instruction::EqSlotConst(s, _) => {
-                    if slot_ty(&st, *s as usize) != Some(Ty::Num) {
+                    if sty(&st, *s as usize) != Some(Ty::Num) {
                         return None;
                     }
                     st.stack.push(Ty::Bool);
@@ -481,6 +493,15 @@ fn analyze(instrs: &[Instruction], arities: &HashMap<usize, usize>, key: Key) ->
                     st.stack.pop();
                     st.stack.pop();
                     st.stack.push(Ty::Num);
+                }
+                Instruction::IndexWriteSlot(s) => {
+                    // `arr[i] = v` on an array parameter (parameters in slots)
+                    if !ps || (*s as usize) >= arity || arg_ty(*s as usize) != Ty::Arr || !top2_num(&st) {
+                        return None;
+                    }
+                    st.stack.pop();
+                    st.stack.pop();
+                    writes = true;
                 }
                 Instruction::IndexWrite(name) => {
                     let is_arr = match arg_index(name, arity) {
@@ -723,6 +744,7 @@ fn compile_group(
     arities: &HashMap<usize, usize>,
     root: Key,
     state_ptr: usize,
+    ps: bool,
 ) -> Option<(Vec<u8>, usize, bool, Vec<String>)> {
     let mut asm = Asm { buf: Vec::new() };
     let mut all_names: Vec<String> = Vec::new();
@@ -734,7 +756,7 @@ fn compile_group(
     let mut any_writes = false;
 
     while let Some(fk) = pending.pop() {
-        let an = analyze(instrs, arities, fk)?;
+        let an = analyze(instrs, arities, fk, ps)?;
         any_writes |= an.writes;
         for n in &an.plain_stores {
             if !all_names.contains(n) {
@@ -774,6 +796,10 @@ fn compile_group(
             .collect();
         let slot_disp = |s: u16| -> [u8; 4] { (-8 * (1 + s as i32)).to_le_bytes() };
         let arg_disp = |i: usize| -> [u8; 4] { (16 + 8 * (arity as i32 - 1 - i as i32)).to_le_bytes() };
+        // where slot `s` lives: the pushed argument (parameters in slots) or a local
+        let sdisp = |s: u16| -> [u8; 4] {
+            if ps && (s as usize) < arity { arg_disp(s as usize) } else { slot_disp(s) }
+        };
         let nslots = an.nslots;
         let names = &an.names;
         let named_disp = |name: &str| -> Option<[u8; 4]> {
@@ -813,7 +839,16 @@ fn compile_group(
                 }
                 Instruction::LoadSlot(s) => {
                     asm.b(&[0xFF, 0xB5]);
-                    asm.b(&slot_disp(*s));
+                    asm.b(&sdisp(*s));
+                }
+                Instruction::IndexWriteSlot(s) => {
+                    asm.b(&[0xF2, 0x0F, 0x10, 0x14, 0x24]); // movsd xmm2,[rsp]    (value)
+                    asm.b(&[0xF2, 0x0F, 0x10, 0x44, 0x24, 0x08]); // movsd xmm0,[rsp+8] (index)
+                    asm.b(&[0x48, 0x8B, 0x8D]); // mov rcx,[rbp+disp32] (array)
+                    asm.b(&sdisp(*s));
+                    emit_index_check(&mut asm, &mut bail_fixups);
+                    asm.b(&[0xF2, 0x0F, 0x11, 0x54, 0xC1, 0x08]); // movsd [rcx+rax*8+8],xmm2
+                    asm.b(&[0x48, 0x83, 0xC4, 0x10]); // add rsp,16
                 }
                 Instruction::StoreSlot(s) => {
                     asm.b(&[0x8F, 0x85]); // pop qword [rbp+disp32]
@@ -840,11 +875,11 @@ fn compile_group(
                     if slot_first {
                         asm.b(&[0x66, 0x48, 0x0F, 0x6E, 0xC8]); // movq xmm1,rax (const)
                         asm.b(&[0xF2, 0x0F, 0x10, 0x85]); // movsd xmm0,[slot]
-                        asm.b(&slot_disp(*s));
+                        asm.b(&sdisp(*s));
                     } else {
                         asm.b(&[0x66, 0x48, 0x0F, 0x6E, 0xC0]); // movq xmm0,rax (const)
                         asm.b(&[0xF2, 0x0F, 0x10, 0x8D]); // movsd xmm1,[slot]
-                        asm.b(&slot_disp(*s));
+                        asm.b(&sdisp(*s));
                     }
                     asm.b(&[0xF2, 0x0F, 0xC2, 0xC1, pred]); // cmpsd xmm0,xmm1
                     asm.b(&[0x48, 0x83, 0xEC, 0x08]);
@@ -853,7 +888,7 @@ fn compile_group(
                 Instruction::EqSlotConst(s, c) => {
                     // |slot - c| < EPSILON (matches the interpreter)
                     asm.b(&[0xF2, 0x0F, 0x10, 0x85]);
-                    asm.b(&slot_disp(*s));
+                    asm.b(&sdisp(*s));
                     asm.b(&[0x48, 0xB8]);
                     asm.b(&c.to_bits().to_le_bytes());
                     asm.b(&[0x66, 0x48, 0x0F, 0x6E, 0xC8]);
@@ -1203,6 +1238,7 @@ mod tests {
     fn run_native(src: &str, target: usize, warm: &[Value], args: &[Value]) -> Option<f64> {
         let p = compile_killer_default(src).unwrap();
         let mut j = FnJit::new();
+        j.set_param_slots(p.param_slots);
         for _ in 0..CALL_THRESHOLD {
             let w: Vec<Value> = warm.iter().map(|v| match v { Value::Array(a) => Value::Array(SharedArray::new(a.to_vec())), o => o.clone() }).collect();
             j.try_call(&p.instructions, &p.function_arities, target, &w, &|_| false);
@@ -1352,6 +1388,7 @@ println(1)
 ";
         let p = compile_killer_default(src).unwrap();
         let mut j = FnJit::new();
+        j.set_param_slots(p.param_slots);
         assert_eq!(j.try_call(&p.instructions, &p.function_arities, 1, &nums(&[100.0]), &|_| false), Some(4950.0));
         assert_eq!(j.native_calls, 1);
     }
@@ -1430,6 +1467,7 @@ println(1)
 ";
         let p = compile_killer_default(src).unwrap();
         let mut j = FnJit::new();
+        j.set_param_slots(p.param_slots);
         // `for` binds its variable with StoreLocal, so a global `i` does not matter
         assert_eq!(j.try_call(&p.instructions, &p.function_arities, 1, &nums(&[5.0]), &|n| n == "i"), Some(10.0));
     }
@@ -1470,6 +1508,7 @@ println(1)
         let src = "fn p(n) {\n  println(n)\n  return n\n}\np(1)\n";
         let p = compile_killer_default(src).unwrap();
         let mut j = FnJit::new();
+        j.set_param_slots(p.param_slots);
         for _ in 0..(CALL_THRESHOLD + 2) {
             assert_eq!(j.try_call(&p.instructions, &p.function_arities, 1, &nums(&[1.0]), &|_| false), None);
         }

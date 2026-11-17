@@ -242,6 +242,8 @@ struct CompilerState {
     instructions: Vec<Instruction>,
     /// Frame slots currently held by list-comprehension temporaries (offsets above `next_slot`).
     lc_temps: u16,
+    /// Call parameters live in frame slots `0..arity` (see docs/call_frames.md); false = the old named `argN`.
+    param_slots: bool,
     function_arities: HashMap<usize, usize>,
     functions: HashMap<String, FunctionMeta>,
     /// Names of the function definitions currently being compiled (outermost first); nested
@@ -324,6 +326,24 @@ fn scope_neutral(ins: &Instruction) -> bool {
 fn fusion_off() -> bool {
     static OFF: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     *OFF.get_or_init(|| std::env::var_os("KILLER_NO_FUSION").is_some())
+}
+/// Parameters in frame slots, unless `KILLER_NO_PARAM_SLOTS` is set (the differential tests in
+/// tests/slots_diff.rs run every program both ways).
+fn param_slots_enabled() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var_os("KILLER_NO_PARAM_SLOTS").is_none())
+}
+/// Read parameter `idx` of the function being compiled.
+fn param_ld(slots: bool, idx: usize) -> Instruction {
+    if slots { Instruction::LoadSlot(idx as u16) } else { Instruction::Load(format!("arg{}", idx)) }
+}
+/// Write parameter `idx` (value on the stack).
+fn param_st(slots: bool, idx: usize) -> Instruction {
+    if slots { Instruction::StoreSlot(idx as u16) } else { Instruction::Store(format!("arg{}", idx)) }
+}
+/// First free frame slot of a function with `nparams` parameters.
+fn first_free_slot(state: &CompilerState, nparams: usize) -> u16 {
+    if state.param_slots { nparams as u16 } else { 0 }
 }
 fn scope_elision_enabled() -> bool {
     static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
@@ -567,6 +587,7 @@ fn remap_error(error: VmError, map: &crate::sourcemap::SourceMap) -> VmError {
 /// Compile the normalized lines (`(line number in the rewritten text, statement)`).
 fn compile_normalized(lines: &[(usize, String)], map: &crate::sourcemap::SourceMap) -> Result<Program, VmError> {
     let mut state = CompilerState::default();
+    state.param_slots = param_slots_enabled();
     state.global_vars = scan_globals(&lines);
     state.signatures = scan_signatures(&lines);
     let mut cursor = 0usize;
@@ -603,6 +624,7 @@ fn compile_normalized(lines: &[(usize, String)], map: &crate::sourcemap::SourceM
     // Get the old→new index map so we can remap function_arities keys and
     // Call targets (the optimizer patches Jump/JumpIfFalse/Call automatically,
     // but function_arities is a separate HashMap keyed by old fn-start indices).
+    let param_slots = state.param_slots;
     let (optimized, old_to_new) = crate::optimizer::optimize_bytecode_with_map(&state.instructions);
     let n_old = state.instructions.len();
 
@@ -656,6 +678,7 @@ fn compile_normalized(lines: &[(usize, String)], map: &crate::sourcemap::SourceM
         classes,
         live_vars: state.live_vars,
         line_table,
+        param_slots,
     })
 }
 
@@ -831,6 +854,7 @@ pub fn compile_statements(statements: &[crate::ast::Stmt]) -> Result<Program, Vm
         classes,
         live_vars: state.live_vars,
         line_table: Default::default(),
+        param_slots: false,
     })
 }
 
@@ -998,8 +1022,8 @@ fn compile_pattern_assignment(
     match pattern {
         Pattern::Identifier(name) => {
             // Simple assignment: value is already on stack
-            if let Some(idx) = context.params.get(name) {
-                state.instructions.push(Instruction::Store(format!("arg{}", idx)));
+            if let Some(&idx) = context.params.get(name) {
+                state.instructions.push(param_st(state.param_slots, idx));
             } else if name.starts_with("__") || context.closure.boxed.contains_key(name) {
                 // Internal temp variable (or a variable shared with closures) — keep as named store
                 state.instructions.push(Instruction::Store(name.clone()));
@@ -1790,8 +1814,8 @@ fn compile_expr(
         }
         Expr::Identifier(name) => {
             // Check if this is a function parameter - if so, reference it as arg{index}
-            if let Some(idx) = context.params.get(name) {
-                state.instructions.push(Instruction::Load(format!("arg{}", idx)));
+            if let Some(&idx) = context.params.get(name) {
+                state.instructions.push(param_ld(state.param_slots, idx));
             } else if let Some(&slot) = context.slot_map.get(name) {
                 // Fast path: known local variable → integer-indexed slot access
                 state.instructions.push(Instruction::LoadSlot(slot));
@@ -1876,52 +1900,48 @@ fn compile_expr(
             state.instructions[jump_end_idx] = Instruction::Jump(end_target);
         }
         Expr::PrefixInc(name) => {
-            let var = if let Some(idx) = context.params.get(name) {
-                format!("arg{}", idx)
-            } else {
-                name.clone()
+            let (ld, st) = match context.params.get(name) {
+                Some(&idx) => (param_ld(state.param_slots, idx), param_st(state.param_slots, idx)),
+                None => (Instruction::Load(name.clone()), Instruction::Store(name.clone())),
             };
-            state.instructions.push(Instruction::Load(var.clone()));
+            state.instructions.push(ld.clone());
             state.instructions.push(Instruction::ConstNum(1.0));
             state.instructions.push(Instruction::Add);
-            state.instructions.push(Instruction::Store(var.clone()));
-            state.instructions.push(Instruction::Load(var));
+            state.instructions.push(st);
+            state.instructions.push(ld);
         }
         Expr::PrefixDec(name) => {
-            let var = if let Some(idx) = context.params.get(name) {
-                format!("arg{}", idx)
-            } else {
-                name.clone()
+            let (ld, st) = match context.params.get(name) {
+                Some(&idx) => (param_ld(state.param_slots, idx), param_st(state.param_slots, idx)),
+                None => (Instruction::Load(name.clone()), Instruction::Store(name.clone())),
             };
-            state.instructions.push(Instruction::Load(var.clone()));
+            state.instructions.push(ld.clone());
             state.instructions.push(Instruction::ConstNum(1.0));
             state.instructions.push(Instruction::Sub);
-            state.instructions.push(Instruction::Store(var.clone()));
-            state.instructions.push(Instruction::Load(var));
+            state.instructions.push(st);
+            state.instructions.push(ld);
         }
         Expr::PostfixInc(name) => {
-            let var = if let Some(idx) = context.params.get(name) {
-                format!("arg{}", idx)
-            } else {
-                name.clone()
+            let (ld, st) = match context.params.get(name) {
+                Some(&idx) => (param_ld(state.param_slots, idx), param_st(state.param_slots, idx)),
+                None => (Instruction::Load(name.clone()), Instruction::Store(name.clone())),
             };
-            state.instructions.push(Instruction::Load(var.clone()));
-            state.instructions.push(Instruction::Load(var.clone()));
+            state.instructions.push(ld.clone());
+            state.instructions.push(ld);
             state.instructions.push(Instruction::ConstNum(1.0));
             state.instructions.push(Instruction::Add);
-            state.instructions.push(Instruction::Store(var));
+            state.instructions.push(st);
         }
         Expr::PostfixDec(name) => {
-            let var = if let Some(idx) = context.params.get(name) {
-                format!("arg{}", idx)
-            } else {
-                name.clone()
+            let (ld, st) = match context.params.get(name) {
+                Some(&idx) => (param_ld(state.param_slots, idx), param_st(state.param_slots, idx)),
+                None => (Instruction::Load(name.clone()), Instruction::Store(name.clone())),
             };
-            state.instructions.push(Instruction::Load(var.clone()));
-            state.instructions.push(Instruction::Load(var.clone()));
+            state.instructions.push(ld.clone());
+            state.instructions.push(ld);
             state.instructions.push(Instruction::ConstNum(1.0));
             state.instructions.push(Instruction::Sub);
-            state.instructions.push(Instruction::Store(var));
+            state.instructions.push(st);
         }
         Expr::Call { callee, args } => {
             // Check if this is a known named function
@@ -2129,7 +2149,7 @@ fn compile_expr(
                 current_function_name: None,
                 params: params.iter().enumerate().map(|(i, p)| (p.clone(), i)).collect(),
                 slot_map: HashMap::new(),
-                next_slot: 0,
+                next_slot: first_free_slot(state, params.len()),
                 outer_vars: std::collections::HashSet::new(),
                 global_decls: Default::default(),
                 tail_position: false,
@@ -2810,8 +2830,8 @@ fn restore_block_scope(
 /// Store the value on top of the stack into variable `name`, creating a local if needed
 /// (same placement rules as plain assignment).
 fn emit_store_variable(name: &str, state: &mut CompilerState, context: &mut CompileContext) {
-    if let Some(param_index) = context.params.get(name) {
-        state.instructions.push(Instruction::Store(format!("arg{}", param_index)));
+    if let Some(&param_index) = context.params.get(name) {
+        state.instructions.push(param_st(state.param_slots, param_index));
     } else if name.starts_with("__")
         || context.global_decls.contains(name)
         || (!context.in_function && state.global_vars.contains(name))
@@ -3336,7 +3356,7 @@ fn compile_for_each_line_statement(
         state.instructions.push(Instruction::StoreSlot(slot));
     } else if let Some(&index) = context.params.get(var_name) {
         state.instructions.push(Instruction::Load(var_name.to_string()));
-        state.instructions.push(Instruction::Store(format!("arg{}", index)));
+        state.instructions.push(param_st(state.param_slots, index));
     }
 
     context.loop_stack.push(LoopContext {
@@ -3600,11 +3620,9 @@ fn compile_simple_statement(
             )));
         }
 
-        if let Some(param_index) = context.params.get(name) {
+        if let Some(&param_index) = context.params.get(name) {
             compile_expr_str(expr, line_no, state, context)?;
-            state
-                .instructions
-                .push(Instruction::Store(format!("arg{}", param_index)));
+            state.instructions.push(param_st(state.param_slots, param_index));
             return Ok(());
         }
 
@@ -4555,10 +4573,8 @@ fn compile_expr_str(
         return Ok(());
     }
 
-    if let Some(param_index) = context.params.get(expr) {
-        state
-            .instructions
-            .push(Instruction::Load(format!("arg{}", param_index)));
+    if let Some(&param_index) = context.params.get(expr) {
+        state.instructions.push(param_ld(state.param_slots, param_index));
         return Ok(());
     }
 
@@ -5721,11 +5737,12 @@ fn compile_chained_index_assign(
 }
 
 fn emit_index_write_named(recv: &str, context: &CompileContext, state: &mut CompilerState) {
-    if let Some(param_index) = context.params.get(recv) {
-        state.instructions.push(Instruction::IndexWrite(format!(
-            "arg{}",
-            param_index
-        )));
+    if let Some(&param_index) = context.params.get(recv) {
+        if state.param_slots {
+            state.instructions.push(Instruction::IndexWriteSlot(param_index as u16));
+        } else {
+            state.instructions.push(Instruction::IndexWrite(format!("arg{}", param_index)));
+        }
     } else if let Some(&slot) = context.slot_map.get(recv) {
         state.instructions.push(Instruction::IndexWriteSlot(slot));
     } else {
@@ -5786,8 +5803,8 @@ fn compile_method_call_str(
         return compile_expr_str(expr, line_no, state, context);
     }
     // Load receiver
-    if let Some(param_idx) = context.params.get(&obj) {
-        state.instructions.push(Instruction::Load(format!("arg{}", param_idx)));
+    if let Some(&param_idx) = context.params.get(&obj) {
+        state.instructions.push(param_ld(state.param_slots, param_idx));
     } else if let Some(&slot) = context.slot_map.get(&obj) {
         state.instructions.push(Instruction::LoadSlot(slot));
     } else {
@@ -6103,7 +6120,7 @@ fn emit_boxed_prologue(
     names.sort();
     for name in names {
         if let Some(index) = context.params.remove(name) {
-            state.instructions.push(Instruction::Load(format!("arg{}", index)));
+            state.instructions.push(param_ld(state.param_slots, index));
         } else {
             state.instructions.push(Instruction::ConstNull);
         }
@@ -6204,7 +6221,7 @@ fn compile_fn_definition(
         current_function_name: Some(name.clone()),
         params: HashMap::new(),
         slot_map: HashMap::new(),
-        next_slot: 0,
+        next_slot: first_free_slot(state, params.len()),
         // Collect parent scope variable names so function body can reference them
         // via named Store/Load (instead of creating new local slots).
         outer_vars: state
@@ -6264,7 +6281,7 @@ fn compile_fn_definition(
         for (var, slot, param) in &captured_vars {
             match (slot, param) {
                 (Some(s), _) => state.instructions.push(Instruction::LoadSlot(*s)),
-                (None, Some(i)) => state.instructions.push(Instruction::Load(format!("arg{}", i))),
+                (None, Some(i)) => state.instructions.push(param_ld(state.param_slots, *i)),
                 (None, None) => continue,
             }
             state.instructions.push(Instruction::Store(var.clone()));
@@ -6443,7 +6460,7 @@ fn compile_class_definition(
                 current_function_name: Some(format!("{}.{}", class_name, method_name)),
                 params: HashMap::new(),
                 slot_map: HashMap::new(),
-                next_slot: 0,
+                next_slot: first_free_slot(state, params.len()),
                 outer_vars: state.known_top_level_vars.iter().cloned().collect(),
                 global_decls: Default::default(),
                 tail_position: false,
@@ -7057,23 +7074,23 @@ fn emit_default_prologue(
     context: &mut CompileContext,
 ) -> Result<(), VmError> {
     for (index, expr) in defaults {
-        let arg = format!("arg{}", index);
+        let index = *index;
         if expr == REST_MARKER {
             // argN = slice(args, N): everything passed from position N on
             state.instructions.push(Instruction::Load("args".to_string()));
-            state.instructions.push(Instruction::ConstNum(*index as f64));
+            state.instructions.push(Instruction::ConstNum(index as f64));
             state.instructions.push(Instruction::ConstNull);
             state.instructions.push(Instruction::CallBuiltin("slice".to_string(), 3));
-            state.instructions.push(Instruction::Store(arg));
+            state.instructions.push(param_st(state.param_slots, index));
             continue;
         }
-        state.instructions.push(Instruction::Load(arg.clone()));
+        state.instructions.push(param_ld(state.param_slots, index));
         state.instructions.push(Instruction::ConstNull);
         state.instructions.push(Instruction::Eq);
         let skip = state.instructions.len();
         state.instructions.push(Instruction::JumpIfFalse(usize::MAX));
         compile_expr_str(expr, line_no, state, context)?;
-        state.instructions.push(Instruction::Store(arg));
+        state.instructions.push(param_st(state.param_slots, index));
         let after = state.instructions.len();
         state.instructions[skip] = Instruction::JumpIfFalse(after);
     }
@@ -8198,14 +8215,14 @@ const VARIADIC_WRAPPER_MAX: usize = 6;
 fn emit_variadic_builtin_wrapper(name: &str, state: &mut CompilerState) {
     for j in (1..=VARIADIC_WRAPPER_MAX).rev() {
         // if type(arg{j-1}) != "null" { return name(arg0 .. arg{j-1}) }
-        state.instructions.push(Instruction::Load(format!("arg{}", j - 1)));
+        state.instructions.push(param_ld(state.param_slots, j - 1));
         state.instructions.push(Instruction::CallBuiltin("type".to_string(), 1));
         state.instructions.push(Instruction::ConstStr("null".to_string()));
         state.instructions.push(Instruction::Ne);
         let jf = state.instructions.len();
         state.instructions.push(Instruction::JumpIfFalse(usize::MAX));
         for i in 0..j {
-            state.instructions.push(Instruction::Load(format!("arg{}", i)));
+            state.instructions.push(param_ld(state.param_slots, i));
         }
         state.instructions.push(Instruction::CallBuiltin(name.to_string(), j));
         state.instructions.push(Instruction::Ret);
@@ -8230,7 +8247,7 @@ fn emit_builtin_value(name: &str, state: &mut CompilerState) {
             state.function_arities.insert(start, arity);
             if exact.is_some() {
                 for i in 0..arity {
-                    state.instructions.push(Instruction::Load(format!("arg{}", i)));
+                    state.instructions.push(param_ld(state.param_slots, i));
                 }
                 state.instructions.push(Instruction::CallBuiltin(name.to_string(), arity));
                 state.instructions.push(Instruction::Ret);

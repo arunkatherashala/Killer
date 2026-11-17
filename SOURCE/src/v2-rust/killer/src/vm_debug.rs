@@ -159,7 +159,13 @@ fn step(vm: &mut VirtualMachine, program: &Program, s: &mut DebugSession) -> Res
                 }
             }
             "locals" => {
-                let vals = vm.debug_locals();
+                // parameters are the first slots of a call frame: name them from the declaration
+                let nparams = if vm.call_stack_depth() > 0 && program.param_slots {
+                    std::fs::read_to_string(if file == "<script>" { s.script.as_str() } else { file.as_str() }).map(|src| crate::dap::params_at_line(&src, line as usize).len()).unwrap_or(0)
+                } else {
+                    0
+                };
+                let vals = vm.debug_locals(nparams);
                 if vals.is_empty() {
                     println!("(no local slots)");
                 }

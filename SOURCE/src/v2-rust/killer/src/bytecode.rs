@@ -288,6 +288,9 @@ pub struct Program {
     /// Instruction index -> original file/line. Only consulted when an error is reported, so the
     /// interpreter loop never touches it.
     pub line_table: LineTable,
+    /// Call parameters are frame slots `0..arity` (`LoadSlot`/`StoreSlot`), not the named `arg0`,
+    /// `arg1`, ... of the older scheme. Callers bind accordingly (see docs/call_frames.md).
+    pub param_slots: bool,
 }
 
 /// Compact instruction-index -> (file, line) table. Entries are sorted by `start`; an entry
@@ -623,6 +626,7 @@ impl Program {
             classes: HashMap::new(),
             live_vars: HashMap::new(),
             line_table: LineTable::default(),
+            param_slots: false,
         })
     }
 }

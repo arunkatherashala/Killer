@@ -413,6 +413,9 @@ pub struct VirtualMachine {
     /// True when the running program mentions `args` anywhere; only then does each call build
     /// the implicit `args` array (it costs an allocation per call).
     uses_args: bool,
+    /// Recycled locals frames (call frames are pushed and popped constantly; keeping their
+    /// capacity avoids a malloc/free per call).
+    frame_pool: Vec<Vec<Value>>,
     /// `new C(...)`: the constructor (`init`) found for each class, including inherited ones.
     init_cache: crate::fast_hash::FastMap<String, Option<usize>>,
     /// Inline cache for `CallMethodDynamic`, keyed by instruction index: (class, method start, arity).
@@ -488,6 +491,7 @@ impl Default for VirtualMachine {
             var_history: HashMap::new(),
             track_history: false,
             uses_args: true,
+            frame_pool: Vec::new(),
             init_cache: Default::default(),
             method_ic: Default::default(),
             gc_alloc_epoch: crate::gc::GC_INTERVAL,
@@ -627,6 +631,7 @@ impl VirtualMachine {
             var_history: HashMap::new(),
             track_history: false,
             uses_args: true,
+            frame_pool: Vec::new(),
             init_cache: Default::default(),
             method_ic: Default::default(),
             gc_alloc_epoch: crate::gc::GC_INTERVAL,
@@ -895,6 +900,7 @@ impl VirtualMachine {
                 other => format!("{other:?}").contains("args"),
             });
         self.fn_jit.reset();
+        self.fn_jit.set_param_slots(program.param_slots);
         self.method_names = program.method_bytecode.keys().map(|(_, m)| m.clone()).collect();
         self.ip = 0;
         self.stack.clear();
@@ -2995,8 +3001,8 @@ impl VirtualMachine {
                     self.check_call_depth()?;
                     self.call_stack.push(self.ip + 1);
                     self.push_call_scope();
-                    self.locals_stack.push(Vec::new());  // new locals frame for this call
-                    self.bind_call_args(*arg_count, expected_arity, self.uses_args);
+                    self.push_frame();  // new locals frame for this call
+                    self.bind_call_args(*arg_count, expected_arity, self.uses_args, program.param_slots);
                     self.ip = *target;
                     continue;
                 }
@@ -3013,12 +3019,10 @@ impl VirtualMachine {
                     // Drop current frame like `Ret`, but keep `call_stack` — we re-enter the same callee.
                     // (the arguments stay on the value stack until bound, so they survive the frame swap)
                     self.pop_scope()?;
-                    if self.locals_stack.len() > 1 {
-                        self.locals_stack.pop();
-                    }
+                    self.pop_frame();
                     self.push_call_scope();
-                    self.locals_stack.push(Vec::new());
-                    self.bind_call_args(*arg_count, expected_arity, self.uses_args);
+                    self.push_frame();
+                    self.bind_call_args(*arg_count, expected_arity, self.uses_args, program.param_slots);
                     self.ip = *target;
                     continue;
                 }
@@ -3040,7 +3044,7 @@ impl VirtualMachine {
                             self.check_call_depth()?;
                             self.call_stack.push(self.ip + 1);
                             self.push_call_scope();
-                            self.locals_stack.push(Vec::new());  // new locals frame
+                            self.push_frame();  // new locals frame
 
                             // Restore captured variables from closure; written back at `Ret`
                             captured.each(|var_name, var_value| self.store_local(var_name, var_value.clone()));
@@ -3048,7 +3052,7 @@ impl VirtualMachine {
                                 self.closure_frames.push((self.call_stack.len(), captured.clone()));
                             }
 
-                            self.bind_call_args(*arg_count, expected_arity, self.uses_args);
+                            self.bind_call_args(*arg_count, expected_arity, self.uses_args, program.param_slots);
                             self.ip = bytecode_start;
                             continue;
                         }
@@ -3090,9 +3094,7 @@ impl VirtualMachine {
                     }
                     self.pop_scope()?;
                     // Pop the locals frame pushed by Call (keep frame 0 for top-level)
-                    if self.locals_stack.len() > 1 {
-                        self.locals_stack.pop();
-                    }
+                    self.pop_frame();
                     let return_ip = self.call_stack.pop().ok_or_else(|| {
                         VmError::runtime_error("RET used without active CALL".to_string())
                     })?;
@@ -3380,6 +3382,16 @@ impl VirtualMachine {
                                     .collect();
                                 // inside a function also report the top-level scope, marked with `::`
                                 let mut vars = vars;
+                                // parameters live in the first slots of the frame (`__slotN`, named by the adapter)
+                                if self.scopes.len() > 1 && program.param_slots {
+                                    if let Some(frame) = self.locals_stack.last() {
+                                        for (i, v) in frame.iter().enumerate() {
+                                            if !matches!(v, Value::Unbound) {
+                                                vars.push((format!("__slot{i}"), format!("{}", v)));
+                                            }
+                                        }
+                                    }
+                                }
                                 if self.scopes.len() > 1 {
                                     if let Some(g) = self.scopes.first() {
                                         vars.extend(g.iter().map(|(k, v)| (format!("::{k}"), format!("{}", v))));
@@ -4700,9 +4712,9 @@ impl VirtualMachine {
                             self.check_call_depth()?;
                             self.call_stack.push(self.ip + 1);
                             self.push_call_scope();
-                            self.locals_stack.push(Vec::new());
+                            self.push_frame();
                             self.store_local("this", object);
-                            self.bind_call_args(*arg_count, arity, false);
+                            self.bind_call_args(*arg_count, arity, false, program.param_slots);
                             self.ip = start;
                             continue; // init's Ret pushes the object
                         }
@@ -4757,10 +4769,15 @@ impl VirtualMachine {
                         self.check_call_depth()?;
                         self.call_stack.push(self.ip + 1);
                         self.push_call_scope();
-                        self.locals_stack.push(Vec::new());
+                        self.push_frame();
                         self.store_local("this", Value::Object(crate::value::SharedObject::new(instance)));
-                        for (idx, arg) in ctor_args.into_iter().enumerate() {
-                            self.store_local(&format!("arg{}", idx), arg);
+                        if program.param_slots {
+                            let arity = program.function_arities.get(&bytecode_start).copied().unwrap_or(0);
+                            self.bind_args_owned(ctor_args, arity, true);
+                        } else {
+                            for (idx, arg) in ctor_args.into_iter().enumerate() {
+                                self.store_local(&format!("arg{}", idx), arg);
+                            }
                         }
                         self.ip = bytecode_start;
                         continue; // jump to init bytecode; Ret will push "this" on stack
@@ -4823,9 +4840,9 @@ impl VirtualMachine {
                             self.check_call_depth()?;
                             self.call_stack.push(self.ip + 1);
                             self.push_call_scope();
-                            self.locals_stack.push(Vec::new());
+                            self.push_frame();
                             self.store_local("this", object);
-                            self.bind_call_args(*arg_count, arity, false);
+                            self.bind_call_args(*arg_count, arity, false, program.param_slots);
                             self.ip = start;
                             continue;
                         }
@@ -4937,7 +4954,7 @@ impl VirtualMachine {
                                 self.check_call_depth()?;
                                 self.call_stack.push(self.ip + 1);
                                 self.push_call_scope();
-                                self.locals_stack.push(Vec::new());
+                                self.push_frame();
                                 captured.each(|var_name, var_value| self.store_local(var_name, var_value.clone()));
                                 if !captured.is_empty() {
                                     self.closure_frames.push((self.call_stack.len(), captured.clone()));
@@ -4946,7 +4963,7 @@ impl VirtualMachine {
                                 for a in args {
                                     self.stack.push(a);
                                 }
-                                self.bind_call_args(n_args, params.len(), self.uses_args);
+                                self.bind_call_args(n_args, params.len(), self.uses_args, program.param_slots);
                                 self.ip = bytecode_start;
                                 continue;
                             }
@@ -4958,22 +4975,14 @@ impl VirtualMachine {
                                 self.check_call_depth()?;
                                 self.call_stack.push(self.ip + 1);
                                 self.push_call_scope();
-                                self.locals_stack.push(Vec::new());  // new locals frame for method
+                                self.push_frame();  // new locals frame for method
 
                                 // Store "this" in the scope
                                 self.store_local("this", object);
 
                                 // Store parameters
-                                let n_passed = args.len();
-                                for (index, arg) in args.into_iter().enumerate() {
-                                    if index < ARG_NAMES.len() { self.store_local(ARG_NAMES[index], arg); } else { self.store_local_owned(format!("arg{index}"), arg); }
-                                }
-                                {
-                                    let arity = program.function_arities.get(&method_bytecode_start).copied().unwrap_or(0);
-                                    for index in n_passed..arity {
-                                        if index < ARG_NAMES.len() { self.store_local(ARG_NAMES[index], Value::Null); } else { self.store_local_owned(format!("arg{index}"), Value::Null); }
-                                    }
-                                }
+                                let arity = program.function_arities.get(&method_bytecode_start).copied().unwrap_or(0);
+                                self.bind_args_owned(args, arity, program.param_slots);
 
                                 // Jump to method
                                 self.ip = method_bytecode_start;
@@ -5294,18 +5303,10 @@ impl VirtualMachine {
                                 self.check_call_depth()?;
                                 self.call_stack.push(self.ip + 1);
                                 self.push_call_scope();
-                                self.locals_stack.push(Vec::new());  // new locals frame for static method
+                                self.push_frame();  // new locals frame for static method
 
-                                let n_passed = args.len();
-                                for (index, arg) in args.into_iter().enumerate() {
-                                    if index < ARG_NAMES.len() { self.store_local(ARG_NAMES[index], arg); } else { self.store_local_owned(format!("arg{index}"), arg); }
-                                }
-                                {
-                                    let arity = program.function_arities.get(&bytecode_start).copied().unwrap_or(0);
-                                    for index in n_passed..arity {
-                                        if index < ARG_NAMES.len() { self.store_local(ARG_NAMES[index], Value::Null); } else { self.store_local_owned(format!("arg{index}"), Value::Null); }
-                                    }
-                                }
+                                let arity = program.function_arities.get(&bytecode_start).copied().unwrap_or(0);
+                                self.bind_args_owned(args, arity, program.param_slots);
 
                                 self.ip = bytecode_start;
                                 continue;
@@ -6122,16 +6123,10 @@ impl VirtualMachine {
                             self.check_call_depth()?;
                             self.call_stack.push(self.ip + 1);
                             self.push_call_scope();
-                            self.locals_stack.push(Vec::new());
+                            self.push_frame();
                             self.store_local("this", this);
-                            let n_passed = args.len();
-                            for (index, arg) in args.into_iter().enumerate() {
-                                if index < ARG_NAMES.len() { self.store_local(ARG_NAMES[index], arg); } else { self.store_local_owned(format!("arg{index}"), arg); }
-                            }
                             let arity = program.function_arities.get(&start).copied().unwrap_or(0);
-                            for index in n_passed..arity {
-                                if index < ARG_NAMES.len() { self.store_local(ARG_NAMES[index], Value::Null); } else { self.store_local_owned(format!("arg{index}"), Value::Null); }
-                            }
+                            self.bind_args_owned(args, arity, program.param_slots);
                             self.ip = start;
                             continue;
                         }
@@ -6613,7 +6608,9 @@ impl VirtualMachine {
     }
 
     /// Values of the current frame's local slots (the debugger shows them by number).
-    pub(crate) fn debug_locals(&self) -> Vec<(String, Value)> {
+    /// `nparams`: how many leading slots of the current frame are call parameters (programs that
+    /// keep parameters in slots); the debugger shows them as `arg0`, `arg1`, ... like the named scheme.
+    pub(crate) fn debug_locals(&self, nparams: usize) -> Vec<(String, Value)> {
         let mut out: Vec<(String, Value)> = Vec::new();
         // named variables of the innermost scope (parameters and locals of a function call), then numbered slots
         if self.scopes.len() > 1 {
@@ -6626,7 +6623,11 @@ impl VirtualMachine {
         if let Some(frame) = self.locals_stack.last() {
             for (i, v) in frame.iter().enumerate() {
                 if !matches!(v, Value::Unbound) {
-                    out.push((format!("slot {}", i), v.clone()));
+                    if i < nparams {
+                        out.push((format!("arg{}", i), v.clone()));
+                    } else {
+                        out.push((format!("slot {}", i), v.clone()));
+                    }
                 }
             }
         }
@@ -6774,7 +6775,7 @@ impl VirtualMachine {
 
         self.call_stack.push(NESTED_RETURN);
         self.push_call_scope();
-        self.locals_stack.push(Vec::new());
+        self.push_frame();
         for (name, value) in captured.snapshot() {
             self.store_local(&name, value.clone());
         }
@@ -6785,14 +6786,7 @@ impl VirtualMachine {
         if self.uses_args {
             self.store_local("args", Value::from(args.clone()));
         }
-        for index in 0..arity.max(args.len()) {
-            let value = args.get(index).cloned().unwrap_or(Value::Null);
-            if index < ARG_NAMES.len() {
-                self.store_local(ARG_NAMES[index], value);
-            } else {
-                self.store_local_owned(format!("arg{index}"), value);
-            }
-        }
+        self.bind_args_owned(args, arity, program.param_slots);
         self.ip = start;
         let outcome = self.run_loop(program);
         self.ip = saved_ip;
@@ -7048,11 +7042,25 @@ impl VirtualMachine {
     /// Bind the `n` call arguments on top of the value stack into the freshly pushed scope as
     /// `arg0..`, padding missing parameters with null. The implicit `args` array is only built for
     /// programs that mention `args`.
-    fn bind_call_args(&mut self, n: usize, expected_arity: usize, with_args: bool) {
+    fn bind_call_args(&mut self, n: usize, expected_arity: usize, with_args: bool, slots: bool) {
         if with_args {
             let base = self.stack.len() - n;
             let args: Vec<Value> = self.stack[base..].to_vec();
             self.store_local("args", Value::from(args));
+        }
+        if slots {
+            // parameters are the first `expected_arity` slots of the new frame; extra arguments
+            // are only visible through `args`
+            let base = self.stack.len().saturating_sub(n);
+            let take = (self.stack.len() - base).min(expected_arity);
+            if let Some(frame) = self.locals_stack.last_mut() {
+                frame.extend(self.stack.drain(base..base + take));
+                for _ in take..expected_arity {
+                    frame.push(Value::Null);
+                }
+            }
+            self.stack.truncate(base);
+            return;
         }
         for index in (0..n).rev() {
             let value = self.stack.pop().unwrap_or(Value::Null);
@@ -7060,6 +7068,48 @@ impl VirtualMachine {
         }
         for index in n..expected_arity {
             self.store_arg(index, Value::Null);
+        }
+    }
+
+    /// Bind call arguments held in a `Vec` (method calls, calls from Rust): slots `0..arity` of the
+    /// new frame, or the named `argN` scheme. Missing parameters are null; extra arguments are dropped
+    /// in slot mode (they only reach `args`).
+    fn bind_args_owned(&mut self, args: Vec<Value>, arity: usize, slots: bool) {
+        if slots {
+            if let Some(frame) = self.locals_stack.last_mut() {
+                frame.extend(args.into_iter().take(arity));
+                while frame.len() < arity {
+                    frame.push(Value::Null);
+                }
+            }
+            return;
+        }
+        let n = args.len();
+        for (index, arg) in args.into_iter().enumerate() {
+            self.store_arg(index, arg);
+        }
+        for index in n..arity {
+            self.store_arg(index, Value::Null);
+        }
+    }
+
+    /// A locals frame for a new call, recycled from the pool when possible.
+    #[inline]
+    fn push_frame(&mut self) {
+        let frame = self.frame_pool.pop().unwrap_or_default();
+        self.locals_stack.push(frame);
+    }
+
+    /// Drop the locals frame of the call that is returning (frame 0 belongs to the top level).
+    #[inline]
+    fn pop_frame(&mut self) {
+        if self.locals_stack.len() > 1 {
+            if let Some(mut frame) = self.locals_stack.pop() {
+                if self.frame_pool.len() < 64 && frame.capacity() <= 128 {
+                    frame.clear();
+                    self.frame_pool.push(frame);
+                }
+            }
         }
     }
 
@@ -7647,17 +7697,10 @@ impl VirtualMachine {
 
         self.call_stack.push(NESTED_RETURN);
         self.push_call_scope();
-        self.locals_stack.push(Vec::new());
+        self.push_frame();
         self.store_local("this", this);
         let arity = program.function_arities.get(&start).copied().unwrap_or(args.len());
-        for index in 0..arity.max(args.len()) {
-            let value = args.get(index).cloned().unwrap_or(Value::Null);
-            if index < ARG_NAMES.len() {
-                self.store_local(ARG_NAMES[index], value);
-            } else {
-                self.store_local_owned(format!("arg{index}"), value);
-            }
-        }
+        self.bind_args_owned(args, arity, program.param_slots);
         self.ip = start;
         let outcome = self.run_loop(program);
         self.ip = saved_ip;
@@ -7755,6 +7798,10 @@ impl VirtualMachine {
     }
 
     fn call_function_sync_inner(&mut self, func: &Value, args: Vec<Value>, program: &Program) ->Result<Value, VmError> {
+        if program.param_slots && matches!(func, Value::Function { .. }) {
+            // this mini-interpreter has no locals frame of its own: slot programs use the real call path
+            return self.call_value_nested_inner(func, args, program);
+        }
         match func {
             Value::Function { params, bytecode_start, captured } => {
                 // Save current state

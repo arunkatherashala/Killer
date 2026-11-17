@@ -164,6 +164,19 @@ pub fn function_ranges(source: &str) -> Vec<(String, usize, usize)> {
     out
 }
 
+/// Parameter names of the function declared around `line` (1-based) of `source`, in order.
+pub fn params_at_line(source: &str, line: usize) -> Vec<String> {
+    let ranges = function_ranges(source);
+    enclosing(&ranges, line)
+        .and_then(|i| source.lines().nth(ranges[i].1 - 1))
+        .map(|decl| {
+            let inner = decl.split_once('(').map(|x| x.1).unwrap_or("");
+            let inner = inner.split(')').next().unwrap_or("");
+            inner.split(',').filter_map(|p| p.trim().split(|c: char| !(c.is_alphanumeric() || c == '_')).next().filter(|w| !w.is_empty()).map(|w| w.to_string())).collect()
+        })
+        .unwrap_or_default()
+}
+
 fn enclosing(ranges: &[(String, usize, usize)], line: usize) -> Option<usize> {
     // innermost = the one with the latest start containing the line
     ranges
@@ -590,6 +603,14 @@ impl<W: Write> Session<W> {
                     if in_function && k == "args" {
                         continue;
                     }
+                    // `__slotN`: parameter N of the running function (parameters live in frame slots)
+                    let k = &match k.strip_prefix("__slot").and_then(|n| n.parse::<usize>().ok()) {
+                        Some(n) => match params.get(n) {
+                            Some(p) if in_function => p.clone(),
+                            _ => continue,
+                        },
+                        None => k.clone(),
+                    };
                     // `__v_x` is the named mirror of the slot variable `x` (see `instrument`)
                     let k = &match k.strip_prefix("::") {
                         Some(rest) => match rest.strip_prefix("__v_") {

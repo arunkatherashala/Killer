@@ -166,6 +166,7 @@ mod tests {
             classes: HashMap::new(),
             live_vars: HashMap::new(),
             line_table: Default::default(),
+            param_slots: false,
         };
 
         let cache = InstructionCache::new(&program);
@@ -187,6 +188,7 @@ mod tests {
             classes: HashMap::new(),
             live_vars: HashMap::new(),
             line_table: Default::default(),
+            param_slots: false,
         };
 
         let mut cache = InstructionCache::new(&program);

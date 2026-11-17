@@ -607,6 +607,7 @@ mod tests {
             classes: HashMap::new(),
             live_vars: HashMap::new(),
             line_table: Default::default(),
+            param_slots: false,
         };
         p.function_names.insert(10, "alpha".to_string());
         p.function_names.insert(20, "beta".to_string());
