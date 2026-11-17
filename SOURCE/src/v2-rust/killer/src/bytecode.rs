@@ -241,6 +241,31 @@ pub enum Instruction {
     /// thread-local debug channel is registered (see `vm::set_vm_debug_channel`).
     /// No-op in release / non-debug runs (zero overhead when channel is None).
     DebugLine(usize),
+    /// Does nothing. The compiler leaves one where it dropped an `EnterScope` / `ExitScope` pair
+    /// of a block that binds no names; the optimizer deletes it again (and remaps every address).
+    Nop,
+    /// First instruction of `for x in range(a)` / `range(a, b)`, placed in front of the unchanged
+    /// `CallBuiltin("range", argc); StoreSlot(iter); ConstNum(0); StoreSlot(idx)` sequence.
+    /// When every argument is an integral number and the range is within the usual size limit it
+    /// pops them, stores `Integer(end)` in `iter` and `Integer(start)` in `idx` (no array is
+    /// built) and skips the four instructions; `ForNext` then counts through the two integers.
+    /// In every other case it does nothing and the ordinary sequence runs (same errors, same array).
+    RangeInit { argc: usize, iter: u16, idx: u16 },
+    // ---- Look-ahead shortcuts -------------------------------------------------------------
+    // The optimizer puts one of these in place of the FIRST instruction of a common sequence
+    // and leaves the rest of the sequence where it was. The shortcut tries the whole sequence
+    // at once and, on success, skips past it. When it cannot (the value is not the expected
+    // kind, ...) it does exactly what the instruction it replaced did and execution simply
+    // continues with the untouched instructions, so jumps into the middle of a sequence and
+    // every error path behave as before.
+    /// `Load(name); GetField(field); CallMethodDynamic { field, 0 }` (`this.x`, `p.x`)
+    LoadField { name: String, field: String },
+    /// `LoadSlot(slot); GetField(field); CallMethodDynamic { field, 0 }`
+    LoadSlotField { slot: u16, field: String },
+    /// `Load(name); ConstStr(key); IndexRead` (`d["key"]`)
+    LoadIndexStr { name: String, key: String },
+    /// `LoadSlot(slot); ConstStr(key); IndexRead`
+    LoadSlotIndexStr { slot: u16, key: String },
 }
 
 #[derive(Debug, Clone)]

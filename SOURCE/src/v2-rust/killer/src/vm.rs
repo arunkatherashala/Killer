@@ -1242,6 +1242,42 @@ impl VirtualMachine {
                 }
                 Instruction::EnterScope => self.push_scope(),
                 Instruction::ExitScope => self.pop_scope()?,
+                Instruction::Nop => {}
+                Instruction::RangeInit { argc, iter, idx } => {
+                    // `for x in range(a)` / `range(a, b)` over plain integers: count instead of
+                    // building the array (see `ForNext`). Anything else runs the builtin as before.
+                    let n = *argc;
+                    if self.stack.len() >= n && self.ip + 4 < program.instructions.len() {
+                        let base = self.stack.len() - n;
+                        let bounds = match &self.stack[base..] {
+                            [Value::Number(e)] if n == 1 => Some((0.0, *e)),
+                            [Value::Number(s), Value::Number(e)] if n == 2 => Some((*s, *e)),
+                            _ => None,
+                        };
+                        if let Some((s, e)) = bounds {
+                            let integral = |x: f64| x.is_finite() && x.fract() == 0.0 && x.abs() < 9.0e15;
+                            let len = if e > s { e - s } else { 0.0 };
+                            if integral(s)
+                                && integral(e)
+                                && len <= crate::builtin::MAX_RANGE_LEN as f64
+                                && crate::memcap::reserve((len as usize).saturating_mul(std::mem::size_of::<Value>())).is_ok()
+                            {
+                                self.stack.truncate(base);
+                                let (iter_i, idx_i) = (*iter as usize, *idx as usize);
+                                if let Some(frame) = self.locals_stack.last_mut() {
+                                    let need = iter_i.max(idx_i) + 1;
+                                    if frame.len() < need {
+                                        frame.resize(need, Value::Unbound);
+                                    }
+                                    frame[iter_i] = Value::Integer(e as i64);
+                                    frame[idx_i] = Value::Integer(s as i64);
+                                }
+                                self.ip += 5;
+                                continue;
+                            }
+                        }
+                    }
+                }
                 Instruction::StoreSlot(slot) => {
                     let value = self.stack.pop().ok_or_else(|| {
                         VmError::runtime_error("STORE_SLOT requires one value on stack".to_string())
@@ -1260,9 +1296,19 @@ impl VirtualMachine {
                     // 0 = element ready, 1 = finished, 2 = not an array (generic path)
                     let mut outcome = 2u8;
                     let mut next_idx = 0.0f64;
+                    let mut next_int: Option<i64> = None;
                     let mut elem = Value::Null;
                     if let Some(frame) = self.locals_stack.last() {
-                        if let (Some(Value::Number(n)), Some(Value::Array(a))) = (frame.get(idx_i), frame.get(iter_i)) {
+                        if let (Some(Value::Integer(n)), Some(Value::Integer(e))) = (frame.get(idx_i), frame.get(iter_i)) {
+                            // a `RangeInit` loop: count from `n` up to `e`
+                            if n < e {
+                                elem = Value::Number(*n as f64);
+                                next_int = Some(*n + 1);
+                                outcome = 0;
+                            } else {
+                                outcome = 1;
+                            }
+                        } else if let (Some(Value::Number(n)), Some(Value::Array(a))) = (frame.get(idx_i), frame.get(iter_i)) {
                             let k = *n as usize;
                             if k < a.len() {
                                 elem = a.get(k).unwrap_or(Value::Null);
@@ -1276,7 +1322,10 @@ impl VirtualMachine {
                     match outcome {
                         0 => {
                             if let Some(frame) = self.locals_stack.last_mut() {
-                                frame[idx_i] = Value::Number(next_idx);
+                                frame[idx_i] = match next_int {
+                                    Some(k) => Value::Integer(k),
+                                    None => Value::Number(next_idx),
+                                };
                             }
                             self.store_local(var, elem);
                             self.ip = *body;
@@ -1375,11 +1424,38 @@ impl VirtualMachine {
                     self.stack.push(lhs);
                     self.stack.push(rhs);
                 }
-                Instruction::LoadSlot(slot) => {
+                Instruction::LoadSlot(slot) | Instruction::LoadSlotField { slot, .. } | Instruction::LoadSlotIndexStr { slot, .. } => {
                     let idx = *slot as usize;
                     let frame = self.locals_stack.last().ok_or_else(|| {
                         VmError::runtime_error("No locals frame".to_string())
                     })?;
+                    // look-ahead shortcuts (see `Instruction::LoadField`)
+                    match instruction {
+                        Instruction::LoadSlotField { field, .. } => {
+                            if let Some(Value::Object(o)) = frame.get(idx) {
+                                if !self.method_names.contains(field.as_str()) {
+                                    if let Some(v) = o.get_field(field) {
+                                        self.stack.push(v);
+                                        self.ip += 3;
+                                        continue;
+                                    }
+                                }
+                            }
+                        }
+                        Instruction::LoadSlotIndexStr { key, .. } => {
+                            let found = match frame.get(idx) {
+                                Some(Value::Dict(d)) => Some(d.get(key).unwrap_or(Value::Null)),
+                                Some(Value::Object(o)) => o.get_field(key),
+                                _ => None,
+                            };
+                            if let Some(v) = found {
+                                self.stack.push(v);
+                                self.ip += 3;
+                                continue;
+                            }
+                        }
+                        _ => {}
+                    }
                     let value = match frame.get(idx) {
                         Some(Value::Number(n)) => Value::Number(*n),
                         Some(Value::Bool(b)) => Value::Bool(*b),
@@ -1549,7 +1625,36 @@ impl VirtualMachine {
                     })?;
                     self.store_local(name, value);
                 }
-                Instruction::Load(name) => {
+                Instruction::Load(name) | Instruction::LoadField { name, .. } | Instruction::LoadIndexStr { name, .. } => {
+                    // look-ahead shortcuts (see `Instruction::LoadField`): `x.f` / `x["k"]` read in place
+                    match instruction {
+                        Instruction::LoadField { field, .. } => {
+                            if !self.method_names.contains(field.as_str()) && !self.is_special_load_name(name) {
+                                if let Some(Value::Object(o)) = self.lookup(name) {
+                                    if let Some(v) = o.get_field(field) {
+                                        self.stack.push(v);
+                                        self.ip += 3;
+                                        continue;
+                                    }
+                                }
+                            }
+                        }
+                        Instruction::LoadIndexStr { key, .. } => {
+                            if !self.is_special_load_name(name) {
+                                let found = match self.lookup(name) {
+                                    Some(Value::Dict(d)) => Some(d.get(key).unwrap_or(Value::Null)),
+                                    Some(Value::Object(o)) => o.get_field(key),
+                                    _ => None,
+                                };
+                                if let Some(v) = found {
+                                    self.stack.push(v);
+                                    self.ip += 3;
+                                    continue;
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
                     // `s[i]` / `len(s)` on a named string (global, parameter, top-level local):
                     // borrow it from its scope instead of copying the whole string per access.
                     if !self.is_special_load_name(name) {

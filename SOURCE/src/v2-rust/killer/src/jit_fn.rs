@@ -578,6 +578,7 @@ fn analyze(instrs: &[Instruction], arities: &HashMap<usize, usize>, key: Key) ->
                     }
                     break; // never falls through: the generic path is not compiled natively
                 }
+                Instruction::RangeInit { .. } => {} // VM-only shortcut in front of the ordinary range sequence
                 Instruction::EnterScope => st.scopes.push(Vec::new()),
                 Instruction::ExitScope => {
                     let sc = st.scopes.pop()?;
@@ -1096,7 +1097,7 @@ fn compile_group(
                     }
                 }
 
-                Instruction::EnterScope | Instruction::ExitScope => {}
+                Instruction::EnterScope | Instruction::ExitScope | Instruction::RangeInit { .. } => {}
                 Instruction::Jump(t) => {
                     asm.b(&[0xE9]);
                     jump_fixups.push((asm.rel32_placeholder(), *t));

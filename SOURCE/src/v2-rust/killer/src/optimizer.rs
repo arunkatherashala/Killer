@@ -17,7 +17,9 @@ pub fn optimize_bytecode_with_map(instructions: &[Instruction]) -> (Vec<Instruct
     // Phase 2: Eliminate redundant operations (conservative pass)
     let instructions = eliminate_redundant_operations(&instructions);
 
-    let n_input = instructions.len();
+    // Phase 2a: delete the `Nop`s the compiler left (blocks that needed no runtime scope)
+    let n_stripped_in = instructions.len();
+    let (instructions, nop_map) = strip_nops(&instructions);
 
     // Phase 2b: Constant folding on ConstNum+ConstNum+Op triplets (shrinks the code, so it
     // yields its own index map and rewrites every code address)
@@ -26,22 +28,83 @@ pub fn optimize_bytecode_with_map(instructions: &[Instruction]) -> (Vec<Instruct
     // Phase 3: Peephole fusion — combine common slot+const+op patterns
     let (instructions, fuse_map) = fuse_slot_patterns(&instructions);
 
+    // Phase 3b: look-ahead shortcuts in front of common sequences (no instruction is added or
+    // removed, so no address changes)
+    let instructions = add_lookahead_shortcuts(instructions);
+
     // Phase 4: Convert CallBuiltin(name) → CallBuiltinId(id) for known builtins
     let instructions = lower_builtin_calls(&instructions);
 
-    // Compose: original index -> after folding -> after fusion.
+    // Compose: original index -> after nop removal -> after folding -> after fusion.
     let last = fuse_map.last().copied().unwrap_or(0);
-    let mut map: Vec<usize> = fold_map
+    let fold_fuse: Vec<usize> = fold_map
         .iter()
         .map(|&mid| fuse_map.get(mid).copied().unwrap_or(last))
         .collect();
+    let mut map: Vec<usize> = nop_map
+        .iter()
+        .map(|&mid| fold_fuse.get(mid).copied().unwrap_or(last))
+        .collect();
     // Callers index the map with `ip.min(original_len)`; keep it that long even when
     // unreachable trailing code (after Halt) was dropped.
-    while map.len() < n_input + 1 {
+    while map.len() < n_stripped_in + 1 {
         map.push(last);
     }
 
     (instructions, map)
+}
+
+/// Replace the first instruction of `Load(x) GetField(f) CallMethodDynamic(f)` / `Load(x) ConstStr(k)
+/// IndexRead` (also with `LoadSlot`) by a shortcut that does all three at once when it can (see
+/// `Instruction::LoadField`). The following instructions stay, so every jump target is still valid.
+fn add_lookahead_shortcuts(mut code: Vec<Instruction>) -> Vec<Instruction> {
+    if std::env::var_os("KILLER_NO_FUSION").is_some() || std::env::var_os("KILLER_X_NOLOOK").is_some() {
+        return code;
+    }
+    for i in 0..code.len().saturating_sub(2) {
+        let replacement = match (&code[i], &code[i + 1], &code[i + 2]) {
+            (Instruction::Load(name), Instruction::GetField(f), Instruction::CallMethodDynamic { method_name, arg_count: 0 })
+                if f == method_name =>
+            {
+                Some(Instruction::LoadField { name: name.clone(), field: f.clone() })
+            }
+            (Instruction::LoadSlot(s), Instruction::GetField(f), Instruction::CallMethodDynamic { method_name, arg_count: 0 })
+                if f == method_name =>
+            {
+                Some(Instruction::LoadSlotField { slot: *s, field: f.clone() })
+            }
+            (Instruction::Load(name), Instruction::ConstStr(k), Instruction::IndexRead) => {
+                Some(Instruction::LoadIndexStr { name: name.clone(), key: k.clone() })
+            }
+            (Instruction::LoadSlot(s), Instruction::ConstStr(k), Instruction::IndexRead) => {
+                Some(Instruction::LoadSlotIndexStr { slot: *s, key: k.clone() })
+            }
+            _ => None,
+        };
+        if let Some(r) = replacement {
+            code[i] = r;
+        }
+    }
+    code
+}
+
+/// Delete every `Nop`. A jump to a deleted instruction lands on the next one that stays.
+fn strip_nops(instructions: &[Instruction]) -> (Vec<Instruction>, Vec<usize>) {
+    let n = instructions.len();
+    if !instructions.iter().any(|i| matches!(i, Instruction::Nop)) {
+        return (instructions.to_vec(), (0..=n).collect());
+    }
+    let mut out: Vec<Instruction> = Vec::with_capacity(n);
+    let mut old_to_new = vec![0usize; n + 1];
+    for (i, ins) in instructions.iter().enumerate() {
+        old_to_new[i] = out.len();
+        if !matches!(ins, Instruction::Nop) {
+            out.push(ins.clone());
+        }
+    }
+    old_to_new[n] = out.len();
+    remap_code_addresses(&mut out, &old_to_new, n);
+    (out, old_to_new)
 }
 
 /// Rewrite every code address in `code` through `old_to_new` (`n` = length of the old code).
@@ -288,6 +351,9 @@ fn slot_read_set(instructions: &[Instruction]) -> HashSet<u16> {
             }
             Instruction::IndexWriteSlot(i) => {
                 s.insert(*i);
+            }
+            Instruction::LoadSlotField { slot, .. } | Instruction::LoadSlotIndexStr { slot, .. } => {
+                s.insert(*slot);
             }
             _ => {}
         }

@@ -277,6 +277,134 @@ struct CompilerState {
     /// Loop / comprehension variables currently in scope. They are stored by name (not in a
     /// slot), so a call `g(x)` on one must still be compiled as a call through the variable.
     named_locals: Vec<String>,
+    /// Blocks that currently have a runtime scope (`EnterScope`), outermost first. The blocks of
+    /// the function being compiled are the topmost `runtime_scope_depth` entries.
+    open_blocks: Vec<OpenBlock>,
+    /// > 0 while compiling the body of a `while` loop: its blocks keep their scopes, because the
+    /// native loop recognizers (jit_x86 `on_loop_back`) look at the exact instruction layout of
+    /// `while` loops and must see the same code as before.
+    in_while_body: usize,
+}
+
+/// A block whose `EnterScope` is already emitted but whose end is not yet compiled.
+#[derive(Debug)]
+struct OpenBlock {
+    /// Index of its `EnterScope`.
+    enter: usize,
+    /// Indexes of the `ExitScope` instructions that `return` / `break` / `continue` inside it
+    /// emitted to leave this particular block.
+    early_exits: Vec<usize>,
+}
+
+/// True for instructions that can neither create a name in the innermost scope nor look at it, so
+/// a block made only of them behaves the same with or without a runtime scope of its own.
+/// Anything not listed (stores by name, `for` loops, `try`, closures, debugger hooks, imports ...)
+/// keeps its scope.
+fn scope_neutral(ins: &Instruction) -> bool {
+    use Instruction as I;
+    match ins {
+        I::ConstStr(_) | I::ConstNum(_) | I::ConstBool(_) | I::ConstNull | I::Load(_) | I::LoadSlot(_)
+        | I::StoreSlot(_) | I::AppendSlot(_) | I::GetField(_) | I::Add | I::Sub | I::Mul | I::Div
+        | I::IntDiv | I::Mod | I::And | I::Or | I::Not | I::Eq | I::Ne | I::Gt | I::Ge | I::Lt | I::Le
+        | I::Jump(_) | I::JumpIfFalse(_) | I::AndShort(_) | I::OrShort(_) | I::CoalesceShort(_)
+        | I::Call { .. } | I::CallDynamic { .. } | I::CallMethodDynamic { .. } | I::NewObjectN(..)
+        | I::Ret | I::Pop | I::Print | I::PrintMultiple(_) | I::BuildArray(_) | I::BuildDict(_)
+        | I::IndexRead | I::IndexWriteSlot(_) | I::ExitScope | I::Nop | I::NullCoalesce => true,
+        // `Math[k] = v` and friends bind a variable (see the VM's `IndexWrite`)
+        I::IndexWrite(name) => !matches!(name.as_str(), "Math" | "Physics" | "Array"),
+        // builtins never touch the scopes, except the debugger checkpoint
+        I::CallBuiltin(name, _) => !name.starts_with("__"),
+        _ => false,
+    }
+}
+
+/// `KILLER_NO_FUSION=1` compiles without the code-shrinking shortcuts (no-scope blocks, lazy
+/// `range` loops, fused instructions) so a program can be run both ways and the results compared
+/// (see tests/fusion_diff.rs). `KILLER_X_NOELIDE` / `KILLER_X_NORANGE` switch single ones off.
+fn fusion_off() -> bool {
+    static OFF: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *OFF.get_or_init(|| std::env::var_os("KILLER_NO_FUSION").is_some())
+}
+fn scope_elision_enabled() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| !fusion_off() && std::env::var_os("KILLER_X_NOELIDE").is_none())
+}
+fn lazy_range_enabled() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| !fusion_off() && std::env::var_os("KILLER_X_NORANGE").is_none())
+}
+
+/// Number of arguments (1 or 2) when `src` is exactly one call `range(...)`, else `None`.
+fn range_call_argc(src: &str) -> Option<usize> {
+    let s = src.trim();
+    let inner = s.strip_prefix("range(")?.strip_suffix(')')?;
+    let mut depth = 0i32;
+    let mut commas = 0usize;
+    let mut quote: Option<char> = None;
+    let mut escaped = false;
+    for c in inner.chars() {
+        if let Some(q) = quote {
+            if escaped {
+                escaped = false;
+            } else if c == '\\' {
+                escaped = true;
+            } else if c == q {
+                quote = None;
+            }
+            continue;
+        }
+        match c {
+            '"' | '\'' => quote = Some(c),
+            '(' | '[' | '{' => depth += 1,
+            ')' | ']' | '}' => {
+                depth -= 1;
+                if depth < 0 {
+                    return None; // the `)` that closes `range(` is not the last one
+                }
+            }
+            ',' if depth == 0 => commas += 1,
+            _ => {}
+        }
+    }
+    if depth != 0 || quote.is_some() || inner.trim().is_empty() {
+        return None;
+    }
+    (commas <= 1).then_some(commas + 1)
+}
+
+/// After the iterable of a `for` loop was compiled: when it was a plain `range(a)` / `range(a, b)`
+/// call, put a `RangeInit` in front of the `range` builtin call (see `Instruction::RangeInit`).
+fn mark_lazy_range(state: &mut CompilerState, iter_src: &str, iter_slot: u16, idx_slot: u16) {
+    if !lazy_range_enabled() {
+        return;
+    }
+    let Some(argc) = range_call_argc(iter_src) else { return };
+    // `range(..)` is compiled as a call that `patch_pending_calls` later turns into the builtin
+    // (or, when the script defines its own `range`, into a call of that function: the
+    // `RangeInit` is then turned into a `Nop` there)
+    let at = state.instructions.len();
+    let is_pending_range = at > 0
+        && matches!(state.instructions.last(), Some(Instruction::Call { target: usize::MAX, arg_count }) if *arg_count == argc)
+        && matches!(state.pending_calls.last(), Some(p) if p.function_name == "range" && p.arg_count == argc && p.instruction_index == at - 1);
+    if is_pending_range {
+        let call = state.instructions.pop().expect("checked");
+        state.instructions.push(Instruction::RangeInit { argc, iter: iter_slot, idx: idx_slot });
+        state.instructions.push(call);
+        if let Some(p) = state.pending_calls.last_mut() {
+            p.instruction_index = at;
+        }
+    }
+}
+
+/// Emit one `ExitScope` that leaves the block at `depth` (1 = outermost block of the function).
+fn emit_exit_scope(state: &mut CompilerState, scope_depth_now: usize, depth: usize) {
+    let at = state.instructions.len();
+    state.instructions.push(Instruction::ExitScope);
+    if let Some(first) = state.open_blocks.len().checked_sub(scope_depth_now) {
+        if let Some(block) = state.open_blocks.get_mut(first + depth - 1) {
+            block.early_exits.push(at);
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -2409,6 +2537,7 @@ fn compile_block(
     // Push runtime scope barrier for true blocks
     if needs_runtime_scope {
         context.runtime_scope_depth += 1;
+        state.open_blocks.push(OpenBlock { enter: state.instructions.len(), early_exits: Vec::new() });
         state.instructions.push(Instruction::EnterScope);
     }
 
@@ -2425,8 +2554,23 @@ fn compile_block(
                 *cursor += 1;
                 // Pop runtime scope barrier
                 if needs_runtime_scope {
+                    let exit_at = state.instructions.len();
                     state.instructions.push(Instruction::ExitScope);
                     context.runtime_scope_depth -= 1;
+                    if let Some(block) = state.open_blocks.pop() {
+                        // a block that binds no names does not need a scope: turn its enter / exits
+                        // into no-ops (the optimizer deletes them)
+                        if scope_elision_enabled()
+                            && state.in_while_body == 0
+                            && state.instructions[block.enter + 1..exit_at].iter().all(scope_neutral)
+                        {
+                            state.instructions[block.enter] = Instruction::Nop;
+                            state.instructions[exit_at] = Instruction::Nop;
+                            for at in block.early_exits {
+                                state.instructions[at] = Instruction::Nop;
+                            }
+                        }
+                    }
                 }
                 restore_block_scope(context, saved_slot_map, saved_next_slot, let_mark);
                 return Ok(());
@@ -3083,7 +3227,10 @@ fn compile_while_statement(
         scope_depth_at_start: context.runtime_scope_depth,
     });
 
-    compile_block(lines, cursor, state, context, true, true)?;
+    state.in_while_body += 1;
+    let body = compile_block(lines, cursor, state, context, true, true);
+    state.in_while_body -= 1;
+    body?;
     state.instructions.push(Instruction::Jump(loop_start));
 
     let loop_end = state.instructions.len();
@@ -3145,6 +3292,7 @@ fn compile_for_each_line_statement(
 
     // Evaluate the iterable once and store it
     compile_expr_str(iter_expr, line_no, state, context)?;
+    mark_lazy_range(state, iter_expr, iter_slot, idx_slot);
     state.instructions.push(Instruction::StoreSlot(iter_slot));
 
     // idx = 0
@@ -3336,8 +3484,8 @@ fn compile_simple_statement(
         emit_finally_unwind(state, context, 0)?;
 
         // Before returning, pop all runtime scopes active in this function
-        for _ in 0..context.runtime_scope_depth {
-            state.instructions.push(Instruction::ExitScope);
+        for j in 0..context.runtime_scope_depth {
+            emit_exit_scope(state, context.runtime_scope_depth, context.runtime_scope_depth - j);
         }
         
         state.instructions.push(Instruction::Ret);
@@ -3353,8 +3501,8 @@ fn compile_simple_statement(
         let loop_context = context.loop_stack.last_mut().expect("checked non-empty");
 
         // Pop runtime scopes pushed since the loop started
-        for _ in 0..(context.runtime_scope_depth - loop_context.scope_depth_at_start) {
-            state.instructions.push(Instruction::ExitScope);
+        for j in 0..(context.runtime_scope_depth - loop_context.scope_depth_at_start) {
+            emit_exit_scope(state, context.runtime_scope_depth, context.runtime_scope_depth - j);
         }
 
         let jump_index = state.instructions.len();
@@ -3374,8 +3522,8 @@ fn compile_simple_statement(
         let loop_context = context.loop_stack.last().expect("checked non-empty");
 
         // Pop runtime scopes pushed since the loop started
-        for _ in 0..(context.runtime_scope_depth - loop_context.scope_depth_at_start) {
-            state.instructions.push(Instruction::ExitScope);
+        for j in 0..(context.runtime_scope_depth - loop_context.scope_depth_at_start) {
+            emit_exit_scope(state, context.runtime_scope_depth, context.runtime_scope_depth - j);
         }
 
         state.instructions.push(Instruction::Jump(loop_context.loop_start));
@@ -4806,6 +4954,7 @@ fn compile_list_comprehension(
             format!("__lcE_{}_{}", state.instructions.len(), level)
         };
         compile_expr_str(&clause.iterable, line_no, state, &scope)?;
+        mark_lazy_range(state, &clause.iterable, iter_slot, idx_slot);
         state.instructions.push(Instruction::StoreSlot(iter_slot));
         state.instructions.push(Instruction::ConstNum(0.0));
         state.instructions.push(Instruction::StoreSlot(idx_slot));
@@ -7381,6 +7530,19 @@ fn patch_pending_calls(state: &mut CompilerState) -> Result<(), VmError> {
             target: meta.start,
             arg_count: pending.arg_count,
         };
+    }
+
+    // a `RangeInit` shortcut only stands in front of the builtin `range`: a script function of
+    // that name is called as usual
+    for pending in &state.pending_calls {
+        if pending.function_name == "range" && pending.instruction_index > 0 {
+            let before = pending.instruction_index - 1;
+            if matches!(state.instructions[before], Instruction::RangeInit { .. })
+                && !matches!(&state.instructions[pending.instruction_index], Instruction::CallBuiltin(name, _) if name == "range")
+            {
+                state.instructions[before] = Instruction::Nop;
+            }
+        }
     }
 
     // v2.2: patch SpawnCallDirect forward references
