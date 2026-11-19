@@ -8,15 +8,14 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 static NEXT: AtomicUsize = AtomicUsize::new(0);
 
-fn run_with(src: &str, off: bool) -> String {
+fn run_with(src: &str, off: Option<&str>) -> String {
     let path = std::env::temp_dir().join(format!("killer_cd_{}_{}.killer", std::process::id(), NEXT.fetch_add(1, Ordering::SeqCst)));
     std::fs::write(&path, src).unwrap();
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_killer_super"));
     cmd.arg(&path).arg("--run");
-    if off {
-        cmd.env("KILLER_NO_RO_CAPTURES", "1");
-    } else {
-        cmd.env_remove("KILLER_NO_RO_CAPTURES");
+    cmd.env_remove("KILLER_NO_RO_CAPTURES").env_remove("KILLER_NO_CAP_SLOTS");
+    if let Some(var) = off {
+        cmd.env(var, "1");
     }
     let out = cmd.output().unwrap();
     let _ = std::fs::remove_file(&path);
@@ -38,11 +37,14 @@ fn run_with(src: &str, off: bool) -> String {
     cleaned.trim().to_string()
 }
 
-/// Run both ways, require identical output, return it.
+/// Run with both optimizations, without capture slots, and without read-only captures at all;
+/// require identical output, return it.
 fn same(src: &str) -> String {
-    let on = run_with(src, false);
-    let off = run_with(src, true);
+    let on = run_with(src, None);
+    let no_slots = run_with(src, Some("KILLER_NO_CAP_SLOTS"));
+    let off = run_with(src, Some("KILLER_NO_RO_CAPTURES"));
     assert_eq!(on, off, "optimized and legacy output differ for:\n{}", src);
+    assert_eq!(on, no_slots, "capture-slot and read-only-only output differ for:\n{}", src);
     on
 }
 
@@ -831,4 +833,121 @@ println(u)
 "#;
     let got = same(src);
     assert_eq!(got, "600000\n9007199254746000\n149997");
+}
+
+#[test]
+fn capture_slots_with_params_defaults_methods_and_callbacks() {
+    let src = r#"fn mk(a, b, c) {
+  d = a + b
+  e = [a, b, c]
+  fn f(x, y) {
+    t = x * 2
+    u = y + a
+    return [t + u + b + c + d, e, len(e)]
+  }
+  return f
+}
+f = mk(1, 2, 3)
+println(f(10, 20))
+println(f(1, 1))
+g = mk(5, 6, 7)
+println(g(0, 0))
+println(f(2, 2))
+fn mk2(base, scale) {
+  fn apply(xs) {
+    return [v * scale + base for v in xs]
+  }
+  fn label(n) {
+    return "{base}:{n}:{scale}"
+  }
+  fn nested(z) {
+    fn inner(w) {
+      return base + scale + z + w
+    }
+    return inner(1)
+  }
+  return [apply, label, nested]
+}
+fs = mk2(100, 3)
+println(fs[0]([1, 2, 3]))
+println(fs[1](7))
+println(fs[2](10))
+fn mk3(k, h) {
+  fn call(x) {
+    return h(x) + k
+  }
+  return call
+}
+fn sq(x) {
+  return x * x
+}
+c3 = mk3(1, sq)
+println(c3(5))
+println(map([1, 2, 3], c3))
+println(sorted([3, 1, 2], mk3(0, fn(v) { return -v })))
+fn mk4(n, acc) {
+  fn go(i) {
+    if i == 0 {
+      return acc
+    }
+    return go(i - 1) + n
+  }
+  return go
+}
+println(mk4(2, 100)(10))
+fn mk5(p = 5, q = 7) {
+  fn f(x, y = 1) {
+    return x + y + p + q
+  }
+  return f
+}
+println(mk5()(1))
+println(mk5(1, 2)(1, 10))
+println(mk5(1)(0))
+class Box {
+  kfn init(v) {
+    this.v = v
+  }
+  kfn getter(m) {
+    fn f(x) {
+      return x * m
+    }
+    return f
+  }
+}
+b = new Box(4)
+gf = b.getter(3)
+println(gf(5))
+fn mk6(items, key) {
+  fn find(name) {
+    for it in items {
+      if it[key] == name {
+        return it
+      }
+    }
+    return null
+  }
+  return find
+}
+find = mk6([{"n": "a", "v": 1}, {"n": "b", "v": 2}], "n")
+println(find("b"))
+println(find("z"))
+"#;
+    assert_eq!(same(src), r#"[49, [1, 2, 3], 3]
+[12, [1, 2, 3], 3]
+[29, [5, 6, 7], 3]
+[15, [1, 2, 3], 3]
+[103, 106, 109]
+{base}:{n}:{scale}
+114
+26
+[2, 5, 10]
+[3, 2, 1]
+120
+14
+14
+9
+15
+{n: b, v: 2}
+null"#);
 }

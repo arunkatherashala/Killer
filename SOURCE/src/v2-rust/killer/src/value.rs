@@ -550,25 +550,59 @@ unsafe impl Sync for FutureHandle {}
 
 /// Variables a closure captured when it was created. Shared between clones of the function value
 /// and written back after every call, so a closure keeps its own state (`n = n + 1` persists).
+///
+/// The variables are kept in the order the compiler listed them. For a read-only closure the first
+/// `slots` entries are not bound by name at call time: they are copied into the frame slots right
+/// after the parameters (see `extend_slots`), the compiler having read them as `LoadSlot`.
 #[derive(Clone, Default)]
-pub struct Captures(Rc<RefCell<HashMap<String, Value>>>, bool);
+pub struct Captures(Rc<RefCell<Vec<(String, Value)>>>, bool, u16);
 
 impl Captures {
     pub fn new(map: HashMap<String, Value>) -> Self {
-        Captures(Rc::new(RefCell::new(map)), false)
+        Captures(Rc::new(RefCell::new(map.into_iter().collect())), false, 0)
+    }
+    /// Captures in the given order, bound by name (the pre-slot behaviour).
+    pub fn from_items(items: Vec<(String, Value)>) -> Self {
+        Captures(Rc::new(RefCell::new(items)), false, 0)
     }
     /// Captures of a closure whose body never assigns a captured name: nothing needs writing back
-    /// at `Ret`, so calls skip the bookkeeping for it.
-    pub fn new_readonly(map: HashMap<String, Value>) -> Self {
-        Captures(Rc::new(RefCell::new(map)), true)
+    /// at `Ret`, so calls skip the bookkeeping for it. `slots` of the leading entries (in the
+    /// order given) live in frame slots instead of the call scope.
+    pub fn new_readonly(items: Vec<(String, Value)>, slots: u16) -> Self {
+        Captures(Rc::new(RefCell::new(items)), true, slots)
     }
     #[inline]
     pub fn is_readonly(&self) -> bool {
         self.1
     }
-    /// An empty capture table with the same read-only flag (used when a value is deep-copied).
+    /// Number of leading entries that are bound to frame slots, not names.
+    #[inline]
+    pub fn slot_count(&self) -> usize {
+        self.2 as usize
+    }
+    /// An empty capture table with the same flags (used when a value is deep-copied).
     pub fn new_like(&self) -> Self {
-        Captures(Rc::new(RefCell::new(HashMap::new())), self.1)
+        Captures(Rc::new(RefCell::new(Vec::new())), self.1, self.2)
+    }
+    /// Append the slot-bound captures to a frame that holds exactly the parameters.
+    #[inline]
+    pub fn extend_slots(&self, frame: &mut Vec<Value>, arity: usize) {
+        let n = self.2 as usize;
+        if n == 0 {
+            return;
+        }
+        if frame.len() < arity {
+            frame.resize(arity, Value::Unbound);
+        }
+        let items = self.0.borrow();
+        frame.extend(items.iter().take(n).map(|(_, v)| v.clone()));
+    }
+    /// Visit the by-name captures (everything after the slot-bound ones).
+    #[inline]
+    pub fn each_named(&self, mut f: impl FnMut(&str, &Value)) {
+        for (k, v) in self.0.borrow().iter().skip(self.2 as usize) {
+            f(k, v);
+        }
     }
     pub fn is_empty(&self) -> bool {
         self.0.borrow().is_empty()
@@ -582,7 +616,7 @@ impl Captures {
         self.0.borrow().iter().map(|(k, v)| (k.clone(), v.clone())).collect()
     }
     pub fn names(&self) -> Vec<String> {
-        self.0.borrow().keys().cloned().collect()
+        self.0.borrow().iter().map(|(k, _)| k.clone()).collect()
     }
     /// Visit every captured variable without copying the map.
     pub fn each(&self, mut f: impl FnMut(&str, &Value)) {
@@ -592,7 +626,7 @@ impl Captures {
     }
     /// Overwrite each captured value in place with `f(name)` when it returns one (no key allocation).
     pub fn refresh_with(&self, mut f: impl FnMut(&str) -> Option<Value>) {
-        for (k, slot) in self.0.borrow_mut().iter_mut() {
+        for (k, slot) in self.0.borrow_mut().iter_mut().map(|(k, v)| (&*k, v)) {
             // a shared cell is the variable itself: it is updated in place, never copied back
             if matches!(slot, Value::Cell(_)) {
                 continue;
@@ -603,10 +637,14 @@ impl Captures {
         }
     }
     pub fn values(&self) -> Vec<Value> {
-        self.0.borrow().values().cloned().collect()
+        self.0.borrow().iter().map(|(_, v)| v.clone()).collect()
     }
     pub fn set(&self, name: &str, value: Value) {
-        self.0.borrow_mut().insert(name.to_string(), value);
+        let mut items = self.0.borrow_mut();
+        match items.iter_mut().find(|(k, _)| k == name) {
+            Some((_, slot)) => *slot = value,
+            None => items.push((name.to_string(), value)),
+        }
     }
 }
 

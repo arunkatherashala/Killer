@@ -1201,20 +1201,35 @@ impl VirtualMachine {
                 Instruction::ConstNull => self.stack.push(Value::Null),
                 Instruction::ConstFunc { params, bytecode_start, captured_names } => {
                     // Capture variables from current scope
-                    let mut captured = HashMap::new();
+                    let mut captured: Vec<(String, Value)> = Vec::with_capacity(captured_names.len());
                     let mut self_name: Option<&str> = None;
                     let mut readonly = false;
+                    // `@slots:N`: the first N listed names are read as frame slots by the body
+                    let mut slots = 0usize;
                     for var_name in captured_names {
+                        if let Some(n) = var_name.strip_prefix("@slots:") {
+                            slots = n.parse().unwrap_or(0);
+                        }
+                    }
+                    for (idx, var_name) in captured_names.iter().enumerate() {
                         if let Some(own) = var_name.strip_prefix("@self:") {
                             self_name = Some(own);
                         } else if var_name == "@ro" {
                             // the compiler proved the body never assigns a captured name
                             readonly = true;
+                        } else if var_name.starts_with("@slots:") {
                         } else if let Ok(value) = self.load_var_raw(var_name) {
-                            captured.insert(var_name.clone(), value);
+                            captured.push((var_name.clone(), value));
+                        } else if idx < slots {
+                            // keep the slot order intact
+                            captured.push((var_name.clone(), Value::Unbound));
                         }
                     }
-                    let captured = if readonly { crate::value::Captures::new_readonly(captured) } else { crate::value::Captures::new(captured) };
+                    let captured = if readonly {
+                        crate::value::Captures::new_readonly(captured, slots.min(u16::MAX as usize) as u16)
+                    } else {
+                        crate::value::Captures::from_items(captured)
+                    };
 
                     // Push a function value onto the stack
                     let func = Value::Function {
@@ -3051,12 +3066,17 @@ impl VirtualMachine {
                             self.push_frame();  // new locals frame
 
                             // Restore captured variables from closure; written back at `Ret`
-                            captured.each(|var_name, var_value| self.store_local(var_name, var_value.clone()));
+                            captured.each_named(|var_name, var_value| self.store_local(var_name, var_value.clone()));
                             if !captured.is_empty() && !captured.is_readonly() {
                                 self.closure_frames.push((self.call_stack.len(), captured.clone()));
                             }
 
                             self.bind_call_args(*arg_count, expected_arity, self.uses_args, program.param_slots);
+                            if captured.slot_count() > 0 {
+                                if let Some(frame) = self.locals_stack.last_mut() {
+                                    captured.extend_slots(frame, expected_arity);
+                                }
+                            }
                             self.ip = bytecode_start;
                             continue;
                         }
@@ -4959,7 +4979,7 @@ impl VirtualMachine {
                                 self.call_stack.push(self.ip + 1);
                                 self.push_call_scope();
                                 self.push_frame();
-                                captured.each(|var_name, var_value| self.store_local(var_name, var_value.clone()));
+                                captured.each_named(|var_name, var_value| self.store_local(var_name, var_value.clone()));
                                 if !captured.is_empty() && !captured.is_readonly() {
                                     self.closure_frames.push((self.call_stack.len(), captured.clone()));
                                 }
@@ -4968,6 +4988,11 @@ impl VirtualMachine {
                                     self.stack.push(a);
                                 }
                                 self.bind_call_args(n_args, params.len(), self.uses_args, program.param_slots);
+                                if captured.slot_count() > 0 {
+                                    if let Some(frame) = self.locals_stack.last_mut() {
+                                        captured.extend_slots(frame, params.len());
+                                    }
+                                }
                                 self.ip = bytecode_start;
                                 continue;
                             }
@@ -6780,9 +6805,7 @@ impl VirtualMachine {
         self.call_stack.push(NESTED_RETURN);
         self.push_call_scope();
         self.push_frame();
-        for (name, value) in captured.snapshot() {
-            self.store_local(&name, value.clone());
-        }
+        captured.each_named(|name, value| self.store_local(name, value.clone()));
         if !captured.is_empty() && !captured.is_readonly() {
             self.closure_frames.push((self.call_stack.len(), captured.clone()));
         }
@@ -6791,6 +6814,11 @@ impl VirtualMachine {
             self.store_local("args", Value::from(args.clone()));
         }
         self.bind_args_owned(args, arity, program.param_slots);
+        if captured.slot_count() > 0 {
+            if let Some(frame) = self.locals_stack.last_mut() {
+                captured.extend_slots(frame, arity);
+            }
+        }
         self.ip = start;
         let outcome = self.run_loop(program);
         self.ip = saved_ip;

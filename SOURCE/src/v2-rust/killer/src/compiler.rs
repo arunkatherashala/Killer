@@ -339,6 +339,12 @@ fn ro_captures_enabled() -> bool {
     static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     *ON.get_or_init(|| std::env::var_os("KILLER_NO_RO_CAPTURES").is_none())
 }
+/// Read-only by-value captures live in frame slots after the parameters, unless
+/// `KILLER_NO_CAP_SLOTS` is set (tests/capture_diff.rs compares both).
+fn cap_slots_enabled() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var_os("KILLER_NO_CAP_SLOTS").is_none())
+}
 /// Read parameter `idx` of the function being compiled.
 fn param_ld(slots: bool, idx: usize) -> Instruction {
     if slots { Instruction::LoadSlot(idx as u16) } else { Instruction::Load(format!("arg{}", idx)) }
@@ -6215,6 +6221,12 @@ fn compile_fn_definition(
         && !capture_names.is_empty()
         && body_range.0 <= body_range.1
         && crate::closure_scan::captures_readonly(&lines[body_range.0..body_range.1], &capture_names);
+    // by-value captures of a read-only closure are read as frame slots after the parameters
+    let slot_caps: Vec<(String, Option<u16>, Option<usize>)> = if read_only && state.param_slots && cap_slots_enabled() {
+        captured_vars.iter().filter(|(_, s, p)| s.is_some() || p.is_some()).cloned().collect()
+    } else {
+        Vec::new()
+    };
 
 
     let skip_jump_index = state.instructions.len();
@@ -6240,14 +6252,14 @@ fn compile_fn_definition(
         current_function_name: Some(name.clone()),
         params: HashMap::new(),
         slot_map: HashMap::new(),
-        next_slot: first_free_slot(state, params.len()),
+        next_slot: first_free_slot(state, params.len()) + slot_caps.len() as u16,
         // Collect parent scope variable names so function body can reference them
         // via named Store/Load (instead of creating new local slots).
         outer_vars: state
             .known_top_level_vars
             .iter()
             .cloned()
-            .chain(captured_vars.iter().map(|(n, _, _)| n.clone()))
+            .chain(captured_vars.iter().filter(|(n, _, _)| !slot_caps.iter().any(|(s, _, _)| s == n)).map(|(n, _, _)| n.clone()))
             .chain(shared_vars.iter().cloned())
             .chain(named_vars.iter().cloned())
             .chain(uses_self.then(|| name.clone()))
@@ -6268,8 +6280,12 @@ fn compile_fn_definition(
         let_new: Vec::new(),
     };
     let param_list = params.clone();
+    let arity = params.len();
     for (index, param) in params.into_iter().enumerate() {
         fn_context.params.insert(param, index);
+    }
+    for (j, (n, _, _)) in slot_caps.iter().enumerate() {
+        fn_context.slot_map.insert(n.clone(), (arity + j) as u16);
     }
 
     emit_default_prologue(&defaults, line_no, state, &mut fn_context)?;
@@ -6313,13 +6329,15 @@ fn compile_fn_definition(
         state.instructions.push(Instruction::ConstFunc {
             params: arg_names,
             bytecode_start: fn_start,
-            captured_names: captured_vars
+            captured_names: slot_caps
                 .iter()
                 .map(|(n, _, _)| n.clone())
+                .chain(captured_vars.iter().map(|(n, _, _)| n.clone()).filter(|n| !slot_caps.iter().any(|(s, _, _)| s == n)))
                 .chain(shared_vars.iter().cloned())
                 .chain(named_vars.iter().cloned())
                 .chain(uses_self.then(|| format!("@self:{}", name)))
                 .chain(read_only.then(|| "@ro".to_string()))
+                .chain((!slot_caps.is_empty()).then(|| format!("@slots:{}", slot_caps.len())))
                 .collect(),
         });
         if let Some(p) = parent.as_deref_mut() {
