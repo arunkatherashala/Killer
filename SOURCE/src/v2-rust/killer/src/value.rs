@@ -551,11 +551,24 @@ unsafe impl Sync for FutureHandle {}
 /// Variables a closure captured when it was created. Shared between clones of the function value
 /// and written back after every call, so a closure keeps its own state (`n = n + 1` persists).
 #[derive(Clone, Default)]
-pub struct Captures(Rc<RefCell<HashMap<String, Value>>>);
+pub struct Captures(Rc<RefCell<HashMap<String, Value>>>, bool);
 
 impl Captures {
     pub fn new(map: HashMap<String, Value>) -> Self {
-        Captures(Rc::new(RefCell::new(map)))
+        Captures(Rc::new(RefCell::new(map)), false)
+    }
+    /// Captures of a closure whose body never assigns a captured name: nothing needs writing back
+    /// at `Ret`, so calls skip the bookkeeping for it.
+    pub fn new_readonly(map: HashMap<String, Value>) -> Self {
+        Captures(Rc::new(RefCell::new(map)), true)
+    }
+    #[inline]
+    pub fn is_readonly(&self) -> bool {
+        self.1
+    }
+    /// An empty capture table with the same read-only flag (used when a value is deep-copied).
+    pub fn new_like(&self) -> Self {
+        Captures(Rc::new(RefCell::new(HashMap::new())), self.1)
     }
     pub fn is_empty(&self) -> bool {
         self.0.borrow().is_empty()
@@ -1125,7 +1138,7 @@ impl Value {
                 let copy = if let Some(Value::Function { captured: done, .. }) = memo.get(&key) {
                     done.clone()
                 } else {
-                    let copy = Captures::new(HashMap::new());
+                    let copy = captured.new_like();
                     memo.insert(
                         key,
                         Value::Function { params: std::rc::Rc::from(Vec::<String>::new()), bytecode_start: 0, captured: copy.clone() },

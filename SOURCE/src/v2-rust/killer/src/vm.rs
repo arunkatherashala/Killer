@@ -1203,14 +1203,18 @@ impl VirtualMachine {
                     // Capture variables from current scope
                     let mut captured = HashMap::new();
                     let mut self_name: Option<&str> = None;
+                    let mut readonly = false;
                     for var_name in captured_names {
                         if let Some(own) = var_name.strip_prefix("@self:") {
                             self_name = Some(own);
+                        } else if var_name == "@ro" {
+                            // the compiler proved the body never assigns a captured name
+                            readonly = true;
                         } else if let Ok(value) = self.load_var_raw(var_name) {
                             captured.insert(var_name.clone(), value);
                         }
                     }
-                    let captured = crate::value::Captures::new(captured);
+                    let captured = if readonly { crate::value::Captures::new_readonly(captured) } else { crate::value::Captures::new(captured) };
 
                     // Push a function value onto the stack
                     let func = Value::Function {
@@ -3048,7 +3052,7 @@ impl VirtualMachine {
 
                             // Restore captured variables from closure; written back at `Ret`
                             captured.each(|var_name, var_value| self.store_local(var_name, var_value.clone()));
-                            if !captured.is_empty() {
+                            if !captured.is_empty() && !captured.is_readonly() {
                                 self.closure_frames.push((self.call_stack.len(), captured.clone()));
                             }
 
@@ -4956,7 +4960,7 @@ impl VirtualMachine {
                                 self.push_call_scope();
                                 self.push_frame();
                                 captured.each(|var_name, var_value| self.store_local(var_name, var_value.clone()));
-                                if !captured.is_empty() {
+                                if !captured.is_empty() && !captured.is_readonly() {
                                     self.closure_frames.push((self.call_stack.len(), captured.clone()));
                                 }
                                 let n_args = args.len();
@@ -6779,7 +6783,7 @@ impl VirtualMachine {
         for (name, value) in captured.snapshot() {
             self.store_local(&name, value.clone());
         }
-        if !captured.is_empty() {
+        if !captured.is_empty() && !captured.is_readonly() {
             self.closure_frames.push((self.call_stack.len(), captured.clone()));
         }
         let arity = program.function_arities.get(&start).copied().unwrap_or(params.len());

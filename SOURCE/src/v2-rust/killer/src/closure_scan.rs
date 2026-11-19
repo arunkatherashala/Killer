@@ -202,3 +202,104 @@ pub(crate) fn boxed_variables(
     }
     out
 }
+
+/// True when `name` occurs in `text` as a whole identifier.
+fn has_word(text: &str, name: &str) -> bool {
+    let b = text.as_bytes();
+    let mut from = 0;
+    while let Some(i) = text[from..].find(name) {
+        let s = from + i;
+        let e = s + name.len();
+        let before_ok = s == 0 || !(b[s - 1].is_ascii_alphanumeric() || b[s - 1] == b'_' || b[s - 1] >= 0x80);
+        let after_ok = e >= b.len() || !(b[e].is_ascii_alphanumeric() || b[e] == b'_' || b[e] >= 0x80);
+        if before_ok && after_ok {
+            return true;
+        }
+        from = e;
+    }
+    false
+}
+
+/// Text left of the first assignment operator in `seg` (`=`, `op=`, `<<=`, `:=`, `++`, `--`), or
+/// `None` when the segment assigns nothing. `==`, `!=`, `<=`, `>=` and `=>` are not assignments.
+fn assignment_lhs(seg: &str) -> Option<&str> {
+    let b = seg.as_bytes();
+    for i in 0..b.len() {
+        match b[i] {
+            b'=' => {
+                let prev = if i > 0 { b[i - 1] } else { b' ' };
+                let next = b.get(i + 1).copied().unwrap_or(b' ');
+                if next == b'=' || next == b'>' {
+                    continue;
+                }
+                let shift = i >= 2 && (&b[i - 2..i] == b"<<" || &b[i - 2..i] == b">>");
+                if matches!(prev, b'=' | b'!' | b'<' | b'>') && !shift {
+                    continue;
+                }
+                return Some(&seg[..i]);
+            }
+            b'+' | b'-' if b.get(i + 1) == Some(&b[i]) => return Some(seg),
+            _ => {}
+        }
+    }
+    None
+}
+
+/// Conservative text check: `true` only when the body in `body` provably never assigns, rebinds
+/// or deletes any of `names` (variables captured from the enclosing function). Every doubtful
+/// shape answers `false`: an assignment whose left side mentions the name (plain, compound,
+/// `++`, destructuring, `a.b = ..`, `a[i] = ..`, also inside nested closures and one-line
+/// blocks), a `for`/comprehension target, `catch`/`with ... as`/`del`/`let`/`fn`/`class`/`import`
+/// statements that mention the name, and any use of `eval`, `exec`, `debugger`, `locals`,
+/// `globals`, `vars` or `yield` (the dynamic features that could bind names behind the scan).
+pub(crate) fn captures_readonly(body: &[(usize, String)], names: &[String]) -> bool {
+    if names.is_empty() {
+        return false;
+    }
+    for (_, line) in body {
+        let m = masked(line);
+        for danger in ["eval", "exec", "debugger", "debug", "locals", "globals", "vars", "yield", "setvar", "nonlocal"] {
+            if has_word(&m, danger) {
+                return false;
+            }
+        }
+        // `for TARGET in ..`: the target is bound by the loop
+        let mut rest = m.as_str();
+        while let Some(i) = rest.find("for ") {
+            let before_ok = i == 0 || !(rest.as_bytes()[i - 1].is_ascii_alphanumeric() || rest.as_bytes()[i - 1] == b'_');
+            let tail = &rest[i + 4..];
+            let target = match tail.find(" in ") {
+                Some(j) => &tail[..j],
+                None => tail,
+            };
+            if before_ok && names.iter().any(|n| has_word(target, n)) {
+                return false;
+            }
+            rest = tail;
+        }
+        for seg in m.split(|c| c == ';' || c == '{' || c == '}') {
+            let t = seg.trim();
+            if t.is_empty() {
+                continue;
+            }
+            if let Some(lhs) = assignment_lhs(t) {
+                if names.iter().any(|n| has_word(lhs, n)) {
+                    return false;
+                }
+            }
+            let first: String = t.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
+            let binds = matches!(
+                first.as_str(),
+                "let" | "const" | "var" | "del" | "import" | "from" | "global" | "catch" | "with" | "fn" | "kfn" | "class" | "async" | "use" | "except" | "as"
+            );
+            if binds && names.iter().any(|n| has_word(t, n)) {
+                return false;
+            }
+            // `... as NAME`
+            if t.contains(" as ") && names.iter().any(|n| has_word(t, n)) {
+                return false;
+            }
+        }
+    }
+    true
+}

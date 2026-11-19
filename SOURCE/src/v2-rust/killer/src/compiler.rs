@@ -333,6 +333,12 @@ fn param_slots_enabled() -> bool {
     static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     *ON.get_or_init(|| std::env::var_os("KILLER_NO_PARAM_SLOTS").is_none())
 }
+/// Closures whose body never assigns a captured name skip the write-back at `Ret`, unless
+/// `KILLER_NO_RO_CAPTURES` is set (tests/capture_diff.rs runs every program both ways).
+fn ro_captures_enabled() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var_os("KILLER_NO_RO_CAPTURES").is_none())
+}
 /// Read parameter `idx` of the function being compiled.
 fn param_ld(slots: bool, idx: usize) -> Instruction {
     if slots { Instruction::LoadSlot(idx as u16) } else { Instruction::Load(format!("arg{}", idx)) }
@@ -6162,8 +6168,10 @@ fn compile_fn_definition(
     let mut shared_vars: Vec<String> = Vec::new();
     let mut named_vars: Vec<String> = Vec::new();
     let mut uses_self = false;
+    let mut body_range = (0usize, 0usize);
     if let Some(p) = parent.as_deref() {
         let body_end = skip_braced_block(lines, *cursor - 1).saturating_sub(1).max(*cursor);
+        body_range = (*cursor, body_end.min(lines.len()));
         let used = identifiers_in_lines(&lines[*cursor..body_end.min(lines.len())]);
         uses_self = p.in_function && used.contains(&name);
         let own: std::collections::HashSet<&String> = params.iter().collect();
@@ -6196,6 +6204,17 @@ fn compile_fn_definition(
     let is_closure = !captured_vars.is_empty() || !shared_vars.is_empty() || !named_vars.is_empty();
     // a closure that calls itself by name gets itself as a captured variable
     let uses_self = uses_self && is_closure;
+    // by-value captures need no write-back when the body provably never assigns them
+    let capture_names: Vec<String> = captured_vars
+        .iter()
+        .map(|(n, _, _)| n.clone())
+        .chain(named_vars.iter().cloned())
+        .collect();
+    let read_only = is_closure
+        && ro_captures_enabled()
+        && !capture_names.is_empty()
+        && body_range.0 <= body_range.1
+        && crate::closure_scan::captures_readonly(&lines[body_range.0..body_range.1], &capture_names);
 
 
     let skip_jump_index = state.instructions.len();
@@ -6300,6 +6319,7 @@ fn compile_fn_definition(
                 .chain(shared_vars.iter().cloned())
                 .chain(named_vars.iter().cloned())
                 .chain(uses_self.then(|| format!("@self:{}", name)))
+                .chain(read_only.then(|| "@ro".to_string()))
                 .collect(),
         });
         if let Some(p) = parent.as_deref_mut() {
