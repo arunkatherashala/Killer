@@ -466,13 +466,21 @@ fn free_port() -> u16 {
     // remember every port this process has handed out and never return one twice.
     static USED: std::sync::Mutex<Vec<u16>> = std::sync::Mutex::new(Vec::new());
     let mut used = USED.lock().unwrap();
-    loop {
-        let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
-        if !used.contains(&port) {
+    // Ports come from 20000..32000, below every OS's ephemeral range (Linux 32768+, macOS/Windows 49152+): a port
+    // picked from the OS (bind to :0) can be handed to a client connection a moment later and then fail with
+    // "Address already in use" when the test binds it (seen on macOS CI). The start differs per process.
+    let start = 20000 + (std::process::id() as u16).wrapping_mul(37) % 11000;
+    for step in 0..12000u16 {
+        let port = 20000 + (start - 20000 + step) % 12000;
+        if used.contains(&port) {
+            continue;
+        }
+        if std::net::TcpListener::bind(("127.0.0.1", port)).is_ok() {
             used.push(port);
             return port;
         }
     }
+    panic!("no free port in 20000..32000")
 }
 
 /// Start a script in the background (killer_super --run) and return the child.
