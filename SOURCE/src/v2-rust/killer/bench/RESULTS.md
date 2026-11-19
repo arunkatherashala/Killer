@@ -322,3 +322,56 @@ back at `Ret`. Making read-only captures skip the write-back, or giving captured
 parameters (needs an ordered `Captures`), is the remaining cost in `closures` (about 2.9x Python on a quiet run of
 `bench/run.py -n 1`). The list-comprehension loop variable was left alone (it would change leaking behaviour).
 Each release build took about an hour on the loaded machine, so only this one step was measured.
+
+## Round 7 (branch wt-cap: closure captures)
+
+CPU seconds (kernel+user via GetProcessTimes, median of 9-15 alternating runs, release build, 4-minute builds on a
+quiet box, noise floor about +-8%). base = f7c1b4f (= Round 6 code), "ro" = commit 1 only, "slots" = commit 1+2.
+Design notes: docs/call_frames.md ("Captured variables").
+
+| Benchmark | base | ro (step 1) | slots (step 1+2) | Change vs base |
+|-----------|-----:|------------:|-----------------:|---------------:|
+| closures | 0.359 | 0.297 / 0.281 | 0.266 / 0.250 | -26% to -30% (kept) |
+| list_comp | 0.297 | 0.312 | 0.312 | noise (code path untouched) |
+| obj_methods | 0.391 | 0.406 | 0.391 | noise |
+| recursion_objects | 0.406 | | 0.328 | -19% in one 9-run set (not reproduced separately; treat as noise) |
+| nested_data | 0.344 | | 0.359 | noise |
+| fib(32) | 0.062 | | 0.047 | unchanged (JIT untouched) |
+| 5M-iteration while loop | 0.531 | | 0.516 | unchanged |
+
+Same-binary switches (15 alternating runs of `closures`): all on 0.250, `KILLER_NO_CAP_SLOTS=1` 0.297, `KILLER_NO_RO_CAPTURES=1`
+0.344. Wall ratio from `bench/run.py -n 3` on the new binary (loaded box, includes start-up): closures 2.13x
+Python, list_comp 2.11x, nested_data 1.80x, obj_methods 2.63x, geometric mean 1.52; no output mismatches.
+
+Step 1 (commit 9bc9dd1): a closure whose body provably never assigns a captured name skips the write-back at `Ret`
+and the `closure_frames` bookkeeping. The proof is a conservative text scan of the body
+(`closure_scan::captures_readonly`: any assignment whose left side mentions the name, `for` targets, `catch`/`with`/`del`/
+`let`/`fn`/`class` lines that mention it, `eval`/`exec`/`debug`/`locals`/`globals`/`vars`/`yield`, also inside nested
+closures and one-line blocks). The compiler marks the `ConstFunc` with `@ro`; the flag lives in `Captures`.
+Step 2 (commit 9e1ce95): `Captures` became an ordered list, and the by-value captures of a read-only closure live in frame
+slots `arity..arity+n` (compiled to `LoadSlot`, copied in after `bind_call_args`), so a call no longer inserts them into
+the scope hash map nor drains them at return. Only 3 call sites bind captures (dynamic call, field call, `call_value_nested`).
+
+Tests: tests/capture_diff.rs runs 21 programs three ways (default, `KILLER_NO_CAP_SLOTS=1`, `KILLER_NO_RO_CAPTURES=1`) and
+requires identical output: shared counters, closures in loops/dicts/lists, 3-level nesting, recursion through a captured
+function, decorators, generators, spawned tasks, try/finally and error line numbers, `eval`, comprehension forms and
+comprehension-variable visibility (it leaks when the name is new and does not clobber an existing slot variable: kept exactly),
+`+=`/`++`/destructuring/catch rebinding of captures (these stay on the old write-back path), captured collections, defaults,
+methods, `map`/`sorted` callbacks, hot loops. Full suite: 3808 passed, 0 failed (was about 3787 + 21 new);
+parity 166/166; thread_safety and concurrency_stress rerun 3 times, all passing.
+
+Not done, with reason:
+* List comprehension loop variable in a frame slot (item B). Today every element stores the variable by name and the
+  name stays in the scope afterwards (the leak), also when the element expression throws part-way (the catch handler can
+  see it). A slot variable would need an extra "leak at the end" instruction that cannot reproduce the throw-midway case
+  exactly, and lambdas inside the comprehension capture the variable by name. Observable behaviour would change, so it was
+  left alone. Gain would be at most the two hash probes per element (about 2 of 4 per iteration).
+* Item C (method path, dict iteration, string building, `sorted` key, `map/filter`): no sampling profile is possible on this
+  box (everything is inside one 400 KB `run_loop_inner`), and `obj_methods` already goes through the method inline cache;
+  nothing was attempted without a measured target.
+
+Residual risks: `killer debug locals` and the DAP adapter no longer list the slot-bound captures of a read-only closure by
+name (they show as unnamed slots after the parameters; the names still resolve in `eval` of the closure only when they are
+not slot-bound, and `eval`/`debug` in a body disables the optimisation anyway); the text scan is conservative but textual:
+a future statement form that writes a variable without matching one of the patterns would be a miscompile (the
+`KILLER_NO_RO_CAPTURES` switch exists to bisect such a report).

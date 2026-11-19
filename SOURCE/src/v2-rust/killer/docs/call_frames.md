@@ -56,3 +56,35 @@ function with `n` parameters are the frame slots `0..n`:
 `LoadSlot(i)` for `i < arity` reads the pushed argument (`arg_disp`), `IndexWriteSlot(i)` on an array
 argument is supported, and any store to a parameter slot (`StoreSlot`, `AddSlotConst`, ...) makes the
 function ineligible (the old code rejected `Store("argN")` too), so it falls back to the interpreter.
+
+## Captured variables (Round 7)
+
+A closure value (`Value::Function`) carries `Captures`: the variables of the enclosing function it uses,
+copied by value when `ConstFunc` runs (shared, assigned variables are `Value::Cell`s and are never copied).
+The map is now an ordered list.
+
+Before Round 7 every call copied each capture into the call scope by name and `Ret` copied every capture
+back by name (`closure_frames` + `Captures::refresh_with`), so a closure could keep private state
+(`n = n + 1` without sharing). The compiler now decides per closure, from the text of its body
+(`closure_scan::captures_readonly`), whether the body can ever assign, rebind or delete a captured name:
+
+* an assignment (plain, compound, `++`/`--`, destructuring, `a.b = ..`, `a[i] = ..`) whose left side
+  mentions the name, also inside nested closures and one-line blocks; `for`/comprehension targets;
+  `catch`, `with .. as`, `del`, `let`/`const`/`var`, `fn`, `class`, `import`, `global` lines that mention it;
+  any use of `eval`, `exec`, `debug`, `debugger`, `locals`, `globals`, `vars`, `yield` or `nonlocal`
+  in the body: the closure keeps the old scheme (write-back at `Ret`).
+* otherwise `ConstFunc` gets the marker `@ro` in `captured_names` and the closure's `Captures` is
+  read-only: calls push no `closure_frames` entry and `Ret` does no write-back.
+* for a read-only closure that captured parameters or slot locals of its parent by value (and only when
+  `param_slots` is on), the first `n` captures (marker `@slots:n`) are bound to frame slots
+  `arity .. arity + n` instead of names: the compiler registers them in the body's `slot_map` (local slots
+  start after them) and reads them with `LoadSlot`. The VM appends them to the frame right after
+  `bind_call_args` / `bind_args_owned` (`Captures::extend_slots`); the three call sites are the dynamic
+  call, the field-call path and `call_value_nested`. Names that are cells, loop variables or the closure's
+  own name (`@self:`) stay in the call scope.
+
+`KILLER_NO_RO_CAPTURES=1` turns both off, `KILLER_NO_CAP_SLOTS=1` only the slots (tests/capture_diff.rs
+runs every program three ways). Only the text compiler emits the markers; the AST compiler's closures and
+functions built by Rust (`Default` captures) behave as before. Closures are never entered through the
+function JIT (it only compiles static `Call` targets), so capture slots cannot be mis-read by it.
+Spawned tasks get a detached copy that keeps the flags (`Captures::new_like`).
