@@ -8,9 +8,6 @@ use super::Provider;
 use crate::value::Value;
 use std::collections::HashMap;
 use crate::ai::ClassifyResult;
-use std::net::TcpStream;
-use std::io::{Read, Write};
-use std::time::Duration;
 
 /// OpenAI Provider
 #[allow(dead_code)]
@@ -42,54 +39,34 @@ impl OpenAIProvider {
             .or_else(|| std::env::var("KILLER_KHLM_LLM_API_KEY").ok())
     }
 
-    /// Attempt a real HTTP call to the OpenAI-compatible chat endpoint.
+    /// Point at another OpenAI-compatible endpoint (http:// is refused by http_req unless loopback).
+    pub fn with_base_url(mut self, url: &str) -> Self {
+        self.base_url = url.to_string();
+        self
+    }
+
+    /// Build the chat request. The key goes in an Authorization header of a request that http_req sends
+    /// over TLS (curl, config on stdin); http_req refuses non-loopback http:// URLs, so the key can never
+    /// travel in clear text.
+    pub fn build_chat_spec(&self, api_key: &str, body: &str) -> crate::http_req::ReqSpec {
+        let mut spec = crate::http_req::ReqSpec::new("POST", &format!("{}/chat/completions", self.base_url.trim_end_matches('/')));
+        spec.headers = vec![
+            ("Content-Type".to_string(), "application/json".to_string()),
+            ("Authorization".to_string(), format!("Bearer {}", api_key)),
+        ];
+        spec.body = Some(body.to_string());
+        spec.timeout_s = 30.0;
+        spec
+    }
+
+    /// Attempt a real HTTPS call to the OpenAI-compatible chat endpoint.
     /// Returns `None` when no API key is available so the caller can fall back.
     fn try_real_chat(&self, body: &str) -> Option<Result<String, String>> {
         let api_key = self.resolve_api_key()?;
-
-        let host = "api.openai.com";
-        let port = 80u16;
-        let addr = format!("{}:{}", host, port);
-        let path = "/v1/chat/completions";
-        let timeout = Duration::from_secs(30);
-
-        let mut stream = match TcpStream::connect_timeout(
-            &match addr.parse() {
-                Ok(a) => a,
-                Err(e) => return Some(Err(format!("Invalid address: {}", e))),
-            },
-            timeout,
-        ) {
-            Ok(s) => s,
-            Err(e) => return Some(Err(format!("Cannot connect to OpenAI: {}", e))),
-        };
-
-        stream.set_read_timeout(Some(timeout)).ok();
-        stream.set_write_timeout(Some(Duration::from_secs(10))).ok();
-
-        let request = format!(
-            "POST {} HTTP/1.1\r\nHost: {}\r\nContent-Type: application/json\r\nAuthorization: Bearer {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-            path, host, api_key, body.len(), body
-        );
-
-        if let Err(e) = stream.write_all(request.as_bytes()) {
-            return Some(Err(format!("Send error: {}", e)));
-        }
-        stream.flush().ok();
-
-        let mut response = Vec::new();
-        if let Err(e) = stream.read_to_end(&mut response) {
-            return Some(Err(format!("Read error: {}", e)));
-        }
-
-        let text = String::from_utf8_lossy(&response).to_string();
-
-        let body_str = if let Some(pos) = text.find("\r\n\r\n") {
-            text[pos + 4..].to_string()
-        } else if let Some(pos) = text.find("\n\n") {
-            text[pos + 2..].to_string()
-        } else {
-            text
+        let spec = self.build_chat_spec(&api_key, body);
+        let body_str = match crate::http_req::exec(&spec) {
+            Ok(r) => r.body,
+            Err(e) => return Some(Err(format!("OpenAI request failed: {}", e))),
         };
 
         // Extract choices[0].message.content from JSON via string searching
@@ -343,6 +320,26 @@ mod tests {
     fn test_openai_provider_creation() {
         let provider = OpenAIProvider::new();
         assert_ne!(provider.base_url, "");
+    }
+
+    #[test]
+    fn chat_request_is_https_and_key_never_goes_to_a_plain_socket() {
+        let p = OpenAIProvider::new();
+        let spec = p.build_chat_spec("sk-secret", "{}");
+        assert!(spec.url.starts_with("https://"), "{}", spec.url);
+        assert!(crate::http_req::validate_url(&spec.url, false).is_ok());
+        assert!(spec.headers.iter().any(|(k, v)| k == "Authorization" && v == "Bearer sk-secret"));
+        // a configured clear-text, non-loopback endpoint is refused before anything is sent
+        let bad = OpenAIProvider::new().with_base_url("http://api.openai.com/v1");
+        let spec = bad.build_chat_spec("sk-secret", "{}");
+        assert!(crate::http_req::validate_url(&spec.url, false).is_err());
+        let r = bad.with_api_key("sk-secret".into()).try_real_chat("{}").unwrap();
+        assert!(r.unwrap_err().contains("HTTPS is required"));
+        // no raw socket in this module
+        let src = include_str!("openai.rs");
+        let needle = ["Tcp", "Stream"].concat();
+        let code: Vec<&str> = src.split("#[cfg(test)]").collect();
+        assert!(!code[0].contains(&needle));
     }
 
     #[test]
