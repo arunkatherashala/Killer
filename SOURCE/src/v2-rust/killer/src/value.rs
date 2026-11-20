@@ -715,7 +715,7 @@ pub enum Value {
         bytecode_start: usize,  // Index in VM's function bytecode
         captured: Captures,  // Variables captured from the enclosing function (closures); shared, persists across calls
     },
-    Generator(String),  // Generator ID string to track state in VM
+    Generator(crate::generator::GenId),  // Generator handle: the id of the state kept in the VM; dropping the last copy frees it
     QualityWrapped(Box<crate::data_quality::DataQuality>),  // Wrapped data quality object
     // -- Phase 1: Ternary (Trit) -----------------------------------------------
     // Balanced ternary: -1 = T_NEG (no/false), 0 = T_ZERO (unknown), +1 = T_POS (yes/true)
@@ -1260,6 +1260,8 @@ impl Value {
             }
             // a fresh allocation: cloning the `Rc` would share a non-atomic count with the other thread
             Value::BigInt(b) => Value::BigInt(Rc::new((**b).clone())),
+            // a fresh handle: sharing the `Rc` would share a non-atomic reference count with the other thread
+            Value::Generator(g) => Value::Generator(g.detached_copy()),
             other => other.clone(),
         }
     }

@@ -6239,7 +6239,7 @@ impl VirtualMachine {
                         ip: self.ip + 1,
                     };
                     let id = self.generator_manager.create(frame);
-                    self.stack.push(Value::Generator(id));
+                    self.stack.push(Value::Generator(self.generator_manager.handle(id)));
                     let return_ip = self.call_stack.pop().ok_or_else(|| {
                         VmError::runtime_error("generator created without an active call".to_string())
                     })?;
@@ -6608,7 +6608,8 @@ impl VirtualMachine {
 
     /// Register a Rust-driven generator (see `generator::NativeSource`) and return its handle.
     pub(crate) fn register_native_gen(&mut self, src: Box<dyn crate::generator::NativeSource>) -> Value {
-        Value::Generator(self.generator_manager.create_native(src))
+        let id = self.generator_manager.create_native(src);
+        Value::Generator(self.generator_manager.handle(id))
     }
 
     /// `call_value_nested` with a wall-clock deadline (`wall_ms`, 0 = none): the call fails with a

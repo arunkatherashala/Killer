@@ -63,3 +63,40 @@ fn live_data_survives_collection() {
     let r = run_capped(code, 256);
     assert!(r.is_ok(), "{r:?}");
 }
+
+#[test]
+fn abandoned_generators_are_freed() {
+    // Each generator is advanced once and then dropped; its suspended frame must go with it.
+    let code = "fn gen(k) {\n  pad = \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\"\n  yield k\n  yield pad\n}\ni = 0\ns = 0\nwhile i < 300000 {\n  g = gen(i)\n  s = s + next(g)\n  i = i + 1\n}\ns\n";
+    let r = run_capped(code, 48);
+    assert!(r.is_ok(), "abandoned generators leaked: {r:?}");
+}
+
+#[test]
+fn generators_still_work_when_kept_and_when_overwritten() {
+    // a generator kept in a variable and one stored in a dict survive the churn of dropped ones around them
+    let code = "fn gen(k) {
+  yield k
+  yield k + 1
+  yield k + 2
+}
+kept = gen(10)
+next(kept)
+holder = {\"g\": gen(100)}
+next(holder[\"g\"])
+i = 0
+while i < 5000 {
+  g = gen(i)
+  next(g)
+  i = i + 1
+}
+if next(kept) != 11 || next(kept) != 12 {
+  throw \"kept generator broke\"
+}
+if next(holder[\"g\"]) != 101 {
+  throw \"dict-held generator broke\"
+}
+";
+    let r = run_capped(code, 256);
+    assert!(r.is_ok(), "{r:?}");
+}

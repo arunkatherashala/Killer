@@ -11,7 +11,58 @@
 
 use crate::value::{Captures, Value};
 use crate::vm::TryHandler;
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
+
+/// Ids of generators whose last [`GenId`] handle was dropped, waiting for their manager to free the slot.
+type DeadQueue = Rc<RefCell<Vec<String>>>;
+
+struct GenToken {
+    id: String,
+    dead: DeadQueue,
+}
+
+impl Drop for GenToken {
+    fn drop(&mut self) {
+        // `try_borrow_mut`: a drop that happens while the manager is draining the queue cannot re-enter it
+        if let Ok(mut q) = self.dead.try_borrow_mut() {
+            q.push(std::mem::take(&mut self.id));
+        }
+    }
+}
+
+/// The value of a generator: its id plus a reference-counted token. When the last copy of the value is gone
+/// (an abandoned, unfinished generator) the token tells the owning [`GeneratorManager`], which drops the suspended
+/// frame at its next safe point, so a script that creates and drops generators does not accumulate frames.
+#[derive(Clone)]
+pub struct GenId(Rc<GenToken>);
+
+impl GenId {
+    /// A handle whose drop frees nothing (a copy that left the VM that owns the generator).
+    pub fn detached_copy(&self) -> GenId {
+        GenId(Rc::new(GenToken { id: self.0.id.clone(), dead: Rc::new(RefCell::new(Vec::new())) }))
+    }
+}
+
+impl std::ops::Deref for GenId {
+    type Target = str;
+    fn deref(&self) -> &str {
+        &self.0.id
+    }
+}
+
+impl PartialEq for GenId {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.id == other.0.id
+    }
+}
+
+impl std::fmt::Debug for GenId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "GenId({})", self.0.id)
+    }
+}
 
 /// A suspended generator call frame. `TryHandler` positions are stored relative to the frame's
 /// bases (operand stack, scopes, locals) so the frame can be resumed at any VM depth.
@@ -53,15 +104,34 @@ pub enum Taken {
 pub struct GeneratorManager {
     slots: HashMap<String, GenSlot>,
     gen_counter: usize,
+    dead: DeadQueue,
 }
 
 impl GeneratorManager {
     pub fn new() -> Self {
-        Self { slots: HashMap::new(), gen_counter: 0 }
+        Self { slots: HashMap::new(), gen_counter: 0, dead: Rc::new(RefCell::new(Vec::new())) }
+    }
+
+    /// The value for generator `id`: dropping its last copy frees the generator.
+    pub fn handle(&self, id: String) -> GenId {
+        GenId(Rc::new(GenToken { id, dead: Rc::clone(&self.dead) }))
+    }
+
+    /// Free the generators nobody holds any more (called whenever a new one is created).
+    pub fn reap(&mut self) {
+        let ids: Vec<String> = match self.dead.try_borrow_mut() {
+            Ok(mut q) if !q.is_empty() => std::mem::take(&mut *q),
+            _ => return,
+        };
+        for id in ids {
+            // removed outside the queue borrow: dropping a frame can drop other generator handles
+            self.slots.remove(&id);
+        }
     }
 
     /// Register a new, not yet started generator.
     pub fn create(&mut self, frame: GenFrame) -> String {
+        self.reap();
         let id = format!("gen_{}", self.gen_counter);
         self.gen_counter += 1;
         self.slots.insert(id.clone(), GenSlot { native: None, frame: Some(frame), peeked: None });
@@ -70,6 +140,7 @@ impl GeneratorManager {
 
     /// Register a generator backed by a Rust [`NativeSource`].
     pub fn create_native(&mut self, src: Box<dyn NativeSource>) -> String {
+        self.reap();
         let id = format!("gen_{}", self.gen_counter);
         self.gen_counter += 1;
         self.slots.insert(id.clone(), GenSlot { native: Some(src), frame: None, peeked: None });
@@ -139,8 +210,16 @@ impl GeneratorManager {
         self.slots.len()
     }
 
+    /// Number of generators still stored after freeing the abandoned ones (for tests and diagnostics).
+    pub fn live_count_after_reap(&mut self) -> usize {
+        self.reap();
+        self.slots.len()
+    }
+
     pub fn clear(&mut self) {
         self.slots.clear();
+        // handles issued before this point keep pointing at the old queue, so a late drop can never free a new generator
+        self.dead = Rc::new(RefCell::new(Vec::new()));
         self.gen_counter = 0;
     }
 }
@@ -224,5 +303,30 @@ mod tests {
         gm.clear();
         assert_eq!(gm.live_count(), 0);
         assert_eq!(gm.create(frame(1)), "gen_0");
+    }
+
+    #[test]
+    fn dropping_the_last_handle_frees_the_generator() {
+        let mut gm = GeneratorManager::new();
+        let id = gm.create(frame(1));
+        let h = gm.handle(id.clone());
+        let h2 = h.clone();
+        drop(h);
+        assert_eq!(gm.live_count_after_reap(), 1, "a copy of the handle is still alive");
+        drop(h2);
+        assert_eq!(gm.live_count_after_reap(), 0, "the last copy is gone: the suspended frame must be freed");
+        assert!(!gm.is_live(&id));
+    }
+
+    #[test]
+    fn a_handle_from_before_clear_cannot_free_a_new_generator() {
+        let mut gm = GeneratorManager::new();
+        let first = gm.create(frame(1));
+        let old = gm.handle(first);
+        gm.clear();
+        let fresh = gm.create(frame(2)); // reuses the id "gen_0"
+        drop(old);
+        assert_eq!(gm.live_count_after_reap(), 1);
+        assert!(gm.is_live(&fresh));
     }
 }
