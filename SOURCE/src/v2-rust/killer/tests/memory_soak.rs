@@ -150,3 +150,14 @@ fn the_shared_counter_returns_to_its_baseline_after_threads_end() {
     // a thread leaves a few hundred bytes of bookkeeping at most; 300 threads must stay well below 1 MB in total
     assert!(drift.abs() < 512 * 1024, "the counted bytes drifted by {drift} over 300 threads");
 }
+
+#[test]
+fn bytes_new_and_page_alloc_respect_the_cap() {
+    // one-liners: no periodic check runs, so only a pre-check can refuse the allocation
+    for code in ["len(bytes_new(300000000))", "len(page_alloc(70000))"] {
+        let r = run_capped(code, 16);
+        assert!(matches!(&r, Err(m) if m.contains("memory limit exceeded (16 MB)")), "{code}: {r:?}");
+    }
+    // within the cap they still work
+    assert!(run_capped("len(bytes_new(1000000)) + len(page_alloc(10))", 16).is_ok());
+}
