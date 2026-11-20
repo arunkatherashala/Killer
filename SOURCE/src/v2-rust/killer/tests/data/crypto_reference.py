@@ -91,6 +91,25 @@ def kse2_decrypt(b64, password):
     return aead_open(key, nonce, MAGIC, sealed).decode()
 
 
+MAGIC3 = b"KSE3"
+
+
+def kse3_encrypt(password, text, iterations=600000, salt=bytes(range(16)), nonce=bytes(range(100, 112))):
+    header = MAGIC3 + struct.pack(">I", iterations) + salt
+    key = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, iterations, 32)
+    return base64.b64encode(header + nonce + aead_seal(key, nonce, header, text.encode())).decode()
+
+
+def kse3_decrypt(b64, password):
+    raw = base64.b64decode(b64, validate=True)
+    assert raw[:4] == MAGIC3, "not a KSE3 value"
+    iterations = struct.unpack(">I", raw[4:8])[0]
+    assert 100000 <= iterations <= 10000000, "iteration count out of range"
+    header, nonce, sealed = raw[:24], raw[24:36], raw[36:]
+    key = hashlib.pbkdf2_hmac("sha256", password.encode(), raw[8:24], iterations, 32)
+    return aead_open(key, nonce, header, sealed).decode()
+
+
 def sweep():
     """Deterministic inputs shared with the Rust test (same formulas there)."""
     for n in range(0, 300, 7):
@@ -114,6 +133,10 @@ def main(argv):
         sweep()
     elif cmd == "kse2-decrypt":
         sys.stdout.buffer.write(kse2_decrypt(argv[2], argv[3]).encode("utf-8"))
+    elif cmd == "kse3-decrypt":
+        sys.stdout.buffer.write(kse3_decrypt(argv[2], argv[3]).encode("utf-8"))
+    elif cmd == "kse3-encrypt":
+        sys.stdout.write(kse3_encrypt(argv[2], argv[3]))
     elif cmd == "kse2-encrypt":
         sys.stdout.write(kse2_encrypt(argv[2], argv[3]))
     elif cmd == "aead-seal":

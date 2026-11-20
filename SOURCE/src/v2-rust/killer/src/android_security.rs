@@ -18,9 +18,11 @@
 //   evidence_hash(recording_data)     → dict {sha256, timestamp, chain}
 //
 // Crypto primitives come from the RustCrypto crates (sha2, pbkdf2, chacha20poly1305; see docs/CRYPTO.md). Encryption: key = PBKDF2-HMAC-SHA256(password, random salt,
-// 100,000 iterations), then ChaCha20-Poly1305 (src/aead.rs, checked against the RFC 8439 vectors) with a fresh
-// random nonce. Output format 2: "KSE2" | salt(16) | nonce(12) | ciphertext | tag(16). Data written by the
-// older, unreviewed scheme (no "KSE2" prefix) can still be decrypted but is never produced again.
+// 600,000 iterations), then ChaCha20-Poly1305 (src/aead.rs, checked against the RFC 8439 vectors) with a fresh
+// random nonce. Output format 3: "KSE3" | iterations(u32 BE) | salt(16) | nonce(12) | ciphertext | tag(16); the
+// whole header (magic, iterations, salt) is authenticated as associated data. Format 2 ("KSE2", 100,000 rounds,
+// only the magic authenticated) and the older unreviewed scheme (no prefix) can still be decrypted but are never
+// produced again; `secure_rewrap` upgrades them.
 
 #![allow(unsafe_code)]
 
@@ -53,7 +55,19 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
 }
 
 /// First bytes of data written by the current `secure_encrypt` (also authenticated as associated data).
-const FORMAT_MAGIC: &[u8] = b"KSE2";
+const FORMAT_MAGIC: &[u8] = b"KSE3";
+/// Previous format: 100,000 rounds, only the magic authenticated. Read-only.
+const FORMAT_MAGIC_V2: &[u8] = b"KSE2";
+/// PBKDF2 rounds `secure_encrypt` uses now (format 3 stores the count it used, so it can be raised again).
+pub const ENCRYPT_ITERATIONS: u32 = 600_000;
+/// Rounds used by formats 1 and 2.
+const LEGACY_ITERATIONS: u32 = 100_000;
+/// The count in a format 3 header is untrusted input: bound it before deriving a key from it, otherwise a crafted
+/// value of 4 billion makes `secure_decrypt` run for hours.
+pub const MIN_DECRYPT_ITERATIONS: u32 = 100_000;
+pub const MAX_DECRYPT_ITERATIONS: u32 = 10_000_000;
+/// magic(4) | iterations(4) | salt(16): the authenticated header of format 3.
+const HEADER_LEN_V3: usize = 24;
 
 // ── Key derivation ───────────────────────────────────────────
 // PBKDF2-HMAC-SHA256 (checked against Python's hashlib.pbkdf2_hmac in the tests)
@@ -210,22 +224,81 @@ pub fn builtin_secure_encrypt(args: &[Value]) -> Result<Value, VmError> {
         _ => return Err(VmError::runtime_error("secure_encrypt: password must be string")),
     };
 
+    Ok(Value::Str(base64_encode(&encrypt_bytes(&data, password.as_bytes(), ENCRYPT_ITERATIONS)?)))
+}
+
+/// Seal `data` as format 3 with the given PBKDF2 round count.
+fn encrypt_bytes(data: &[u8], password: &[u8], iterations: u32) -> Result<Vec<u8>, VmError> {
     // Derive the key from the password with a fresh random salt, then seal with a fresh random nonce
     let mut salt = [0u8; 16];
     secure_random(&mut salt)?;
     let mut nonce = [0u8; 12];
     secure_random(&mut nonce)?;
-    let key = pbkdf2_sha256(password.as_bytes(), &salt, 100_000);
-    let sealed = crate::aead::seal(&key, &nonce, FORMAT_MAGIC, &data);
+    let mut key = pbkdf2_sha256(password, &salt, iterations);
 
-    // Output: "KSE2" | salt(16) | nonce(12) | ciphertext | tag(16)
-    let mut output = Vec::with_capacity(FORMAT_MAGIC.len() + 16 + 12 + sealed.len());
+    // Output: "KSE3" | iterations(4, BE) | salt(16) | nonce(12) | ciphertext | tag(16)
+    let mut output = Vec::with_capacity(HEADER_LEN_V3 + 12 + data.len() + 16);
     output.extend_from_slice(FORMAT_MAGIC);
+    output.extend_from_slice(&iterations.to_be_bytes());
     output.extend_from_slice(&salt);
+    let sealed = crate::aead::seal(&key, &nonce, &output[..HEADER_LEN_V3], data);
+    crate::encryption::wipe(&mut key);
     output.extend_from_slice(&nonce);
     output.extend_from_slice(&sealed);
+    Ok(output)
+}
 
-    Ok(Value::Str(base64_encode(&output)))
+/// Decrypt any supported format. `Err` carries the message shown to the script.
+fn decrypt_bytes(raw: &[u8], password: &[u8]) -> Result<Vec<u8>, VmError> {
+    if raw.len() < 16 {
+        return Err(VmError::runtime_error("secure_decrypt: data too short"));
+    }
+    let wrong = || VmError::runtime_error("secure_decrypt: wrong password, or the data was changed");
+    if raw.starts_with(FORMAT_MAGIC) && raw.len() >= HEADER_LEN_V3 + 12 + 16 {
+        let mut it = [0u8; 4];
+        it.copy_from_slice(&raw[4..8]);
+        let iterations = u32::from_be_bytes(it);
+        if !(MIN_DECRYPT_ITERATIONS..=MAX_DECRYPT_ITERATIONS).contains(&iterations) {
+            return Err(VmError::runtime_error(format!(
+                "secure_decrypt: iteration count {} in the header is outside the accepted range {}..={}",
+                iterations, MIN_DECRYPT_ITERATIONS, MAX_DECRYPT_ITERATIONS
+            )));
+        }
+        let mut nonce = [0u8; 12];
+        nonce.copy_from_slice(&raw[HEADER_LEN_V3..HEADER_LEN_V3 + 12]);
+        let mut key = pbkdf2_sha256(password, &raw[8..24], iterations);
+        let out = crate::aead::open(&key, &nonce, &raw[..HEADER_LEN_V3], &raw[HEADER_LEN_V3 + 12..]);
+        crate::encryption::wipe(&mut key);
+        out.ok_or_else(wrong)
+    } else if raw.starts_with(FORMAT_MAGIC_V2) && raw.len() >= 4 + 16 + 12 + 16 {
+        let mut nonce = [0u8; 12];
+        nonce.copy_from_slice(&raw[20..32]);
+        let mut key = pbkdf2_sha256(password, &raw[4..20], LEGACY_ITERATIONS);
+        let out = crate::aead::open(&key, &nonce, FORMAT_MAGIC_V2, &raw[32..]);
+        crate::encryption::wipe(&mut key);
+        out.ok_or_else(wrong)
+    } else {
+        // data from the older scheme
+        let mut key = pbkdf2_sha256(password, &raw[..16], LEGACY_ITERATIONS);
+        let out = legacy_decrypt(&raw[16..], &key).map_err(|e| VmError::runtime_error(format!("secure_decrypt: {}", e)));
+        crate::encryption::wipe(&mut key);
+        out
+    }
+}
+
+/// True when `raw` (decoded `secure_encrypt` output) is not in the current format.
+pub fn needs_rewrap(raw: &[u8]) -> bool {
+    !(raw.starts_with(FORMAT_MAGIC) && raw.len() >= HEADER_LEN_V3 + 12 + 16 && raw[4..8] >= ENCRYPT_ITERATIONS.to_be_bytes()[..])
+}
+
+/// Rehash-on-read for stored ciphertexts: decrypt with the password and, if the data is in an older format (or fewer
+/// rounds than now), return it re-sealed in the current format. `Ok(None)` means it is already current.
+pub fn rewrap(encrypted_b64: &str, password: &str) -> Result<Option<String>, VmError> {
+    let raw = base64_decode(encrypted_b64).map_err(|e| VmError::runtime_error(format!("secure_decrypt: {}", e)))?;
+    let mut plain = decrypt_bytes(&raw, password.as_bytes())?;
+    let out = if needs_rewrap(&raw) { Some(base64_encode(&encrypt_bytes(&plain, password.as_bytes(), ENCRYPT_ITERATIONS)?)) } else { None };
+    crate::encryption::wipe(&mut plain);
+    Ok(out)
 }
 
 /// secure_decrypt(encrypted_b64, password) → decrypted string
@@ -245,23 +318,7 @@ pub fn builtin_secure_decrypt(args: &[Value]) -> Result<Value, VmError> {
     let raw = base64_decode(&encrypted_b64)
         .map_err(|e| VmError::runtime_error(format!("secure_decrypt: {}", e)))?;
 
-    if raw.len() < 16 {
-        return Err(VmError::runtime_error("secure_decrypt: data too short"));
-    }
-
-    let plaintext = if raw.starts_with(FORMAT_MAGIC) && raw.len() >= FORMAT_MAGIC.len() + 16 + 12 + 16 {
-        let h = FORMAT_MAGIC.len();
-        let salt = &raw[h..h + 16];
-        let mut nonce = [0u8; 12];
-        nonce.copy_from_slice(&raw[h + 16..h + 28]);
-        let key = pbkdf2_sha256(password.as_bytes(), salt, 100_000);
-        crate::aead::open(&key, &nonce, FORMAT_MAGIC, &raw[h + 28..])
-            .ok_or_else(|| VmError::runtime_error("secure_decrypt: wrong password, or the data was changed"))?
-    } else {
-        // data from the older scheme
-        let key = pbkdf2_sha256(password.as_bytes(), &raw[..16], 100_000);
-        legacy_decrypt(&raw[16..], &key).map_err(|e| VmError::runtime_error(format!("secure_decrypt: {}", e)))?
-    };
+    let plaintext = decrypt_bytes(&raw, password.as_bytes())?;
 
     let text = String::from_utf8(plaintext)
         .map_err(|e| VmError::runtime_error(format!("secure_decrypt: invalid UTF-8: {}", e)))?;
@@ -553,40 +610,83 @@ mod tests {
 
     #[test]
     fn encrypt_round_trips_and_every_message_is_different() {
+        // the builtin runs the full 600,000 rounds (slow in a debug build), so it is exercised once here; the other
+        // checks use `encrypt_bytes` with the lowest accepted count
         let a = text(builtin_secure_encrypt(&[s("secret data \u{1F512}"), s("pw")]));
-        let b = text(builtin_secure_encrypt(&[s("secret data \u{1F512}"), s("pw")]));
-        assert_ne!(a, b, "salt and nonce must be fresh every time");
         assert_eq!(text(builtin_secure_decrypt(&[s(&a), s("pw")])), "secret data \u{1F512}");
-        assert_eq!(text(builtin_secure_decrypt(&[s(&b), s("pw")])), "secret data \u{1F512}");
-        let empty = text(builtin_secure_encrypt(&[s(""), s("pw")]));
-        assert_eq!(text(builtin_secure_decrypt(&[s(&empty), s("pw")])), "");
-        // new data carries the version prefix
-        assert!(base64_decode(&a).unwrap().starts_with(b"KSE2"));
+        let raw = base64_decode(&a).unwrap();
+        assert!(raw.starts_with(b"KSE3"), "new data carries the version prefix");
+        assert_eq!(u32::from_be_bytes([raw[4], raw[5], raw[6], raw[7]]), 600_000, "the round count is stored in the header");
+        assert!(!needs_rewrap(&raw));
+        let x = encrypt_bytes(b"same", b"pw", MIN_DECRYPT_ITERATIONS).unwrap();
+        let y = encrypt_bytes(b"same", b"pw", MIN_DECRYPT_ITERATIONS).unwrap();
+        assert_ne!(x, y, "salt and nonce must be fresh every time");
+        assert_eq!(decrypt_bytes(&x, b"pw").unwrap(), b"same".to_vec());
+        assert_eq!(decrypt_bytes(&encrypt_bytes(b"", b"pw", MIN_DECRYPT_ITERATIONS).unwrap(), b"pw").unwrap(), Vec::<u8>::new());
     }
 
     #[test]
-    fn a_wrong_password_or_any_changed_byte_is_rejected() {
-        let enc = text(builtin_secure_encrypt(&[s("attack at dawn"), s("right")]));
-        assert!(builtin_secure_decrypt(&[s(&enc), s("wrong")]).is_err());
-        let raw = base64_decode(&enc).unwrap();
-        // flipping a byte in each region must fail (the prefix itself would route to the old format). Every key
-        // derivation costs 100,000 hash rounds, so only the region boundaries are tried here; aead.rs flips
-        // every byte of a sealed message.
+    fn a_wrong_password_or_any_changed_header_byte_is_rejected() {
+        let raw = encrypt_bytes(b"attack at dawn", b"right", MIN_DECRYPT_ITERATIONS).unwrap();
+        assert!(decrypt_bytes(&raw, b"wrong").is_err());
+        // flipping a byte in each region must fail (byte 0 routes to the old formats). Every derivation costs
+        // 100,000 hash rounds, so only region boundaries are tried; aead.rs flips every byte of a sealed message.
+        // Bytes 4..8 are the round count (authenticated as part of the header), 8..24 the salt.
         let n = raw.len();
-        for i in [4, 19, 20, 31, 32, n - 17, n - 16, n - 1] {
+        for i in [0, 3, 5, 7, 8, 23, 24, 35, 36, n - 17, n - 16, n - 1] {
             let mut bad = raw.clone();
             bad[i] ^= 1;
-            assert!(builtin_secure_decrypt(&[s(&base64_encode(&bad)), s("right")]).is_err(), "flip at byte {}", i);
+            assert!(decrypt_bytes(&bad, b"right").is_err(), "flip at byte {}", i);
         }
-        // truncated data
-        assert!(builtin_secure_decrypt(&[s(&base64_encode(&raw[..raw.len() - 1])), s("right")]).is_err());
+        assert!(decrypt_bytes(&raw[..raw.len() - 1], b"right").is_err());
     }
 
     #[test]
-    fn data_from_the_old_scheme_can_still_be_read() {
+    fn a_header_that_only_changes_the_round_count_fails_authentication() {
+        // same key material is NOT reachable by editing the count, but the header is also bound as associated data:
+        // rewrite the count and re-derive with it, and the tag must still reject the data
+        let raw = encrypt_bytes(b"attack at dawn", b"pw", MIN_DECRYPT_ITERATIONS).unwrap();
+        let mut forged = raw.clone();
+        forged[4..8].copy_from_slice(&(MIN_DECRYPT_ITERATIONS + 1).to_be_bytes());
+        assert!(decrypt_bytes(&forged, b"pw").is_err());
+    }
+
+    #[test]
+    fn crafted_round_counts_are_rejected_before_any_key_derivation() {
+        let base = encrypt_bytes(b"x", b"pw", MIN_DECRYPT_ITERATIONS).unwrap();
+        let t = std::time::Instant::now();
+        for bad in [u32::MAX, MAX_DECRYPT_ITERATIONS + 1, MIN_DECRYPT_ITERATIONS - 1, 0, 1] {
+            let mut raw = base.clone();
+            raw[4..8].copy_from_slice(&bad.to_be_bytes());
+            let err = decrypt_bytes(&raw, b"pw").unwrap_err();
+            assert!(format!("{:?}", err).contains("iteration count"), "{} rounds: {:?}", bad, err);
+        }
+        assert!(t.elapsed().as_secs() < 5, "rejection must be immediate, took {:?}", t.elapsed());
+    }
+
+    #[test]
+    fn data_from_the_old_schemes_can_still_be_read_and_is_rewrapped() {
         // produced by an independent Python implementation of the old format (salt 0..15, nonce 100..111)
         let old = "AAECAwQFBgcICQoLDA0OD2RlZmdoaWprbG1ubzeAv02U9Y6yTAuHh9ABFeh7Hr8WCd5IMyCcnvZoRO4jCdg+B21M8OAwQQPzSEaLxqyV3Cad5K5PnYEm/vQKBA==";
         assert_eq!(text(builtin_secure_decrypt(&[s(old), s("pw")])), "legacy data from the old scheme");
         assert!(builtin_secure_decrypt(&[s(old), s("nope")]).is_err());
+        // format 2 (KSE2, 100,000 rounds, magic-only AAD), from tests/data/crypto_reference.py kse2-encrypt
+        let kse2 = "S1NFMgABAgMEBQYHCAkKCwwNDg9kZWZnaGlqa2xtbm/aWzkv7684zVaiKLo8f811CohvrIpQlzCXnxoONsGZpd8=";
+        assert_eq!(text(builtin_secure_decrypt(&[s(kse2), s("pw")])), "kse2 fixture text");
+        assert!(builtin_secure_decrypt(&[s(kse2), s("nope")]).is_err());
+        // rehash-on-read: old formats come back re-sealed as format 3 with the same plain text; the new format
+        // reports nothing to do
+        assert!(needs_rewrap(&base64_decode(kse2).unwrap()) && needs_rewrap(&base64_decode(old).unwrap()));
+        let again = rewrap(kse2, "pw").unwrap().expect("KSE2 must be upgraded");
+        let raw = base64_decode(&again).unwrap();
+        assert!(raw.starts_with(b"KSE3") && !needs_rewrap(&raw));
+        assert_eq!(text(builtin_secure_decrypt(&[s(&again), s("pw")])), "kse2 fixture text");
+        assert!(rewrap(&again, "pw").unwrap().is_none());
+        assert!(rewrap(kse2, "nope").is_err());
+        // format 3 produced by the independent Python implementation (600,000 rounds, salt 0..15, nonce 100..111)
+        let kse3 = "S1NFMwAJJ8AAAQIDBAUGBwgJCgsMDQ4PZGVmZ2hpamtsbW5vZGJA1bUQg2VarXEecTcaXj+ENEaKsiop/yCZwA==";
+        assert_eq!(text(builtin_secure_decrypt(&[s(kse3), s("pw")])), "kse3 fixture");
+        assert!(rewrap(kse3, "pw").unwrap().is_none());
+        assert_eq!(text(builtin_secure_decrypt(&[s(&rewrap(old, "pw").unwrap().unwrap()), s("pw")])), "legacy data from the old scheme");
     }
 }

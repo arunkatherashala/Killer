@@ -27,6 +27,13 @@ What this means for you:
 
 Other security fixes in this release:
 
+* Password-based encryption and hashing use PBKDF2-HMAC-SHA256 with 600,000 iterations (was 100,000). `secure_encrypt`
+  now writes format `KSE3` (iteration count and salt are authenticated in the header); `KSE2` and older data still
+  decrypt, and `android_security::rewrap` re-seals them in the new format. `PasswordHasher` writes version 2 hashes
+  (`$pbkdf2-sha256$v=2$i=600000$...`), still verifies version 1, and `verify_and_upgrade` returns the replacement hash.
+  Stored iteration counts above 10,000,000 are rejected (they used to be a denial of service). `KeyManager::rotate_key`
+  keeps the old key versions so old data still decrypts. New hashes and `secure_encrypt` are slower (about 7 s per
+  call in a debug build; much less in a release build).
 * `eval` / `exec` ran with full trust, so a restricted script could use them to read files, use the network or run
   processes. They now inherit the caller's restrictions, stop after a step and time budget and refuse deep nesting.
   Never `eval` text you do not trust.
