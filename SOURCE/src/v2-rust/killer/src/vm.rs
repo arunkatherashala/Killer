@@ -524,10 +524,15 @@ fn spawn_task_thread(
     slot: std::sync::Arc<std::sync::Mutex<Option<Box<Value>>>>,
 ) {
     let failed_slot = std::sync::Arc::clone(&slot);
+    // the task counts against the memory cap of the evaluation that started it (see `memcap`)
+    let cap = crate::memcap::inherit();
     let spawned = std::thread::Builder::new()
         .name("killer-task".to_string())
         .stack_size(SPAWN_STACK_BYTES)
-        .spawn(move || run_spawned_task(task, func, args, slot));
+        .spawn(move || {
+            let _cap = crate::memcap::adopt(cap);
+            run_spawned_task(task, func, args, slot)
+        });
     if spawned.is_err() {
         *failed_slot.lock().unwrap() = Some(Box::new(Value::TaskError(Box::new(Value::Str(
             "could not start a thread for this task".to_string(),
@@ -1094,6 +1099,8 @@ impl VirtualMachine {
             // (polled every 256 instructions; the interval is 50,000 allocations).
             gc_poll = gc_poll.wrapping_add(1);
             if gc_poll & 0xFF == 0 {
+                // a task thread has no step budget of its own: it still stops when the evaluation's memory cap is hit
+                crate::memcap::check()?;
                 let allocs = crate::gc::GC_ALLOC_COUNT.with(|c| *c.borrow());
                 if allocs >= self.gc_alloc_epoch {
                     // Cycle collection by trial deletion: it finds every holder through the reference counts, so no root list is needed.

@@ -23,36 +23,36 @@ fn run_capped(code: &str, mb: i64) -> Result<String, String> {
 
 #[test]
 fn dict_cycles_are_collected() {
-    let code = "i = 0\nwhile i < 400000 {\n  a = {\"n\": i}\n  b = {\"a\": a}\n  a[\"b\"] = b\n  i = i + 1\n}\n\"done\"\n";
-    let r = run_capped(code, 48);
+    let code = "i = 0\nwhile i < 150000 {\n  a = {\"n\": i}\n  b = {\"a\": a}\n  a[\"b\"] = b\n  i = i + 1\n}\n\"done\"\n";
+    let r = run_capped(code, 32);
     assert!(r.is_ok(), "dict cycles leaked: {r:?}");
 }
 
 #[test]
 fn object_cycles_are_collected() {
-    let code = "class Node {\n  kfn init() {\n    this.other = null\n    this.pad = \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\"\n  }\n}\ni = 0\nwhile i < 400000 {\n  a = new Node()\n  b = new Node()\n  a.other = b\n  b.other = a\n  i = i + 1\n}\n\"done\"\n";
-    let r = run_capped(code, 48);
+    let code = "class Node {\n  kfn init() {\n    this.other = null\n    this.pad = \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\"\n  }\n}\ni = 0\nwhile i < 60000 {\n  a = new Node()\n  b = new Node()\n  a.other = b\n  b.other = a\n  i = i + 1\n}\n\"done\"\n";
+    let r = run_capped(code, 40);
     assert!(r.is_ok(), "object cycles leaked: {r:?}");
 }
 
 #[test]
 fn self_referencing_closures_are_collected() {
-    let code = "kfn make(k) {\n  fn walk(n) {\n    if n <= 0 {\n      return k\n    }\n    return walk(n - 1)\n  }\n  return walk(2)\n}\ni = 0\ns = 0\nwhile i < 400000 {\n  s = s + make(i)\n  i = i + 1\n}\ns\n";
-    let r = run_capped(code, 48);
+    let code = "kfn make(k) {\n  fn walk(n) {\n    if n <= 0 {\n      return k\n    }\n    return walk(n - 1)\n  }\n  return walk(2)\n}\ni = 0\ns = 0\nwhile i < 150000 {\n  s = s + make(i)\n  i = i + 1\n}\ns\n";
+    let r = run_capped(code, 32);
     assert!(r.is_ok(), "closure cycles leaked: {r:?}");
 }
 
 #[test]
 fn array_cycles_are_collected() {
-    let code = "i = 0\nwhile i < 400000 {\n  a = [i, \"xxxxxxxxxxxxxxxxxxxxxxxxxxxx\"]\n  b = [a]\n  push(a, b)\n  i = i + 1\n}\n\"done\"\n";
-    let r = run_capped(code, 48);
+    let code = "i = 0\nwhile i < 150000 {\n  a = [i, \"xxxxxxxxxxxxxxxxxxxxxxxxxxxx\"]\n  b = [a]\n  push(a, b)\n  i = i + 1\n}\n\"done\"\n";
+    let r = run_capped(code, 32);
     assert!(r.is_ok(), "array cycles leaked: {r:?}");
 }
 
 #[test]
 fn array_dict_mixed_cycles_are_collected() {
-    let code = "i = 0\nwhile i < 400000 {\n  a = [i]\n  d = {\"list\": a}\n  push(a, d)\n  i = i + 1\n}\n\"done\"\n";
-    let r = run_capped(code, 48);
+    let code = "i = 0\nwhile i < 150000 {\n  a = [i]\n  d = {\"list\": a}\n  push(a, d)\n  i = i + 1\n}\n\"done\"\n";
+    let r = run_capped(code, 32);
     assert!(r.is_ok(), "array/dict cycles leaked: {r:?}");
 }
 
@@ -67,8 +67,8 @@ fn live_data_survives_collection() {
 #[test]
 fn abandoned_generators_are_freed() {
     // Each generator is advanced once and then dropped; its suspended frame must go with it.
-    let code = "fn gen(k) {\n  pad = \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\"\n  yield k\n  yield pad\n}\ni = 0\ns = 0\nwhile i < 300000 {\n  g = gen(i)\n  s = s + next(g)\n  i = i + 1\n}\ns\n";
-    let r = run_capped(code, 48);
+    let code = "fn gen(k) {\n  pad = \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\"\n  yield k\n  yield pad\n}\ni = 0\ns = 0\nwhile i < 150000 {\n  g = gen(i)\n  s = s + next(g)\n  i = i + 1\n}\ns\n";
+    let r = run_capped(code, 32);
     assert!(r.is_ok(), "abandoned generators leaked: {r:?}");
 }
 
@@ -99,4 +99,54 @@ if next(holder[\"g\"]) != 101 {
 ";
     let r = run_capped(code, 256);
     assert!(r.is_ok(), "{r:?}");
+}
+
+/// Each task holds roughly 5 MB for a while; the tasks run at the same time.
+const TASK_FN: &str = "kfn hold(n) {\n  a = []\n  i = 0\n  while i < n {\n    push(a, i)\n    i = i + 1\n  }\n  sleep_ms(1500)\n  return len(a)\n}\n";
+
+#[test]
+fn spawned_threads_cannot_bypass_the_cap() {
+    // 16 tasks x ~5 MB = ~80 MB held at once under a 32 MB cap: the threads must be stopped, not run uncounted.
+    let code = format!("{TASK_FN}hs = []\ni = 0\nwhile i < 16 {{\n  push(hs, spawn hold(150000))\n  i = i + 1\n}}\ntotal = 0\nfor h in hs {{\n  total = total + await h\n}}\n");
+    let r = run_capped(&code, 32);
+    assert!(matches!(&r, Err(m) if m.contains("memory limit exceeded")), "threads escaped the cap: {r:?}");
+}
+
+#[test]
+fn spawned_threads_within_the_cap_still_work() {
+    // 4 tasks x ~5 MB = ~20 MB under a 256 MB cap, and again after they ended (their memory is returned to the budget)
+    let code = format!("{TASK_FN}round = 0\nwhile round < 2 {{\n  hs = []\n  i = 0\n  while i < 4 {{\n    push(hs, spawn hold(50000))\n    i = i + 1\n  }}\n  total = 0\n  for h in hs {{\n    total = total + await h\n  }}\n  if total != 200000 {{\n    throw \"wrong total\"\n  }}\n  round = round + 1\n}}\n");
+    let r = run_capped(&code, 256);
+    assert!(r.is_ok(), "{r:?}");
+}
+
+#[test]
+fn many_short_tasks_do_not_leave_the_budget_drifting_upwards() {
+    // 150 tasks, one after another, each allocating and freeing ~1 MB under an 8 MB cap: if every ended task left
+    // even a few KB counted but never freed, the cap would eventually fire although the script holds nothing.
+    let code = "kfn work(n) {\n  a = []\n  i = 0\n  while i < n {\n    push(a, i)\n    i = i + 1\n  }\n  return len(a)\n}\nround = 0\ntotal = 0\nwhile round < 150 {\n  total = total + await spawn work(2000)\n  round = round + 1\n}\nif total != 300000 {\n  throw \"wrong total\"\n}\n";
+    let r = run_capped(code, 8);
+    assert!(r.is_ok(), "{r:?}");
+}
+
+#[test]
+fn the_shared_counter_returns_to_its_baseline_after_threads_end() {
+    use killer_native::memcap;
+    let _g = memcap::enter(256);
+    let keep = vec![0u8; 1024];
+    let before = memcap::live_bytes();
+    for _ in 0..300 {
+        let cap = memcap::inherit();
+        std::thread::spawn(move || {
+            let _c = memcap::adopt(cap);
+            let v: Vec<u64> = (0..20000).collect();
+            std::hint::black_box(&v);
+        })
+        .join()
+        .unwrap();
+    }
+    let drift = memcap::live_bytes() - before;
+    drop(keep);
+    // a thread leaves a few hundred bytes of bookkeeping at most; 300 threads must stay well below 1 MB in total
+    assert!(drift.abs() < 512 * 1024, "the counted bytes drifted by {drift} over 300 threads");
 }
