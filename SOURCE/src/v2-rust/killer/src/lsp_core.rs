@@ -322,6 +322,24 @@ pub fn scan_symbols(text: &str) -> Vec<Symbol> {
     syms
 }
 
+/// LSP columns count UTF-16 code units; the server works on characters. Convert a client column to a character
+/// index of `line` (a column inside a surrogate pair maps to the start of that character).
+pub fn utf16_to_char_col(line: &str, col16: usize) -> usize {
+    let mut units = 0usize;
+    for (i, c) in line.chars().enumerate() {
+        if units + c.len_utf16() > col16 {
+            return i;
+        }
+        units += c.len_utf16();
+    }
+    line.chars().count()
+}
+
+/// Character index of `line` -> UTF-16 column to send to the client.
+pub fn char_to_utf16_col(line: &str, col: usize) -> usize {
+    line.chars().take(col).map(|c| c.len_utf16()).sum()
+}
+
 /// The identifier under (line, character) of `text`.
 pub fn word_at(text: &str, line: usize, character: usize) -> Option<String> {
     let l: Vec<char> = text.lines().nth(line)?.chars().collect();
@@ -453,6 +471,11 @@ fn as_usize(v: &Value) -> Option<usize> {
 fn encode(v: &Value) -> String {
     json_lang::stringify(v, 0).unwrap_or_else(|_| "null".to_string())
 }
+/// Range on `line` of `text` given in characters, encoded with UTF-16 columns.
+fn range_u16(text: &str, line: usize, c0: usize, c1: usize) -> Value {
+    let l = text.lines().nth(line).unwrap_or("");
+    range_value(line, char_to_utf16_col(l, c0), char_to_utf16_col(l, c1))
+}
 fn range_value(line: usize, c0: usize, c1: usize) -> Value {
     obj(vec![
         ("start", obj(vec![("line", n(line as i64)), ("character", n(c0 as i64))])),
@@ -508,7 +531,7 @@ impl Server {
                 let width = self
                     .docs
                     .get(uri)
-                    .and_then(|t| t.lines().nth(d.line).map(|l| l.chars().count()))
+                    .and_then(|t| t.lines().nth(d.line).map(|l| l.encode_utf16().count()))
                     .unwrap_or(0);
                 obj(vec![
                     ("range", range_value(d.line, 0, width)),
@@ -552,6 +575,8 @@ impl Server {
         let line = as_usize(&path(params, &["position", "line"]))?;
         let ch = as_usize(&path(params, &["position", "character"]))?;
         let text = self.docs.get(&uri)?;
+        // the client's column is in UTF-16 code units
+        let ch = utf16_to_char_col(text.lines().nth(line)?, ch);
         let w = word_at(text, line, ch)?;
         Some((uri, w, line, ch))
     }
@@ -592,7 +617,7 @@ impl Server {
         match pick {
             Some(sym) => obj(vec![
                 ("uri", s(&uri)),
-                ("range", range_value(sym.line, sym.col, sym.col + sym.name.chars().count())),
+                ("range", range_u16(&self.docs[&uri], sym.line, sym.col, sym.col + sym.name.chars().count())),
             ]),
             None => Value::Null,
         }
@@ -617,7 +642,7 @@ impl Server {
                         "location",
                         obj(vec![
                             ("uri", s(&uri)),
-                            ("range", range_value(sym.line, sym.col, sym.col + sym.name.chars().count())),
+                            ("range", range_u16(text, sym.line, sym.col, sym.col + sym.name.chars().count())),
                         ]),
                     ),
                 ];
@@ -706,28 +731,93 @@ impl Server {
 // ---------------------------------------------------------------------------------------------
 // Framing
 
-/// Read one `Content-Length` framed message body; `None` at end of input.
-pub fn read_message<R: BufRead>(r: &mut R) -> Option<String> {
+/// Largest message body the language servers accept (a bigger `Content-Length` is refused, never allocated).
+pub const MAX_MESSAGE_BYTES: usize = 32 * 1024 * 1024;
+const MAX_HEADER_LINE: u64 = 8 * 1024;
+
+/// One unit read from a `Content-Length` framed stream.
+pub enum Frame {
+    /// End of input (or an unreadable stream): the only case in which a server stops.
+    Eof,
+    /// A message body (invalid UTF-8 is replaced, not fatal).
+    Body(String),
+    /// A frame that must be answered with an error; call [`skip_bytes`] with `skip` afterwards.
+    Invalid { message: String, skip: u64 },
+}
+
+/// Discard `n` bytes (the body of a refused frame) without holding them in memory.
+pub fn skip_bytes<R: BufRead>(r: &mut R, n: u64) {
+    let _ = std::io::copy(&mut r.by_ref().take(n), &mut std::io::sink());
+}
+
+/// Read one frame. Header lines are length-limited, the declared body length is capped at
+/// [`MAX_MESSAGE_BYTES`], and bytes that are not UTF-8 never end the session.
+pub fn read_frame<R: BufRead>(r: &mut R) -> Frame {
     let mut len: Option<usize> = None;
+    let mut bad: Option<String> = None;
     loop {
-        let mut line = String::new();
-        if r.read_line(&mut line).ok()? == 0 {
-            return None;
+        let mut line = Vec::new();
+        let n = match r.by_ref().take(MAX_HEADER_LINE).read_until(b'\n', &mut line) {
+            Ok(n) => n,
+            Err(_) => return Frame::Eof,
+        };
+        if n == 0 {
+            return Frame::Eof;
         }
-        let t = line.trim();
+        if line.last() != Some(&b'\n') && n as u64 >= MAX_HEADER_LINE {
+            // an absurdly long header line: drop the rest of it
+            loop {
+                let mut sink = Vec::new();
+                match r.by_ref().take(MAX_HEADER_LINE).read_until(b'\n', &mut sink) {
+                    Ok(0) | Err(_) => break,
+                    Ok(_) => {
+                        if sink.last() == Some(&b'\n') {
+                            break;
+                        }
+                    }
+                }
+            }
+            bad = Some("header line too long".to_string());
+            continue;
+        }
+        let text = String::from_utf8_lossy(&line).into_owned();
+        let t = text.trim();
         if t.is_empty() {
-            if len.is_some() {
+            if len.is_some() || bad.is_some() {
                 break;
             }
             continue;
         }
         if let Some(v) = t.to_ascii_lowercase().strip_prefix("content-length:") {
-            len = v.trim().parse().ok();
+            match v.trim().parse::<usize>() {
+                Ok(n) => len = Some(n),
+                Err(_) => bad = Some(format!("bad Content-Length: {}", v.trim())),
+            }
         }
     }
-    let mut buf = vec![0u8; len?];
-    r.read_exact(&mut buf).ok()?;
-    String::from_utf8(buf).ok()
+    let n = match len {
+        Some(n) => n,
+        None => return Frame::Invalid { message: bad.unwrap_or_else(|| "missing Content-Length".to_string()), skip: 0 },
+    };
+    if n > MAX_MESSAGE_BYTES {
+        return Frame::Invalid { message: format!("message too large ({n} bytes; limit {MAX_MESSAGE_BYTES})"), skip: n as u64 };
+    }
+    let mut buf = vec![0u8; n];
+    if r.read_exact(&mut buf).is_err() {
+        return Frame::Eof;
+    }
+    Frame::Body(String::from_utf8_lossy(&buf).into_owned())
+}
+
+/// Read one `Content-Length` framed message body; `None` at end of input. Refused frames are skipped.
+pub fn read_message<R: BufRead>(r: &mut R) -> Option<String> {
+    loop {
+        match read_frame(r) {
+            Frame::Eof => return None,
+            Frame::Body(s) => return Some(s),
+            Frame::Invalid { skip, .. } => skip_bytes(r, skip),
+        }
+    }
 }
 
 /// Write one framed message.
@@ -739,7 +829,18 @@ pub fn write_message<W: Write>(w: &mut W, body: &str) -> std::io::Result<()> {
 /// Serve until `exit` or end of input. Returns the process exit code (0 after a clean shutdown).
 pub fn serve<R: BufRead, W: Write>(mut input: R, mut output: W) -> i32 {
     let mut server = Server::new();
-    while let Some(body) = read_message(&mut input) {
+    loop {
+        let body = match read_frame(&mut input) {
+            Frame::Eof => break,
+            Frame::Body(b) => b,
+            Frame::Invalid { message, skip } => {
+                if write_message(&mut output, &Server::error_response(&Value::Null, -32600, &message)).is_err() {
+                    return 1;
+                }
+                skip_bytes(&mut input, skip);
+                continue;
+            }
+        };
         let msg = match json_lang::parse(&body) {
             Ok(m) => m,
             Err(_) => {
@@ -835,5 +936,110 @@ mod tests {
         assert_eq!(as_usize(&path(&r, &["result", "range", "start", "line"])), Some(5));
         let h = parse(&sv.handle(&req(3, "textDocument/hover", pos("file:///a.killer", 8, 10)))[0]);
         assert!(as_str(&path(&h, &["result", "contents", "value"])).unwrap().contains("fn add(a, b)"));
+    }
+
+    fn frame(body: &str) -> Vec<u8> {
+        format!("Content-Length: {}\r\n\r\n{}", body.len(), body).into_bytes()
+    }
+
+    fn run_serve(input: Vec<u8>) -> (i32, String) {
+        let mut out = Vec::new();
+        let code = serve(std::io::Cursor::new(input), &mut out);
+        (code, String::from_utf8_lossy(&out).into_owned())
+    }
+
+    const INIT: &str = r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#;
+    const SHUTDOWN: &str = r#"{"jsonrpc":"2.0","id":2,"method":"shutdown"}"#;
+    const EXIT: &str = r#"{"jsonrpc":"2.0","method":"exit"}"#;
+
+    #[test]
+    fn oversized_content_length_is_refused_without_allocating() {
+        // 100 GB claimed, no body: the old reader did vec![0; n]
+        let (_, out) = run_serve(b"Content-Length: 99999999999\r\n\r\n".to_vec());
+        assert!(out.contains("too large"), "{out}");
+    }
+
+    #[test]
+    fn oversized_body_is_skipped_and_the_session_continues() {
+        let big = MAX_MESSAGE_BYTES + 1;
+        let mut input = format!("Content-Length: {}\r\n\r\n", big).into_bytes();
+        input.extend(std::iter::repeat(b' ').take(big));
+        for m in [INIT, SHUTDOWN, EXIT] {
+            input.extend(frame(m));
+        }
+        let (code, out) = run_serve(input);
+        assert!(out.contains("too large") && out.contains("capabilities"), "{out}");
+        assert_eq!(code, 0);
+    }
+
+    #[test]
+    fn invalid_utf8_does_not_shut_the_server_down() {
+        let mut bad = br#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"x":""#.to_vec();
+        bad.extend_from_slice(&[0xff, 0xfe, 0xfd]);
+        bad.extend_from_slice(br#""}}"#);
+        let mut input = format!("Content-Length: {}\r\n\r\n", bad.len()).into_bytes();
+        input.extend(bad);
+        // a header with invalid UTF-8 too
+        input.extend_from_slice(b"X-Junk: \xff\xfe\r\n");
+        for m in [SHUTDOWN, EXIT] {
+            input.extend(frame(m));
+        }
+        let (code, out) = run_serve(input);
+        assert!(out.contains("capabilities"), "initialize after bad utf-8 unanswered: {out}");
+        assert!(out.contains("\"id\":2"), "later request unanswered: {out}");
+        assert_eq!(code, 0);
+    }
+
+    #[test]
+    fn bad_headers_get_an_error_and_do_not_end_the_session() {
+        let mut input = b"Content-Length: nope\r\n\r\n".to_vec();
+        for m in [INIT, SHUTDOWN, EXIT] {
+            input.extend(frame(m));
+        }
+        let (code, out) = run_serve(input);
+        assert!(out.contains("bad Content-Length") && out.contains("capabilities"), "{out}");
+        assert_eq!(code, 0);
+    }
+
+    #[test]
+    fn utf16_column_conversion() {
+        let l = "s = \"\u{1F600}x\" + y";
+        // chars: s,space,=,space,",emoji,x,",... ; the emoji is 2 UTF-16 units
+        assert_eq!(utf16_to_char_col(l, 5), 5);
+        assert_eq!(utf16_to_char_col(l, 7), 6); // right after the emoji
+        assert_eq!(utf16_to_char_col(l, 6), 5); // inside the surrogate pair: start of the emoji
+        assert_eq!(char_to_utf16_col(l, 6), 7);
+        assert_eq!(utf16_to_char_col(l, 999), l.chars().count());
+        assert_eq!(char_to_utf16_col("abc", 2), 2);
+    }
+
+    #[test]
+    fn hover_uses_utf16_columns_on_non_ascii_lines() {
+        let src = "fn add(a, b) {\n  return a + b\n}\ns = \"\u{1F600}\u{1F600}\u{1F600}\u{1F600}\" + add(1)\n";
+        let mut sv = Server::new();
+        sv.handle(&open("file:///u.killer", src));
+        let line = src.lines().nth(3).unwrap();
+        let char_idx = line.find("add").map(|b| line[..b].chars().count()).unwrap();
+        let utf16_idx = char_to_utf16_col(line, char_idx);
+        assert!(utf16_idx > char_idx);
+        let out = sv.handle(&req(2, "textDocument/hover", pos("file:///u.killer", 3, utf16_idx as i64 + 1)));
+        assert!(out[0].contains("fn add(a, b)"), "{}", out[0]);
+    }
+
+    #[test]
+    fn diagnostic_range_end_is_in_utf16_units() {
+        let src = "fn f(a) {\n  return \"\u{1F600}\u{1F600}\" +\n}\n";
+        let mut sv = Server::new();
+        let out = sv.handle(&open("file:///d.killer", src));
+        let m = parse(&out[0]);
+        let diag = path(&m, &["params", "diagnostics"]);
+        let first = match &diag {
+            Value::Array(a) => a.to_vec().into_iter().next().expect("a diagnostic"),
+            other => panic!("{other:?}"),
+        };
+        let line = as_usize(&path(&first, &["range", "start", "line"])).unwrap();
+        let end = as_usize(&path(&first, &["range", "end", "character"])).unwrap();
+        let text_line = src.lines().nth(line).unwrap();
+        assert_eq!(end, text_line.encode_utf16().count());
     }
 }

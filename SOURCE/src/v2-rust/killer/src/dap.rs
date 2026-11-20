@@ -385,10 +385,11 @@ impl<W: Write> Session<W> {
             .stderr(std::process::Stdio::piped())
             .spawn()
             .map_err(|e| format!("cannot start the debuggee: {e}"))?;
+        let mut readers: Vec<std::thread::JoinHandle<()>> = Vec::new();
         for (stream, cat) in [(child.stdout.take().map(|x| Box::new(x) as Box<dyn Read + Send>), "stdout"), (child.stderr.take().map(|x| Box::new(x) as Box<dyn Read + Send>), "stderr")] {
             if let Some(mut r) = stream {
                 let tx = tx.clone();
-                std::thread::spawn(move || {
+                readers.push(std::thread::spawn(move || {
                     let mut buf = [0u8; 4096];
                     loop {
                         match r.read(&mut buf) {
@@ -398,7 +399,7 @@ impl<W: Write> Session<W> {
                             }
                         }
                     }
-                });
+                }));
             }
         }
         self.child = Some(child);
@@ -439,16 +440,37 @@ impl<W: Write> Session<W> {
                 let _ = tx2.send(Msg::Exited(1));
             }
         });
-        // the child may exit before connecting (compile error): do not block forever
-        match conn_rx.recv_timeout(std::time::Duration::from_secs(20)) {
-            Ok(stream) => {
-                self.to_child = Some(stream);
-                Ok(())
+        // the child may exit before connecting (compile error): notice it, flush its output, and report the exit
+        // (exited + terminated events) instead of waiting for a connection that will never come
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+        loop {
+            match conn_rx.try_recv() {
+                Ok(stream) => {
+                    self.to_child = Some(stream);
+                    return Ok(());
+                }
+                Err(mpsc::TryRecvError::Disconnected) => return Ok(()), // the accept thread already reported
+                Err(mpsc::TryRecvError::Empty) => {}
             }
-            Err(_) => {
-                // the debuggee exited without connecting: its output already explains why
-                Ok(())
+            let mut code: Option<i32> = None;
+            if let Some(c) = self.child.as_mut() {
+                if let Ok(Some(st)) = c.try_wait() {
+                    code = Some(st.code().unwrap_or(-1));
+                } else if std::time::Instant::now() >= deadline {
+                    let _ = c.kill();
+                    code = Some(-1);
+                }
             }
+            if let Some(code) = code {
+                for h in readers {
+                    let _ = h.join(); // its output events are queued before the exit
+                }
+                let _ = tx.send(Msg::Exited(code));
+                // free the accept thread (it ends by itself once connected and closed)
+                let _ = std::net::TcpStream::connect(("127.0.0.1", port));
+                return Ok(());
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
         }
     }
 
@@ -554,8 +576,25 @@ impl<W: Write> Session<W> {
                         }
                     }
                 }
-                self.breakpoints = lines.iter().copied().collect();
-                let bps: Vec<Value> = lines.iter().map(|l| obj(vec![("verified", Value::Bool(true)), ("line", num(*l as i64))])).collect();
+                // breakpoints belong to the launched program: another file's breakpoints are reported unverified and
+                // must not replace this program's
+                let applies = match (as_str(&get(&get(&args, "source"), "path")), &self.program) {
+                    (Some(sp), Some(pg)) => same_path(&sp, pg),
+                    _ => true,
+                };
+                if applies {
+                    self.breakpoints = lines.iter().copied().collect();
+                }
+                let bps: Vec<Value> = lines
+                    .iter()
+                    .map(|l| {
+                        let mut pairs = vec![("verified", Value::Bool(applies)), ("line", num(*l as i64))];
+                        if !applies {
+                            pairs.push(("message", s("this source is not the program being debugged")));
+                        }
+                        obj(pairs)
+                    })
+                    .collect();
                 self.respond(req, true, obj(vec![("breakpoints", Value::from(bps))]), "");
             }
             "setExceptionBreakpoints" => self.respond(req, true, obj(vec![]), ""),
@@ -669,26 +708,30 @@ impl<W: Write> Session<W> {
 }
 
 fn read_dap<R: BufRead>(r: &mut R) -> Option<String> {
-    let mut len: Option<usize> = None;
+    use crate::lsp_core::{read_frame, skip_bytes, Frame};
     loop {
-        let mut line = String::new();
-        if r.read_line(&mut line).ok()? == 0 {
-            return None;
-        }
-        let t = line.trim();
-        if t.is_empty() {
-            if len.is_some() {
-                break;
+        match read_frame(r) {
+            Frame::Eof => return None,
+            Frame::Body(s) => return Some(s),
+            Frame::Invalid { message, skip } => {
+                // a refused frame (oversized, bad header) must not end the debug session
+                eprintln!("[killer_dap] refused frame: {message}");
+                skip_bytes(r, skip);
             }
-            continue;
-        }
-        if let Some(v) = t.to_ascii_lowercase().strip_prefix("content-length:") {
-            len = v.trim().parse().ok();
         }
     }
-    let mut buf = vec![0u8; len?];
-    r.read_exact(&mut buf).ok()?;
-    String::from_utf8(buf).ok()
+}
+
+/// Do two paths name the same file? Canonical form when both exist, else a normalised string compare.
+fn same_path(a: &str, b: &str) -> bool {
+    if let (Ok(x), Ok(y)) = (std::fs::canonicalize(a), std::fs::canonicalize(b)) {
+        return x == y;
+    }
+    let norm = |s: &str| {
+        let s = s.replace(char::from(92u8), "/");
+        if cfg!(windows) { s.to_lowercase() } else { s }
+    };
+    norm(a) == norm(b)
 }
 
 /// Run the adapter on `input`/`output`. Returns the exit code.

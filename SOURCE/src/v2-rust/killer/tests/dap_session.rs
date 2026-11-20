@@ -140,3 +140,86 @@ fn stop_on_entry_and_step_over_a_call() {
     let _ = d.child.wait();
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Hang guard: a regression must fail the run, not block it forever on a pipe read.
+fn watchdog(secs: u64) {
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_secs(secs));
+        eprintln!("dap_session watchdog: test still blocked after {secs} s");
+        std::process::exit(101);
+    });
+}
+
+fn temp_prog(tag: &str, text: &str) -> (std::path::PathBuf, String) {
+    let dir = std::env::temp_dir().join(format!("killer_dap_{}_{}", tag, std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let prog = dir.join("prog.killer");
+    std::fs::write(&prog, text).unwrap();
+    let path = prog.display().to_string().replace('\\', "/");
+    (prog, path)
+}
+
+#[test]
+fn a_debuggee_that_dies_before_connecting_still_ends_the_session() {
+    watchdog(120);
+    // syntax error: the child exits with code 1 without ever connecting to the adapter
+    let (_p, path) = temp_prog("dies", "fn f( {\n");
+    let mut d = Dap::start();
+    d.request("initialize", "{}");
+    d.request("launch", &format!(r#"{{"program":"{path}"}}"#));
+    d.request("configurationDone", "{}");
+    let exited = d.until(&["\"event\":\"exited\""]);
+    assert!(exited.contains("\"exitCode\":1"), "{exited}");
+    d.until(&["\"event\":\"terminated\""]);
+    // its error output is delivered before the exit
+    let before_exit = d.log.iter().position(|m| m.contains("\"event\":\"output\"")).expect("an output event");
+    let exit_pos = d.log.iter().position(|m| m.contains("\"event\":\"exited\"")).unwrap();
+    assert!(before_exit < exit_pos, "{:#?}", d.log);
+}
+
+#[test]
+fn set_breakpoints_for_another_file_does_not_replace_the_programs_breakpoints() {
+    watchdog(120);
+    let (_p, path) = temp_prog("bps", "x = 1\nfn f(a) {\n  b = a + 1\n  return b\n}\ny = f(x)\nprint(\"finished\")\n");
+    let mut d = Dap::start();
+    d.request("initialize", "{}");
+    d.request("launch", &format!(r#"{{"program":"{path}"}}"#));
+    let r = d.request("setBreakpoints", &format!(r#"{{"source":{{"path":"{path}"}},"breakpoints":[{{"line":3}}]}}"#));
+    assert!(r.contains("\"verified\":true"), "{r}");
+    // another file's breakpoints: reported unverified, and the program's own are kept
+    let other = if cfg!(windows) { "C:/nowhere/other.killer" } else { "/nowhere/other.killer" };
+    let r = d.request("setBreakpoints", &format!(r#"{{"source":{{"path":"{other}"}},"breakpoints":[{{"line":7}}]}}"#));
+    assert!(r.contains("\"verified\":false"), "{r}");
+    d.request("configurationDone", "{}");
+    let stopped = d.until(&["\"event\":\"stopped\""]);
+    assert!(stopped.contains("\"reason\":\"breakpoint\""), "{stopped}");
+    let st = d.request("stackTrace", r#"{"threadId":1}"#);
+    assert!(st.contains("\"line\":3"), "{st}");
+    d.request("continue", r#"{"threadId":1}"#);
+    d.until(&["\"event\":\"terminated\""]);
+}
+
+#[test]
+fn oversized_and_non_utf8_frames_do_not_close_the_adapter() {
+    watchdog(120);
+    let mut d = Dap::start();
+    // a frame over the cap: refused, body discarded, next request answered
+    let big = 33 * 1024 * 1024usize;
+    write!(d.stdin, "Content-Length: {}\r\n\r\n", big).unwrap();
+    let chunk = vec![b' '; 1024 * 1024];
+    for _ in 0..33 {
+        d.stdin.write_all(&chunk).unwrap();
+    }
+    d.stdin.flush().unwrap();
+    // a body with bytes that are not UTF-8
+    let mut body = br#"{"seq":50,"type":"request","command":"threads","arguments":{"x":""#.to_vec();
+    body.extend_from_slice(&[0xff, 0xfe]);
+    body.extend_from_slice(br#""}}"#);
+    write!(d.stdin, "Content-Length: {}\r\n\r\n", body.len()).unwrap();
+    d.stdin.write_all(&body).unwrap();
+    d.stdin.flush().unwrap();
+    let r = d.until(&["\"request_seq\":50"]);
+    assert!(r.contains("\"success\":true"), "{r}");
+    let r = d.request("threads", "{}");
+    assert!(r.contains("\"main\""), "{r}");
+}

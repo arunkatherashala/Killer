@@ -254,3 +254,11 @@ token is a shared secret on a stdio pipe, not transport security: anything that 
 environment or process can use it. `killer_run` can still execute any `.killer` file the server user can read, so keep
 the server off untrusted clients.
 
+
+## Language server and debug adapter framing (LSP / DAP)
+
+`killer lsp` and `killer_dap` read `Content-Length` frames through one shared reader (`lsp_core::read_frame`): a body larger
+than 32 MiB is refused with an error (and discarded without being allocated), header lines are length-limited, and bytes
+that are not UTF-8 are replaced instead of ending the session. LSP positions use UTF-16 code units as the protocol
+requires. The debug adapter reports `exited` and `terminated` also when the debuggee dies before it connects, and
+`setBreakpoints` only applies to the launched program (other files are answered with unverified breakpoints).
