@@ -27,6 +27,11 @@ What this means for you:
 
 Other security fixes in this release:
 
+* Download integrity: `install.sh` / `install.ps1` can verify the archive against a checksum that does not come from the
+  release assets (`--sha256` / `-Sha256`, or `checksums/<tag>.sha256` in the repository; `--require-pinned` makes it
+  mandatory). `killer.toml` has a `[checksums]` section (`killer pin` writes it, `killer install --require-pins`
+  enforces it) so registry releases can be pinned before any lockfile exists. There are still no signatures; see
+  `SOURCE/docs/project/SECURITY.md` for the trust model.
 * Password-based encryption and hashing use PBKDF2-HMAC-SHA256 with 600,000 iterations (was 100,000). `secure_encrypt`
   now writes format `KSE3` (iteration count and salt are authenticated in the header); `KSE2` and older data still
   decrypt, and `android_security::rewrap` re-seals them in the new format. `PasswordHasher` writes version 2 hashes

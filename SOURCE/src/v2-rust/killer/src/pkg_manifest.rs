@@ -18,6 +18,9 @@
 //!
 //! [dev-dependencies]
 //! tester = "*"
+//!
+//! [checksums]                     # optional: pin registry releases (content sha256) in the repository
+//! "libA@1.2.3" = "<64 hex digits>"   # `killer pin` writes these from killer.lock
 //! ```
 
 use crate::package_manager::{Version, VersionReq};
@@ -78,6 +81,9 @@ pub struct Manifest {
     pub registry: Option<String>,
     pub dependencies: Vec<DepSpec>,
     pub dev_dependencies: Vec<DepSpec>,
+    /// `[checksums]`: `(name, version, sha256)` of registry releases pinned in the repository. This is an
+    /// integrity source that does not come from the registry server, unlike the checksum the server sends.
+    pub checksums: Vec<(String, String, String)>,
 }
 
 pub fn valid_name(name: &str) -> bool {
@@ -104,7 +110,13 @@ impl Manifest {
             registry: root.get_table("registry").and_then(|r| r.get_str("url")).map(|s| s.to_string()),
             dependencies: parse_deps(root.get_table("dependencies"))?,
             dev_dependencies: parse_deps(root.get_table("dev-dependencies"))?,
+            checksums: parse_checksums(root.get_table("checksums"))?,
         })
+    }
+
+    /// The pinned sha256 for a registry release, if `[checksums]` has one.
+    pub fn pinned(&self, name: &str, version: &str) -> Option<&str> {
+        self.checksums.iter().find(|(n, v, _)| n == name && v == version).map(|(_, _, h)| h.as_str())
     }
 
     pub fn load(dir: &Path) -> Result<Manifest, String> {
@@ -125,6 +137,26 @@ impl Manifest {
             .chain(std::iter::once(dir.join(format!("{}.killer", self.name))))
             .find(|p| p.is_file())
     }
+}
+
+fn parse_checksums(t: Option<&Table>) -> Result<Vec<(String, String, String)>, String> {
+    let Some(t) = t else { return Ok(Vec::new()) };
+    let mut out = Vec::new();
+    for (key, v) in &t.entries {
+        let (name, ver) = key.split_once('@').ok_or_else(|| format!("killer.toml: [checksums] key '{}' must look like \"name@1.2.3\"", key))?;
+        if !valid_name(name) || Version::parse(ver).is_err() {
+            return Err(format!("killer.toml: [checksums] key '{}' must look like \"name@1.2.3\"", key));
+        }
+        let hash = match v {
+            Value::Str(s) => s.trim().to_ascii_lowercase(),
+            _ => return Err(format!("killer.toml: [checksums] '{}' must be a sha256 string", key)),
+        };
+        if hash.len() != 64 || !hash.chars().all(|c| c.is_ascii_hexdigit()) {
+            return Err(format!("killer.toml: [checksums] '{}' must be 64 hex digits (sha256)", key));
+        }
+        out.push((name.to_string(), ver.to_string(), hash));
+    }
+    Ok(out)
 }
 
 fn parse_deps(t: Option<&Table>) -> Result<Vec<DepSpec>, String> {

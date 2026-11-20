@@ -283,6 +283,7 @@ mod tests {
                     .map(|(n, r)| DepSpec { name: n.clone(), req: VersionReq::parse(r).unwrap(), source: DepSource::Registry(None) })
                     .collect(),
                 dev_dependencies: vec![],
+                checksums: vec![],
             })
         }
         fn package_dir(&mut self, _n: &str, _c: &Candidate) -> Option<PathBuf> {

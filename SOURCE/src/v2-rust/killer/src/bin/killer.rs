@@ -38,6 +38,7 @@ const COMMANDS: &[(&str, &str, Handler)] = &[
     ("list", "show dependencies", |a| pkg_cmd("list", a)),
     ("publish", "publish this package to a registry", |a| pkg_cmd("publish", a)),
     ("check", "check manifest and lockfile", |a| pkg_cmd("check", a)),
+    ("pin", "pin locked registry checksums in killer.toml [checksums]", |a| pkg_cmd("pin", a)),
 ];
 
 /// Package manager commands share one implementation with the `killer_pkg` binary.
