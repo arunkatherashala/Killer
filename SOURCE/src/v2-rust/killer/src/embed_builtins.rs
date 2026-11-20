@@ -221,6 +221,7 @@ fn embed_remote(opts: &SharedDict, provider: &str, texts: &[String]) -> Result<V
         }
         spec.body = Some(body);
         spec.timeout_s = timeout;
+        spec.allow_private = true; // user-configured embedding endpoint (local Ollama / gateway)
         spec.retries = retries;
         spec.insecure = matches!(opts.get("insecure"), Some(Value::Bool(true)));
         spec.allow_http = matches!(opts.get("allow_http"), Some(Value::Bool(true)));

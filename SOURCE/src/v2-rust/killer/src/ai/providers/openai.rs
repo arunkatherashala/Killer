@@ -56,6 +56,7 @@ impl OpenAIProvider {
         ];
         spec.body = Some(body.to_string());
         spec.timeout_s = 30.0;
+        spec.allow_private = true; // configured provider endpoint
         spec
     }
 

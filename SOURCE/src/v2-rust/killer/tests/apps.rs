@@ -7,6 +7,14 @@ use std::process::{Command, Output, Stdio};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
+/// These tests talk to servers on 127.0.0.1; http_* refuses loopback unless KILLER_ALLOW_PRIVATE_NET=1 (SSRF guard).
+fn net_cmd(bin: &str) -> Command {
+    let mut c = Command::new(bin);
+    c.env("KILLER_ALLOW_PRIVATE_NET", "1");
+    c
+}
+
+
 static NEXT: AtomicUsize = AtomicUsize::new(0);
 
 /// Longest any single spawned process may run before the harness kills it (a hung server or client
@@ -66,13 +74,13 @@ fn run_limited(mut cmd: Command, secs: u64) -> Output {
 }
 
 fn killer(cwd: &Path, args: &[&str]) -> Output {
-    let mut c = Command::new(env!("CARGO_BIN_EXE_killer"));
+    let mut c = net_cmd(env!("CARGO_BIN_EXE_killer"));
     c.current_dir(cwd).args(args);
     run_limited(c, PROCESS_LIMIT_SECS)
 }
 
 fn killer_pkg(cwd: &Path, args: &[&str]) -> Output {
-    let mut c = Command::new(env!("CARGO_BIN_EXE_killer_pkg"));
+    let mut c = net_cmd(env!("CARGO_BIN_EXE_killer_pkg"));
     c.current_dir(cwd).args(args);
     run_limited(c, PROCESS_LIMIT_SECS)
 }
@@ -710,7 +718,7 @@ fn free_port() -> u16 {
 }
 
 fn start_todo_server(port: u16, data: &Path, max_requests: u32) -> std::process::Child {
-    Command::new(env!("CARGO_BIN_EXE_killer"))
+    net_cmd(env!("CARGO_BIN_EXE_killer"))
         .current_dir(app_dir("todo"))
         .args(["run", "src/main.killer", "--port", &port.to_string(), "--data", data.to_str().unwrap(), "--max-requests", &max_requests.to_string()])
         .stdin(Stdio::null())
@@ -899,7 +907,7 @@ fn rag_service_answers_http_requests() {
     let index = t.0.join("docs");
     assert!(rag(&["ingest", "data/docs", "--index", index.to_str().unwrap()]).status.success());
     let port = free_port();
-    let server = Command::new(env!("CARGO_BIN_EXE_killer"))
+    let server = net_cmd(env!("CARGO_BIN_EXE_killer"))
         .current_dir(app_dir("rag"))
         .args(["run", "src/main.killer", "serve", "--index", index.to_str().unwrap(), "--port", &port.to_string(), "--max-requests", "5"])
         .stdin(Stdio::null())

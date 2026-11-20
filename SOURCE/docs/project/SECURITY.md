@@ -214,3 +214,28 @@ case applies. `tests/eval_memory_embedded.rs` covers the no-allocator case.
   `KILLER_TOOL_ALLOW=name1,name2` (or `*`).
 - *Installers.* Version tags must match `[A-Za-z0-9._-]`; setting `KILLER_BASE_URL` prints a notice. Release archives are
   checked against a SHA256 file from the same location; there are no signatures.
+
+## Network targets (SSRF guard)
+
+Every request made through `http_req` (all `http_*` builtins, `llm_stream`, embeddings, the LLM providers) checks its
+target before curl runs:
+
+* **Link-local and cloud-metadata addresses are always blocked**: 169.254.0.0/16 (including 169.254.169.254),
+  fe80::/10, fd00:ec2::254, 100.100.100.200, 192.0.0.192 and the names `metadata.google.internal`, `metadata`,
+  `instance-data`. `allow_private` does NOT unlock them. The only overrides are the environment variable
+  `KILLER_ALLOW_METADATA_NET=1` (or the Rust-only `ReqSpec.allow_metadata`); scripts cannot set it through an option.
+* **Loopback and private ranges are blocked by default** for the script-facing `http_get/post/put/patch/delete/head/status/download/request`
+  builtins: 127.0.0.0/8, 0.0.0.0/8, ::1, 10/8, 172.16/12, 192.168/16, 100.64/10, fc00::/7, reserved 240/4. Opt in per call with
+  `http_request({..., "allow_private": true})`, or process-wide with `KILLER_ALLOW_PRIVATE_NET=1` (the simple verbs such
+  as `http_get(url)` have no options dict, so they need the environment variable).
+* IPv4-mapped / compatible / NAT64 IPv6 forms are judged by the IPv4 address inside; odd IPv4 spellings such as
+  `2130706433`, `0x7f.1`, `0177.0.0.1`, `127.1` are decoded the way curl and libc would.
+* Host names are resolved up front and every address is checked; curl is then pinned to exactly those addresses
+  (`resolve =` in the stdin config), so a DNS-rebinding answer cannot differ between check and connect. curl runs
+  without `-L`, so redirects are never followed (a redirect cannot lead to a blocked address).
+* Not subject to the loopback/private default: the endpoint of an LLM/embedding provider the user configured
+  (`base_url`, local Ollama on localhost, a LAN gateway): these set `allow_private` themselves. Metadata addresses
+  stay blocked for them too.
+* Not covered: the raw-socket Ollama client in `llm.rs` (fixed localhost:11434) and the package-registry client
+  (`pkg_registry.rs`, plain HTTP to a registry the user names; a publish token travels in clear text unless the
+  registry is behind a TLS terminator). That registry behaviour is an open decision.
