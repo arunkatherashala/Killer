@@ -239,3 +239,18 @@ target before curl runs:
 * Not covered: the raw-socket Ollama client in `llm.rs` (fixed localhost:11434) and the package-registry client
   (`pkg_registry.rs`, plain HTTP to a registry the user names; a publish token travels in clear text unless the
   registry is behind a TLS terminator). That registry behaviour is an open decision.
+
+## killer-mcp server limits
+
+`killer-mcp` (MCP over stdio) enforces: message bodies of at most 8 MiB (larger `Content-Length` is answered with
+error -32600 and discarded without being allocated), JSON nesting of at most 64 levels (error -32700), a wall-clock
+budget for `killer_run` (`KILLER_MCP_RUN_TIMEOUT_S`, default 30 s, the child is killed; its captured output is capped at
+1 MiB), and tool calls run on a large-stack worker thread under `catch_unwind`, so a compiler panic is an error result.
+There is no step budget: the time budget is the execution limit.
+
+Authentication is opt-in: set `KILLER_MCP_TOKEN` and every request must carry the same value as `params._meta.token`
+(or a top-level `token`), compared in constant time; others get error -32001 (notifications are dropped silently). The
+token is a shared secret on a stdio pipe, not transport security: anything that can read the launching client's
+environment or process can use it. `killer_run` can still execute any `.killer` file the server user can read, so keep
+the server off untrusted clients.
+
