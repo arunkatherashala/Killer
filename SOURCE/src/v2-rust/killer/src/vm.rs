@@ -1096,12 +1096,8 @@ impl VirtualMachine {
             if gc_poll & 0xFF == 0 {
                 let allocs = crate::gc::GC_ALLOC_COUNT.with(|c| *c.borrow());
                 if allocs >= self.gc_alloc_epoch {
-                    // Collect all live values as roots.
-                    let roots = self.stack.iter()
-                        .chain(self.scopes.iter().flat_map(|s| s.values()))
-                        .chain(self.locals_stack.iter().flat_map(|f| f.iter()))
-                        .cloned();
-                    crate::gc::gc_collect(roots);
+                    // Cycle collection by trial deletion: it finds every holder through the reference counts, so no root list is needed.
+                    crate::gc::gc_collect(std::iter::empty());
                     // Each collection walks every live array, so wait for at least as many new
                     // allocations as there are live arrays (amortised O(1) per allocation; a fixed
                     // interval made building N nested lists quadratic).
@@ -1262,7 +1258,7 @@ impl VirtualMachine {
                     if let Some(slot) = self.lookup_mut(name.as_str()) {
                         if !matches!(slot, Value::Cell(_)) {
                             let v = std::mem::replace(slot, Value::Null);
-                            *slot = Value::Cell(std::rc::Rc::new(std::cell::RefCell::new(v)));
+                            *slot = Value::Cell(crate::value::new_cell(v));
                         }
                     }
                 }

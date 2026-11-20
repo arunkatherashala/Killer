@@ -61,6 +61,12 @@ impl SharedArray {
         arr
     }
 
+    /// The shared storage, for the cycle collector.
+    #[inline]
+    pub(crate) fn rc(&self) -> &Rc<RefCell<Vec<Value>>> {
+        &self.0
+    }
+
     /// Raw pointer of the inner Rc allocation — used as a stable identity by the GC.
     #[inline]
     pub fn rc_ptr(&self) -> usize {
@@ -81,7 +87,9 @@ impl SharedArray {
 
     /// Full structural copy (new buffer). Use when an API must return an independent array.
     pub fn deep_copy(&self) -> Self {
-        Self(Rc::new(RefCell::new(self.0.borrow().clone())))
+        let arr = Self(Rc::new(RefCell::new(self.0.borrow().clone())));
+        crate::gc::gc_register(&arr);
+        arr
     }
 
     #[inline]
@@ -301,10 +309,19 @@ impl SharedDict {
     }
     /// From pairs in order; a repeated key keeps its first position and its last value.
     pub fn from_pairs(pairs: Vec<(String, Value)>) -> Self {
-        SharedDict(Rc::new(RefCell::new(pairs.into_iter().collect())))
+        Self::registered(Rc::new(RefCell::new(pairs.into_iter().collect())))
     }
     pub fn empty() -> Self {
-        SharedDict(Rc::new(RefCell::new(Default::default())))
+        Self::registered(Rc::new(RefCell::new(Default::default())))
+    }
+    fn registered(rc: Rc<RefCell<crate::ordered_map::OrderedMap<Value>>>) -> Self {
+        crate::gc::gc_register_node(crate::gc::WeakNode::Dict(Rc::downgrade(&rc)));
+        SharedDict(rc)
+    }
+    /// The shared storage, for the cycle collector.
+    #[inline]
+    pub(crate) fn rc(&self) -> &Rc<RefCell<crate::ordered_map::OrderedMap<Value>>> {
+        &self.0
     }
     #[inline]
     pub fn rc_ptr(&self) -> usize {
@@ -457,6 +474,13 @@ impl Debug for SharedSet {
     }
 }
 
+/// A new shared variable cell (see [`Value::Cell`]), known to the cycle collector.
+pub fn new_cell(v: Value) -> Rc<RefCell<Value>> {
+    let rc = Rc::new(RefCell::new(v));
+    crate::gc::gc_register_node(crate::gc::WeakNode::Cell(Rc::downgrade(&rc)));
+    rc
+}
+
 impl PartialEq for SharedSet {
     fn eq(&self, other: &Self) -> bool {
         Rc::ptr_eq(&self.0, &other.0) || *self.0.borrow() == *other.0.borrow()
@@ -469,7 +493,14 @@ pub struct SharedObject(Rc<RefCell<ObjectInstance>>);
 
 impl SharedObject {
     pub fn new(inst: ObjectInstance) -> Self {
-        SharedObject(Rc::new(RefCell::new(inst)))
+        let rc = Rc::new(RefCell::new(inst));
+        crate::gc::gc_register_node(crate::gc::WeakNode::Obj(Rc::downgrade(&rc)));
+        SharedObject(rc)
+    }
+    /// The shared storage, for the cycle collector.
+    #[inline]
+    pub(crate) fn rc(&self) -> &Rc<RefCell<ObjectInstance>> {
+        &self.0
     }
     #[inline]
     pub fn rc_ptr(&self) -> usize {
@@ -559,17 +590,27 @@ pub struct Captures(Rc<RefCell<Vec<(String, Value)>>>, bool, u16);
 
 impl Captures {
     pub fn new(map: HashMap<String, Value>) -> Self {
-        Captures(Rc::new(RefCell::new(map.into_iter().collect())), false, 0)
+        Self::registered(map.into_iter().collect(), false, 0)
+    }
+    fn registered(items: Vec<(String, Value)>, readonly: bool, slots: u16) -> Self {
+        let rc = Rc::new(RefCell::new(items));
+        crate::gc::gc_register_node(crate::gc::WeakNode::Caps(Rc::downgrade(&rc)));
+        Captures(rc, readonly, slots)
+    }
+    /// The shared storage, for the cycle collector.
+    #[inline]
+    pub(crate) fn rc(&self) -> &Rc<RefCell<Vec<(String, Value)>>> {
+        &self.0
     }
     /// Captures in the given order, bound by name (the pre-slot behaviour).
     pub fn from_items(items: Vec<(String, Value)>) -> Self {
-        Captures(Rc::new(RefCell::new(items)), false, 0)
+        Self::registered(items, false, 0)
     }
     /// Captures of a closure whose body never assigns a captured name: nothing needs writing back
     /// at `Ret`, so calls skip the bookkeeping for it. `slots` of the leading entries (in the
     /// order given) live in frame slots instead of the call scope.
     pub fn new_readonly(items: Vec<(String, Value)>, slots: u16) -> Self {
-        Captures(Rc::new(RefCell::new(items)), true, slots)
+        Self::registered(items, true, slots)
     }
     #[inline]
     pub fn is_readonly(&self) -> bool {
@@ -582,7 +623,7 @@ impl Captures {
     }
     /// An empty capture table with the same flags (used when a value is deep-copied).
     pub fn new_like(&self) -> Self {
-        Captures(Rc::new(RefCell::new(Vec::new())), self.1, self.2)
+        Self::registered(Vec::new(), self.1, self.2)
     }
     /// Append the slot-bound captures to a frame that holds exactly the parameters.
     #[inline]
@@ -1095,6 +1136,8 @@ impl Value {
     /// work list, so a value nested a million levels deep is copied without touching the native
     /// stack.
     pub fn detached(&self) -> Value {
+        // the copy leaves this thread: none of it may be registered with this thread's cycle collector
+        let _no_gc = crate::gc::SuppressGuard::new();
         let mut memo: HashMap<usize, Value> = HashMap::new();
         let mut work: Vec<DetachJob> = Vec::new();
         let root = self.detach_shell(&mut memo, &mut work, 0);
