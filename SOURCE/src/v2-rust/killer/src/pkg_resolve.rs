@@ -300,6 +300,7 @@ mod tests {
             registry: None,
             dependencies: deps.iter().map(|(n, r)| DepSpec { name: n.to_string(), req: VersionReq::parse(r).unwrap(), source: DepSource::Registry(None) }).collect(),
             dev_dependencies: vec![],
+            checksums: vec![],
         }
     }
 
