@@ -14,48 +14,7 @@
 /// Replace string contents and comments with `_`/spaces so structural scanning cannot be fooled,
 /// keeping byte length (and line breaks) identical to the source.
 pub(crate) fn mask(src: &str) -> Vec<u8> {
-    let b = src.as_bytes();
-    let mut out = b.to_vec();
-    let mut i = 0;
-    let mut quote: Option<u8> = None;
-    while i < b.len() {
-        let c = b[i];
-        match quote {
-            Some(q) => {
-                if c == b'\\' && i + 1 < b.len() {
-                    out[i] = b'_';
-                    if b[i + 1] != b'\n' {
-                        out[i + 1] = b'_';
-                    }
-                    i += 2;
-                    continue;
-                }
-                if c == q {
-                    quote = None;
-                } else if c != b'\n' {
-                    out[i] = b'_';
-                }
-                i += 1;
-            }
-            None => {
-                if c == b'"' || c == b'`' {
-                    quote = Some(c);
-                    i += 1;
-                } else if (c == b'/' && b.get(i + 1) == Some(&b'/'))
-                    || (c == b'-' && b.get(i + 1) == Some(&b'-'))
-                    || (c == b'#' && b[..i].iter().rev().take_while(|x| **x != b'\n').all(|x| x.is_ascii_whitespace()))
-                {
-                    while i < b.len() && b[i] != b'\n' {
-                        out[i] = b' ';
-                        i += 1;
-                    }
-                } else {
-                    i += 1;
-                }
-            }
-        }
-    }
-    out
+    crate::linemask::mask_source(src)
 }
 
 fn is_word(c: u8) -> bool {

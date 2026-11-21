@@ -2,32 +2,8 @@
 
 /// Byte offset of a `//` that starts a comment (not inside a string or backticks).
 fn comment_start(line: &str) -> Option<usize> {
-    let b = line.as_bytes();
-    let mut quote: Option<u8> = None;
-    let mut i = 0;
-    while i < b.len() {
-        let c = b[i];
-        match quote {
-            Some(q) => {
-                if c == b'\\' && q != b'`' {
-                    i += 1;
-                } else if c == q {
-                    quote = None;
-                }
-            }
-            None => {
-                if c == b'"' || c == b'\'' || c == b'`' {
-                    quote = Some(c);
-                } else if c == b'#' {
-                    return None;
-                } else if c == b'/' && b.get(i + 1) == Some(&b'/') {
-                    return Some(i);
-                }
-            }
-        }
-        i += 1;
-    }
-    None
+    let at = crate::linemask::comment_start(line)?;
+    line[at..].starts_with("//").then_some(at)
 }
 
 /// True when `rest` (the text after `//`) reads like the right operand of a division

@@ -300,6 +300,7 @@ pub mod bigint;                // arbitrary-precision integers (Value::BigInt)
 pub mod bigint_ops;            // BigInt operators and builtins
 pub mod closure_scan;          // which closure-captured locals must be shared cells
 pub mod limits;               // structural limits (nesting depth, expression length) checked before compiling
+pub mod linemask;              // the one string/comment mask the string-based passes share
 pub mod lambda;                // lifts anonymous functions (fn(x){..}, x => ..) into named ones
 pub mod sugar;               // surface syntax sugar rewritten to core Killer before compiling
 pub mod uncertain;             // interval arithmetic and three-valued comparison for `believe` values

@@ -345,42 +345,15 @@ fn number_to_decimal(text: &str) -> String {
 /// the input (a multi-byte character becomes that many placeholder bytes), so byte offsets found in
 /// the masked line are valid in the original line.
 fn mask_strings(line: &str) -> String {
-    let mut out = String::with_capacity(line.len());
-    let mut in_str = false;
-    let mut escaped = false;
-    let fill = |out: &mut String, c: char| {
-        for _ in 0..c.len_utf8() {
-            out.push('\u{1}');
-        }
-    };
-    for c in line.chars() {
-        if in_str {
-            if escaped {
-                escaped = false;
-                fill(&mut out, c);
-            } else if c == '\\' {
-                escaped = true;
-                fill(&mut out, c);
-            } else if c == '"' {
-                in_str = false;
-                out.push('"');
-            } else {
-                fill(&mut out, c);
-            }
-        } else {
-            if c == '"' {
-                in_str = true;
-            }
-            out.push(c);
-        }
-    }
-    out
+    crate::linemask::mask_strings(line, '\u{1}')
 }
 
 /// Parse a leading assignment target `name`, `a.b.c`, `a[i]`, `a[i][j]`, `this.x[i]` from `s`.
 /// Returns the byte length of the target, or `None`.
 fn target_len(s: &str) -> Option<usize> {
     let b: Vec<char> = s.chars().collect();
+    // brackets are counted on the masked text, so a `]` or `[` inside a string key (`d["a]b"]`) does not count
+    let m: Vec<char> = crate::linemask::mask(s, crate::linemask::Opts { fill: '\u{1}', keep_quotes: true, blank_comments: false, per_byte: false }).chars().collect();
     let mut i = 0;
     if i >= b.len() || !(b[i].is_alphabetic() || b[i] == '_') {
         return None;
@@ -397,9 +370,9 @@ fn target_len(s: &str) -> Option<usize> {
         } else if i < b.len() && b[i] == '[' {
             let mut depth = 0;
             while i < b.len() {
-                if b[i] == '[' {
+                if m[i] == '[' {
                     depth += 1;
-                } else if b[i] == ']' {
+                } else if m[i] == ']' {
                     depth -= 1;
                     if depth == 0 {
                         i += 1;
