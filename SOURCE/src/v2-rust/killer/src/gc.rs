@@ -1,42 +1,166 @@
-/// Killer GC — cycle collector for the `Rc` array graph
-///
-/// `Rc<RefCell<Vec<Value>>>` handles typical short-lived allocations efficiently
-/// but cannot collect reference cycles (A → B → A).  This module adds a
-/// stop-the-world cycle sweep that the VM triggers every GC_INTERVAL allocs.
-///
-/// Safety rule: an array is only cleared when it is *provably* garbage, i.e. every
-/// strong reference to it comes from other unreachable arrays (trial deletion).  Holders
-/// the collector does not know about — local-variable frames, native registries, values
-/// in flight — keep their arrays alive, so an incomplete root set can never lose data.
-///
-///   Mark:   walk every Value reachable from VM roots, record each array's raw Rc address.
-///   Count:  for every unreachable ("candidate") array, count the references held *inside*
-///           candidate arrays.  strong_count above that means an outside holder exists.
-///   Close:  candidates with an outside holder are live roots; everything reachable from
-///           them is live too.
-///   Sweep:  the remaining candidates are garbage cycles — clear their contents.
-///
-/// Thread-safety: all state is thread-local; spawned VMs have their own heap.
+//! Killer GC: cycle collector for the `Rc` value graph (arrays, dicts, objects, closure captures, variable cells).
+//!
+//! `Rc` frees acyclic data the moment the last handle goes away but cannot free a reference cycle (A -> B -> A, or a
+//! closure that captured the variable holding itself). Every container created on a thread is registered here with a
+//! `Weak` handle, and the VM runs a collection every few tens of thousands of registrations (a safe point of its run
+//! loop).
+//!
+//! Soundness rule (trial deletion): a container is cleared only when it is *provably* garbage, that is when every
+//! strong reference to it comes from other containers that are themselves unreachable. For each registered container
+//! the collector counts the references held *inside* registered containers; `Rc::strong_count` above that number means
+//! some holder the collector does not know about (a local-variable frame, the operand stack, a native registry, a
+//! value in flight on the Rust stack) keeps it alive, and so is everything reachable from it. Only the remainder is
+//! cleared. An incomplete root set can therefore never lose data, it can only delay freeing. No VM roots are needed.
+//!
+//! Limits (documented in docs/project/SECURITY.md): containers that are not registered are never collected when they
+//! are part of a cycle. That covers values copied by `Value::detached` (arguments and results of spawned tasks,
+//! channel messages, server worker state), because a registered container must never leave the thread whose
+//! collector owns its `Weak`. Reference cycles that run through a suspended generator frame are not collected either
+//! (the frame is owned by the VM's generator table, not by a registered container).
+//!
+//! Thread-safety: all state is thread-local; spawned VMs have their own heap.
 
-use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
+use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 use std::rc::{Rc, Weak};
-use crate::value::{Value, SharedArray};
+use crate::value::{ObjectInstance, SharedArray, Value};
 
-/// How many SharedArray allocations between GC runs.
+/// How many registrations between GC runs.
 pub const GC_INTERVAL: u64 = 50_000;
 
+/// Weak handle of one registered container.
+pub enum WeakNode {
+    Arr(Weak<RefCell<Vec<Value>>>),
+    Dict(Weak<RefCell<crate::ordered_map::OrderedMap<Value>>>),
+    Obj(Weak<RefCell<ObjectInstance>>),
+    Caps(Weak<RefCell<Vec<(String, Value)>>>),
+    Cell(Weak<RefCell<Value>>),
+}
+
+/// Strong handle held only while a collection runs.
+enum Node {
+    Arr(Rc<RefCell<Vec<Value>>>),
+    Dict(Rc<RefCell<crate::ordered_map::OrderedMap<Value>>>),
+    Obj(Rc<RefCell<ObjectInstance>>),
+    Caps(Rc<RefCell<Vec<(String, Value)>>>),
+    Cell(Rc<RefCell<Value>>),
+}
+
+impl WeakNode {
+    fn alive(&self) -> bool {
+        match self {
+            WeakNode::Arr(w) => w.strong_count() > 0,
+            WeakNode::Dict(w) => w.strong_count() > 0,
+            WeakNode::Obj(w) => w.strong_count() > 0,
+            WeakNode::Caps(w) => w.strong_count() > 0,
+            WeakNode::Cell(w) => w.strong_count() > 0,
+        }
+    }
+    fn upgrade(&self) -> Option<Node> {
+        Some(match self {
+            WeakNode::Arr(w) => Node::Arr(w.upgrade()?),
+            WeakNode::Dict(w) => Node::Dict(w.upgrade()?),
+            WeakNode::Obj(w) => Node::Obj(w.upgrade()?),
+            WeakNode::Caps(w) => Node::Caps(w.upgrade()?),
+            WeakNode::Cell(w) => Node::Cell(w.upgrade()?),
+        })
+    }
+}
+
+impl Node {
+    fn ptr(&self) -> usize {
+        match self {
+            Node::Arr(r) => Rc::as_ptr(r) as *const u8 as usize,
+            Node::Dict(r) => Rc::as_ptr(r) as *const u8 as usize,
+            Node::Obj(r) => Rc::as_ptr(r) as *const u8 as usize,
+            Node::Caps(r) => Rc::as_ptr(r) as *const u8 as usize,
+            Node::Cell(r) => Rc::as_ptr(r) as *const u8 as usize,
+        }
+    }
+    fn strong(&self) -> usize {
+        match self {
+            Node::Arr(r) => Rc::strong_count(r),
+            Node::Dict(r) => Rc::strong_count(r),
+            Node::Obj(r) => Rc::strong_count(r),
+            Node::Caps(r) => Rc::strong_count(r),
+            Node::Cell(r) => Rc::strong_count(r),
+        }
+    }
+    /// Visit the values held directly; false when the container is borrowed right now (left alone).
+    fn each_value(&self, f: &mut dyn FnMut(&Value)) -> bool {
+        match self {
+            Node::Arr(r) => r.try_borrow().map(|b| b.iter().for_each(|v| f(v))).is_ok(),
+            Node::Dict(r) => r.try_borrow().map(|b| b.values().for_each(|v| f(v))).is_ok(),
+            Node::Obj(r) => r.try_borrow().map(|b| b.fields.values().for_each(|v| f(v))).is_ok(),
+            Node::Caps(r) => r.try_borrow().map(|b| b.iter().for_each(|(_, v)| f(v))).is_ok(),
+            Node::Cell(r) => r.try_borrow().map(|b| f(&b)).is_ok(),
+        }
+    }
+    /// Move the contents out (to be dropped by the caller once no borrow is held); None when borrowed.
+    fn take_contents(&self) -> Option<Vec<Value>> {
+        match self {
+            Node::Arr(r) => r.try_borrow_mut().ok().map(|mut b| std::mem::take(&mut *b)),
+            Node::Dict(r) => r.try_borrow_mut().ok().map(|mut b| b.take_values()),
+            Node::Obj(r) => r.try_borrow_mut().ok().map(|mut b| b.fields.drain().map(|(_, v)| v).collect()),
+            Node::Caps(r) => r.try_borrow_mut().ok().map(|mut b| std::mem::take(&mut *b).into_iter().map(|(_, v)| v).collect()),
+            Node::Cell(r) => r.try_borrow_mut().ok().map(|mut b| vec![std::mem::replace(&mut *b, Value::Null)]),
+        }
+    }
+}
+
 thread_local! {
-    /// Weak references to every living SharedArray on this thread.
-    static GC_HEAP: RefCell<Vec<Weak<RefCell<Vec<Value>>>>> = RefCell::new(Vec::new());
-    /// Running count of SharedArray allocations (wraps at u64::MAX — safe).
-    pub static GC_ALLOC_COUNT: RefCell<u64> = RefCell::new(0);
+    /// Weak references to every registered container created on this thread.
+    static GC_HEAP: RefCell<Vec<WeakNode>> = const { RefCell::new(Vec::new()) };
+    /// Running count of registrations (wraps at u64::MAX, which is safe).
+    pub static GC_ALLOC_COUNT: RefCell<u64> = const { RefCell::new(0) };
+    /// While non-zero, new containers are not registered (see [`SuppressGuard`]).
+    static SUPPRESS: Cell<u32> = const { Cell::new(0) };
+    /// Heap length at which dead entries are pruned (so dead `Rc` boxes held alive by their `Weak` stay bounded).
+    static PRUNE_AT: Cell<usize> = const { Cell::new(4096) };
+}
+
+/// Containers created while a guard is alive are not registered with this thread's collector. `Value::detached`
+/// uses it: the copies it makes are handed to another thread, and a `Weak` that stays behind in this thread's
+/// registry would let two threads touch the same non-atomic counts.
+pub struct SuppressGuard;
+
+impl SuppressGuard {
+    pub fn new() -> Self {
+        SUPPRESS.with(|s| s.set(s.get() + 1));
+        SuppressGuard
+    }
+}
+
+impl Default for SuppressGuard {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Drop for SuppressGuard {
+    fn drop(&mut self) {
+        SUPPRESS.with(|s| s.set(s.get().saturating_sub(1)));
+    }
 }
 
 /// Register a newly created SharedArray with the GC.  Called from SharedArray::new.
 pub fn gc_register(arr: &SharedArray) {
+    gc_register_node(WeakNode::Arr(arr.weak()));
+}
+
+/// Register a newly created container.
+pub fn gc_register_node(node: WeakNode) {
+    if SUPPRESS.with(|s| s.get()) != 0 {
+        return;
+    }
     GC_HEAP.with(|heap| {
-        heap.borrow_mut().push(arr.weak());
+        let mut h = heap.borrow_mut();
+        h.push(node);
+        let at = PRUNE_AT.with(|p| p.get());
+        if h.len() >= at {
+            h.retain(|w| w.alive());
+            PRUNE_AT.with(|p| p.set((h.len() * 2).max(4096)));
+        }
     });
     GC_ALLOC_COUNT.with(|c| *c.borrow_mut() += 1);
 }
@@ -47,189 +171,98 @@ pub fn should_collect() -> bool {
     GC_ALLOC_COUNT.with(|c| *c.borrow() % GC_INTERVAL == 0 && *c.borrow() > 0)
 }
 
-// ── Mark phase ────────────────────────────────────────────────────────────────
-
-/// Walk `val` and all Values reachable from it, recording the Rc address of every container.
-/// Dicts, objects and closure captures are recorded too: without that a shared (or cyclic) dict
-/// was walked again for every holder, which made a deep tree held by one frame per level (a
-/// recursive evaluator) quadratic per collection and a dict cycle an endless loop.
-fn mark_value(val: &Value, seen: &mut HashSet<usize>, queue: &mut Vec<Value>) {
-    match val {
-        Value::Array(arr) => {
-            let ptr = arr.rc_ptr();
-            if seen.insert(ptr) {
-                // First visit — enqueue elements for further traversal.
-                queue.extend(arr.clone_elements());
-            }
+/// Visit the registered containers a value holds directly (looking through the boxes of `Signal` and `TaskError`).
+fn each_edge(v: &Value, f: &mut dyn FnMut(usize)) {
+    let mut cur = v;
+    loop {
+        match cur {
+            Value::Array(a) => return f(a.rc_ptr()),
+            Value::Dict(d) => return f(d.rc_ptr()),
+            Value::Object(o) => return f(o.rc_ptr()),
+            Value::Function { captured, .. } => return f(captured.rc_ptr()),
+            Value::Cell(c) => return f(Rc::as_ptr(c) as *const u8 as usize),
+            Value::Signal { value, .. } => cur = value,
+            Value::TaskError(inner) => cur = inner,
+            _ => return,
         }
-        Value::Dict(dict) => {
-            if seen.insert(dict.rc_ptr()) {
-                queue.extend(dict.values());
-            }
-        }
-        Value::Function { captured, .. } => {
-            if seen.insert(captured.rc_ptr()) {
-                queue.extend(captured.values());
-            }
-        }
-        Value::Signal { value, .. } => {
-            queue.push((**value).clone());
-        }
-        Value::Object(obj) => {
-            if seen.insert(obj.rc_ptr()) {
-                queue.extend(obj.fields().into_values());
-            }
-        }
-        Value::Cell(c) => {
-            if let Ok(inner) = c.try_borrow() {
-                queue.push(inner.clone());
-            }
-        }
-        _ => {}
     }
 }
 
-// ── Public API ────────────────────────────────────────────────────────────────
-
-/// Run a full mark-and-sweep cycle collection.
-///
-/// `roots` should be an iterator over all Values currently live in the VM
-/// (stack + all scope frames).  Unreachable arrays are cleared in-place to
-/// break cycles; their Rc counts then drop to zero and memory is reclaimed by
-/// the normal Rc destructor when the caller releases its handle.
-pub fn gc_collect<I>(roots: I)
+/// Run a full cycle collection on this thread (trial deletion, see the module documentation). The roots argument is
+/// accepted for compatibility and not needed: every holder outside the registered containers, listed or not, is
+/// found through the reference counts.
+pub fn gc_collect<I>(_roots: I)
 where
     I: Iterator<Item = Value>,
 {
-    let mut reachable: HashSet<usize> = HashSet::new();
-    let mut queue: Vec<Value> = roots.collect();
+    // Work on a private copy of the registry: dropping garbage below may run code that registers or prunes.
+    let heap: Vec<WeakNode> = GC_HEAP.with(|h| std::mem::take(&mut *h.borrow_mut()));
+    let nodes: Vec<Node> = heap.iter().filter_map(|w| w.upgrade()).collect();
+    let n = nodes.len();
+    let index: HashMap<usize, usize> = nodes.iter().enumerate().map(|(i, nd)| (nd.ptr(), i)).collect();
 
-    // Mark
-    while let Some(val) = queue.pop() {
-        mark_value(&val, &mut reachable, &mut queue);
+    // References held inside registered containers.
+    let mut internal = vec![0usize; n];
+    let mut live = vec![false; n];
+    for (i, node) in nodes.iter().enumerate() {
+        let readable = node.each_value(&mut |v| {
+            each_edge(v, &mut |p| {
+                if let Some(&j) = index.get(&p) {
+                    internal[j] += 1;
+                }
+            })
+        });
+        if !readable {
+            live[i] = true; // being mutated right now: leave it alone (its targets stay live by the count)
+        }
     }
 
-    // Sweep (trial deletion): only arrays whose every reference comes from other garbage.
-    GC_HEAP.with(|heap| {
-        let mut h = heap.borrow_mut();
-        let strongs: Vec<Rc<RefCell<Vec<Value>>>> = h.iter().filter_map(|w| w.upgrade()).collect();
-        let ptr_of = |rc: &Rc<RefCell<Vec<Value>>>| Rc::as_ptr(rc) as usize;
-        let index: HashMap<usize, usize> = strongs.iter().enumerate().map(|(i, rc)| (ptr_of(rc), i)).collect();
-        let candidate: Vec<bool> = strongs.iter().map(|rc| !reachable.contains(&ptr_of(rc))).collect();
-
-        // References held inside candidate arrays.
-        let mut internal: HashMap<usize, usize> = HashMap::new();
-        let mut seen_captures: HashSet<usize> = HashSet::new();
-        let mut live: Vec<bool> = candidate.iter().map(|c| !*c).collect();
-        for (i, rc) in strongs.iter().enumerate() {
-            if !candidate[i] {
-                continue;
-            }
-            match rc.try_borrow() {
-                Ok(elems) => {
-                    for v in elems.iter() {
-                        count_array_refs(v, &mut internal, &mut seen_captures);
-                    }
-                }
-                Err(_) => live[i] = true, // being mutated right now: leave it alone
-            }
+    // A holder outside the registered containers (`nodes` itself holds exactly one reference) keeps it live.
+    let mut work: Vec<usize> = Vec::new();
+    for (i, node) in nodes.iter().enumerate() {
+        if live[i] || node.strong() > 1 + internal[i] {
+            live[i] = true;
+            work.push(i);
         }
-
-        // Candidates with a holder outside the candidate set are live roots.
-        let mut work: Vec<usize> = Vec::new();
-        for (i, rc) in strongs.iter().enumerate() {
-            if candidate[i] && !live[i] {
-                let inside = internal.get(&ptr_of(rc)).copied().unwrap_or(0);
-                // `strongs` itself holds exactly one reference.
-                if Rc::strong_count(rc) > 1 + inside {
-                    live[i] = true;
-                }
-            }
-            if candidate[i] && live[i] {
-                work.push(i);
-            }
-        }
-        // Everything reachable from a live candidate is live.
+    }
+    // Everything reachable from a live container is live.
+    while let Some(i) = work.pop() {
         let mut found: Vec<usize> = Vec::new();
-        let mut seen_nodes: HashSet<usize> = HashSet::new();
-        while let Some(i) = work.pop() {
-            if let Ok(elems) = strongs[i].try_borrow() {
-                found.clear();
-                for v in elems.iter() {
-                    collect_array_ptrs(v, &mut found, &mut seen_nodes);
-                }
-                for ptr in found.iter() {
-                    if let Some(&j) = index.get(ptr) {
-                        if !live[j] {
-                            live[j] = true;
-                            work.push(j);
-                        }
-                    }
+        nodes[i].each_value(&mut |v| each_edge(v, &mut |p| found.push(p)));
+        for p in found {
+            if let Some(&j) = index.get(&p) {
+                if !live[j] {
+                    live[j] = true;
+                    work.push(j);
                 }
             }
         }
-        // Remaining candidates are unreachable cycles: break them.
-        for (i, rc) in strongs.iter().enumerate() {
-            if !live[i] {
-                rc.borrow_mut().clear();
+    }
+
+    // The rest are unreachable cycles: take their contents out and drop them with no borrow held.
+    let mut garbage: Vec<Vec<Value>> = Vec::new();
+    for (i, node) in nodes.iter().enumerate() {
+        if !live[i] {
+            if let Some(c) = node.take_contents() {
+                garbage.push(c);
             }
         }
-        drop(strongs);
-        // Prune dead Weaks.
-        h.retain(|w| w.strong_count() > 0);
+    }
+    drop(garbage);
+    drop(nodes);
+
+    // Restore the registry: survivors first, then whatever was registered meanwhile.
+    GC_HEAP.with(|h| {
+        let mut h = h.borrow_mut();
+        let added = std::mem::take(&mut *h);
+        let mut kept: Vec<WeakNode> = heap.into_iter().filter(|w| w.alive()).collect();
+        kept.extend(added);
+        PRUNE_AT.with(|p| p.set((kept.len() * 2).max(4096)));
+        *h = kept;
     });
 }
 
-/// Count references held directly by a candidate array. Dicts and objects are shared handles that
-/// other holders may also reference, so arrays reachable only through them are deliberately NOT
-/// counted as "internal": that keeps them live (a cycle through a dict is leaked, never freed).
-/// Closure captures are one holder however many function values share them, so each is visited once
-/// (`seen`); the walk uses an explicit stack, so deeply nested values cannot overflow the native one.
-fn count_array_refs(v: &Value, internal: &mut HashMap<usize, usize>, seen: &mut HashSet<usize>) {
-    let mut stack: Vec<Value> = vec![v.clone()];
-    while let Some(v) = stack.pop() {
-        match v {
-            Value::Array(a) => *internal.entry(a.rc_ptr()).or_insert(0) += 1,
-            Value::Function { captured, .. } => {
-                if seen.insert(captured.rc_ptr()) {
-                    stack.extend(captured.values());
-                }
-            }
-            Value::Signal { value, .. } => stack.push(*value),
-            _ => {}
-        }
-    }
-}
-
-/// Pointers of the arrays held by `v`, looking through dicts, objects, captures and signals
-/// (explicit stack; `seen` keeps shared or cyclic containers from being walked twice).
-fn collect_array_ptrs(v: &Value, out: &mut Vec<usize>, seen: &mut HashSet<usize>) {
-    let mut stack: Vec<Value> = vec![v.clone()];
-    while let Some(v) = stack.pop() {
-        match v {
-            Value::Array(a) => out.push(a.rc_ptr()),
-            Value::Dict(d) => {
-                if seen.insert(d.rc_ptr()) {
-                    stack.extend(d.values());
-                }
-            }
-            Value::Object(o) => {
-                if seen.insert(o.rc_ptr()) {
-                    stack.extend(o.fields().into_values());
-                }
-            }
-            Value::Function { captured, .. } => {
-                if seen.insert(captured.rc_ptr()) {
-                    stack.extend(captured.values());
-                }
-            }
-            Value::Signal { value, .. } => stack.push(*value),
-            _ => {}
-        }
-    }
-}
-
-/// Collect GC statistics (tracked_arrays, last_alloc_count) — for diagnostics.
+/// Collect GC statistics (tracked containers, last_alloc_count) — for diagnostics.
 pub fn gc_stats() -> (usize, u64) {
     let tracked = GC_HEAP.with(|h| h.borrow().len());
     let allocs = GC_ALLOC_COUNT.with(|c| *c.borrow());
@@ -349,5 +382,51 @@ mod tests {
             strong.borrow_mut().clear(); // break cycle manually
         }
         assert_eq!(weak.strong_count(), 0, "after breaking cycle: memory freed");
+    }
+
+    #[test]
+    fn gc_collects_dict_and_object_cycles_and_spares_held_ones() {
+        use crate::value::{ObjectInstance, SharedDict, SharedObject};
+        let (wd, wo) = {
+            let d = SharedDict::empty();
+            let o = SharedObject::new(ObjectInstance { class_name: "N".into(), fields: Default::default() });
+            d.insert("o".into(), Value::Object(o.clone()));
+            o.set_field("d".into(), Value::Dict(d.clone()));
+            (std::rc::Rc::downgrade(d.rc()), std::rc::Rc::downgrade(o.rc()))
+        };
+        assert_eq!((wd.strong_count(), wo.strong_count()), (1, 1));
+        gc_collect(std::iter::empty());
+        assert_eq!((wd.strong_count(), wo.strong_count()), (0, 0), "dict <-> object cycle must be freed");
+
+        let held = SharedDict::empty();
+        held.insert("self".into(), Value::Dict(held.clone()));
+        held.insert("n".into(), Value::Number(3.0));
+        gc_collect(std::iter::empty());
+        assert!(matches!(held.get("n"), Some(Value::Number(n)) if n == 3.0), "a held cyclic dict must keep its contents");
+    }
+
+    #[test]
+    fn gc_collects_closure_capture_cycles() {
+        use crate::value::{new_cell, Captures};
+        let w = {
+            let cell = new_cell(Value::Null);
+            let caps = Captures::from_items(vec![("f".to_string(), Value::Cell(cell.clone()))]);
+            *cell.borrow_mut() = Value::Function { params: std::rc::Rc::from(Vec::<String>::new()), bytecode_start: 0, captured: caps.clone() };
+            std::rc::Rc::downgrade(&cell)
+        };
+        assert_eq!(w.strong_count(), 1, "only the capture table holds the cell, and only the cell holds the table");
+        gc_collect(std::iter::empty());
+        assert_eq!(w.strong_count(), 0, "a closure that captured itself must be freed");
+    }
+
+    #[test]
+    fn detached_copies_are_not_registered() {
+        let a = SharedArray::new(vec![Value::Number(1.0)]);
+        a.push(Value::Array(a.clone()));
+        let (before, _) = gc_stats();
+        let copy = Value::Array(a.clone()).detached();
+        let (after, _) = gc_stats();
+        assert_eq!(before, after, "a detached copy leaves this thread, so it must not enter this thread's registry");
+        drop(copy);
     }
 }

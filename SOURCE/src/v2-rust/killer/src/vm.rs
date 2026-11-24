@@ -524,10 +524,15 @@ fn spawn_task_thread(
     slot: std::sync::Arc<std::sync::Mutex<Option<Box<Value>>>>,
 ) {
     let failed_slot = std::sync::Arc::clone(&slot);
+    // the task counts against the memory cap of the evaluation that started it (see `memcap`)
+    let cap = crate::memcap::inherit();
     let spawned = std::thread::Builder::new()
         .name("killer-task".to_string())
         .stack_size(SPAWN_STACK_BYTES)
-        .spawn(move || run_spawned_task(task, func, args, slot));
+        .spawn(move || {
+            let _cap = crate::memcap::adopt(cap);
+            run_spawned_task(task, func, args, slot)
+        });
     if spawned.is_err() {
         *failed_slot.lock().unwrap() = Some(Box::new(Value::TaskError(Box::new(Value::Str(
             "could not start a thread for this task".to_string(),
@@ -1094,14 +1099,12 @@ impl VirtualMachine {
             // (polled every 256 instructions; the interval is 50,000 allocations).
             gc_poll = gc_poll.wrapping_add(1);
             if gc_poll & 0xFF == 0 {
+                // a task thread has no step budget of its own: it still stops when the evaluation's memory cap is hit
+                crate::memcap::check()?;
                 let allocs = crate::gc::GC_ALLOC_COUNT.with(|c| *c.borrow());
                 if allocs >= self.gc_alloc_epoch {
-                    // Collect all live values as roots.
-                    let roots = self.stack.iter()
-                        .chain(self.scopes.iter().flat_map(|s| s.values()))
-                        .chain(self.locals_stack.iter().flat_map(|f| f.iter()))
-                        .cloned();
-                    crate::gc::gc_collect(roots);
+                    // Cycle collection by trial deletion: it finds every holder through the reference counts, so no root list is needed.
+                    crate::gc::gc_collect(std::iter::empty());
                     // Each collection walks every live array, so wait for at least as many new
                     // allocations as there are live arrays (amortised O(1) per allocation; a fixed
                     // interval made building N nested lists quadratic).
@@ -1262,7 +1265,7 @@ impl VirtualMachine {
                     if let Some(slot) = self.lookup_mut(name.as_str()) {
                         if !matches!(slot, Value::Cell(_)) {
                             let v = std::mem::replace(slot, Value::Null);
-                            *slot = Value::Cell(std::rc::Rc::new(std::cell::RefCell::new(v)));
+                            *slot = Value::Cell(crate::value::new_cell(v));
                         }
                     }
                 }
@@ -6243,7 +6246,7 @@ impl VirtualMachine {
                         ip: self.ip + 1,
                     };
                     let id = self.generator_manager.create(frame);
-                    self.stack.push(Value::Generator(id));
+                    self.stack.push(Value::Generator(self.generator_manager.handle(id)));
                     let return_ip = self.call_stack.pop().ok_or_else(|| {
                         VmError::runtime_error("generator created without an active call".to_string())
                     })?;
@@ -6612,7 +6615,8 @@ impl VirtualMachine {
 
     /// Register a Rust-driven generator (see `generator::NativeSource`) and return its handle.
     pub(crate) fn register_native_gen(&mut self, src: Box<dyn crate::generator::NativeSource>) -> Value {
-        Value::Generator(self.generator_manager.create_native(src))
+        let id = self.generator_manager.create_native(src);
+        Value::Generator(self.generator_manager.handle(id))
     }
 
     /// `call_value_nested` with a wall-clock deadline (`wall_ms`, 0 = none): the call fails with a

@@ -11216,6 +11216,7 @@ The fact that you shared this means something. What's underneath it  what are 
             _ => return Err(VmError::runtime_error("bytes_new: size must be numeric".to_string())),
         };
         if size > 1_073_741_824 { return Err(VmError::runtime_error("bytes_new: max 1GB".to_string())); }
+        crate::memcap::reserve(size)?;
         Ok(Value::Bytes(vec![0u8; size]))
     }
 
@@ -11881,8 +11882,9 @@ The fact that you shared this means something. What's underneath it  what are 
     fn page_alloc(args: &[Value]) -> Result<Value, VmError> {
         if args.len() != 1 { return Err(VmError::runtime_error("page_alloc(num_pages)".to_string())); }
         let num = match &args[0] { Value::Number(n) => *n as usize, Value::Integer(n) => *n as usize, _ => return Err(VmError::runtime_error("page_alloc: argument must be numeric".to_string())) };
-        let size = num * 4096; // 4KB pages
+        let size = num.saturating_mul(4096); // 4KB pages
         if size > 1_073_741_824 { return Err(VmError::runtime_error("page_alloc: max 1GB".to_string())); }
+        crate::memcap::reserve(size)?;
         Ok(Value::Bytes(vec![0u8; size]))
     }
 
