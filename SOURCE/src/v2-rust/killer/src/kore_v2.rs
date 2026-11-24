@@ -538,6 +538,9 @@ fn write_zvar(buf: &mut Vec<u8>, n: i64) { write_varint(buf, zigzag_enc(n)); }
 /// Largest row count a single chunk may claim (hostile-input bound).
 const MAX_CHUNK_ROWS: usize = 1 << 24;
 
+/// Largest decompressed block any codec may produce (hostile-input bound).
+const MAX_DECOMPRESSED: usize = 1 << 28;
+
 /// Pre-allocation hint for header-derived sizes: never trust a count read from the input.
 #[inline]
 fn cap_hint(n: usize) -> usize { n.min(1 << 16) }
@@ -711,9 +714,10 @@ fn lz77_compress(input: &[u8]) -> Vec<u8> {
 }
 
 fn lz77_decompress(input: &[u8]) -> Vec<u8> {
-    let mut out = Vec::with_capacity(input.len() * 2);
+    let mut out = Vec::with_capacity(cap_hint(input.len().saturating_mul(2)));
     let mut i = 0;
     while i < input.len() {
+        if out.len() > MAX_DECOMPRESSED { break; }
         if input[i] == 0xFF && i + 4 < input.len() {
             let off = u16::from_le_bytes([input[i+1], input[i+2]]) as usize;
             let len = u16::from_le_bytes([input[i+3], input[i+4]]) as usize;
@@ -908,6 +912,9 @@ fn huffman_decompress(input: &[u8]) -> Vec<u8> {
         }
     }
 
+    if orig_len > MAX_DECOMPRESSED { return Vec::new(); }
+    // canonical code lengths are limited to 15 bits by the lookup table
+    if code_lens.iter().any(|&l| l > 15) { return Vec::new(); }
     let bitstream = &input[bitstream_start..];
 
     // Rebuild canonical codes
@@ -938,7 +945,7 @@ fn huffman_decompress(input: &[u8]) -> Vec<u8> {
     }
 
     // Decode using lookup table — O(1) per symbol
-    let mut out = Vec::with_capacity(orig_len);
+    let mut out = Vec::with_capacity(cap_hint(orig_len));
     let mut bitbuf: u64 = 0;
     let mut bits_avail = 0u32;
     let mut byte_pos = 0usize;
@@ -955,7 +962,7 @@ fn huffman_decompress(input: &[u8]) -> Vec<u8> {
         // Lookup top 15 bits
         let peek = (bitbuf >> 49) as usize & 0x7FFF;
         let (sym, len) = lookup[peek];
-        if len == 0 { break; }
+        if len == 0 || len as u32 > bits_avail { break; }
         out.push(sym);
         bitbuf <<= len;
         bits_avail -= len as u32;
@@ -1079,6 +1086,7 @@ fn range_decompress(input: &[u8]) -> Vec<u8> {
     if p + 3 >= input.len() { return Vec::new(); }
     let orig_len = u32::from_le_bytes([input[p], input[p+1], input[p+2], input[p+3]]) as usize;
     p += 4;
+    if orig_len > MAX_DECOMPRESSED { return Vec::new(); }
 
     // Single-symbol case
     if active == 1 {
@@ -1089,6 +1097,8 @@ fn range_decompress(input: &[u8]) -> Vec<u8> {
     // Build CDF
     let mut cdf = [0u32; 257];
     for i in 0..256 { cdf[i + 1] = cdf[i] + norm[i] as u32; }
+    // a valid table sums to at most RC_SCALE
+    if cdf[256] > RC_SCALE { return Vec::new(); }
 
     // Build reverse lookup: for each frequency position, which symbol?
     let mut sym_lookup = vec![0u8; RC_SCALE as usize];
@@ -1110,19 +1120,24 @@ fn range_decompress(input: &[u8]) -> Vec<u8> {
     }
     let mut low: u32 = 0;
     let mut range: u32 = u32::MAX;
-    let mut out = Vec::with_capacity(orig_len);
+    let mut out = Vec::with_capacity(cap_hint(orig_len));
 
     for _ in 0..orig_len {
+        // the coder never reads more than a few bytes past the end of a valid stream
+        if cp > coded.len().saturating_add(8) { break; }
         let r = range / RC_SCALE;
         let offset = ((code.wrapping_sub(low)) / r).min(RC_SCALE - 1);
         let sym = sym_lookup[offset as usize];
         let si = sym as usize;
-        low = low.wrapping_add(r * cdf[si]);
+        // a frequency slot that no symbol covers means a corrupt table
+        if cdf[si + 1] == cdf[si] { break; }
+        low = low.wrapping_add(r.wrapping_mul(cdf[si]));
         range = if cdf[si + 1] - cdf[si] < RC_SCALE {
-            r * (cdf[si + 1] - cdf[si])
+            r.wrapping_mul(cdf[si + 1] - cdf[si])
         } else {
-            range - r * cdf[si]
+            range.wrapping_sub(r.wrapping_mul(cdf[si]))
         };
+        if range == 0 { break; }
 
         while range < RC_BOT {
             low <<= 8;
@@ -2077,6 +2092,14 @@ fn encode_nested_val(v: &KVal) -> Vec<u8> {
 
 /// Decode a single nested KVal recursively.
 fn decode_nested_val(data: &[u8], pos: usize) -> (KVal, usize) {
+    // bounded depth and total node budget: nested lengths come from the (untrusted) input
+    let mut budget = 1usize << 20;
+    decode_nested_val_b(data, pos, 0, &mut budget)
+}
+
+fn decode_nested_val_b(data: &[u8], pos: usize, depth: usize, budget: &mut usize) -> (KVal, usize) {
+    if depth > 64 || *budget == 0 { return (KVal::Null, pos.saturating_add(1)); }
+    *budget -= 1;
     if pos >= data.len() { return (KVal::Null, pos); }
     let tag = data[pos];
     let mut p = pos + 1;
@@ -2090,52 +2113,55 @@ fn decode_nested_val(data: &[u8], pos: usize) -> (KVal, usize) {
         }
         3 => {
             let (slen, p2) = read_varint(data, p); p = p2;
-            let end = (p + slen as usize).min(data.len());
-            let s = String::from_utf8_lossy(&data[p..end]).into_owned();
+            let end = p.saturating_add(slen as usize).min(data.len());
+            let s = String::from_utf8_lossy(sub(data, p, end)).into_owned();
             (KVal::Str(s), end)
         }
         4 => { let b = data.get(p).copied().unwrap_or(0) != 0; (KVal::Bool(b), p + 1) }
         5 => {
             let (blen, p2) = read_varint(data, p); p = p2;
-            let end = (p + blen as usize).min(data.len());
-            (KVal::Bytes(data[p..end].to_vec()), end)
+            let end = p.saturating_add(blen as usize).min(data.len());
+            (KVal::Bytes(sub(data, p, end).to_vec()), end)
         }
         6 => { // Struct
             let (nfields, p2) = read_varint(data, p); p = p2;
-            let mut fields = Vec::with_capacity(nfields as usize);
+            let nfields = nfields.min(data.len() as u64);
+            let mut fields = Vec::with_capacity(cap_hint(nfields as usize));
             for _ in 0..nfields {
                 let (nlen, p2) = read_varint(data, p); p = p2;
-                let end = (p + nlen as usize).min(data.len());
-                let name = String::from_utf8_lossy(&data[p..end]).into_owned();
+                let end = p.saturating_add(nlen as usize).min(data.len());
+                let name = String::from_utf8_lossy(sub(data, p, end)).into_owned();
                 p = end;
                 let (clen, p2) = read_varint(data, p); p = p2;
-                let (val, _) = decode_nested_val(data, p);
-                p += clen as usize;
+                let (val, _) = decode_nested_val_b(data, p, depth + 1, budget);
+                p = p.saturating_add(clen as usize);
                 fields.push((name, val));
             }
             (KVal::Struct(fields), p)
         }
         7 => { // List
             let (nitems, p2) = read_varint(data, p); p = p2;
-            let mut items = Vec::with_capacity(nitems as usize);
+            let nitems = nitems.min(data.len() as u64);
+            let mut items = Vec::with_capacity(cap_hint(nitems as usize));
             for _ in 0..nitems {
                 let (clen, p2) = read_varint(data, p); p = p2;
-                let (val, _) = decode_nested_val(data, p);
-                p += clen as usize;
+                let (val, _) = decode_nested_val_b(data, p, depth + 1, budget);
+                p = p.saturating_add(clen as usize);
                 items.push(val);
             }
             (KVal::List(items), p)
         }
         8 => { // Map
             let (npairs, p2) = read_varint(data, p); p = p2;
-            let mut pairs = Vec::with_capacity(npairs as usize);
+            let npairs = npairs.min(data.len() as u64);
+            let mut pairs = Vec::with_capacity(cap_hint(npairs as usize));
             for _ in 0..npairs {
                 let (klen, p2) = read_varint(data, p); p = p2;
-                let (key, _) = decode_nested_val(data, p);
-                p += klen as usize;
+                let (key, _) = decode_nested_val_b(data, p, depth + 1, budget);
+                p = p.saturating_add(klen as usize);
                 let (vlen, p2) = read_varint(data, p); p = p2;
-                let (val, _) = decode_nested_val(data, p);
-                p += vlen as usize;
+                let (val, _) = decode_nested_val_b(data, p, depth + 1, budget);
+                p = p.saturating_add(vlen as usize);
                 pairs.push((key, val));
             }
             (KVal::Map(pairs), p)
