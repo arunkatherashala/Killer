@@ -301,6 +301,63 @@ println("served", n)
 }
 
 #[test]
+fn serve_over_https_runs_slow_handlers_in_parallel_on_the_worker_pool() {
+    let Some((_d, cert, key)) = creds() else { return };
+    if !have_curl() {
+        return;
+    }
+    let port = {
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        l.local_addr().unwrap().port()
+    };
+    let server_src = format!(
+        r#"fn h(req) {{
+    if req["path"] == "/ping" {{
+        return "pong"
+    }}
+    sleep_ms(3000)
+    return "slow " + req["path"]
+}}
+n = serve({port}, h, {{"workers": 4, "max_requests": 4, "tls": {{"cert": "{cert}", "key": "{key}"}}}})
+println("served", n)
+"#
+    );
+    let file = script(&server_src);
+    let mut server = Command::new(env!("CARGO_BIN_EXE_killer")).arg("run").arg(&file).stdout(Stdio::piped()).stderr(server_stderr()).spawn().unwrap();
+    let mut guard = KillGuard(Some(server.id()));
+    let curl = move |p: &str| Command::new("curl").args(["-sS", "-k", "--max-time", "90"]).arg(format!("https://127.0.0.1:{port}{p}")).output().unwrap();
+    let mut up = false;
+    for _ in 0..300 {
+        let o = curl("/ping");
+        if o.status.success() {
+            assert_eq!(String::from_utf8_lossy(&o.stdout), "pong");
+            up = true;
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(200));
+    }
+    assert!(up, "the https server never answered");
+    let started = std::time::Instant::now();
+    let clients: Vec<_> = ["/a", "/b", "/c"].iter().map(|p| {
+        let p = p.to_string();
+        std::thread::spawn(move || (p.clone(), curl(&p)))
+    }).collect();
+    for c in clients {
+        let (p, o) = c.join().unwrap();
+        assert!(o.status.success(), "{p}: {}", String::from_utf8_lossy(&o.stderr));
+        assert_eq!(String::from_utf8_lossy(&o.stdout), format!("slow {p}"));
+    }
+    // three 3 s handlers on four workers overlap; one at a time they would take 9 s
+    assert!(started.elapsed() < std::time::Duration::from_secs(8), "took {:?}", started.elapsed());
+    let mut line = String::new();
+    BufReader::new(server.stdout.take().unwrap()).read_line(&mut line).unwrap();
+    assert_eq!(line.trim(), "served 4", "server report");
+    assert!(server.wait().unwrap().success());
+    guard.0 = None;
+    let _ = std::fs::remove_dir_all(file.parent().unwrap());
+}
+
+#[test]
 fn clear_errors_for_missing_or_mismatched_credentials() {
     let Some((d, cert, key)) = creds() else { return };
     let other = creds().unwrap();
