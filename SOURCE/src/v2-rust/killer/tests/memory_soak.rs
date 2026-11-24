@@ -161,3 +161,23 @@ fn bytes_new_and_page_alloc_respect_the_cap() {
     // within the cap they still work
     assert!(run_capped("len(bytes_new(1000000)) + len(page_alloc(10))", 16).is_ok());
 }
+
+#[test]
+fn many_trivial_tasks_return_everything_they_counted_when_their_thread_ends() {
+    // The script holds a 600 KB string under the smallest cap (1 MB), then runs 1500 empty tasks in a row. Whatever
+    // a task thread leaves counted when it ends (the runtime's start closure and result packet, the thread-local
+    // registry of the collector) adds up to a false "memory limit exceeded" although nothing is held.
+    let code = "kfn work(n) {
+  return [n]
+}
+keep = \"x\" * 600000
+round = 0
+while round < 1500 {
+  x = await spawn work(10)
+  round = round + 1
+}
+len(keep)
+";
+    let r = run_capped(code, 1);
+    assert!(r.is_ok(), "false memory limit after many trivial tasks: {r:?}");
+}

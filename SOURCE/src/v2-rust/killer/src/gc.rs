@@ -262,6 +262,14 @@ where
     });
 }
 
+/// Drop this thread's container registry now. A task thread calls it while it is still counted against the memory
+/// cap, so the weak boxes it keeps alive are returned to the budget (thread-local destructors run after the thread
+/// left the budget, and their frees would otherwise never be subtracted).
+pub fn release_thread() {
+    let heap = GC_HEAP.try_with(|h| std::mem::take(&mut *h.borrow_mut())).unwrap_or_default();
+    drop(heap);
+}
+
 /// Collect GC statistics (tracked containers, last_alloc_count) — for diagnostics.
 pub fn gc_stats() -> (usize, u64) {
     let tracked = GC_HEAP.with(|h| h.borrow().len());
