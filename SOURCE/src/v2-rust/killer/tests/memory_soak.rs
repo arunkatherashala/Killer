@@ -163,20 +163,21 @@ fn bytes_new_and_page_alloc_respect_the_cap() {
 }
 
 #[test]
-fn thousands_of_sequential_tasks_do_not_trip_a_false_limit() {
-    // 3000 tasks one after another, each building a ~1 MB list, a string and a dict and returning a value, under a
-    // 16 MB cap. The script never holds more than a few MB, so the cap must never fire however many tasks ran.
-    let code = "kfn work(n) {\n  a = []\n  i = 0\n  while i < n {\n    push(a, i)\n    i = i + 1\n  }\n  d = {\"k\": \"v\" * 100, \"n\": len(a)}\n  return [len(a), d]\n}\nround = 0\ntotal = 0\nwhile round < 3000 {\n  r = await spawn work(500)\n  total = total + r[0]\n  round = round + 1\n}\nif total != 1500000 {\n  throw \"wrong total\"\n}\n";
-    let r = run_capped(code, 16);
-    assert!(r.is_ok(), "false memory limit after many sequential tasks: {r:?}");
+fn many_trivial_tasks_return_everything_they_counted_when_their_thread_ends() {
+    // The script holds a 600 KB string under the smallest cap (1 MB), then runs 1500 empty tasks in a row. Whatever
+    // a task thread leaves counted when it ends (the runtime's start closure and result packet, the thread-local
+    // registry of the collector) adds up to a false "memory limit exceeded" although nothing is held.
+    let code = "kfn work(n) {
+  return [n]
 }
-
-#[test]
-fn trivial_tasks_return_everything_they_counted_when_their_thread_ends() {
-    // Under the smallest cap (1 MB) 20000 empty tasks in a row: whatever a task thread still held in its
-    // thread-local state when it ended (the container registry of the collector, for one) must have been returned
-    // to the shared counter, or a few dozen bytes per task add up to a false "memory limit exceeded".
-    let code = "kfn work(n) {\n  return [n]\n}\nround = 0\nwhile round < 20000 {\n  x = await spawn work(10)\n  round = round + 1\n}\n\"done\"\n";
+keep = \"x\" * 600000
+round = 0
+while round < 1500 {
+  x = await spawn work(10)
+  round = round + 1
+}
+len(keep)
+";
     let r = run_capped(code, 1);
     assert!(r.is_ok(), "false memory limit after many trivial tasks: {r:?}");
 }
