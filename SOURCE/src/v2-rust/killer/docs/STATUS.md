@@ -61,8 +61,7 @@ Dead code was moved out of `src/` with `git mv` (history kept, nothing deleted):
   `contract_programming`, `dependent_types` (+ `_ast`, `_check`, `_integration`), `effect_handlers`,
   `effect_system`, `message_passing`, `trait_system`, `type_checking_runtime`, `vm_integration`,
   `vm_v2_components`. **Dependent types, an effect system, and the trait system described in older design docs are
-  not implemented.** `cluster_coordinator.rs` stayed in `src/` (still named by the feature-gated
-  `tests/cluster_demo.rs`, which does not compile because the module is not declared); `ghost_vm_sha.rs` and
+  not implemented.** `ghost_vm_sha.rs` and
   `mcp_minjson.rs` stayed because `ghost_vm.rs` and `bin/killer_mcp.rs` include them with `#[path]`.
 - `archive/stubs/`: 33 declared-but-empty modules of 7-21 lines that nothing referenced (abac, concurrency_solver,
   database_mongodb, database_postgresql, database_query, distributed_tracing, file_upload, game_theory, graphql,
@@ -96,3 +95,15 @@ cargo test --tests --no-fail-fast
 python parity/run_parity.py          # set KILLER_BIN to the built killer_super
 python docs/check_examples.py
 ```
+
+## Archived in the inference/stub pass
+
+Moved with `git mv` into `archive/uncompiled/` and removed from the build; none of these are features:
+
+- `kafka/` (the Kafka client was a mock), `spark/`, `cluster_coordinator.rs` and its test
+  (`cluster_demo_test.rs`; the `cluster-demo-tests` Cargo feature now gates nothing).
+- `llm_client.rs` (returned canned text; use `crate::llm` for real calls), `agent_framework.rs` (fake
+  act/observe), `websocket.rs` (simulated; the `websocket_new` / `websocket_server_new` builtins were removed;
+  the real WebSocket client/server is `ws_connect` / `ws_accept` in `net_sock`), `auth.rs` (always returned no user).
+- `ai/providers/local.rs` stays compiled because `ProviderManager` registers it, but its simulated embedding,
+  classification, extraction and ONNX paths now return errors.

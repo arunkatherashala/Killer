@@ -61,7 +61,8 @@ The row-by-row history is in the root `tracker.csv`; the Python comparison is in
 
 | Feature | Status | Notes |
 |---|---|---|
-| Local model inference (GGUF) | yes | |
+| Local model inference (GGUF) | partial | LLaMA-family decoder models. BPE merge ranks, NEOX RoPE (Qwen2/Phi/Gemma) and shape validation at load are unit tested; **not validated end to end against a real model in this repo**. Quantization: see `docs/INFERENCE_QUANT.md` (IQ1/IQ2/IQ3 and TQ1_0 return an error) |
+| Local provider (`ai` runtime `local`) | Ollama only | `generate` calls a local Ollama; embeddings, classify, extract and ONNX inference return a "not implemented" error |
 | LLM providers (OpenAI, Anthropic, Ollama) | partial | request building, headers, parsing, streaming and errors tested against a local fake server (`tests/llm_live.rs`); the opt-in live suite (`docs/LLM_TESTING.md`) is written but **NOT TESTED** against any real provider (waiting for an Ollama install or a key) |
 | Embeddings, vector store, chunking, RAG | yes | scale measured at 33k and 332k chunks |
 | Streaming responses | yes | |

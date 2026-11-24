@@ -510,8 +510,6 @@ cd SOURCE/src/v2-rust/killer
 - `watch_dir`
 - `watch_report`
 - `watch_value`
-- `websocket_new`
-- `websocket_server_new`
 - `wfi`
 - `what_if`
 - `write`
