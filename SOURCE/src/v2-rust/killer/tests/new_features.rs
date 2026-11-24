@@ -82,7 +82,8 @@ r = async_await(h)
 println(r[0], r[1], r[2], r[3], n)
 "#;
     let file = script(src);
-    let out = Command::new(env!("CARGO_BIN_EXE_killer")).arg("run").arg(&file).output().unwrap();
+    // the page is served on 127.0.0.1: the SSRF guard blocks loopback unless it is allowed explicitly
+    let out = Command::new(env!("CARGO_BIN_EXE_killer")).arg("run").arg(&file).env("KILLER_ALLOW_PRIVATE_NET", "1").output().unwrap();
     let _ = std::fs::remove_dir_all(file.parent().unwrap());
     assert!(out.status.success(), "{}", lf(&out.stderr));
     assert_eq!(lf(&out.stdout).trim(), "true {\"result\":10} 404 200 4");
