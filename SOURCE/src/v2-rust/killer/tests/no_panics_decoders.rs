@@ -159,3 +159,43 @@ fn kore_delete_bitmap_hostile_header() {
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn msgpack_and_toml_mutation_fuzz() {
+    use killer_native::killer_serialization::{msgpack_decode, msgpack_encode, toml_parse, SerValue};
+    let sample = SerValue::Map(vec![
+        ("name".into(), SerValue::Str("killer".into())),
+        ("n".into(), SerValue::Int(-5)),
+        ("f".into(), SerValue::Float(1.5)),
+        ("list".into(), SerValue::Array(vec![SerValue::Int(1), SerValue::Null, SerValue::Bool(true), SerValue::Str("x".into())])),
+    ]);
+    let mp = msgpack_encode(&sample);
+    let toml = b"title = \"x\"\nn = 3\narr = [1, [2, 3], \"a\"]\n[server]\nhost = 'h'\nport = 80\n".to_vec();
+    let mut rng = Rng(0xDEADBEEFCAFEF00D);
+    for it in 0..4000 {
+        for (label, base) in [("msgpack", &mp), ("toml", &toml)] {
+            let mut b = base.clone();
+            match rng.below(3) {
+                0 => {
+                    for _ in 0..1 + rng.below(4) {
+                        let i = rng.below(b.len());
+                        b[i] = rng.next() as u8;
+                    }
+                }
+                1 => b.truncate(rng.below(b.len())),
+                _ => {
+                    let i = rng.below(b.len());
+                    b.insert(i, rng.next() as u8);
+                }
+            }
+            let is_mp = label == "msgpack";
+            guarded(&format!("{label} iter {it}"), b, move |d| {
+                if is_mp {
+                    let _ = msgpack_decode(&d);
+                } else {
+                    let _ = toml_parse(&String::from_utf8_lossy(&d));
+                }
+            });
+        }
+    }
+}
