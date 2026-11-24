@@ -699,3 +699,28 @@ fn operations_doc_lists_every_polyglot_variable() {
     }
     assert!(ops.contains("KILLER_POLYGLOT_<LANG>"));
 }
+
+// --- Review: the block pre-pass is linear in the file size ---------------------------------------
+
+#[test]
+fn at_signs_in_strings_do_not_make_compiling_quadratic() {
+    fn source(at: bool) -> String {
+        let (mail, mention) = if at { ("user@example.com", "ping @team") } else { ("user_example.com", "ping _team") };
+        let mut s = String::new();
+        for i in 0..30_000 {
+            s.push_str(&format!("a{} = \"{}\"\nb{} = \"{}\"\n", i % 50, mail, i % 50, mention));
+        }
+        s
+    }
+    let time = |src: &str| {
+        let start = std::time::Instant::now();
+        killer_native::compiler::compile_killer_subset(src).expect("compiles");
+        start.elapsed()
+    };
+    let (plain, with_at) = (source(false), source(true));
+    assert_eq!(plain.lines().count(), 60_000);
+    let base = time(&plain);
+    let at = time(&with_at);
+    let bound = base.mul_f64(1.5) + std::time::Duration::from_secs(1);
+    assert!(at <= bound, "60k lines: {:?} with '@' in strings vs {:?} without (bound {:?})", at, base, bound);
+}
