@@ -46,7 +46,9 @@ fn main() {
     fail(1, str(e))
   }
   build_api(store)
-  opts = {}
+  # the store lives in memory: one worker keeps every request on the same copy of it
+  # (each serve worker has its own copy of the program's data)
+  opts = {"workers": 1}
   if max_requests != null {
     opts["max_requests"] = max_requests
   }
