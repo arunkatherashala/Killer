@@ -207,8 +207,8 @@ fn test_concurrency_unlimited(results: &mut TestResults) {
         let _ = handle.join();
     }
 
-    let total_ops = *operations_completed.lock().unwrap();
-    let total_errors = *errors.lock().unwrap();
+    let total_ops = *operations_completed.lock().unwrap_or_else(|e| e.into_inner());
+    let total_errors = *errors.lock().unwrap_or_else(|e| e.into_inner());
     let success_rate = if total_ops > 0 {
         (total_ops as f32 / (total_ops + total_errors) as f32) * 100.0
     } else {

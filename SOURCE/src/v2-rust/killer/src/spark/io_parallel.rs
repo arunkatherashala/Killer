@@ -49,7 +49,7 @@ impl ThreadPool {
 
             let thread = thread::spawn(move || loop {
                 let message = {
-                    let mut recv = receiver.lock().unwrap();
+                    let mut recv = receiver.lock().unwrap_or_else(|e| e.into_inner());
                     recv.recv().unwrap()
                 };
 

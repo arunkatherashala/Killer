@@ -475,7 +475,7 @@ Be rigorous, precise, and intellectually honest.";
 /// Falls back to standard `khlm_ask` if no LLM is configured.
 pub fn khlm_ask_expert(question: &str) -> String {
     let cfg_opt = {
-        let lock = config().lock().unwrap();
+        let lock = config().lock().unwrap_or_else(|e| e.into_inner());
         if lock.llm_available() { Some(lock.clone()) } else { None }
     };
     if let Some(cfg) = cfg_opt {
@@ -722,7 +722,7 @@ pub fn khlm_generate_code(question: &str) -> String {
     }
 
     let cfg_opt = {
-        let lock = config().lock().unwrap();
+        let lock = config().lock().unwrap_or_else(|e| e.into_inner());
         if lock.llm_available() { Some(lock.clone()) } else { None }
     };
     if let Some(cfg) = cfg_opt {
@@ -2541,7 +2541,7 @@ fn scaffold_django_react_fullstack() -> String {
 /// Deep reasoning version of khlm_ask_expert — uses thinking-oriented prompt.
 pub fn khlm_think_expert(question: &str) -> String {
     let cfg_opt = {
-        let lock = config().lock().unwrap();
+        let lock = config().lock().unwrap_or_else(|e| e.into_inner());
         if lock.llm_available() { Some(lock.clone()) } else { None }
     };
     if let Some(cfg) = cfg_opt {
@@ -2581,7 +2581,7 @@ Use storytelling, metaphors, and thought experiments where they illuminate — n
 /// Imagine/what-if mode — visionary, grounded speculation with multi-turn context.
 pub fn khlm_imagine_expert(question: &str) -> String {
     let cfg_opt = {
-        let lock = config().lock().unwrap();
+        let lock = config().lock().unwrap_or_else(|e| e.into_inner());
         if lock.llm_available() { Some(lock.clone()) } else { None }
     };
     if let Some(cfg) = cfg_opt {
@@ -2759,7 +2759,7 @@ Use formulas and short illustrative pseudo-code. Prior conversation turns are re
 Earlier messages in this session are real prior turns — continue threads, reuse definitions the user gave, and answer follow-ups in context.";
 
 fn ai_lab_llm(question: &str) -> String {
-    let cfg = config().lock().unwrap();
+    let cfg = config().lock().unwrap_or_else(|e| e.into_inner());
     let api_key  = cfg.llm_api_key.clone();
     let provider = cfg.llm_provider.clone();
     let model    = cfg.llm_model.clone();
@@ -3133,7 +3133,7 @@ pub fn khlm_polyglot_ask(operation: &str, lang: &str, code: &str, extra: &str)
 
     // Check result cache
     {
-        let cfg = config().lock().unwrap();
+        let cfg = config().lock().unwrap_or_else(|e| e.into_inner());
         if let Some(cached) = cfg.cache.get(&cache_key) {
             return (cached.text.clone(), "CAG/Cache", cached.ms);
         }
@@ -3145,7 +3145,7 @@ pub fn khlm_polyglot_ask(operation: &str, lang: &str, code: &str, extra: &str)
     // Tier 0: CAG static knowledge base
     // Extract result while holding lock, then release lock BEFORE calling cache_result
     let cag_result: Option<String> = {
-        let cfg = config().lock().unwrap();
+        let cfg = config().lock().unwrap_or_else(|e| e.into_inner());
         if cfg.cag_enabled {
             // Search against code + error context (extra often contains stderr)
             let search_text = format!("{} {} {}", prompt, code, extra).to_lowercase();
@@ -3167,7 +3167,7 @@ pub fn khlm_polyglot_ask(operation: &str, lang: &str, code: &str, extra: &str)
 
     // Tier 2: LLM (Ollama / Groq / OpenAI / Anthropic)
     {
-        let cfg = config().lock().unwrap();
+        let cfg = config().lock().unwrap_or_else(|e| e.into_inner());
         if cfg.llm_available() {
             let cfg_clone = cfg.clone();
             drop(cfg);
@@ -3182,7 +3182,7 @@ pub fn khlm_polyglot_ask(operation: &str, lang: &str, code: &str, extra: &str)
 
     // Tier 3: RLM deep reasoning
     {
-        let cfg = config().lock().unwrap();
+        let cfg = config().lock().unwrap_or_else(|e| e.into_inner());
         if cfg.rlm_available() {
             let model = cfg.rlm_model.clone();
             drop(cfg);
@@ -3199,7 +3199,7 @@ pub fn khlm_polyglot_ask(operation: &str, lang: &str, code: &str, extra: &str)
     // Skip Ghost-108 web search when LLM+RLM are both offline.
     // Return a guidance message so the user knows how to enable AI backends.
     let (llm_avail, rlm_avail) = {
-        let cfg = config().lock().unwrap();
+        let cfg = config().lock().unwrap_or_else(|e| e.into_inner());
         (cfg.llm_available(), cfg.rlm_available())
     };
 
@@ -3322,7 +3322,7 @@ pub fn builtin_khlm_translate(args: &[Value]) -> Result<Value, VmError> {
 /// khlm_status() - show which AI tiers are configured and available.
 pub fn builtin_khlm_status(_args: &[Value]) -> Result<Value, VmError> {
     crate::security::require_llm()?;
-    let cfg = config().lock().unwrap();
+    let cfg = config().lock().unwrap_or_else(|e| e.into_inner());
 
     let llm_status = if cfg.llm_available() {
         format!(
@@ -3388,7 +3388,7 @@ pub fn builtin_khlm_set_llm(args: &[Value]) -> Result<Value, VmError> {
         ));
     }
 
-    let mut cfg = config().lock().unwrap();
+    let mut cfg = config().lock().unwrap_or_else(|e| e.into_inner());
     cfg.llm_provider = provider.clone();
     cfg.llm_api_key  = api_key;
     cfg.llm_model    = model.clone();
@@ -3401,7 +3401,7 @@ pub fn builtin_khlm_set_llm(args: &[Value]) -> Result<Value, VmError> {
 pub fn builtin_khlm_set_rlm(args: &[Value]) -> Result<Value, VmError> {
     crate::security::require_llm()?;
     let path = get_str_arg(args, 0, "model_path")?;
-    let mut cfg = config().lock().unwrap();
+    let mut cfg = config().lock().unwrap_or_else(|e| e.into_inner());
     cfg.rlm_model = path.clone();
     Ok(Value::Str(format!("KhLM Tier 3 RLM configured: {}", path)))
 }
@@ -3410,7 +3410,7 @@ pub fn builtin_khlm_set_rlm(args: &[Value]) -> Result<Value, VmError> {
 /// Safe to call anytime; does not require LLM capability (fixes stuck wrong answers when LLM is off).
 pub fn clear_all_khlm_caches() -> (usize, usize) {
     let poly_n = {
-        let mut cfg = config().lock().unwrap();
+        let mut cfg = config().lock().unwrap_or_else(|e| e.into_inner());
         let n = cfg.cache.len();
         cfg.cache.clear();
         n
@@ -3444,7 +3444,7 @@ pub fn builtin_khlm_write(args: &[Value]) -> Result<Value, VmError> {
 
     // Tier 2: LLM if available
     {
-        let cfg = config().lock().unwrap();
+        let cfg = config().lock().unwrap_or_else(|e| e.into_inner());
         if cfg.llm_available() {
             let cfg_clone = cfg.clone();
             drop(cfg);

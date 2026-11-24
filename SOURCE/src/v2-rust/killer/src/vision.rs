@@ -119,7 +119,7 @@ fn image_describe(path: &str, question: &str) -> String {
     };
 
     // Try LLM vision if a backend is configured
-    let cfg = crate::khlm_polyglot::config().lock().unwrap().clone();
+    let cfg = crate::khlm_polyglot::config().lock().unwrap_or_else(|e| e.into_inner()).clone();
     if cfg.llm_available() {
         if let Some(answer) = llm_vision_call(&bytes, path, question, &cfg) {
             return answer;

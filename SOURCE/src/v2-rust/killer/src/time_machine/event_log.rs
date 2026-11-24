@@ -60,8 +60,8 @@ impl EventLog {
         self.events.push_back(Arc::new(event));
         
         // Update statistics
-        *self.total_events.lock().unwrap() += 1;
-        *self.total_bytes.lock().unwrap() += event_size as u64;
+        *self.total_events.lock().unwrap_or_else(|e| e.into_inner()) += 1;
+        *self.total_bytes.lock().unwrap_or_else(|e| e.into_inner()) += event_size as u64;
         
         Ok(event_id)
     }
@@ -119,22 +119,22 @@ impl EventLog {
     
     /// Get total number of events logged
     pub fn total_events_count(&self) -> u64 {
-        *self.total_events.lock().unwrap()
+        *self.total_events.lock().unwrap_or_else(|e| e.into_inner())
     }
     
     /// Get total bytes stored
     pub fn total_bytes_stored(&self) -> u64 {
-        *self.total_bytes.lock().unwrap()
+        *self.total_bytes.lock().unwrap_or_else(|e| e.into_inner())
     }
     
     /// Get current compression ratio
     pub fn compression_ratio(&self) -> f64 {
-        *self.compression_ratio.lock().unwrap()
+        *self.compression_ratio.lock().unwrap_or_else(|e| e.into_inner())
     }
     
     /// Set compression ratio (called by compressor)
     pub fn set_compression_ratio(&self, ratio: f64) {
-        *self.compression_ratio.lock().unwrap() = ratio;
+        *self.compression_ratio.lock().unwrap_or_else(|e| e.into_inner()) = ratio;
     }
     
     /// Get current in-memory event count

@@ -313,7 +313,7 @@ mod android_aaudio {
 
         /// Get current amplitude (RMS of last 1024 samples)
         pub fn amplitude(&self) -> f64 {
-            let buf = self.buffer.lock().unwrap();
+            let buf = self.buffer.lock().unwrap_or_else(|e| e.into_inner());
             if buf.is_empty() { return 0.0; }
             let start = buf.len().saturating_sub(1024);
             let chunk = &buf[start..];
@@ -388,7 +388,7 @@ mod desktop_audio {
         }
 
         pub fn amplitude(&self) -> f64 {
-            let buf = self.buffer.lock().unwrap();
+            let buf = self.buffer.lock().unwrap_or_else(|e| e.into_inner());
             if buf.is_empty() { return 0.0; }
             let start = buf.len().saturating_sub(1024);
             let chunk = &buf[start..];

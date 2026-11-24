@@ -107,7 +107,7 @@ impl Subject {
 
     /// Subscribe to events. Returns a SubId for unsubscribing.
     pub fn subscribe<F: Fn(&StreamEvent) + Send + 'static>(&self, handler: F) -> SubId {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         let id = inner.next_id;
         inner.next_id += 1;
         inner.subscribers.push(Subscriber { id, handler: Box::new(handler) });
@@ -116,13 +116,13 @@ impl Subject {
 
     /// Unsubscribe by ID.
     pub fn unsubscribe(&self, id: SubId) {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         inner.subscribers.retain(|s| s.id != id);
     }
 
     /// Emit a value to all subscribers.
     pub fn next(&self, value: StreamValue) {
-        let inner = self.inner.lock().unwrap();
+        let inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         if inner.completed { return; }
         let event = StreamEvent::Next(value);
         for sub in &inner.subscribers {
@@ -132,7 +132,7 @@ impl Subject {
 
     /// Emit an error to all subscribers.
     pub fn error(&self, msg: String) {
-        let inner = self.inner.lock().unwrap();
+        let inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         if inner.completed { return; }
         let event = StreamEvent::Error(msg);
         for sub in &inner.subscribers {
@@ -142,7 +142,7 @@ impl Subject {
 
     /// Complete the stream — no more events after this.
     pub fn complete(&self) {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         if inner.completed { return; }
         inner.completed = true;
         let event = StreamEvent::Complete;
@@ -152,11 +152,11 @@ impl Subject {
     }
 
     pub fn is_completed(&self) -> bool {
-        self.inner.lock().unwrap().completed
+        self.inner.lock().unwrap_or_else(|e| e.into_inner()).completed
     }
 
     pub fn subscriber_count(&self) -> usize {
-        self.inner.lock().unwrap().subscribers.len()
+        self.inner.lock().unwrap_or_else(|e| e.into_inner()).subscribers.len()
     }
 }
 
@@ -185,18 +185,18 @@ impl BehaviorSubject {
 
     pub fn subscribe<F: Fn(&StreamEvent) + Send + 'static>(&self, handler: F) -> SubId {
         // Immediately emit current value to new subscriber
-        let current = self.current.lock().unwrap().clone();
+        let current = self.current.lock().unwrap_or_else(|e| e.into_inner()).clone();
         handler(&StreamEvent::Next(current));
         self.subject.subscribe(handler)
     }
 
     pub fn next(&self, value: StreamValue) {
-        *self.current.lock().unwrap() = value.clone();
+        *self.current.lock().unwrap_or_else(|e| e.into_inner()) = value.clone();
         self.subject.next(value);
     }
 
     pub fn value(&self) -> StreamValue {
-        self.current.lock().unwrap().clone()
+        self.current.lock().unwrap_or_else(|e| e.into_inner()).clone()
     }
 
     pub fn complete(&self) { self.subject.complete(); }
@@ -235,7 +235,7 @@ impl Observable {
 
     /// Subscribe and replay all events.
     pub fn subscribe<F: Fn(&StreamEvent) + Send + 'static>(&self, handler: F) {
-        let events = self.events.lock().unwrap();
+        let events = self.events.lock().unwrap_or_else(|e| e.into_inner());
         for event in events.iter() {
             handler(event);
         }
@@ -243,7 +243,7 @@ impl Observable {
 
     /// Collect all Next values into a Vec.
     pub fn collect(&self) -> Vec<StreamValue> {
-        let events = self.events.lock().unwrap();
+        let events = self.events.lock().unwrap_or_else(|e| e.into_inner());
         events.iter().filter_map(|e| {
             if let StreamEvent::Next(v) = e { Some(v.clone()) } else { None }
         }).collect()
@@ -253,7 +253,7 @@ impl Observable {
 
     /// Transform each value with a function.
     pub fn map<F: Fn(&StreamValue) -> StreamValue>(self, f: F) -> Observable {
-        let events = self.events.lock().unwrap();
+        let events = self.events.lock().unwrap_or_else(|e| e.into_inner());
         let mapped: Vec<StreamEvent> = events.iter().map(|e| match e {
             StreamEvent::Next(v) => StreamEvent::Next(f(v)),
             other => other.clone(),
@@ -263,7 +263,7 @@ impl Observable {
 
     /// Keep only values matching predicate.
     pub fn filter<F: Fn(&StreamValue) -> bool>(self, f: F) -> Observable {
-        let events = self.events.lock().unwrap();
+        let events = self.events.lock().unwrap_or_else(|e| e.into_inner());
         let filtered: Vec<StreamEvent> = events.iter().filter(|e| match e {
             StreamEvent::Next(v) => f(v),
             _ => true,
@@ -273,7 +273,7 @@ impl Observable {
 
     /// Take only the first N values.
     pub fn take(self, n: usize) -> Observable {
-        let events = self.events.lock().unwrap();
+        let events = self.events.lock().unwrap_or_else(|e| e.into_inner());
         let mut count = 0;
         let mut result = Vec::new();
         for e in events.iter() {
@@ -295,7 +295,7 @@ impl Observable {
 
     /// Skip the first N values.
     pub fn skip(self, n: usize) -> Observable {
-        let events = self.events.lock().unwrap();
+        let events = self.events.lock().unwrap_or_else(|e| e.into_inner());
         let mut count = 0;
         let skipped: Vec<StreamEvent> = events.iter().filter(|e| {
             match e {
@@ -311,7 +311,7 @@ impl Observable {
 
     /// Remove consecutive duplicate values.
     pub fn distinct_until_changed(self) -> Observable {
-        let events = self.events.lock().unwrap();
+        let events = self.events.lock().unwrap_or_else(|e| e.into_inner());
         let mut result = Vec::new();
         let mut last: Option<StreamValue> = None;
         for e in events.iter() {
@@ -330,7 +330,7 @@ impl Observable {
 
     /// Accumulator — like Array.reduce but emits each intermediate.
     pub fn scan<F: Fn(&StreamValue, &StreamValue) -> StreamValue>(self, initial: StreamValue, f: F) -> Observable {
-        let events = self.events.lock().unwrap();
+        let events = self.events.lock().unwrap_or_else(|e| e.into_inner());
         let mut acc = initial;
         let scanned: Vec<StreamEvent> = events.iter().map(|e| match e {
             StreamEvent::Next(v) => {
@@ -344,7 +344,7 @@ impl Observable {
 
     /// Buffer values into arrays of N.
     pub fn buffer_count(self, count: usize) -> Observable {
-        let events = self.events.lock().unwrap();
+        let events = self.events.lock().unwrap_or_else(|e| e.into_inner());
         let mut result = Vec::new();
         let mut buf: Vec<StreamValue> = Vec::new();
         for e in events.iter() {
@@ -369,8 +369,8 @@ impl Observable {
 
     /// Merge two observables — interleave their events.
     pub fn merge(self, other: Observable) -> Observable {
-        let mut events = self.events.lock().unwrap().clone();
-        let other_events = other.events.lock().unwrap();
+        let mut events = self.events.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        let other_events = other.events.lock().unwrap_or_else(|e| e.into_inner());
         // Remove Complete from first, append all of second
         events.retain(|e| !matches!(e, StreamEvent::Complete));
         for e in other_events.iter() {
@@ -382,7 +382,7 @@ impl Observable {
     /// Emit each value only if debounce_ms has passed since last.
     /// For cold observables, we simulate via index-based dedup.
     pub fn debounce_count(self, min_gap: usize) -> Observable {
-        let events = self.events.lock().unwrap();
+        let events = self.events.lock().unwrap_or_else(|e| e.into_inner());
         let mut result = Vec::new();
         let mut gap = min_gap; // Emit first immediately
         for e in events.iter() {
@@ -465,10 +465,10 @@ impl EventBus {
     }
 
     pub fn on<F: Fn(&StreamValue) + Send + 'static>(&self, topic: &str, handler: F) -> SubId {
-        let mut id_lock = self.next_id.lock().unwrap();
+        let mut id_lock = self.next_id.lock().unwrap_or_else(|e| e.into_inner());
         let id = *id_lock;
         *id_lock += 1;
-        let mut subjects = self.subjects.lock().unwrap();
+        let mut subjects = self.subjects.lock().unwrap_or_else(|e| e.into_inner());
         let wrapped: SubscriberFn = Box::new(move |event| {
             if let StreamEvent::Next(v) = event { handler(v); }
         });
@@ -477,7 +477,7 @@ impl EventBus {
     }
 
     pub fn emit(&self, topic: &str, value: StreamValue) {
-        let subjects = self.subjects.lock().unwrap();
+        let subjects = self.subjects.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(handlers) = subjects.get(topic) {
             let event = StreamEvent::Next(value);
             for (_, handler) in handlers {
@@ -487,14 +487,14 @@ impl EventBus {
     }
 
     pub fn off(&self, topic: &str, id: SubId) {
-        let mut subjects = self.subjects.lock().unwrap();
+        let mut subjects = self.subjects.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(handlers) = subjects.get_mut(topic) {
             handlers.retain(|(sid, _)| *sid != id);
         }
     }
 
     pub fn topic_count(&self) -> usize {
-        self.subjects.lock().unwrap().len()
+        self.subjects.lock().unwrap_or_else(|e| e.into_inner()).len()
     }
 }
 

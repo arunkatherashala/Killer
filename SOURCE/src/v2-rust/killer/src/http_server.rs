@@ -138,13 +138,13 @@ impl HttpServer {
 
         // Register in router
         {
-            let mut router = self.router.lock().unwrap();
+            let mut router = self.router.lock().unwrap_or_else(|e| e.into_inner());
             router.register(method_enum, path.to_string(), handler_key.clone());
         }
 
         // Store handler function
         {
-            let mut handlers = self.request_handlers.lock().unwrap();
+            let mut handlers = self.request_handlers.lock().unwrap_or_else(|e| e.into_inner());
             handlers.insert(handler_key, Box::new(handler));
         }
 
@@ -214,12 +214,12 @@ impl HttpServer {
 
     /// Route HTTP request to appropriate handler
     fn route_request(&self, request: &HttpRequest) -> HttpResponse {
-        let router = self.router.lock().unwrap();
+        let router = self.router.lock().unwrap_or_else(|e| e.into_inner());
         
         // Try to match route
         if let Some(route) = router.match_route(&request.method, &request.path) {
             let handler_key = &route.handler;
-            let handlers = self.request_handlers.lock().unwrap();
+            let handlers = self.request_handlers.lock().unwrap_or_else(|e| e.into_inner());
             
             if let Some(handler) = handlers.get(handler_key) {
                 return handler(request);
@@ -318,10 +318,10 @@ impl HttpServer {
         };
 
         // Route request
-        let router_guard = router.lock().unwrap();
+        let router_guard = router.lock().unwrap_or_else(|e| e.into_inner());
         let response = if let Some(route) = router_guard.match_route(&request.method, &request.path) {
             let handler_key = &route.handler;
-            let handlers_guard = handlers.lock().unwrap();
+            let handlers_guard = handlers.lock().unwrap_or_else(|e| e.into_inner());
             
             if let Some(handler) = handlers_guard.get(handler_key) {
                 handler(&request)

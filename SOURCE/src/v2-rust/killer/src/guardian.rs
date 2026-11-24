@@ -194,7 +194,7 @@ pub fn guardian_check(input: &str) -> String {
     let harm = detect_harm(input);
 
     if harm == HarmCategory::None {
-        let g = guardian_global().lock().unwrap();
+        let g = guardian_global().lock().unwrap_or_else(|e| e.into_inner());
         return format!(
             "+-- Guardian ─────────────────────────────────────────────\n\
              |  Status   : SAFE\n\
@@ -209,7 +209,7 @@ pub fn guardian_check(input: &str) -> String {
 
     // Harm detected — intercept
     {
-        let mut g = guardian_global().lock().unwrap();
+        let mut g = guardian_global().lock().unwrap_or_else(|e| e.into_inner());
         g.intercepts += 1;
         g.last_intercept = input.to_string();
     }
@@ -237,7 +237,7 @@ pub fn guardian_check(input: &str) -> String {
         HarmCategory::None => unreachable!(),
     };
 
-    let g = guardian_global().lock().unwrap();
+    let g = guardian_global().lock().unwrap_or_else(|e| e.into_inner());
 
     format!(
         "+-- Guardian: BLOCKED ────────────────────────────────────\n\
@@ -326,7 +326,7 @@ pub fn guardian_principles() -> String {
 
 /// Returns the current guardian status (live session stats).
 pub fn guardian_status() -> String {
-    let g = guardian_global().lock().unwrap();
+    let g = guardian_global().lock().unwrap_or_else(|e| e.into_inner());
     format!(
         "+-- Guardian Status ───────────────────────────────────────\n\
          |  Level       : {} (permanent — cannot be changed)\n\

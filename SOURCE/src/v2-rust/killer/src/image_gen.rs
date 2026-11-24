@@ -566,7 +566,7 @@ pub fn get_gen_config() -> (String, String, String) {
     if !openai_key.is_empty()    { return ("openai".into(),    openai_key,    "dall-e-3".into()); }
 
     // Fall back to khlm_polyglot config (set via kala_set_llm)
-    let cfg = config().lock().unwrap();
+    let cfg = config().lock().unwrap_or_else(|e| e.into_inner());
     (cfg.llm_provider.clone(), cfg.llm_api_key.clone(), cfg.llm_model.clone())
 }
 

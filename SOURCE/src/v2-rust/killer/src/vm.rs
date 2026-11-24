@@ -537,7 +537,7 @@ fn spawn_task_thread(
         });
     drop(uncounted);
     if spawned.is_err() {
-        *failed_slot.lock().unwrap() = Some(Box::new(Value::TaskError(Box::new(Value::Str(
+        *failed_slot.lock().unwrap_or_else(|e| e.into_inner()) = Some(Box::new(Value::TaskError(Box::new(Value::Str(
             "could not start a thread for this task".to_string(),
         )))));
     }
@@ -574,9 +574,43 @@ fn run_spawned_task(
         result
     }));
     let result = outcome.unwrap_or_else(|_| Value::TaskError(Box::new(Value::Str("task panicked".to_string()))));
-    *slot.lock().unwrap() = Some(Box::new(result));
+    *slot.lock().unwrap_or_else(|e| e.into_inner()) = Some(Box::new(result));
     // still counted against the evaluation's memory cap: give back what the thread-local registry holds
     crate::gc::release_thread();
+}
+
+/// Maximum nesting of runtime `import` statements.
+const MAX_IMPORT_DEPTH: usize = 32;
+
+thread_local! {
+    static IMPORT_STACK: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// RAII guard tracking the chain of files currently being imported on this thread.
+struct ImportGuard;
+
+impl ImportGuard {
+    fn enter(key: &str, display: &str) -> Result<ImportGuard, VmError> {
+        IMPORT_STACK.with(|s| {
+            let mut s = s.borrow_mut();
+            if s.iter().any(|k| k == key) {
+                return Err(VmError::runtime_error(format!("circular import of '{}'", display)));
+            }
+            if s.len() >= MAX_IMPORT_DEPTH {
+                return Err(VmError::runtime_error(format!(
+                    "imports nested deeper than {} levels at '{}'", MAX_IMPORT_DEPTH, display
+                )));
+            }
+            s.push(key.to_string());
+            Ok(ImportGuard)
+        })
+    }
+}
+
+impl Drop for ImportGuard {
+    fn drop(&mut self) {
+        IMPORT_STACK.with(|s| { s.borrow_mut().pop(); });
+    }
 }
 
 impl VirtualMachine {
@@ -6332,7 +6366,7 @@ impl VirtualMachine {
                         }
                         other => {
                             // a plain value resolves immediately, as an independent copy
-                            *fut_clone.lock().unwrap() = Some(Box::new(other.detached()));
+                            *fut_clone.lock().unwrap_or_else(|e| e.into_inner()) = Some(Box::new(other.detached()));
                         }
                     }
                     self.stack.push(Value::Future(crate::value::FutureHandle(future)));
@@ -6401,13 +6435,19 @@ impl VirtualMachine {
                         format!("packages/{}.killer", path),
                     ];
                     let mut source_opt: Option<String> = None;
+                    let mut import_key = String::new();
                     for candidate in &candidates {
                         if let Ok(src) = std::fs::read_to_string(candidate) {
                             source_opt = Some(src);
+                            import_key = std::fs::canonicalize(candidate)
+                                .map(|p| p.to_string_lossy().into_owned())
+                                .unwrap_or_else(|_| candidate.clone());
                             break;
                         }
                     }
                     if let Some(pkg_source) = source_opt {
+                        // runtime import guard: depth limit + cycle detection
+                        let _import_guard = ImportGuard::enter(&import_key, path)?;
                         let pkg_prog = crate::compiler::compile_killer_default(&pkg_source)
                             .map_err(|e| VmError::runtime_error(
                                 format!("Import compile error in '{}': {}", path, e)

@@ -2813,7 +2813,7 @@ fn handle_llm_config(stream: &mut TcpStream, body: &str) {
     }
 
     {
-        let mut cfg = crate::khlm_polyglot::config().lock().unwrap();
+        let mut cfg = crate::khlm_polyglot::config().lock().unwrap_or_else(|e| e.into_inner());
         cfg.llm_provider = provider.clone();
         cfg.llm_api_key  = api_key;
         if model.is_empty() {

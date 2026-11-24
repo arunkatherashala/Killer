@@ -119,7 +119,7 @@ impl Container {
     /// Register a constant value.
     pub fn register_value(&self, name: &str, value: ServiceValue) {
         let stored = value.clone();
-        let mut providers = self.providers.lock().unwrap();
+        let mut providers = self.providers.lock().unwrap_or_else(|e| e.into_inner());
         providers.insert(name.to_string(), Provider {
             scope: Scope::Singleton,
             factory: Arc::new(move |_| stored.clone()),
@@ -131,7 +131,7 @@ impl Container {
     pub fn register_singleton<F: Fn(&Container) -> ServiceValue + Send + Sync + 'static>(
         &self, name: &str, factory: F
     ) {
-        let mut providers = self.providers.lock().unwrap();
+        let mut providers = self.providers.lock().unwrap_or_else(|e| e.into_inner());
         providers.insert(name.to_string(), Provider {
             scope: Scope::Singleton,
             factory: Arc::new(factory),
@@ -143,7 +143,7 @@ impl Container {
     pub fn register_transient<F: Fn(&Container) -> ServiceValue + Send + Sync + 'static>(
         &self, name: &str, factory: F
     ) {
-        let mut providers = self.providers.lock().unwrap();
+        let mut providers = self.providers.lock().unwrap_or_else(|e| e.into_inner());
         providers.insert(name.to_string(), Provider {
             scope: Scope::Transient,
             factory: Arc::new(factory),
@@ -155,7 +155,7 @@ impl Container {
     pub fn resolve(&self, name: &str) -> Option<ServiceValue> {
         // First pass: check for cached instance or clone factory for lazy init.
         let (scope, factory) = {
-            let providers = self.providers.lock().unwrap();
+            let providers = self.providers.lock().unwrap_or_else(|e| e.into_inner());
             if let Some(provider) = providers.get(name) {
                 if let Some(ref inst) = provider.instance {
                     return Some(inst.clone());
@@ -175,7 +175,7 @@ impl Container {
         let value = factory(self);
         // For singletons/scoped, cache the result.
         if scope == Scope::Singleton || scope == Scope::Scoped {
-            let mut providers = self.providers.lock().unwrap();
+            let mut providers = self.providers.lock().unwrap_or_else(|e| e.into_inner());
             if let Some(p) = providers.get_mut(name) {
                 p.instance = Some(value.clone());
             }
@@ -185,13 +185,13 @@ impl Container {
 
     /// Check if a service is registered (locally or in parent).
     pub fn has(&self, name: &str) -> bool {
-        if self.providers.lock().unwrap().contains_key(name) { return true; }
+        if self.providers.lock().unwrap_or_else(|e| e.into_inner()).contains_key(name) { return true; }
         if let Some(ref parent) = self.parent { parent.has(name) } else { false }
     }
 
     /// List all registered service names.
     pub fn service_names(&self) -> Vec<String> {
-        self.providers.lock().unwrap().keys().cloned().collect()
+        self.providers.lock().unwrap_or_else(|e| e.into_inner()).keys().cloned().collect()
     }
 
     pub fn name(&self) -> &str { &self.name }
@@ -226,7 +226,7 @@ impl Module {
     /// Apply all registrations to a container.
     pub fn apply_to(self, container: &Container) {
         for (name, scope, factory) in self.registrations {
-            let mut providers = container.providers.lock().unwrap();
+            let mut providers = container.providers.lock().unwrap_or_else(|e| e.into_inner());
             providers.insert(name, Provider {
                 scope,
                 factory,

@@ -429,9 +429,21 @@ impl DeleteBitmap {
         let data = std::fs::read(&del_path)
             .map_err(|e| format!("Cannot read {}: {}", del_path, e))?;
         if data.len() < 16 { return Err("Delete bitmap too short".to_string()); }
-        let total_rows = u64::from_le_bytes(data[0..8].try_into().unwrap()) as usize;
-        let deleted_count = u64::from_le_bytes(data[8..16].try_into().unwrap()) as usize;
-        let nwords = (total_rows + 63) / 64;
+        let total_rows64 = u64::from_le_bytes(data[0..8].try_into().unwrap_or([0; 8]));
+        let deleted_count64 = u64::from_le_bytes(data[8..16].try_into().unwrap_or([0; 8]));
+        // the header must be consistent with the bytes actually present: never allocate
+        // more than the sidecar file can back
+        let max_words = ((data.len() - 16) / 8) as u64;
+        let nwords64 = total_rows64.div_ceil(64);
+        if nwords64 > max_words {
+            return Err("Delete bitmap header claims more rows than the file holds".to_string());
+        }
+        if deleted_count64 > total_rows64 {
+            return Err("Delete bitmap header is inconsistent (deleted > total)".to_string());
+        }
+        let total_rows = total_rows64 as usize;
+        let deleted_count = deleted_count64 as usize;
+        let nwords = nwords64 as usize;
         let mut bits = vec![0u64; nwords];
         for i in 0..nwords {
             let off = 16 + i * 8;
@@ -522,6 +534,23 @@ fn write_varint(buf: &mut Vec<u8>, mut v: u64) {
     }
 }
 fn write_zvar(buf: &mut Vec<u8>, n: i64) { write_varint(buf, zigzag_enc(n)); }
+
+/// Largest row count a single chunk may claim (hostile-input bound).
+const MAX_CHUNK_ROWS: usize = 1 << 24;
+
+/// Largest decompressed block any codec may produce (hostile-input bound).
+const MAX_DECOMPRESSED: usize = 1 << 28;
+
+/// Pre-allocation hint for header-derived sizes: never trust a count read from the input.
+#[inline]
+fn cap_hint(n: usize) -> usize { n.min(1 << 16) }
+
+/// Bounds-safe sub-slice (empty if `start` is past the end).
+#[inline]
+fn sub(data: &[u8], start: usize, end: usize) -> &[u8] {
+    let e = end.min(data.len());
+    if start >= e { &[] } else { &data[start..e] }
+}
 
 fn read_varint(data: &[u8], pos: usize) -> (u64, usize) {
     let mut r = 0u64; let mut s = 0u32; let mut i = pos;
@@ -685,9 +714,10 @@ fn lz77_compress(input: &[u8]) -> Vec<u8> {
 }
 
 fn lz77_decompress(input: &[u8]) -> Vec<u8> {
-    let mut out = Vec::with_capacity(input.len() * 2);
+    let mut out = Vec::with_capacity(cap_hint(input.len().saturating_mul(2)));
     let mut i = 0;
     while i < input.len() {
+        if out.len() > MAX_DECOMPRESSED { break; }
         if input[i] == 0xFF && i + 4 < input.len() {
             let off = u16::from_le_bytes([input[i+1], input[i+2]]) as usize;
             let len = u16::from_le_bytes([input[i+3], input[i+4]]) as usize;
@@ -882,6 +912,9 @@ fn huffman_decompress(input: &[u8]) -> Vec<u8> {
         }
     }
 
+    if orig_len > MAX_DECOMPRESSED { return Vec::new(); }
+    // canonical code lengths are limited to 15 bits by the lookup table
+    if code_lens.iter().any(|&l| l > 15) { return Vec::new(); }
     let bitstream = &input[bitstream_start..];
 
     // Rebuild canonical codes
@@ -912,7 +945,7 @@ fn huffman_decompress(input: &[u8]) -> Vec<u8> {
     }
 
     // Decode using lookup table — O(1) per symbol
-    let mut out = Vec::with_capacity(orig_len);
+    let mut out = Vec::with_capacity(cap_hint(orig_len));
     let mut bitbuf: u64 = 0;
     let mut bits_avail = 0u32;
     let mut byte_pos = 0usize;
@@ -929,7 +962,7 @@ fn huffman_decompress(input: &[u8]) -> Vec<u8> {
         // Lookup top 15 bits
         let peek = (bitbuf >> 49) as usize & 0x7FFF;
         let (sym, len) = lookup[peek];
-        if len == 0 { break; }
+        if len == 0 || len as u32 > bits_avail { break; }
         out.push(sym);
         bitbuf <<= len;
         bits_avail -= len as u32;
@@ -1053,6 +1086,7 @@ fn range_decompress(input: &[u8]) -> Vec<u8> {
     if p + 3 >= input.len() { return Vec::new(); }
     let orig_len = u32::from_le_bytes([input[p], input[p+1], input[p+2], input[p+3]]) as usize;
     p += 4;
+    if orig_len > MAX_DECOMPRESSED { return Vec::new(); }
 
     // Single-symbol case
     if active == 1 {
@@ -1063,6 +1097,8 @@ fn range_decompress(input: &[u8]) -> Vec<u8> {
     // Build CDF
     let mut cdf = [0u32; 257];
     for i in 0..256 { cdf[i + 1] = cdf[i] + norm[i] as u32; }
+    // a valid table sums to at most RC_SCALE
+    if cdf[256] > RC_SCALE { return Vec::new(); }
 
     // Build reverse lookup: for each frequency position, which symbol?
     let mut sym_lookup = vec![0u8; RC_SCALE as usize];
@@ -1084,19 +1120,24 @@ fn range_decompress(input: &[u8]) -> Vec<u8> {
     }
     let mut low: u32 = 0;
     let mut range: u32 = u32::MAX;
-    let mut out = Vec::with_capacity(orig_len);
+    let mut out = Vec::with_capacity(cap_hint(orig_len));
 
     for _ in 0..orig_len {
+        // the coder never reads more than a few bytes past the end of a valid stream
+        if cp > coded.len().saturating_add(8) { break; }
         let r = range / RC_SCALE;
         let offset = ((code.wrapping_sub(low)) / r).min(RC_SCALE - 1);
         let sym = sym_lookup[offset as usize];
         let si = sym as usize;
-        low = low.wrapping_add(r * cdf[si]);
+        // a frequency slot that no symbol covers means a corrupt table
+        if cdf[si + 1] == cdf[si] { break; }
+        low = low.wrapping_add(r.wrapping_mul(cdf[si]));
         range = if cdf[si + 1] - cdf[si] < RC_SCALE {
-            r * (cdf[si + 1] - cdf[si])
+            r.wrapping_mul(cdf[si + 1] - cdf[si])
         } else {
-            range - r * cdf[si]
+            range.wrapping_sub(r.wrapping_mul(cdf[si]))
         };
+        if range == 0 { break; }
 
         while range < RC_BOT {
             low <<= 8;
@@ -1306,12 +1347,15 @@ fn encode_rle_int(nums: &[i64]) -> Vec<u8> {
 
 fn decode_rle_int(data: &[u8], pos: usize, nrows: usize) -> (Vec<i64>, usize) {
     let (nruns, mut p) = read_varint(data, pos);
-    let mut out = Vec::with_capacity(nrows);
-    for _ in 0..nruns {
+    let mut out = Vec::with_capacity(cap_hint(nrows));
+    // every run consumes input bytes: never loop more often than there are bytes, and
+    // never expand beyond the row count the chunk claims
+    for _ in 0..nruns.min(data.len() as u64) {
         let (cnt, p2) = read_varint(data, p);
         let (val, p3) = read_zvar(data, p2);
         p = p3;
-        for _ in 0..cnt { out.push(val); }
+        let take = (cnt.min(usize::MAX as u64) as usize).min(nrows.saturating_sub(out.len()));
+        out.resize(out.len() + take, val);
     }
     (out, p)
 }
@@ -1321,7 +1365,7 @@ fn encode_delta_int(nums: &[i64]) -> Vec<u8> {
     if nums.is_empty() { return Vec::new(); }
     let mut buf = Vec::new();
     write_zvar(&mut buf, nums[0]);
-    for i in 1..nums.len() { write_zvar(&mut buf, nums[i] - nums[i-1]); }
+    for i in 1..nums.len() { write_zvar(&mut buf, nums[i].wrapping_sub(nums[i-1])); }
     buf
 }
 
@@ -1329,27 +1373,27 @@ fn decode_delta_int(data: &[u8], pos: usize, nrows: usize) -> (Vec<i64>, usize) 
     if nrows == 0 { return (Vec::new(), pos); }
     // Phase 1: read raw deltas (base + nrows-1 deltas)
     let (base, mut p) = read_zvar(data, pos);
-    let mut deltas = Vec::with_capacity(nrows - 1);
+    let mut deltas = Vec::with_capacity(cap_hint(nrows - 1));
     for _ in 1..nrows {
         let (d, p2) = read_zvar(data, p);
         deltas.push(d);
         p = p2;
     }
     // Phase 2: prefix-sum with SIMD-friendly 4-wide unrolled loop
-    let mut out = Vec::with_capacity(nrows);
+    let mut out = Vec::with_capacity(cap_hint(nrows));
     out.push(base);
     let n = deltas.len();
     let mut acc = base;
     let chunks = n / 4;
     for c in 0..chunks {
         let i = c * 4;
-        acc += deltas[i];   out.push(acc);
-        acc += deltas[i+1]; out.push(acc);
-        acc += deltas[i+2]; out.push(acc);
-        acc += deltas[i+3]; out.push(acc);
+        acc = acc.wrapping_add(deltas[i]);   out.push(acc);
+        acc = acc.wrapping_add(deltas[i+1]); out.push(acc);
+        acc = acc.wrapping_add(deltas[i+2]); out.push(acc);
+        acc = acc.wrapping_add(deltas[i+3]); out.push(acc);
     }
     for i in (chunks * 4)..n {
-        acc += deltas[i];
+        acc = acc.wrapping_add(deltas[i]);
         out.push(acc);
     }
     (out, p)
@@ -1384,7 +1428,7 @@ fn encode_bitpack(bits: &[bool]) -> Vec<u8> {
 
 fn decode_bitpack(data: &[u8], pos: usize, nrows: usize) -> (Vec<bool>, usize) {
     let nbytes = (nrows + 7) / 8;
-    let mut out = Vec::with_capacity(nrows);
+    let mut out = Vec::with_capacity(cap_hint(nrows));
     for i in 0..nrows {
         let byte_idx = pos + i / 8;
         let b = data.get(byte_idx).copied().unwrap_or(0);
@@ -1447,17 +1491,19 @@ fn encode_bdict(vals: &[&str]) -> Vec<u8> {
 fn decode_bdict(data: &[u8], pos: usize, nrows: usize) -> (Vec<String>, usize) {
     let mut p = pos;
     let (n_unique, np) = read_varint(data, p); p = np;
-    let mut dict: Vec<String> = Vec::with_capacity(n_unique as usize);
+    let n_unique = n_unique.min(data.len() as u64);
+    let mut dict: Vec<String> = Vec::with_capacity(cap_hint(n_unique as usize));
     for _ in 0..n_unique {
         let (slen, np) = read_varint(data, p); p = np;
-        let end = p + slen as usize;
-        dict.push(String::from_utf8_lossy(&data[p..end.min(data.len())]).into_owned());
+        let end = p.saturating_add(slen as usize);
+        dict.push(String::from_utf8_lossy(sub(data, p, end)).into_owned());
         p = end;
     }
-    let bits_per = data.get(p).copied().unwrap_or(1) as usize; p += 1;
+    let bits_per = data.get(p).copied().unwrap_or(1) as usize; p = p.saturating_add(1);
+    if bits_per > 32 { return (Vec::new(), p); }
     let mask = (1u64 << bits_per) - 1;
 
-    let mut out = Vec::with_capacity(nrows);
+    let mut out = Vec::with_capacity(cap_hint(nrows));
     let mut bitbuf: u64 = 0;
     let mut bits_avail: u32 = 0;
     for _ in 0..nrows {
@@ -1468,7 +1514,7 @@ fn decode_bdict(data: &[u8], pos: usize, nrows: usize) -> (Vec<String>, usize) {
         }
         let idx = (bitbuf & mask) as usize;
         bitbuf >>= bits_per;
-        bits_avail -= bits_per as u32;
+        bits_avail = bits_avail.saturating_sub(bits_per as u32);
         out.push(dict.get(idx).cloned().unwrap_or_default());
     }
     (out, p)
@@ -1521,16 +1567,17 @@ fn encode_huffdict(vals: &[&str]) -> Vec<u8> {
 fn decode_huffdict(data: &[u8], pos: usize, nrows: usize) -> (Vec<String>, usize) {
     let mut p = pos;
     let (n_unique, np) = read_varint(data, p); p = np;
-    let mut dict: Vec<String> = Vec::with_capacity(n_unique as usize);
+    let n_unique = n_unique.min(data.len() as u64);
+    let mut dict: Vec<String> = Vec::with_capacity(cap_hint(n_unique as usize));
     for _ in 0..n_unique {
         let (slen, np) = read_varint(data, p); p = np;
-        let end = p + slen as usize;
-        dict.push(String::from_utf8_lossy(&data[p..end.min(data.len())]).into_owned());
+        let end = p.saturating_add(slen as usize);
+        dict.push(String::from_utf8_lossy(sub(data, p, end)).into_owned());
         p = end;
     }
 
     // Remaining data from pos p onwards is Huffman-compressed index stream
-    let indices = huffman_decompress(&data[p..]);
+    let indices = huffman_decompress(sub(data, p, data.len()));
 
     let out: Vec<String> = indices.iter()
         .take(nrows)
@@ -1547,7 +1594,7 @@ fn encode_cdelta(nums: &[i64]) -> Vec<u8> {
     let mut buf = Vec::new();
     if nums.is_empty() { write_zvar(&mut buf, 0); write_zvar(&mut buf, 0); return buf; }
     let base = nums[0];
-    let step = if nums.len() > 1 { nums[1] - nums[0] } else { 0 };
+    let step = if nums.len() > 1 { nums[1].wrapping_sub(nums[0]) } else { 0 };
     write_zvar(&mut buf, base);
     write_zvar(&mut buf, step);
     buf
@@ -1556,15 +1603,15 @@ fn encode_cdelta(nums: &[i64]) -> Vec<u8> {
 fn decode_cdelta(data: &[u8], pos: usize, nrows: usize) -> (Vec<i64>, usize) {
     let (base, p1) = read_zvar(data, pos);
     let (step, p2) = read_zvar(data, p1);
-    let out: Vec<i64> = (0..nrows as i64).map(|i| base + step * i).collect();
+    let out: Vec<i64> = (0..nrows as i64).map(|i| base.wrapping_add(step.wrapping_mul(i))).collect();
     (out, p2)
 }
 
 /// Check if a column is constant-delta (sequential with fixed step).
 fn is_cdelta(nums: &[i64]) -> bool {
     if nums.len() <= 2 { return true; }
-    let step = nums[1] - nums[0];
-    nums.windows(2).all(|w| w[1] - w[0] == step)
+    let step = nums[1].wrapping_sub(nums[0]);
+    nums.windows(2).all(|w| w[1].wrapping_sub(w[0]) == step)
 }
 
 // ── Codec 7: FOR (frame-of-reference: min + bit-packed residuals) ───────────
@@ -1574,7 +1621,7 @@ fn encode_for(nums: &[i64]) -> Vec<u8> {
     if nums.is_empty() { return Vec::new(); }
     let min_val = *nums.iter().min().unwrap();
     let max_val = *nums.iter().max().unwrap();
-    let range = (max_val - min_val) as u64;
+    let range = max_val.wrapping_sub(min_val) as u64;
     let bits_per = if range == 0 { 0 } else { 64 - range.leading_zeros() } as usize;
 
     let mut buf = Vec::new();
@@ -1587,7 +1634,7 @@ fn encode_for(nums: &[i64]) -> Vec<u8> {
     let mut bitbuf: u64 = 0;
     let mut bitpos: u32 = 0;
     for &n in nums {
-        let residual = (n - min_val) as u64 & mask;
+        let residual = n.wrapping_sub(min_val) as u64 & mask;
         bitbuf |= residual << bitpos;
         bitpos += bits_per as u32;
         while bitpos >= 8 {
@@ -1602,17 +1649,18 @@ fn encode_for(nums: &[i64]) -> Vec<u8> {
 
 fn decode_for(data: &[u8], pos: usize, nrows: usize) -> (Vec<i64>, usize) {
     let (min_val, mut p) = read_zvar(data, pos);
-    let bits_per = data.get(p).copied().unwrap_or(0) as usize; p += 1;
+    let bits_per = data.get(p).copied().unwrap_or(0) as usize; p = p.saturating_add(1);
 
     if bits_per == 0 {
         return (vec![min_val; nrows], p);
     }
+    if bits_per > 56 { return (Vec::new(), p); }
 
     let mask = (1u64 << bits_per) - 1;
     let total_bytes = (bits_per * nrows + 7) / 8;
     let avail = data.len().saturating_sub(p);
-    let packed = &data[p..p + total_bytes.min(avail)];
-    let mut out = Vec::with_capacity(nrows);
+    let packed = sub(data, p, p.saturating_add(total_bytes.min(avail)));
+    let mut out = Vec::with_capacity(cap_hint(nrows));
     let mut bitpos: usize = 0;
 
     // Bulk loop: no bounds check needed when byte_start + 8 <= packed.len()
@@ -1627,7 +1675,7 @@ fn decode_for(data: &[u8], pos: usize, nrows: usize) -> (Vec<i64>, usize) {
             packed[byte_start], packed[byte_start+1], packed[byte_start+2], packed[byte_start+3],
             packed[byte_start+4], packed[byte_start+5], packed[byte_start+6], packed[byte_start+7],
         ]);
-        out.push(min_val + ((word >> bit_offset) & mask) as i64);
+        out.push(min_val.wrapping_add(((word >> bit_offset) & mask) as i64));
         bitpos += bits_per;
     }
 
@@ -1637,9 +1685,9 @@ fn decode_for(data: &[u8], pos: usize, nrows: usize) -> (Vec<i64>, usize) {
         let bit_offset = (bitpos & 7) as u32;
         let mut tmp = [0u8; 8];
         let tail = packed.len().saturating_sub(byte_start).min(8);
-        tmp[..tail].copy_from_slice(&packed[byte_start..byte_start + tail]);
+        if tail > 0 { tmp[..tail].copy_from_slice(&packed[byte_start..byte_start + tail]); }
         let word = u64::from_le_bytes(tmp);
-        out.push(min_val + ((word >> bit_offset) & mask) as i64);
+        out.push(min_val.wrapping_add(((word >> bit_offset) & mask) as i64));
         bitpos += bits_per;
     }
     (out, p + (bitpos + 7) / 8)
@@ -1667,12 +1715,12 @@ fn encode_rle_str(vals: &[&str]) -> Vec<u8> {
 
 fn decode_rle_str(data: &[u8], pos: usize, nrows: usize) -> (Vec<String>, usize) {
     let (nruns, mut p) = read_varint(data, pos);
-    let mut out = Vec::with_capacity(nrows);
-    for _ in 0..nruns {
+    let mut out = Vec::with_capacity(cap_hint(nrows));
+    for _ in 0..nruns.min(data.len() as u64) {
         if p >= data.len() { break; }
         let (cnt, p2) = read_varint(data, p);
         let (slen, p3) = read_varint(data, p2);
-        let end = p3 + slen as usize;
+        let end = p3.saturating_add(slen as usize);
         let safe_end = end.min(data.len());
         let s = if p3 <= safe_end {
             String::from_utf8_lossy(&data[p3..safe_end]).into_owned()
@@ -1680,7 +1728,8 @@ fn decode_rle_str(data: &[u8], pos: usize, nrows: usize) -> (Vec<String>, usize)
             String::new()
         };
         p = end;
-        for _ in 0..cnt { out.push(s.clone()); }
+        let take = (cnt.min(usize::MAX as u64) as usize).min(nrows.saturating_sub(out.len()));
+        for _ in 0..take { out.push(s.clone()); }
     }
     (out, p)
 }
@@ -1697,12 +1746,12 @@ fn encode_raw_str(vals: &[&str]) -> Vec<u8> {
 }
 
 fn decode_raw_str(data: &[u8], pos: usize, nrows: usize) -> (Vec<String>, usize) {
-    let mut out = Vec::with_capacity(nrows);
+    let mut out = Vec::with_capacity(cap_hint(nrows));
     let mut p = pos;
     for _ in 0..nrows {
         let (slen, np) = read_varint(data, p);
-        let end = np + slen as usize;
-        out.push(String::from_utf8_lossy(&data[np..end.min(data.len())]).into_owned());
+        let end = np.saturating_add(slen as usize);
+        out.push(String::from_utf8_lossy(sub(data, np, end)).into_owned());
         p = end;
     }
     (out, p)
@@ -1721,7 +1770,7 @@ fn select_int_codec(nums: &[i64]) -> Codec {
     // Check if FOR is efficient (small range of values)
     let min = *nums.iter().min().unwrap();
     let max = *nums.iter().max().unwrap();
-    let range = (max - min) as u64;
+    let range = max.wrapping_sub(min) as u64;
     let bits_for = if range == 0 { 0 } else { 64 - range.leading_zeros() } as usize;
 
     // Try all and pick smallest
@@ -2043,6 +2092,14 @@ fn encode_nested_val(v: &KVal) -> Vec<u8> {
 
 /// Decode a single nested KVal recursively.
 fn decode_nested_val(data: &[u8], pos: usize) -> (KVal, usize) {
+    // bounded depth and total node budget: nested lengths come from the (untrusted) input
+    let mut budget = 1usize << 20;
+    decode_nested_val_b(data, pos, 0, &mut budget)
+}
+
+fn decode_nested_val_b(data: &[u8], pos: usize, depth: usize, budget: &mut usize) -> (KVal, usize) {
+    if depth > 64 || *budget == 0 { return (KVal::Null, pos.saturating_add(1)); }
+    *budget -= 1;
     if pos >= data.len() { return (KVal::Null, pos); }
     let tag = data[pos];
     let mut p = pos + 1;
@@ -2056,52 +2113,55 @@ fn decode_nested_val(data: &[u8], pos: usize) -> (KVal, usize) {
         }
         3 => {
             let (slen, p2) = read_varint(data, p); p = p2;
-            let end = (p + slen as usize).min(data.len());
-            let s = String::from_utf8_lossy(&data[p..end]).into_owned();
+            let end = p.saturating_add(slen as usize).min(data.len());
+            let s = String::from_utf8_lossy(sub(data, p, end)).into_owned();
             (KVal::Str(s), end)
         }
         4 => { let b = data.get(p).copied().unwrap_or(0) != 0; (KVal::Bool(b), p + 1) }
         5 => {
             let (blen, p2) = read_varint(data, p); p = p2;
-            let end = (p + blen as usize).min(data.len());
-            (KVal::Bytes(data[p..end].to_vec()), end)
+            let end = p.saturating_add(blen as usize).min(data.len());
+            (KVal::Bytes(sub(data, p, end).to_vec()), end)
         }
         6 => { // Struct
             let (nfields, p2) = read_varint(data, p); p = p2;
-            let mut fields = Vec::with_capacity(nfields as usize);
+            let nfields = nfields.min(data.len() as u64);
+            let mut fields = Vec::with_capacity(cap_hint(nfields as usize));
             for _ in 0..nfields {
                 let (nlen, p2) = read_varint(data, p); p = p2;
-                let end = (p + nlen as usize).min(data.len());
-                let name = String::from_utf8_lossy(&data[p..end]).into_owned();
+                let end = p.saturating_add(nlen as usize).min(data.len());
+                let name = String::from_utf8_lossy(sub(data, p, end)).into_owned();
                 p = end;
                 let (clen, p2) = read_varint(data, p); p = p2;
-                let (val, _) = decode_nested_val(data, p);
-                p += clen as usize;
+                let (val, _) = decode_nested_val_b(data, p, depth + 1, budget);
+                p = p.saturating_add(clen as usize);
                 fields.push((name, val));
             }
             (KVal::Struct(fields), p)
         }
         7 => { // List
             let (nitems, p2) = read_varint(data, p); p = p2;
-            let mut items = Vec::with_capacity(nitems as usize);
+            let nitems = nitems.min(data.len() as u64);
+            let mut items = Vec::with_capacity(cap_hint(nitems as usize));
             for _ in 0..nitems {
                 let (clen, p2) = read_varint(data, p); p = p2;
-                let (val, _) = decode_nested_val(data, p);
-                p += clen as usize;
+                let (val, _) = decode_nested_val_b(data, p, depth + 1, budget);
+                p = p.saturating_add(clen as usize);
                 items.push(val);
             }
             (KVal::List(items), p)
         }
         8 => { // Map
             let (npairs, p2) = read_varint(data, p); p = p2;
-            let mut pairs = Vec::with_capacity(npairs as usize);
+            let npairs = npairs.min(data.len() as u64);
+            let mut pairs = Vec::with_capacity(cap_hint(npairs as usize));
             for _ in 0..npairs {
                 let (klen, p2) = read_varint(data, p); p = p2;
-                let (key, _) = decode_nested_val(data, p);
-                p += klen as usize;
+                let (key, _) = decode_nested_val_b(data, p, depth + 1, budget);
+                p = p.saturating_add(klen as usize);
                 let (vlen, p2) = read_varint(data, p); p = p2;
-                let (val, _) = decode_nested_val(data, p);
-                p += vlen as usize;
+                let (val, _) = decode_nested_val_b(data, p, depth + 1, budget);
+                p = p.saturating_add(vlen as usize);
                 pairs.push((key, val));
             }
             (KVal::Map(pairs), p)
@@ -2130,7 +2190,7 @@ fn decode_column_data(
                 }
                 Codec::Raw => {
                     // Raw bytes: 1 byte per bool (0x00=false, else=true)
-                    data[..nrows].iter().map(|&b| KVal::Bool(b != 0)).collect()
+                    data[..nrows.min(data.len())].iter().map(|&b| KVal::Bool(b != 0)).collect()
                 }
                 _ => {
                     let (bits, _) = decode_bitpack(data, 0, nrows);
@@ -2177,23 +2237,23 @@ fn decode_column_data(
             strs.into_iter().map(KVal::Str).collect()
         }
         KType::Bytes => {
-            let mut out = Vec::with_capacity(nrows);
+            let mut out = Vec::with_capacity(cap_hint(nrows));
             let mut p = 0;
             for _ in 0..nrows {
                 let (len, np) = read_varint(data, p);
-                let end = np + len as usize;
-                out.push(KVal::Bytes(data[np..end.min(data.len())].to_vec()));
+                let end = np.saturating_add(len as usize);
+                out.push(KVal::Bytes(sub(data, np, end).to_vec()));
                 p = end;
             }
             out
         }
         KType::Struct | KType::List | KType::Map => {
-            let mut out = Vec::with_capacity(nrows);
+            let mut out = Vec::with_capacity(cap_hint(nrows));
             let mut p = 0;
             for _ in 0..nrows {
                 let (blen, p2) = read_varint(data, p); p = p2;
                 let (val, _) = decode_nested_val(data, p);
-                p += blen as usize;
+                p = p.saturating_add(blen as usize);
                 out.push(val);
             }
             out
@@ -2717,19 +2777,23 @@ impl KoreReader {
         if pos + 4 > data.len() { return Err("Truncated schema length".to_string()); }
         let schema_comp_len = u32::from_le_bytes(data[pos..pos+4].try_into().unwrap_or([0; 4])) as usize;
         pos += 4;
-        if pos + schema_comp_len > data.len() { return Err("Truncated schema data".to_string()); }
+        if schema_comp_len > data.len() - pos { return Err("Truncated schema data".to_string()); }
         let schema_raw = decompress_block(&data[pos..pos + schema_comp_len]);
         pos += schema_comp_len;
 
-        let mut columns = Vec::with_capacity(ncols);
-        let mut sp = 0;
+        // every column needs at least 3 schema bytes (name length, type, encrypted flag)
+        if ncols.saturating_mul(3) > schema_raw.len() {
+            return Err("Corrupt KORE schema (column count exceeds schema size)".to_string());
+        }
+        let mut columns = Vec::with_capacity(cap_hint(ncols));
+        let mut sp = 0usize;
         for _ in 0..ncols {
             let (name_len, np) = read_varint(&schema_raw, sp); sp = np;
-            let name_end = sp + name_len as usize;
-            let name = String::from_utf8_lossy(&schema_raw[sp..name_end.min(schema_raw.len())]).into_owned();
+            let name_end = sp.saturating_add(name_len as usize);
+            let name = String::from_utf8_lossy(sub(&schema_raw, sp, name_end)).into_owned();
             sp = name_end;
-            let ktype = KType::from_u8(schema_raw.get(sp).copied().unwrap_or(4)); sp += 1;
-            let encrypted = schema_raw.get(sp).copied().unwrap_or(0) != 0; sp += 1;
+            let ktype = KType::from_u8(schema_raw.get(sp).copied().unwrap_or(4)); sp = sp.saturating_add(1);
+            let encrypted = schema_raw.get(sp).copied().unwrap_or(0) != 0; sp = sp.saturating_add(1);
             columns.push(KColumn { name, ktype, encrypted, enc_key: [0u8; 32] });
         }
 
@@ -2737,16 +2801,20 @@ impl KoreReader {
         if pos + 4 > data.len() { return Err("Truncated dict length".to_string()); }
         let dict_comp_len = u32::from_le_bytes(data[pos..pos+4].try_into().unwrap_or([0; 4])) as usize;
         pos += 4;
-        if pos + dict_comp_len > data.len() { return Err("Truncated dict data".to_string()); }
+        if dict_comp_len > data.len() - pos { return Err("Truncated dict data".to_string()); }
         let dict_raw = decompress_block(&data[pos..pos + dict_comp_len]);
         let _pos_after_dict = pos + dict_comp_len;
 
         let (dict_count, mut dp) = read_varint(&dict_raw, 0);
-        let mut dict = Vec::with_capacity(dict_count as usize);
+        // every entry needs at least one byte (its length)
+        if dict_count > dict_raw.len() as u64 {
+            return Err("Corrupt KORE dictionary (entry count exceeds dictionary size)".to_string());
+        }
+        let mut dict = Vec::with_capacity(cap_hint(dict_count as usize));
         for _ in 0..dict_count {
             let (slen, np) = read_varint(&dict_raw, dp);
-            let end = np + slen as usize;
-            dict.push(String::from_utf8_lossy(&dict_raw[np..end.min(dict_raw.len())]).into_owned());
+            let end = np.saturating_add(slen as usize);
+            dict.push(String::from_utf8_lossy(sub(&dict_raw, np, end)).into_owned());
             dp = end;
         }
 
@@ -2759,7 +2827,7 @@ impl KoreReader {
             data[footer_trailer_start+4..footer_trailer_start+12].try_into().unwrap_or([0; 8])
         ) as usize;
 
-        if footer_offset + footer_comp_len > data.len() {
+        if footer_offset.checked_add(footer_comp_len).map_or(true, |e| e > data.len()) {
             return Err("Corrupt footer offset".to_string());
         }
         let footer_raw = decompress_block(&data[footer_offset..footer_offset + footer_comp_len]);
@@ -2775,18 +2843,37 @@ impl KoreReader {
         ) as usize;
         fp += 2;
 
-        let mut chunk_nrows = Vec::with_capacity(ft_nchunks);
+        // the footer must agree with the header and be large enough to hold what it claims
+        // (a column entry is at least 21 bytes): never loop or allocate on an unchecked count
+        if ft_nchunks != nchunks || ft_ncols != ncols || ncols != columns.len() {
+            return Err("Corrupt KORE footer (chunk/column counts disagree with header)".to_string());
+        }
+        let min_footer = 6usize
+            .saturating_add(ft_nchunks.saturating_mul(4))
+            .saturating_add(ft_nchunks.saturating_mul(ft_ncols).saturating_mul(21));
+        if min_footer > footer_raw.len() {
+            return Err("Corrupt KORE footer (smaller than its chunk table)".to_string());
+        }
+        let mut chunk_nrows = Vec::with_capacity(cap_hint(ft_nchunks));
+        let mut total_rows = 0usize;
         for _ in 0..ft_nchunks {
             let nr = u32::from_le_bytes(
                 footer_raw.get(fp..fp+4).unwrap_or(&[0; 4]).try_into().unwrap_or([0; 4])
             ) as usize;
             fp += 4;
+            if nr > MAX_CHUNK_ROWS {
+                return Err("Corrupt KORE footer (chunk row count too large)".to_string());
+            }
+            total_rows = total_rows.saturating_add(nr);
             chunk_nrows.push(nr);
         }
+        if total_rows > (1usize << 32) {
+            return Err("Corrupt KORE footer (total row count too large)".to_string());
+        }
 
-        let mut col_meta: Vec<Vec<FooterColMeta>> = Vec::with_capacity(ft_nchunks);
+        let mut col_meta: Vec<Vec<FooterColMeta>> = Vec::with_capacity(cap_hint(ft_nchunks));
         for _chunk_idx in 0..ft_nchunks {
-            let mut chunk_cols = Vec::with_capacity(ft_ncols);
+            let mut chunk_cols = Vec::with_capacity(cap_hint(ft_ncols));
             for _ci in 0..ft_ncols {
                 let file_offset = u64::from_le_bytes(
                     footer_raw.get(fp..fp+8).unwrap_or(&[0; 8]).try_into().unwrap_or([0; 8])
@@ -2807,19 +2894,19 @@ impl KoreReader {
                 let (max_i64, np) = read_zvar(&footer_raw, fp); fp = np;
                 let (min_slen, np) = read_varint(&footer_raw, fp); fp = np;
                 let min_str = String::from_utf8_lossy(
-                    &footer_raw[fp..(fp + min_slen as usize).min(footer_raw.len())]
+                    sub(&footer_raw, fp, fp.saturating_add(min_slen as usize))
                 ).into_owned();
-                fp += min_slen as usize;
+                fp = fp.saturating_add(min_slen as usize);
                 let (max_slen, np) = read_varint(&footer_raw, fp); fp = np;
                 let max_str = String::from_utf8_lossy(
-                    &footer_raw[fp..(fp + max_slen as usize).min(footer_raw.len())]
+                    sub(&footer_raw, fp, fp.saturating_add(max_slen as usize))
                 ).into_owned();
-                fp += max_slen as usize;
+                fp = fp.saturating_add(max_slen as usize);
 
                 // Bloom filter (512 bytes)
-                let bloom_end = (fp + 512).min(footer_raw.len());
-                let bloom = Bloom::from_bytes(&footer_raw[fp..bloom_end]);
-                fp = bloom_end;
+                let bloom_end = fp.saturating_add(512).min(footer_raw.len());
+                let bloom = Bloom::from_bytes(sub(&footer_raw, fp, bloom_end));
+                fp = bloom_end.max(fp.min(footer_raw.len()));
 
                 chunk_cols.push(FooterColMeta {
                     file_offset, comp_len, codec,
@@ -2852,7 +2939,7 @@ impl KoreReader {
     /// Automatically filters out deleted rows if a delete bitmap is present.
     pub fn read_column(&self, col_name: &str) -> Option<Vec<KVal>> {
         let ci = self.columns.iter().position(|c| c.name == col_name)?;
-        let mut out = Vec::with_capacity(self.nrows);
+        let mut out = Vec::with_capacity(cap_hint(self.nrows));
         let mut global_row = 0usize;
         for chunk_idx in 0..self.nchunks {
             let meta = &self.col_meta[chunk_idx][ci];
@@ -2897,7 +2984,7 @@ impl KoreReader {
     /// Streams chunk-by-chunk with parallel per-column decode to reduce peak memory.
     /// Automatically filters out deleted rows if a delete bitmap is present.
     pub fn read_all(&self) -> Vec<Vec<KVal>> {
-        let mut rows = Vec::with_capacity(self.nrows);
+        let mut rows = Vec::with_capacity(cap_hint(self.nrows));
         let mut global_row = 0usize;
         for chunk_idx in 0..self.nchunks {
             let chunk_nrows = self.chunk_nrows[chunk_idx];
@@ -3077,10 +3164,10 @@ impl KoreReader {
 
     fn decode_col_block(&self, ci: usize, meta: &FooterColMeta, nrows: usize, chunk_idx: usize) -> Vec<KVal> {
         let col = &self.columns[ci];
-        let offset = meta.file_offset as usize;
+        let offset = usize::try_from(meta.file_offset).unwrap_or(usize::MAX);
 
         // Read: [crc32(4)] [comp_len(4)] [compressed_data]
-        if offset + 8 > self.data.len() { return vec![KVal::Null; nrows]; }
+        if offset.checked_add(8).map_or(true, |e| e > self.data.len()) { return vec![KVal::Null; nrows]; }
         let stored_crc = u32::from_le_bytes(
             self.data[offset..offset+4].try_into().unwrap_or([0; 4])
         );
@@ -3088,7 +3175,7 @@ impl KoreReader {
             self.data[offset+4..offset+8].try_into().unwrap_or([0; 4])
         ) as usize;
         let data_start = offset + 8;
-        let data_end = (data_start + comp_len).min(self.data.len());
+        let data_end = data_start.saturating_add(comp_len).min(self.data.len());
 
         // CRC32 integrity check
         let actual_crc = crc32(&self.data[data_start..data_end]);
@@ -3122,7 +3209,8 @@ impl KoreReader {
         decode_derived(data, nrows, &|src_ci: usize| -> Vec<f64> {
             if src_ci >= self.ncols { return vec![0.0; nrows]; }
             let src_meta = &self.col_meta[chunk_idx][src_ci];
-            // Recursively decode source column (must not itself be Derived to avoid loops)
+            // a derived column may not depend on another derived column (also stops cycles)
+            if src_meta.codec == Codec::Derived { return vec![0.0; nrows]; }
             let src_vals = self.decode_col_block(src_ci, src_meta, nrows, chunk_idx);
             src_vals.iter().map(|v| v.as_f64()).collect()
         })
@@ -3429,7 +3517,7 @@ fn decode_derived(
     let formula_type = data[0];
     let num_sources = data[1] as usize;
     let mut p = 2usize;
-    let mut src_indices = Vec::with_capacity(num_sources);
+    let mut src_indices = Vec::with_capacity(cap_hint(num_sources));
     for _ in 0..num_sources {
         if p + 2 > data.len() { return vec![KVal::Null; nrows]; }
         src_indices.push(u16::from_le_bytes([data[p], data[p+1]]) as usize);
@@ -3456,25 +3544,27 @@ fn decode_derived(
         .collect();
 
     // Reconstruct
-    let mut out = Vec::with_capacity(nrows);
+    let mut out = Vec::with_capacity(cap_hint(nrows));
+    // a source column may decode shorter than `nrows` in a corrupt file
+    let at = |k: usize, ri: usize| -> f64 { src_vals[k].get(ri).copied().unwrap_or(0.0) };
     for ri in 0..nrows {
         let predicted = match formula_type {
             0 => {
                 // A * B * (1 - C)
                 if src_vals.len() >= 3 {
-                    src_vals[0][ri] * src_vals[1][ri] * (1.0 - src_vals[2][ri])
+                    at(0, ri) * at(1, ri) * (1.0 - at(2, ri))
                 } else { 0.0 }
             }
             1 => {
                 // A * B
                 if src_vals.len() >= 2 {
-                    src_vals[0][ri] * src_vals[1][ri]
+                    at(0, ri) * at(1, ri)
                 } else { 0.0 }
             }
             _ => 0.0,
         };
         let pred_scaled = (predicted * scale).round() as i64;
-        let tgt_scaled = pred_scaled + if ri < residuals.len() { residuals[ri] } else { 0 };
+        let tgt_scaled = pred_scaled.wrapping_add(if ri < residuals.len() { residuals[ri] } else { 0 });
         out.push(KVal::Float(tgt_scaled as f64 / scale));
     }
     out

@@ -61,7 +61,7 @@ impl MemoryPool {
             allocated_at: std::time::Instant::now(),
         };
 
-        self.allocations.lock().unwrap().push(block);
+        self.allocations.lock().unwrap_or_else(|e| e.into_inner()).push(block);
         self.current_usage.fetch_add(size, Ordering::Relaxed);
 
         Ok(MemoryRegion {
@@ -72,7 +72,7 @@ impl MemoryPool {
     }
 
     pub fn deallocate(&self, region: &MemoryRegion) -> Result<(), String> {
-        let mut allocs = self.allocations.lock().unwrap();
+        let mut allocs = self.allocations.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(pos) = allocs.iter().position(|a| a.id == region.id) {
             let block = allocs.remove(pos);
             self.current_usage.fetch_sub(block.size, Ordering::Relaxed);
@@ -316,8 +316,8 @@ impl SpillableCache {
                     // Now evict it
                     self.memory_cache.evict_lru();
                     self.disk_buffer.write(&evicted_key, &evicted_value)?;
-                    self.stats.lock().unwrap().spill_count += 1;
-                    self.stats.lock().unwrap().spill_bytes += evicted_value.len();
+                    self.stats.lock().unwrap_or_else(|e| e.into_inner()).spill_count += 1;
+                    self.stats.lock().unwrap_or_else(|e| e.into_inner()).spill_bytes += evicted_value.len();
                 }
             }
         }
@@ -329,27 +329,27 @@ impl SpillableCache {
     pub fn get(&mut self, key: &str) -> Result<Option<Vec<u8>>, String> {
         // Try memory first
         if let Some(value) = self.memory_cache.get(&key.to_string()) {
-            self.stats.lock().unwrap().cache_hits += 1;
+            self.stats.lock().unwrap_or_else(|e| e.into_inner()).cache_hits += 1;
             return Ok(Some(value.clone()));
         }
 
         // Try disk
         match self.disk_buffer.read(key) {
             Ok(value) => {
-                self.stats.lock().unwrap().cache_hits += 1;
+                self.stats.lock().unwrap_or_else(|e| e.into_inner()).cache_hits += 1;
                 // Move back to memory
                 self.put(key.to_string(), value.clone())?;
                 Ok(Some(value))
             }
             Err(_) => {
-                self.stats.lock().unwrap().cache_misses += 1;
+                self.stats.lock().unwrap_or_else(|e| e.into_inner()).cache_misses += 1;
                 Ok(None)
             }
         }
     }
 
     pub fn get_stats(&self) -> MemoryStats {
-        self.stats.lock().unwrap().clone()
+        self.stats.lock().unwrap_or_else(|e| e.into_inner()).clone()
     }
 }
 
@@ -381,17 +381,17 @@ impl MemoryManager {
     }
 
     pub fn cache_data(&self, key: String, data: Vec<u8>) -> Result<(), String> {
-        let mut cache = self.cache.lock().unwrap();
+        let mut cache = self.cache.lock().unwrap_or_else(|e| e.into_inner());
         cache.put(key, data)
     }
 
     pub fn get_data(&self, key: &str) -> Result<Option<Vec<u8>>, String> {
-        let mut cache = self.cache.lock().unwrap();
+        let mut cache = self.cache.lock().unwrap_or_else(|e| e.into_inner());
         cache.get(key)
     }
 
     pub fn get_stats(&self) -> MemoryStats {
-        self.stats.lock().unwrap().clone()
+        self.stats.lock().unwrap_or_else(|e| e.into_inner()).clone()
     }
 
     pub fn memory_usage(&self) -> f64 {
@@ -399,7 +399,7 @@ impl MemoryManager {
     }
 
     pub fn disk_usage(&self) -> f64 {
-        self.cache.lock().unwrap().disk_buffer.usage_percentage()
+        self.cache.lock().unwrap_or_else(|e| e.into_inner()).disk_buffer.usage_percentage()
     }
 }
 

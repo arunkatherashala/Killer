@@ -5,7 +5,14 @@
 use std::collections::HashMap;
 
 /// JSON pretty printer (indented output)
+pub const MAX_INDENT: usize = 32;
+/// Maximum bracket nesting accepted by `json_pretty`.
+pub const MAX_NEST_DEPTH: usize = 256;
+/// Maximum output size produced by the pretty printers (bytes).
+pub const MAX_PRETTY_OUTPUT: usize = 64 * 1024 * 1024;
+
 pub fn json_pretty(json_str: &str, indent: usize) -> Result<String, String> {
+    let indent = indent.min(MAX_INDENT);
     let mut result = String::new();
     let mut current_indent = 0;
     let indent_str = " ".repeat(indent);
@@ -49,6 +56,9 @@ pub fn json_pretty(json_str: &str, indent: usize) -> Result<String, String> {
             '{' | '[' => {
                 result.push(ch);
                 current_indent += 1;
+                if current_indent > MAX_NEST_DEPTH {
+                    return Err(format!("json_pretty: nesting deeper than {}", MAX_NEST_DEPTH));
+                }
                 result.push('\n');
                 result.push_str(&indent_str.repeat(current_indent));
             }
@@ -77,6 +87,9 @@ pub fn json_pretty(json_str: &str, indent: usize) -> Result<String, String> {
             _ => result.push(ch),
         }
 
+        if result.len() > MAX_PRETTY_OUTPUT {
+            return Err("json_pretty: output too large".to_string());
+        }
         i += 1;
     }
 
@@ -230,7 +243,7 @@ pub fn to_csv(
 /// Convert dict to YAML-like format
 pub fn to_yaml(dict: &HashMap<String, String>, indent: usize) -> String {
     let mut result = String::new();
-    let indent_str = " ".repeat(indent);
+    let indent_str = " ".repeat(indent.min(MAX_INDENT));
 
     for (key, value) in dict {
         result.push_str(&indent_str);

@@ -43,23 +43,23 @@ impl TaskHandle {
     /// Block until the task completes. Returns the result.
     pub fn join(&self) -> TaskState {
         let (lock, cvar) = &*self.notify;
-        let mut done = lock.lock().unwrap();
+        let mut done = lock.lock().unwrap_or_else(|e| e.into_inner());
         while !*done {
             done = cvar.wait(done).unwrap();
         }
-        self.state.lock().unwrap().clone()
+        self.state.lock().unwrap_or_else(|e| e.into_inner()).clone()
     }
 
     /// Block with timeout.
     pub fn join_timeout(&self, timeout: Duration) -> TaskState {
         let (lock, cvar) = &*self.notify;
-        let mut done = lock.lock().unwrap();
+        let mut done = lock.lock().unwrap_or_else(|e| e.into_inner());
         if !*done {
             let (new_done, _) = cvar.wait_timeout(done, timeout).unwrap();
             done = new_done;
         }
         if *done {
-            self.state.lock().unwrap().clone()
+            self.state.lock().unwrap_or_else(|e| e.into_inner()).clone()
         } else {
             TaskState::Pending
         }
@@ -68,16 +68,16 @@ impl TaskHandle {
     /// Is the task finished?
     pub fn is_done(&self) -> bool {
         let (lock, _) = &*self.notify;
-        *lock.lock().unwrap()
+        *lock.lock().unwrap_or_else(|e| e.into_inner())
     }
 
     /// Cancel the task (sets flag; task must check).
     pub fn cancel(&self) {
-        *self.state.lock().unwrap() = TaskState::Cancelled;
+        *self.state.lock().unwrap_or_else(|e| e.into_inner()) = TaskState::Cancelled;
     }
 
     pub fn result(&self) -> Option<TaskResult> {
-        self.result.lock().unwrap().clone()
+        self.result.lock().unwrap_or_else(|e| e.into_inner()).clone()
     }
 }
 
@@ -135,7 +135,7 @@ impl Executor {
         let done_notify = Arc::new((Mutex::new(false), Condvar::new()));
 
         let id = {
-            let mut guard = self.inner.lock().unwrap();
+            let mut guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
             let id = guard.next_id;
             guard.next_id += 1;
             guard.queue.push_back((id, Box::new(f), Arc::clone(&state), Arc::clone(&result), Arc::clone(&done_notify)));
@@ -160,7 +160,7 @@ impl Executor {
 
     /// Number of pending tasks in the queue.
     pub fn pending_count(&self) -> usize {
-        self.inner.lock().unwrap().queue.len()
+        self.inner.lock().unwrap_or_else(|e| e.into_inner()).queue.len()
     }
 
     /// Number of worker threads.
@@ -169,7 +169,7 @@ impl Executor {
     /// Shutdown the executor, waiting for all tasks to finish.
     pub fn shutdown(self) {
         {
-            let mut guard = self.inner.lock().unwrap();
+            let mut guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
             guard.shutdown = true;
         }
         // Wake all workers
@@ -185,7 +185,7 @@ impl Executor {
 fn worker_loop(inner: Arc<Mutex<ExecutorInner>>, notify: Arc<Condvar>) {
     loop {
         let task = {
-            let mut guard = inner.lock().unwrap();
+            let mut guard = inner.lock().unwrap_or_else(|e| e.into_inner());
             loop {
                 if let Some(task) = guard.queue.pop_front() {
                     guard.active_count += 1;
@@ -200,12 +200,12 @@ fn worker_loop(inner: Arc<Mutex<ExecutorInner>>, notify: Arc<Condvar>) {
 
         match task {
             Some((id, f, state, result, done_notify)) => {
-                *state.lock().unwrap() = TaskState::Running;
+                *state.lock().unwrap_or_else(|e| e.into_inner()) = TaskState::Running;
                 let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(f));
                 match r {
                     Ok(val) => {
-                        *result.lock().unwrap() = Some(val.clone());
-                        *state.lock().unwrap() = TaskState::Completed(val);
+                        *result.lock().unwrap_or_else(|e| e.into_inner()) = Some(val.clone());
+                        *state.lock().unwrap_or_else(|e| e.into_inner()) = TaskState::Completed(val);
                     }
                     Err(e) => {
                         let msg = if let Some(s) = e.downcast_ref::<String>() {
@@ -215,14 +215,14 @@ fn worker_loop(inner: Arc<Mutex<ExecutorInner>>, notify: Arc<Condvar>) {
                         } else {
                             format!("task {} panicked", id)
                         };
-                        *state.lock().unwrap() = TaskState::Failed(msg);
+                        *state.lock().unwrap_or_else(|e| e.into_inner()) = TaskState::Failed(msg);
                     }
                 }
                 // Signal completion
                 let (lock, cvar) = &*done_notify;
-                *lock.lock().unwrap() = true;
+                *lock.lock().unwrap_or_else(|e| e.into_inner()) = true;
                 cvar.notify_all();
-                inner.lock().unwrap().active_count -= 1;
+                inner.lock().unwrap_or_else(|e| e.into_inner()).active_count -= 1;
             }
             None => break, // shutdown
         }
@@ -240,7 +240,7 @@ pub fn select(handles: &[TaskHandle]) -> (usize, TaskState) {
     loop {
         for (i, h) in handles.iter().enumerate() {
             if h.is_done() {
-                return (i, h.state.lock().unwrap().clone());
+                return (i, h.state.lock().unwrap_or_else(|e| e.into_inner()).clone());
             }
         }
         thread::sleep(Duration::from_micros(sleep_us));
@@ -255,7 +255,7 @@ pub fn select_timeout(handles: &[TaskHandle], timeout: Duration) -> Option<(usiz
     while start.elapsed() < timeout {
         for (i, h) in handles.iter().enumerate() {
             if h.is_done() {
-                return Some((i, h.state.lock().unwrap().clone()));
+                return Some((i, h.state.lock().unwrap_or_else(|e| e.into_inner()).clone()));
             }
         }
         thread::sleep(Duration::from_micros(sleep_us));
@@ -327,7 +327,7 @@ impl<T> AsyncChannel<T> {
     /// Send a value. Blocks if the channel is full.
     pub fn send(&self, value: T) -> Result<(), &'static str> {
         if self.inner.closed.load(Ordering::Relaxed) { return Err("channel closed"); }
-        let mut buf = self.inner.buf.lock().unwrap();
+        let mut buf = self.inner.buf.lock().unwrap_or_else(|e| e.into_inner());
         while buf.len() >= self.inner.capacity {
             if self.inner.closed.load(Ordering::Relaxed) { return Err("channel closed"); }
             buf = self.inner.not_full.wait(buf).unwrap();
@@ -340,7 +340,7 @@ impl<T> AsyncChannel<T> {
     /// Try send without blocking. Returns Err if full.
     pub fn try_send(&self, value: T) -> Result<(), &'static str> {
         if self.inner.closed.load(Ordering::Relaxed) { return Err("channel closed"); }
-        let mut buf = self.inner.buf.lock().unwrap();
+        let mut buf = self.inner.buf.lock().unwrap_or_else(|e| e.into_inner());
         if buf.len() >= self.inner.capacity { return Err("channel full"); }
         buf.push_back(value);
         self.inner.not_empty.notify_one();
@@ -349,7 +349,7 @@ impl<T> AsyncChannel<T> {
 
     /// Receive a value. Blocks if the channel is empty.
     pub fn recv(&self) -> Result<T, &'static str> {
-        let mut buf = self.inner.buf.lock().unwrap();
+        let mut buf = self.inner.buf.lock().unwrap_or_else(|e| e.into_inner());
         loop {
             if let Some(val) = buf.pop_front() {
                 self.inner.not_full.notify_one();
@@ -362,7 +362,7 @@ impl<T> AsyncChannel<T> {
 
     /// Try receive without blocking.
     pub fn try_recv(&self) -> Result<T, &'static str> {
-        let mut buf = self.inner.buf.lock().unwrap();
+        let mut buf = self.inner.buf.lock().unwrap_or_else(|e| e.into_inner());
         match buf.pop_front() {
             Some(val) => {
                 self.inner.not_full.notify_one();
@@ -377,13 +377,13 @@ impl<T> AsyncChannel<T> {
         // Set the flag and notify while holding the buffer lock: a waiter that has already
         // checked `closed` is then guaranteed to be parked on the condvar before we notify
         // (otherwise the wakeup is lost and recv()/send() block forever).
-        let _guard = self.inner.buf.lock().unwrap();
+        let _guard = self.inner.buf.lock().unwrap_or_else(|e| e.into_inner());
         self.inner.closed.store(true, Ordering::SeqCst);
         self.inner.not_empty.notify_all();
         self.inner.not_full.notify_all();
     }
 
-    pub fn len(&self) -> usize { self.inner.buf.lock().unwrap().len() }
+    pub fn len(&self) -> usize { self.inner.buf.lock().unwrap_or_else(|e| e.into_inner()).len() }
     pub fn is_empty(&self) -> bool { self.len() == 0 }
     pub fn is_closed(&self) -> bool { self.inner.closed.load(Ordering::Relaxed) }
 }

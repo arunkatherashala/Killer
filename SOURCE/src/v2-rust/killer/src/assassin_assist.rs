@@ -449,7 +449,7 @@ pub fn builtin_assist_log(args: &[crate::value::Value]) -> Result<crate::value::
         }
     };
 
-    let layer = layer().lock().unwrap();
+    let layer = layer().lock().unwrap_or_else(|e| e.into_inner());
     if layer.log.is_empty() {
         return Ok(crate::value::Value::Str("No executions logged yet.".into()));
     }
@@ -482,7 +482,7 @@ pub fn builtin_assist_log(args: &[crate::value::Value]) -> Result<crate::value::
 
 /// `nova_assist_status()` → print aggregate stats.
 pub fn builtin_assist_status(_args: &[crate::value::Value]) -> Result<crate::value::Value, crate::error::VmError> {
-    let layer = layer().lock().unwrap();
+    let layer = layer().lock().unwrap_or_else(|e| e.into_inner());
     let s = &layer.stats;
 
     let mut by_lang = s.by_lang.iter().collect::<Vec<_>>();
@@ -519,7 +519,7 @@ pub fn builtin_assist_debug(args: &[crate::value::Value]) -> Result<crate::value
         "debug", &lang, truncate(&code, 800), ""
     );
 
-    let mut lyr = layer().lock().unwrap();
+    let mut lyr = layer().lock().unwrap_or_else(|e| e.into_inner());
     let tokens = AssassinAssistLayer::estimate_tokens(&answer);
     lyr.tokens_used_total += tokens;
     let _ = tier_name;
@@ -537,20 +537,20 @@ pub fn builtin_assist_optimize(args: &[crate::value::Value]) -> Result<crate::va
         )),
     };
 
-    let mut lyr = layer().lock().unwrap();
+    let mut lyr = layer().lock().unwrap_or_else(|e| e.into_inner());
     let (result, _backend, _tok) = lyr.ai_optimize(&lang, &code);
     Ok(crate::value::Value::Str(result))
 }
 
 /// `nova_assist_enable()` → turn on AI layer.
 pub fn builtin_assist_enable(_args: &[crate::value::Value]) -> Result<crate::value::Value, crate::error::VmError> {
-    layer().lock().unwrap().enabled = true;
+    layer().lock().unwrap_or_else(|e| e.into_inner()).enabled = true;
     Ok(crate::value::Value::Str("Nova Assassin Assist: ENABLED".into()))
 }
 
 /// `nova_assist_disable()` → turn off AI layer (still logs, no AI calls).
 pub fn builtin_assist_disable(_args: &[crate::value::Value]) -> Result<crate::value::Value, crate::error::VmError> {
-    layer().lock().unwrap().enabled = false;
+    layer().lock().unwrap_or_else(|e| e.into_inner()).enabled = false;
     Ok(crate::value::Value::Str("Nova Assassin Assist: DISABLED (logging still active)".into()))
 }
 
@@ -559,7 +559,7 @@ pub fn builtin_assist_set_budget(args: &[crate::value::Value]) -> Result<crate::
     match args.first() {
         Some(crate::value::Value::Number(n)) => {
             let n = (*n as i64).max(0) as u64;
-            layer().lock().unwrap().token_budget = n;
+            layer().lock().unwrap_or_else(|e| e.into_inner()).token_budget = n;
             Ok(crate::value::Value::Str(format!("Token budget set to {}", n)))
         }
         _ => Err(crate::error::VmError::runtime_error(
@@ -573,7 +573,7 @@ pub fn builtin_assist_set_log(args: &[crate::value::Value]) -> Result<crate::val
     match args.first() {
         Some(crate::value::Value::Str(path)) => {
             let p = path.clone();
-            layer().lock().unwrap().disk_log_path = Some(p.clone());
+            layer().lock().unwrap_or_else(|e| e.into_inner()).disk_log_path = Some(p.clone());
             Ok(crate::value::Value::Str(format!("Disk log enabled → {}", p)))
         }
         _ => Err(crate::error::VmError::runtime_error(
@@ -584,7 +584,7 @@ pub fn builtin_assist_set_log(args: &[crate::value::Value]) -> Result<crate::val
 
 /// `nova_assist_clear()` → clear the execution log and stats.
 pub fn builtin_assist_clear(_args: &[crate::value::Value]) -> Result<crate::value::Value, crate::error::VmError> {
-    let mut lyr = layer().lock().unwrap();
+    let mut lyr = layer().lock().unwrap_or_else(|e| e.into_inner());
     lyr.log.clear();
     lyr.stats = AssistStats::default();
     lyr.suggestion_cache.clear();

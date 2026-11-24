@@ -46,7 +46,7 @@ impl TemporalAPI {
     }
 
     fn handle_request(&self, request: &str) -> String {
-        *self.request_count.lock().unwrap() += 1;
+        *self.request_count.lock().unwrap_or_else(|e| e.into_inner()) += 1;
 
         let lines: Vec<&str> = request.lines().collect();
         if lines.is_empty() {
@@ -74,8 +74,8 @@ impl TemporalAPI {
     }
 
     fn status_response(&self) -> String {
-        let count = *self.request_count.lock().unwrap();
-        let events = self.event_log.lock().unwrap().total_events_count();
+        let count = *self.request_count.lock().unwrap_or_else(|e| e.into_inner());
+        let events = self.event_log.lock().unwrap_or_else(|e| e.into_inner()).total_events_count();
         
         let response = format!(
             r#"{{"system": "KILLER Time Machine", "version": "2.1.0", "status": "operational", "phases_active": 8, "events": {}, "requests": {}}}"#,
@@ -86,7 +86,7 @@ impl TemporalAPI {
     }
 
     fn create_event_response(&self) -> String {
-        let mut log = self.event_log.lock().unwrap();
+        let mut log = self.event_log.lock().unwrap_or_else(|e| e.into_inner());
         let event_id = log.total_events_count();
         
         let event = Event::new(
@@ -116,7 +116,7 @@ impl TemporalAPI {
         let cause_id = 1u64;
         let effect_id = 2u64;
         
-        let mut causality = self.causality.lock().unwrap();
+        let mut causality = self.causality.lock().unwrap_or_else(|e| e.into_inner());
         match causality.link_events(cause_id, effect_id) {
             Ok(_) => {
                 let response = format!(
@@ -130,7 +130,7 @@ impl TemporalAPI {
     }
 
     fn insert_timeseries_response(&self) -> String {
-        let mut ts = self.timeseries.lock().unwrap();
+        let mut ts = self.timeseries.lock().unwrap_or_else(|e| e.into_inner());
         let point = DataPoint {
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -148,8 +148,8 @@ impl TemporalAPI {
     }
 
     fn deep_analysis_response(&self) -> String {
-        let log = self.event_log.lock().unwrap();
-        let reversible = self.reversible.lock().unwrap();
+        let log = self.event_log.lock().unwrap_or_else(|e| e.into_inner());
+        let reversible = self.reversible.lock().unwrap_or_else(|e| e.into_inner());
         
         let response = format!(
             r#"{{"events": {}, "reversibility": {:.1}%, "consistency": 100.0}}"#,
@@ -161,7 +161,7 @@ impl TemporalAPI {
 
     fn benchmark_response(&self) -> String {
         let start = Instant::now();
-        let mut ts = self.timeseries.lock().unwrap();
+        let mut ts = self.timeseries.lock().unwrap_or_else(|e| e.into_inner());
         
         for i in 0..1000 {
             let point = DataPoint {
