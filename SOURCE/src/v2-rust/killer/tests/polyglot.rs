@@ -326,3 +326,42 @@ fn script_file_is_owner_only() {
     assert!(o.stdout.starts_with("-rw-------"), "{}", o.all());
 }
 
+
+// --- Item 4: absolute runtime resolution and overrides -------------------------------------------
+
+#[test]
+fn runtime_override_must_be_absolute_and_exist() {
+    let (o, _) = run_watch("println(polyglot_exec(\"python\", \"print(1)\"))\n", &[("KILLER_POLYGLOT_PYTHON", "python")], None, WATCH);
+    assert!(o.all().contains("KILLER_POLYGLOT_PYTHON") && o.all().contains("absolute"), "{}", o.all());
+    let missing = std::env::temp_dir().join("killer_pgt_no_such_python_zz.exe");
+    let m = missing.to_string_lossy().to_string();
+    let (o, _) = run_watch("println(polyglot_exec(\"python\", \"print(1)\"))\n", &[("KILLER_PYTHON", m.as_str())], None, WATCH);
+    assert!(o.all().contains("POLYGLOT_E_RUNTIME_MISSING"), "{}", o.all());
+}
+
+#[test]
+fn polyglot_list_shows_absolute_paths() {
+    need!("python");
+    let (o, _) = run_watch("println(polyglot_list())\n", &[], None, WATCH);
+    let line = o.stdout.lines().find(|l| l.trim_start().starts_with("@python")).unwrap_or("").to_string();
+    let path = line.split_whitespace().nth(1).unwrap_or("");
+    assert!(std::path::Path::new(path).is_absolute(), "{}", o.all());
+}
+
+#[cfg(unix)]
+#[test]
+fn planted_runtime_in_a_relative_path_entry_is_not_run() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = fresh_dir("plant");
+    let marker = dir.join("PLANTED_RAN");
+    for name in ["python3", "python", "py"] {
+        let p = dir.join(name);
+        std::fs::write(&p, format!("#!/bin/sh\ntouch '{}'\necho planted\n", marker.display())).unwrap();
+        std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    let path = format!(".:{}", std::env::var("PATH").unwrap_or_default());
+    let (o, _) = run_watch("try {\n    println(polyglot_exec(\"python\", \"print(1)\"))\n} catch e {\n    println(\"err\")\n}\n", &[("PATH", path.as_str())], Some(&dir), WATCH);
+    assert!(!marker.exists() && !o.stdout.contains("planted"), "{}", o.all());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
