@@ -132,3 +132,72 @@ fn no_source_file_writes_a_bearer_key_to_a_raw_socket() {
     }
     assert!(found.is_empty(), "bearer key near a raw socket in: {:?}", found);
 }
+
+/// Why a curl command-line token would leak a secret (command lines are visible in `ps` / Task Manager): a
+/// header, user or bearer flag whose value is not a plain string literal, or is a literal that names a credential.
+fn leaks_secret_argument(flag: &str, rest: &str) -> bool {
+    if !["-H", "--header", "-u", "--user", "--oauth2-bearer"].contains(&flag) {
+        return false;
+    }
+    let rest = rest.trim_start_matches(|c: char| c == ',' || c.is_whitespace());
+    if !rest.starts_with('"') {
+        return true; // a computed value (format!, a variable, a header list): could carry a key
+    }
+    let lit = rest[1..].split('"').next().unwrap_or("").to_ascii_lowercase();
+    ["authorization", "bearer", "api-key", "api_key", "apikey", "token", "secret", "key"].iter().any(|w| lit.contains(w)) || flag != "-H" && flag != "--header"
+}
+
+#[test]
+fn the_secret_argument_detector_catches_the_known_spellings() {
+    assert!(leaks_secret_argument("-H", r#".to_string(), h.clone()"#));
+    assert!(leaks_secret_argument("-H", r#""Authorization: Bearer x""#));
+    assert!(leaks_secret_argument("-H", r#"format!("x")"#));
+    assert!(leaks_secret_argument("-u", r#""user:pw""#));
+    assert!(leaks_secret_argument("--oauth2-bearer", "tok"));
+    assert!(!leaks_secret_argument("-H", r#""Accept: text/html""#));
+    assert!(!leaks_secret_argument("-X", "POST"));
+}
+
+/// No code path may pass an Authorization header, key or credential as a curl command-line argument: secrets go to
+/// curl through its `-K -` config on stdin (see http_req.rs).
+#[test]
+fn no_curl_call_passes_a_secret_on_the_command_line() {
+    let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let mut files = Vec::new();
+    rust_files(&src, &mut files);
+    let mut found = Vec::new();
+    for file in files {
+        let name = file.to_string_lossy().replace(std::path::MAIN_SEPARATOR, "/");
+        if name.contains("/archive/") {
+            continue;
+        }
+        let text = std::fs::read_to_string(&file).unwrap_or_default();
+        if !text.contains("tool_path::curl") && !text.contains("Command::new(\"curl") {
+            continue;
+        }
+        let prod = text.split("#[cfg(test)]").next().unwrap_or("");
+        let lines: Vec<&str> = prod.lines().collect();
+        for (n, line) in lines.iter().enumerate() {
+            if line.trim_start().starts_with("//") {
+                continue;
+            }
+            for flag in ["-H", "--header", "-u", "--user", "--oauth2-bearer"] {
+                let tok = format!("\"{}\"", flag);
+                let mut from = 0;
+                while let Some(i) = line[from..].find(&tok) {
+                    let after = &line[from + i + tok.len()..];
+                    let rest = if after.trim_matches(|c: char| c == ',' || c.is_whitespace() || c == ']' || c == ')').is_empty() {
+                        lines.get(n + 1).copied().unwrap_or("")
+                    } else {
+                        after
+                    };
+                    if leaks_secret_argument(flag, rest) {
+                        found.push(format!("{}:{}: {}", name, n + 1, line.trim()));
+                    }
+                    from += i + tok.len();
+                }
+            }
+        }
+    }
+    assert!(found.is_empty(), "secrets must go through curl's stdin config, not argv:\n{}", found.join("\n"));
+}

@@ -196,6 +196,12 @@ pub fn url_port(url: &str) -> u16 {
     after_host.strip_prefix(':').and_then(|p| p.parse().ok()).unwrap_or(if scheme.eq_ignore_ascii_case("https") { 443 } else { 80 })
 }
 
+fn proxy_configured() -> bool {
+    ["https_proxy", "HTTPS_PROXY", "all_proxy", "ALL_PROXY", "http_proxy", "HTTP_PROXY"]
+        .iter()
+        .any(|k| std::env::var(k).map_or(false, |v| !v.trim().is_empty()))
+}
+
 fn is_metadata_name(h: &str) -> bool {
     let h = h.trim_end_matches('.');
     h == "metadata.google.internal" || h == "metadata" || h == "instance-data" || h.ends_with(".metadata.google.internal")
@@ -225,10 +231,46 @@ fn check_class(class: NetClass, host: &str, spec: &ReqSpec) -> Result<(), String
 /// Returns curl `resolve` pins for resolved names so curl connects to exactly the addresses checked (no DNS
 /// rebinding between check and connect). curl is run without -L, so redirects are never followed.
 pub fn check_target(spec: &ReqSpec) -> Result<Vec<String>, String> {
+    let deny = |why: &str| Err(format!("Security: request refused by the SSRF guard: {}.", why));
+    // The authority is judged exactly as curl will read it: no control characters, whitespace or backslashes
+    // (curl and the URL parsers disagree about what they mean), so nothing can hide a different host.
+    let rest = spec.url.split_once("://").map(|x| x.1).unwrap_or("");
+    let end = rest.find(|c| c == '/' || c == '?' || c == '#').unwrap_or(rest.len());
+    let authority = &rest[..end];
+    if authority.chars().any(|c| c.is_control() || c.is_whitespace() || c == '\\') {
+        return deny("the host part contains control characters, whitespace or a backslash");
+    }
     let host = match url_host(&spec.url) {
         Some(h) => h,
-        None => return Ok(Vec::new()),
+        None => return deny("the URL has no host"),
     };
+    let bracketed = authority.rsplit('@').next().map_or(false, |a| a.starts_with('['));
+    if bracketed {
+        // IPv6 literal, optionally with a zone id ("fe80::1%25eth0"): the zone never changes the class.
+        let (addr, zone) = match host.split_once('%') {
+            Some((a, z)) => (a, Some(z)),
+            None => (host.as_str(), None),
+        };
+        if let Some(z) = zone {
+            if z.is_empty() || !z.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.') {
+                return deny("invalid IPv6 zone id");
+            }
+        }
+        return match addr.parse::<std::net::Ipv6Addr>() {
+            Ok(ip) => {
+                check_class(classify_ip(std::net::IpAddr::V6(ip)), &host, spec)?;
+                Ok(Vec::new())
+            }
+            Err(_) => deny("the bracketed host is not a valid IPv6 address"),
+        };
+    }
+    if host.contains('%') {
+        return deny("percent-encoded host names are not accepted");
+    }
+    let host = host.trim_end_matches('.').to_string();
+    if host.is_empty() || !host.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.') {
+        return deny("the host is not a plain IP address or DNS name");
+    }
     if is_metadata_name(&host) {
         check_class(NetClass::Metadata, &host, spec)?;
     }
@@ -242,15 +284,18 @@ pub fn check_target(spec: &ReqSpec) -> Result<Vec<String>, String> {
     }
     use std::net::ToSocketAddrs;
     let port = url_port(&spec.url);
+    // Fail closed: a name that cannot be resolved here is not handed to curl (curl may read it differently).
     let addrs: Vec<std::net::IpAddr> = match (host.as_str(), port).to_socket_addrs() {
         Ok(it) => it.map(|a| a.ip()).collect(),
-        Err(_) => return Ok(Vec::new()), // unresolvable: curl will report the error itself
+        // Behind a proxy the proxy resolves the name; the host is already restricted to plain DNS characters here.
+        Err(_) if proxy_configured() => return Ok(Vec::new()),
+        Err(_) => return deny(&format!("cannot resolve host '{}' to check it", host)),
     };
+    if addrs.is_empty() {
+        return deny(&format!("host '{}' resolves to no address", host));
+    }
     for ip in &addrs {
         check_class(classify_ip(*ip), &format!("{} (resolves to {})", host, ip), spec)?;
-    }
-    if addrs.is_empty() {
-        return Ok(Vec::new());
     }
     let list: Vec<String> = addrs.iter().map(|ip| if ip.is_ipv6() { format!("[{}]", ip) } else { ip.to_string() }).collect();
     Ok(vec![format!("{}:{}:{}", host, port, list.join(","))])
@@ -538,7 +583,7 @@ mod tests {
     use super::*;
 
     fn secret_spec() -> ReqSpec {
-        let mut s = ReqSpec::new("POST", "https://api.example.com/v1/x?token=URLSECRET");
+        let mut s = ReqSpec::new("POST", "https://93.184.216.34/v1/x?token=URLSECRET");
         s.headers.push(("Authorization".into(), "Bearer SK-TOPSECRET".into()));
         s.headers.push(("x-api-key".into(), "KEYSECRET".into()));
         s.body = Some("{\"prompt\":\"BODYSECRET\"}".into());
@@ -548,7 +593,7 @@ mod tests {
     #[test]
     fn no_secret_ever_appears_in_argv() {
         let argv = build_argv(&secret_spec()).join(" ");
-        for secret in ["SK-TOPSECRET", "KEYSECRET", "BODYSECRET", "URLSECRET", "Authorization", "api.example.com"] {
+        for secret in ["SK-TOPSECRET", "KEYSECRET", "BODYSECRET", "URLSECRET", "Authorization", "93.184.216.34"] {
             assert!(!argv.contains(secret), "{} leaked into argv: {}", secret, argv);
         }
         assert!(argv.contains("-K -"));

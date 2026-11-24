@@ -140,7 +140,7 @@ fn http_client_does_not_run_a_planted_curl_and_override_must_be_absolute() {
     let cwd = scratch();
     plant(&cwd, "curl");
     let path = format!(".{}", sep());
-    let src = "http_request({\"url\": \"https://example.invalid/\"})\n";
+    let src = "http_request({\"url\": \"https://93.184.216.34/\"})\n";
     let (ok, text) = run_script(src, &cwd, &[("PATH", &path)]);
     assert!(!ok && text.contains("curl") && text.contains("not found in any absolute PATH directory"), "{text}");
     let (ok, text) = run_script(src, &cwd, &[("PATH", &path), ("KILLER_CURL", "curl")]);
@@ -189,7 +189,7 @@ fn the_network_capability_still_gates_tls_and_http() {
     use killer_native::security::{CapabilityScopeGuard, CapabilitySet};
     use killer_native::value::Value;
     let _g = CapabilityScopeGuard::install(CapabilitySet::restricted());
-    let d = Value::Dict(killer_native::value::SharedDict::new(std::collections::HashMap::from([("url".to_string(), Value::Str("https://example.invalid/".into()))])));
+    let d = Value::Dict(killer_native::value::SharedDict::new(std::collections::HashMap::from([("url".to_string(), Value::Str("https://93.184.216.34/".into()))])));
     for (name, args) in [
         ("tcp_connect_tls", vec![Value::Str("127.0.0.1:9".into())]),
         ("tls_listen", vec![Value::Str("127.0.0.1:0".into()), Value::Str("c".into()), Value::Str("k".into())]),
