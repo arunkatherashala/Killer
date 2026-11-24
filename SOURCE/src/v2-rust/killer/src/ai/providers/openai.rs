@@ -61,7 +61,9 @@ impl OpenAIProvider {
     }
 
     /// Attempt a real HTTPS call to the OpenAI-compatible chat endpoint.
-    /// Returns `None` when no API key is available so the caller can fall back.
+    /// Returns `None` when no API key is available so the caller can fall back. The `Ok` value is the raw JSON
+    /// response body, exactly like the simulated one: [`Self::parse_chat_response`] is the only place that
+    /// extracts the message text.
     fn try_real_chat(&self, body: &str) -> Option<Result<String, String>> {
         let api_key = self.resolve_api_key()?;
         let spec = self.build_chat_spec(&api_key, body);
@@ -70,12 +72,7 @@ impl OpenAIProvider {
             Err(e) => return Some(Err(format!("OpenAI request failed: {}", e))),
         };
 
-        // Extract choices[0].message.content from JSON via string searching
-        if let Some(content) = extract_json_content_value(&body_str) {
-            Some(Ok(content))
-        } else {
-            Some(Err(format!("Failed to parse OpenAI response: {}", body_str)))
-        }
+        Some(Ok(body_str))
     }
 
     /// Make HTTP request to OpenAI
@@ -145,14 +142,11 @@ impl OpenAIProvider {
 
     /// Parse JSON response
     fn parse_chat_response(&self, response: &str) -> Result<String, String> {
-        // Simple JSON parsing for testing
-        if let Some(start) = response.find("\"content\": \"") {
-            let start = start + 12;
-            if let Some(end) = response[start..].find("\"") {
-                return Ok(response[start..start + end].to_string());
-            }
-        }
-        Err("Failed to parse response".to_string())
+        // choices[0].message.content from the raw response body (handles whitespace and escapes)
+        extract_json_content_value(response).ok_or_else(|| {
+            let shown: String = response.chars().take(300).collect();
+            format!("Failed to parse OpenAI response: {}", shown)
+        })
     }
 }
 
