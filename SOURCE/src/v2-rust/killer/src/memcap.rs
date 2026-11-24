@@ -301,6 +301,23 @@ pub fn adopt(h: Option<Inherited>) -> AdoptGuard {
     }
 }
 
+/// Keeps this thread's allocations out of the count while it is alive (see [`suspend`]).
+pub struct SuspendGuard(i64);
+
+impl Drop for SuspendGuard {
+    fn drop(&mut self) {
+        LIMIT.with(|l| l.set(self.0));
+    }
+}
+
+/// Stop counting on this thread until the guard is dropped. The runtime's own bookkeeping for a new thread (its
+/// handle, result packet and start closure) is allocated by the starter but freed by the new thread outside of
+/// its membership window (after [`AdoptGuard`] is gone); counting it on the starter's side only would make every
+/// started thread leave a few dozen bytes in the count for good.
+pub fn suspend() -> SuspendGuard {
+    SuspendGuard(LIMIT.with(|l| l.replace(0)))
+}
+
 /// The cap in megabytes: an explicit `requested` value, else `KILLER_EVAL_MAX_MEMORY`, else the default. Values
 /// outside `MIN_MB..=HARD_MAX_MB` are an error.
 pub fn resolve_mb(requested: Option<f64>) -> Result<u64, String> {

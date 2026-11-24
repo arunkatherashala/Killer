@@ -526,6 +526,8 @@ fn spawn_task_thread(
     let failed_slot = std::sync::Arc::clone(&slot);
     // the task counts against the memory cap of the evaluation that started it (see `memcap`)
     let cap = crate::memcap::inherit();
+    // the thread's own bookkeeping is not part of the budget (see `memcap::suspend`)
+    let uncounted = crate::memcap::suspend();
     let spawned = std::thread::Builder::new()
         .name("killer-task".to_string())
         .stack_size(SPAWN_STACK_BYTES)
@@ -533,6 +535,7 @@ fn spawn_task_thread(
             let _cap = crate::memcap::adopt(cap);
             run_spawned_task(task, func, args, slot)
         });
+    drop(uncounted);
     if spawned.is_err() {
         *failed_slot.lock().unwrap() = Some(Box::new(Value::TaskError(Box::new(Value::Str(
             "could not start a thread for this task".to_string(),
@@ -572,6 +575,8 @@ fn run_spawned_task(
     }));
     let result = outcome.unwrap_or_else(|_| Value::TaskError(Box::new(Value::Str("task panicked".to_string()))));
     *slot.lock().unwrap() = Some(Box::new(result));
+    // still counted against the evaluation's memory cap: give back what the thread-local registry holds
+    crate::gc::release_thread();
 }
 
 impl VirtualMachine {
