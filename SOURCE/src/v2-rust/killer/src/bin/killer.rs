@@ -25,6 +25,8 @@ const COMMANDS: &[(&str, &str, Handler)] = &[
     ("profile", "profile a program: killer profile <file.killer> [--html out.html] [--top N] [--lines N]", killer_native::profile_cli::cmd_profile),
     ("debug", "step debugger: killer debug <file.killer> [--break LINE]...", killer_native::vm_debug::cmd_debug),
     ("wasm", "compile numeric functions to WebAssembly: killer wasm <file.killer> [-o out.wasm]", killer_native::wasm_compile::cmd_wasm),
+    ("polyglot", "polyglot runtimes: killer polyglot list [--json]", killer_native::polyglot::cmd_polyglot),
+    ("doctor", "check runtimes and polyglot settings: killer doctor [--require python,bash] [--json]", killer_native::polyglot::cmd_doctor),
     ("lint", "lint files: killer lint [--deny-warnings] <files or dirs>", cli_tools::cmd_lint),
     ("test", "run tests: killer test [--junit FILE] [filter] [paths]", testfw::cmd_test),
     ("repl", "interactive prompt", cli_tools::cmd_repl),

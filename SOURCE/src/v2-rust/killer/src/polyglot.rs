@@ -664,6 +664,8 @@ struct Ctx<'a> {
     s: &'a Settings,
     wd: WorkDir,
     echo: bool,
+    /// `KILLER_ARGS` / `KILLER_ARGS_FILE`
+    extra_env: Vec<(String, String)>,
 }
 
 impl Ctx<'_> {
@@ -671,6 +673,9 @@ impl Ctx<'_> {
         scrub_env(&mut cmd, self.s);
         if let Ok(cwd) = std::env::current_dir() {
             cmd.env("KILLER_CWD", cwd);
+        }
+        for (k, v) in &self.extra_env {
+            cmd.env(k, v);
         }
         cmd.current_dir(&self.wd.0);
         let lang = self.rt.name.to_string();
@@ -736,18 +741,29 @@ fn indent(code: &str, pad: &str) -> String {
     code.lines().map(|l| format!("{}{}", pad, l)).collect::<Vec<_>>().join("\n")
 }
 
-/// Arguments passed into a block: `(name, value as JSON)` pairs.
-pub type BlockArgs = Vec<(String, String)>;
+/// One Killer value passed into a block.
+#[derive(Debug, Clone)]
+pub struct BlockArg {
+    pub name: String,
+    /// The value as JSON.
+    pub json: String,
+    /// The value as shell text: strings as they are, everything else as JSON.
+    pub text: String,
+}
+
+/// Values passed into a block (`@lang(a, b) { }`).
+pub type BlockArgs = Vec<BlockArg>;
 
 fn execute(rt: &'static LangRuntime, code: &str, args: Option<&BlockArgs>, echo: bool) -> Result<RunOutput, PolyglotError> {
     check_policy(rt)?;
     let s = settings();
     let exe = resolve_runtime(rt)?;
     let javac = if rt.kind == Kind::Java { Some(resolve_javac()?) } else { None };
-    let ctx = Ctx { rt, s, wd: WorkDir::new(rt.name)?, echo };
+    let mut ctx = Ctx { rt, s, wd: WorkDir::new(rt.name)?, echo, extra_env: Vec::new() };
     let lang = rt.name;
-    let (args_env, prelude) = block_args(rt, &ctx, args)?;
-    let mut run_cmd = match rt.kind {
+    let (args_env, prelude) = block_args(rt, &ctx.wd, args)?;
+    ctx.extra_env = args_env;
+    let run_cmd = match rt.kind {
         Kind::Script => {
             let file = ctx.wd.write(lang, &format!("block.{}", rt.ext), &format!("{}{}\n", prelude, code))?;
             let mut c = Command::new(&exe.path);
@@ -783,9 +799,6 @@ fn execute(rt: &'static LangRuntime, code: &str, args: Option<&BlockArgs>, echo:
             Command::new(out)
         }
     };
-    for (k, v) in &args_env {
-        run_cmd.env(k, v);
-    }
     let c = ctx.step(run_cmd, "", s.timeout)?;
     Ok(RunOutput {
         stdout: String::from_utf8_lossy(&c.stdout).trim_end().to_string(),
@@ -796,12 +809,52 @@ fn execute(rt: &'static LangRuntime, code: &str, args: Option<&BlockArgs>, echo:
     })
 }
 
-/// Variables for the block (`@lang(a, b) { }`): `KILLER_ARGS` holds a JSON object (or, above
-/// 8 KiB, `KILLER_ARGS_FILE` names a file holding it). Python, Ruby and JS get a one-line prelude
-/// that defines the variables; Bash / sh get shell assignments. Other languages read the JSON.
-fn block_args(rt: &LangRuntime, ctx: &Ctx, args: Option<&BlockArgs>) -> Result<(Vec<(String, String)>, String), PolyglotError> {
-    let _ = (rt, ctx, args);
-    Ok((Vec::new(), String::new()))
+/// Above this many bytes the arguments go through a file (`KILLER_ARGS_FILE`), not the environment.
+pub const ARGS_ENV_LIMIT: usize = 8 * 1024;
+
+/// Variables for the block (`@lang(a, b) { }`): `KILLER_ARGS` holds a JSON object of them (above
+/// [`ARGS_ENV_LIMIT`] bytes `KILLER_ARGS_FILE` names a file holding it instead). Python, Ruby and
+/// Node get a one-line prelude that defines the variables (so their error line numbers are one
+/// higher); Bash / sh get one shell assignment per variable on that line. Every other language
+/// reads the JSON itself.
+fn block_args(rt: &LangRuntime, wd: &WorkDir, args: Option<&BlockArgs>) -> Result<(Vec<(String, String)>, String), PolyglotError> {
+    let Some(args) = args.filter(|a| !a.is_empty()) else { return Ok((Vec::new(), String::new())) };
+    let json = format!("{{{}}}", args.iter().map(|a| format!("{}:{}", js(&a.name), a.json)).collect::<Vec<_>>().join(","));
+    let env = if json.len() > ARGS_ENV_LIMIT {
+        let f = wd.write(rt.name, "killer_args.json", &json)?;
+        vec![("KILLER_ARGS_FILE".to_string(), f.to_string_lossy().into_owned())]
+    } else {
+        vec![("KILLER_ARGS".to_string(), json)]
+    };
+    let names: Vec<&str> = args.iter().map(|a| a.name.as_str()).collect();
+    let each = |f: &dyn Fn(&str) -> String| names.iter().map(|n| f(n)).collect::<Vec<_>>().join("; ");
+    let prelude = match rt.name {
+        "python" => format!(
+            "import json as _kj, os as _ko; _ka = _kj.loads(open(_ko.environ['KILLER_ARGS_FILE'], encoding='utf-8').read() if 'KILLER_ARGS_FILE' in _ko.environ else _ko.environ['KILLER_ARGS']); {}; del _kj, _ko, _ka\n",
+            each(&|n| format!("{n} = _ka['{n}']"))
+        ),
+        "ruby" => format!(
+            "require 'json'; _ka = JSON.parse(ENV['KILLER_ARGS_FILE'] ? File.read(ENV['KILLER_ARGS_FILE'], encoding: 'UTF-8') : ENV['KILLER_ARGS']); {}\n",
+            each(&|n| format!("{n} = _ka['{n}']"))
+        ),
+        "node" => format!(
+            "const _ka = JSON.parse(process.env.KILLER_ARGS_FILE ? require('fs').readFileSync(process.env.KILLER_ARGS_FILE, 'utf8') : process.env.KILLER_ARGS); {};\n",
+            each(&|n| format!("let {n} = _ka['{n}']"))
+        ),
+        "bash" | "sh" => {
+            let sq = char::from(39u8).to_string();
+            let dq = char::from(34u8).to_string();
+            // 'it'"'"'s': a single quote closes, a double-quoted one follows, then it reopens
+            let escaped_sq = format!("{sq}{dq}{sq}{dq}{sq}");
+            let mut line = Vec::new();
+            for a in args {
+                line.push(format!("{}={}{}{}", a.name, sq, a.text.replace('\0', "").replace(&sq, &escaped_sq), sq));
+            }
+            format!("{}\n", line.join("; "))
+        }
+        _ => String::new(),
+    };
+    Ok((env, prelude))
 }
 
 /// Run a block and return its output, also when it exits non-zero.
@@ -811,8 +864,13 @@ pub fn polyglot_run(lang: &str, code: &str, args: Option<&BlockArgs>) -> Result<
 
 fn run_block(lang: &str, code: &str, args: Option<&BlockArgs>, echo: bool) -> Result<RunOutput, PolyglotError> {
     let code = crate::polyglot_front::decode(code);
-    let rt = find_runtime(lang).ok_or_else(|| PolyglotError::UnknownLang(lang.to_string()))?;
-    execute(rt, &code, args, echo)
+    let start = Instant::now();
+    let res = match find_runtime(lang) {
+        Some(rt) => execute(rt, &code, args, echo),
+        None => Err(PolyglotError::UnknownLang(lang.to_string())),
+    };
+    audit(find_runtime(lang).map_or(lang, |r| r.name), &code, start.elapsed(), &res);
+    res
 }
 
 /// Run a block; a non-zero exit is an error.
@@ -883,6 +941,223 @@ pub fn polyglot_list_str() -> String {
     format!("Detected runtimes:\n{}", lines.join("\n"))
 }
 
+// --- Audit log ---------------------------------------------------------------------------------
+
+/// A JSON string literal.
+fn js(s: &str) -> String {
+    crate::json_lang::stringify(&Value::Str(s.to_string()), 0).unwrap_or_else(|_| "\"\"".to_string())
+}
+
+fn sha256_hex(data: &[u8]) -> String {
+    use sha2::Digest;
+    sha2::Sha256::digest(data).iter().map(|b| format!("{:02x}", b)).collect()
+}
+
+/// Append one JSON line for a run to `KILLER_AUDIT_LOG` (when set). The block source is only
+/// included with `KILLER_AUDIT_CODE=1`; output is never included. Write errors are reported once
+/// on stderr and do not fail the block. No rotation: use logrotate or similar.
+fn audit(lang: &str, code: &str, took: Duration, res: &Result<RunOutput, PolyglotError>) {
+    let s = settings();
+    let Some(path) = &s.audit_log else { return };
+    let (exe, version) = match res {
+        Ok(o) => (o.exe.to_string_lossy().into_owned(), o.version.clone()),
+        Err(_) => cache()
+            .lock()
+            .ok()
+            .and_then(|c| c.get(lang).and_then(|r| r.as_ref().ok().cloned()))
+            .map(|r| (r.path.to_string_lossy().into_owned(), r.version))
+            .unwrap_or_default(),
+    };
+    let (exit_code, outcome) = match res {
+        Ok(o) if o.code == 0 => (o.code.to_string(), "ok"),
+        Ok(o) => (o.code.to_string(), "POLYGLOT_E_EXIT"),
+        Err(PolyglotError::NonZeroExit { code, .. }) => (code.map_or("null".to_string(), |c| c.to_string()), "POLYGLOT_E_EXIT"),
+        Err(e) => ("null".to_string(), e.code()),
+    };
+    let ts = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0);
+    let mut line = format!(
+        "{{\"ts\":{},\"pid\":{},\"lang\":{},\"exe\":{},\"version\":{},\"code_sha256\":\"{}\",\"code_len\":{},\"duration_ms\":{},\"exit_code\":{},\"outcome\":\"{}\"",
+        ts,
+        std::process::id(),
+        js(lang),
+        js(&exe),
+        js(&version),
+        sha256_hex(code.as_bytes()),
+        code.len(),
+        took.as_millis(),
+        exit_code,
+        outcome
+    );
+    if s.audit_code {
+        line.push_str(&format!(",\"code\":{}", js(code)));
+    }
+    line.push_str("}\n");
+    let mut o = fs::OpenOptions::new();
+    o.create(true).append(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        o.mode(0o600);
+    }
+    let r = o.open(path).and_then(|mut f| f.write_all(line.as_bytes()));
+    if let Err(e) = r {
+        static WARN: AtomicBool = AtomicBool::new(false);
+        if !WARN.swap(true, Ordering::SeqCst) {
+            eprintln!("killer: warning: cannot write the audit log {}: {}", path.display(), e);
+        }
+    }
+}
+
+// --- `killer polyglot list` / `killer doctor` ---------------------------------------------------
+
+/// One row of the runtime report.
+#[derive(Debug, Clone)]
+pub struct RuntimeRow {
+    pub name: &'static str,
+    pub aliases: &'static [&'static str],
+    /// `ok`, `missing` or `denied`.
+    pub status: &'static str,
+    pub path: String,
+    pub version: String,
+    pub override_var: String,
+    pub detail: String,
+}
+
+/// Probe every language (denied languages are not probed).
+pub fn runtime_rows() -> Vec<RuntimeRow> {
+    RUNTIMES
+        .iter()
+        .map(|rt| {
+            let mut row = RuntimeRow { name: rt.name, aliases: rt.aliases, status: "ok", path: String::new(), version: String::new(), override_var: override_vars(rt.name)[0].clone(), detail: String::new() };
+            if let Err(e) = policy_decision(rt.name, settings(), true) {
+                row.status = "denied";
+                row.detail = e.to_string();
+                return row;
+            }
+            let found = resolve_runtime(rt).and_then(|r| if rt.kind == Kind::Java { resolve_javac().map(|_| r) } else { Ok(r) });
+            match found {
+                Ok(r) => {
+                    row.path = r.path.to_string_lossy().into_owned();
+                    row.version = r.version;
+                }
+                Err(e) => {
+                    row.status = "missing";
+                    row.detail = e.to_string();
+                }
+            }
+            row
+        })
+        .collect()
+}
+
+fn rows_json(rows: &[RuntimeRow]) -> String {
+    let items: Vec<String> = rows
+        .iter()
+        .map(|r| {
+            format!(
+                "{{\"name\":{},\"aliases\":[{}],\"status\":{},\"path\":{},\"version\":{},\"override\":{}}}",
+                js(r.name),
+                r.aliases.iter().map(|a| js(a)).collect::<Vec<_>>().join(","),
+                js(r.status),
+                js(&r.path),
+                js(&r.version),
+                js(&r.override_var)
+            )
+        })
+        .collect();
+    format!("[{}]", items.join(","))
+}
+
+fn rows_text(rows: &[RuntimeRow]) -> String {
+    let mut out = format!("{:<11} {:<8} {:<60} {}\n", "LANGUAGE", "STATUS", "PATH", "VERSION");
+    for r in rows {
+        out.push_str(&format!("{:<11} {:<8} {:<60} {}\n", r.name, r.status, if r.path.is_empty() { "-" } else { &r.path }, r.version));
+    }
+    out
+}
+
+fn policy_summary(s: &Settings) -> String {
+    let policy = match &s.allow {
+        Allow::All => "allow all (KILLER_POLYGLOT_ALLOW)".to_string(),
+        Allow::Only(l) if l.is_empty() => "deny all (KILLER_POLYGLOT_ALLOW=none)".to_string(),
+        Allow::Only(l) => format!("allow {} (KILLER_POLYGLOT_ALLOW)", l.join(",")),
+        Allow::Unset if s.strict => "deny all (KILLER_PROFILE strict, no KILLER_POLYGLOT_ALLOW)".to_string(),
+        Allow::Unset => "allow all, warn once (default)".to_string(),
+    };
+    format!(
+        "policy: {}\ntimeout: {}\nmax output: {} bytes\nenv pass-through: {}\nAI assist: {}\naudit log: {}\n",
+        policy,
+        s.timeout.map_or("none".to_string(), |t| format!("{} s run, {} s compile", t.as_secs_f64(), t.as_secs_f64() * 2.0)),
+        s.max_output,
+        if s.env_pass.is_empty() { "-".to_string() } else { s.env_pass.join(",") },
+        if s.ai { "on (KILLER_POLYGLOT_AI)" } else { "off" },
+        s.audit_log.as_ref().map_or("-".to_string(), |p| p.display().to_string())
+    )
+}
+
+/// `killer polyglot list [--json]`
+pub fn cmd_polyglot(args: &[String]) -> i32 {
+    match args.first().map(|s| s.as_str()) {
+        Some("list") => {
+            let rows = runtime_rows();
+            if args.iter().any(|a| a == "--json") {
+                println!("{}", rows_json(&rows));
+            } else {
+                print!("{}", rows_text(&rows));
+            }
+            0
+        }
+        _ => {
+            eprintln!("usage: killer polyglot list [--json]");
+            2
+        }
+    }
+}
+
+/// `killer doctor [--require a,b] [--json]`: runtimes and polyglot settings; with `--require`,
+/// exit 1 unless every listed language is allowed and installed.
+pub fn cmd_doctor(args: &[String]) -> i32 {
+    let mut require: Vec<String> = Vec::new();
+    let mut json = false;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--json" => json = true,
+            "--require" => {
+                i += 1;
+                if let Some(v) = args.get(i) {
+                    require.extend(v.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()));
+                }
+            }
+            other => {
+                eprintln!("killer doctor: unknown argument `{}`\nusage: killer doctor [--require python,bash] [--json]", other);
+                return 2;
+            }
+        }
+        i += 1;
+    }
+    let rows = runtime_rows();
+    if json {
+        println!("{}", rows_json(&rows));
+    } else {
+        print!("{}\n{}", policy_summary(settings()), rows_text(&rows));
+    }
+    let missing: Vec<String> = require
+        .iter()
+        .filter(|l| match find_runtime(l) {
+            None => true,
+            Some(rt) => rows.iter().find(|r| r.name == rt.name).map_or(true, |r| r.status != "ok"),
+        })
+        .cloned()
+        .collect();
+    if missing.is_empty() {
+        0
+    } else {
+        eprintln!("killer doctor: required but not available: {}", missing.join(", "));
+        1
+    }
+}
+
 // --- Builtins ----------------------------------------------------------------------------------
 
 fn str_arg(args: &[Value], i: usize, f: &str, what: &str) -> Result<String, VmError> {
@@ -929,7 +1204,11 @@ pub fn builtin_polyglot_exec_args(args: &[Value]) -> Result<Value, VmError> {
     let mut pairs = BlockArgs::new();
     for (n, v) in names.iter().zip(&args[3..]) {
         let json = crate::json_lang::stringify(v, 0).map_err(|e| VmError::runtime_error(format!("@{}({}): {}", lang, n, e)))?;
-        pairs.push((n.to_string(), json));
+        let text = match v {
+            Value::Str(s) => s.clone(),
+            _ => json.clone(),
+        };
+        pairs.push(BlockArg { name: n.to_string(), json, text });
     }
     assisted(&lang, &code, Some(&pairs), false).map(Value::Str).map_err(VmError::runtime_error)
 }
