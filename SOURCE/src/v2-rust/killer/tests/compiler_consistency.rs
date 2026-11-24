@@ -234,3 +234,31 @@ fn typed_code_still_reports_real_errors() {
     assert!(run("x: number = 1\nx = \"now a string\"\nprintln(x)").contains("type error"));
     assert!(run("x: number = \"5\" + 0").contains("type error"));
 }
+
+#[test]
+fn prefixed_single_quote_strings_are_masked_like_the_compiler_reads_them() {
+    // f'..' and k'..' are strings: `//`, `--`, `#` and brackets inside them are text, and code after them is code
+    let src = r#"n = 5
+d = {"a": 1}
+s = f'a // b {n} ]'
+println(s)
+t = k'x -- y {n} # z'
+println(t)
+println(f'{d['a']}[z' + "!")
+xs = [f'p // q', 2, k'r -- s']
+println(len(xs))
+println(xs[0] + "|" + xs[2])
+w = F'big // {n}'
+println(w)
+println(f'x => {n}')
+println(k'(a, b) => a + b {n}')
+add = (a, b) => a + b
+println(add(1, 2) + len(f'fn(x) {{ => }}'))
+// don't treat this apostrophe as a string: f's
+println("it's fine") -- it's a comment
+"#;
+    assert_eq!(
+        lines(src),
+        ["a // b 5 ]", "x -- y 5 # z", "1[z!", "3", "p // q|r -- s", "big // 5", "x => 5", "(a, b) => a + b 5", "15", "it's fine"]
+    );
+}
