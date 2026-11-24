@@ -201,6 +201,45 @@ println("served", n, "main sees", len(hits), "mutex", mutex_get(total))
 }
 
 #[test]
+fn routes_that_capture_one_object_still_share_it_inside_a_worker() {
+    // two route closures over the same list (an in-memory store): with one worker, what POST adds GET sees
+    let port = free_port();
+    let srv = start(&format!(
+        r#"fn build() {{
+  items = []
+  fn add(req) {{
+    push(items, req["query"]["v"])
+    return str(len(items))
+  }}
+  fn show(req) {{
+    return join(items, ",")
+  }}
+  route("GET", "/ping", fn(req) {{ return "pong" }})
+  route("POST", "/add", add)
+  route("GET", "/show", show)
+}}
+build()
+n = serve({port}, null, {{"workers": 1, "max_requests": 4}})
+println("served", n)
+"#
+    ));
+    wait_ready(port);
+    let post = |v: &str| {
+        let mut s = TcpStream::connect(("127.0.0.1", port)).unwrap();
+        s.set_read_timeout(Some(Duration::from_secs(60))).unwrap();
+        let nl = crlf();
+        s.write_all(format!("POST /add?v={v} HTTP/1.1{nl}Host: x{nl}Content-Length: 0{nl}{nl}").as_bytes()).unwrap();
+        let mut out = String::new();
+        let _ = s.read_to_string(&mut out);
+        out
+    };
+    assert!(post("a").ends_with("1"));
+    assert!(post("b").ends_with("2"));
+    assert_eq!(get(port, "/show", 60), (200, "a,b".to_string()));
+    assert_eq!(srv.finish(60), "served 4");
+}
+
+#[test]
 fn server_stop_answers_at_once_and_drains_in_flight_requests() {
     let port = free_port();
     let srv = start(&format!(
