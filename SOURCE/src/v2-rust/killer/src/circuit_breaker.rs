@@ -146,14 +146,14 @@ impl CircuitBreaker {
     }
 
     pub fn get_state(&self) -> CircuitState {
-        *self.state.lock().unwrap()
+        *self.state.lock().unwrap_or_else(|e| e.into_inner())
     }
 
     pub fn record_success(&self) {
-        let mut state = self.state.lock().unwrap();
-        let mut failure_count = self.failure_count.lock().unwrap();
-        let mut success_count = self.success_count.lock().unwrap();
-        let mut half_open_requests = self.half_open_requests.lock().unwrap();
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        let mut failure_count = self.failure_count.lock().unwrap_or_else(|e| e.into_inner());
+        let mut success_count = self.success_count.lock().unwrap_or_else(|e| e.into_inner());
+        let mut half_open_requests = self.half_open_requests.lock().unwrap_or_else(|e| e.into_inner());
 
         *failure_count = 0;  // Reset failure count on success
 
@@ -181,9 +181,9 @@ impl CircuitBreaker {
     }
 
     pub fn record_failure(&self) {
-        let mut state = self.state.lock().unwrap();
-        let mut failure_count = self.failure_count.lock().unwrap();
-        let mut last_failure_time = self.last_failure_time.lock().unwrap();
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        let mut failure_count = self.failure_count.lock().unwrap_or_else(|e| e.into_inner());
+        let mut last_failure_time = self.last_failure_time.lock().unwrap_or_else(|e| e.into_inner());
 
         *failure_count += 1;
         *last_failure_time = Some(SystemTime::now());
@@ -214,8 +214,8 @@ impl CircuitBreaker {
     where
         F: FnOnce() -> Result<T, String>,
     {
-        let mut state = self.state.lock().unwrap();
-        let mut last_failure_time = self.last_failure_time.lock().unwrap();
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        let mut last_failure_time = self.last_failure_time.lock().unwrap_or_else(|e| e.into_inner());
 
         match *state {
             CircuitState::Closed => {
@@ -251,7 +251,7 @@ impl CircuitBreaker {
                 Err(CircuitBreakerError::CircuitOpen)
             }
             CircuitState::HalfOpen => {
-                let mut half_open_requests = self.half_open_requests.lock().unwrap();
+                let mut half_open_requests = self.half_open_requests.lock().unwrap_or_else(|e| e.into_inner());
 
                 if *half_open_requests >= self.config.half_open_max_requests {
                     return Err(CircuitBreakerError::TooManyRequests);
@@ -277,10 +277,10 @@ impl CircuitBreaker {
     }
 
     pub fn reset(&self) {
-        let mut state = self.state.lock().unwrap();
-        let mut failure_count = self.failure_count.lock().unwrap();
-        let mut success_count = self.success_count.lock().unwrap();
-        let mut half_open_requests = self.half_open_requests.lock().unwrap();
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        let mut failure_count = self.failure_count.lock().unwrap_or_else(|e| e.into_inner());
+        let mut success_count = self.success_count.lock().unwrap_or_else(|e| e.into_inner());
+        let mut half_open_requests = self.half_open_requests.lock().unwrap_or_else(|e| e.into_inner());
 
         *state = CircuitState::Closed;
         *failure_count = 0;
