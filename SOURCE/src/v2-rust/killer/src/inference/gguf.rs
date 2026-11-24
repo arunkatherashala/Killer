@@ -667,3 +667,20 @@ mod tests {
         assert_eq!(t.n_bytes(), 36);
     }
 }
+
+#[cfg(test)]
+mod type_tests {
+    use super::*;
+
+    #[test]
+    fn unverified_iq_types_error_and_sizes_match_ggml() {
+        for t in [GgmlType::IQ2XXS, GgmlType::IQ2XS, GgmlType::IQ2S, GgmlType::IQ3XXS, GgmlType::IQ3S, GgmlType::IQ1S, GgmlType::IQ1M] {
+            let r = t.unsupported_reason().expect("must be unsupported");
+            assert!(r.contains("lookup table not verified"), "{}", r);
+        }
+        assert!(GgmlType::IQ4XS.unsupported_reason().is_none() && GgmlType::Q2K.unsupported_reason().is_none());
+        let sizes = [(GgmlType::IQ2XXS, 66), (GgmlType::IQ2XS, 74), (GgmlType::IQ2S, 82), (GgmlType::IQ3XXS, 98),
+                     (GgmlType::IQ3S, 110), (GgmlType::IQ4XS, 136), (GgmlType::Q2K, 84), (GgmlType::Q3KS, 110)];
+        for (t, n) in sizes { assert_eq!(t.bytes_per_block(), n, "{:?}", t); }
+    }
+}

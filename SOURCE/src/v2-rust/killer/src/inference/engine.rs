@@ -95,6 +95,68 @@ impl ModelConfig {
     }
 }
 
+/// Validate the model config and the tensor shapes it implies. Returns an error (never panics)
+/// when dimensions are zero/inconsistent, a required tensor is missing, or a shape disagrees
+/// with the config. GGUF shape convention: shape[0] = in_dim, shape[1] = out_dim.
+/// `tokenizer_vocab` is the number of tokens in the embedded tokenizer.
+pub fn validate_model_shapes(
+    cfg: &ModelConfig,
+    tensors: &HashMap<String, super::gguf::TensorInfo>,
+    tokenizer_vocab: usize,
+) -> Result<(), String> {
+    if cfg.n_layers == 0 || cfg.n_layers > 4096 { return Err(format!("invalid block_count {}", cfg.n_layers)); }
+    if cfg.n_heads == 0 { return Err("invalid head_count 0".to_string()); }
+    if cfg.n_kv_heads == 0 { return Err("invalid head_count_kv 0".to_string()); }
+    if cfg.n_embd == 0 { return Err("invalid embedding_length 0".to_string()); }
+    if cfg.n_ff == 0 { return Err("invalid feed_forward_length 0".to_string()); }
+    if cfg.n_embd % cfg.n_heads != 0 {
+        return Err(format!("embedding_length {} is not divisible by head_count {}", cfg.n_embd, cfg.n_heads));
+    }
+    if cfg.n_heads % cfg.n_kv_heads != 0 {
+        return Err(format!("head_count {} is not a multiple of head_count_kv {}", cfg.n_heads, cfg.n_kv_heads));
+    }
+    if cfg.head_dim % 2 != 0 {
+        return Err(format!("head_dim {} must be even for RoPE", cfg.head_dim));
+    }
+    let q_dim = cfg.n_heads.checked_mul(cfg.head_dim).ok_or("q_dim overflows")?;
+    let kv_dim = cfg.n_kv_heads.checked_mul(cfg.head_dim).ok_or("kv_dim overflows")?;
+
+    let check = |name: &str, want: &[usize]| -> Result<(), String> {
+        let t = tensors.get(name).ok_or_else(|| format!("required tensor '{}' is missing", name))?;
+        let got: Vec<usize> = t.shape.iter().map(|&d| d as usize).collect();
+        // Trailing 1-dims are insignificant (a vector may be stored as [n] or [n, 1]).
+        let mut g = got.clone();
+        while g.len() > want.len() && g.last() == Some(&1) { g.pop(); }
+        if g != want {
+            return Err(format!("tensor '{}' has shape {:?}, expected {:?} for this model config", name, got, want));
+        }
+        if t.checked_n_bytes().is_none() { return Err(format!("tensor '{}' size overflows", name)); }
+        Ok(())
+    };
+
+    let emb = tensors.get("token_embd.weight").ok_or("required tensor 'token_embd.weight' is missing")?;
+    if emb.shape.len() != 2 || emb.shape[0] as usize != cfg.n_embd {
+        return Err(format!("tensor 'token_embd.weight' has shape {:?}, expected [{}, vocab]", emb.shape, cfg.n_embd));
+    }
+    if (emb.shape[1] as usize) < tokenizer_vocab {
+        return Err(format!("token_embd.weight has {} rows but the tokenizer has {} tokens", emb.shape[1], tokenizer_vocab));
+    }
+    check("output_norm.weight", &[cfg.n_embd])?;
+    for l in 0..cfg.n_layers {
+        let b = |n: &str| format!("blk.{}.{}", l, n);
+        check(&b("attn_norm.weight"), &[cfg.n_embd])?;
+        check(&b("attn_q.weight"), &[cfg.n_embd, q_dim])?;
+        check(&b("attn_k.weight"), &[cfg.n_embd, kv_dim])?;
+        check(&b("attn_v.weight"), &[cfg.n_embd, kv_dim])?;
+        check(&b("attn_output.weight"), &[q_dim, cfg.n_embd])?;
+        check(&b("ffn_norm.weight"), &[cfg.n_embd])?;
+        check(&b("ffn_gate.weight"), &[cfg.n_embd, cfg.n_ff])?;
+        check(&b("ffn_up.weight"), &[cfg.n_embd, cfg.n_ff])?;
+        check(&b("ffn_down.weight"), &[cfg.n_ff, cfg.n_embd])?;
+    }
+    Ok(())
+}
+
 // --- Quantized weight tensor -------------------------------------------------
 //
 // Stores a weight matrix in its native quantized form (Q4_K_M, Q8_0, etc.)
@@ -494,6 +556,8 @@ impl KillerInference {
         let gguf      = GgufFile::open(path)?;
         let mut config = ModelConfig::from_gguf(&gguf)?;
         let tokenizer  = KillerTokenizer::from_gguf(&gguf)?;
+        validate_model_shapes(&config, &gguf.tensors, tokenizer.vocab_size)
+            .map_err(|e| format!("Invalid model '{}': {}", path, e))?;
 
         eprintln!("[Killer] {:?} | layers={} heads={} kv_heads={} embd={} vocab={} rope_theta={} n_ff={} ctx_len={}",
             config.arch, config.n_layers, config.n_heads, config.n_kv_heads, config.n_embd, config.vocab_size, config.rope_theta, config.n_ff, config.ctx_len);
@@ -1104,5 +1168,77 @@ mod tests {
         let b = vec![3.0f32, 4.0];
         let c = add(&a, &b);
         assert_eq!(c, vec![4.0, 6.0]);
+    }
+
+    // ---- crafted tiny GGUF (shape validation) ----
+    fn gstr(b: &mut Vec<u8>, s: &str) { b.extend((s.len() as u64).to_le_bytes()); b.extend(s.as_bytes()); }
+    fn kv_u32(b: &mut Vec<u8>, k: &str, v: u32) { gstr(b, k); b.extend(4u32.to_le_bytes()); b.extend(v.to_le_bytes()); }
+
+    /// Build a tiny llama GGUF (all F32). `q_cols` is the out-dim of attn_q (8 is correct).
+    fn tiny_gguf(path: &std::path::Path, q_cols: u64) {
+        let mut b = Vec::new();
+        let tensors: Vec<(String, Vec<u64>)> = {
+            let mut t = vec![("token_embd.weight".to_string(), vec![8, 4]), ("output_norm.weight".to_string(), vec![8])];
+            for (n, d) in [("attn_norm", vec![8]), ("attn_q", vec![8, q_cols]), ("attn_k", vec![8, 8]), ("attn_v", vec![8, 8]),
+                           ("attn_output", vec![8, 8]), ("ffn_norm", vec![8]), ("ffn_gate", vec![8, 16]),
+                           ("ffn_up", vec![8, 16]), ("ffn_down", vec![16, 8])] {
+                let suffix = if n.ends_with("norm") { "weight" } else { "weight" };
+                t.push((format!("blk.0.{}.{}", n, suffix), d));
+            }
+            t
+        };
+        b.extend(0x46554747u32.to_le_bytes()); b.extend(3u32.to_le_bytes());
+        b.extend((tensors.len() as u64).to_le_bytes()); b.extend(7u64.to_le_bytes());
+        gstr(&mut b, "general.architecture"); b.extend(8u32.to_le_bytes()); gstr(&mut b, "llama");
+        kv_u32(&mut b, "llama.block_count", 1);
+        kv_u32(&mut b, "llama.attention.head_count", 4);
+        kv_u32(&mut b, "llama.embedding_length", 8);
+        kv_u32(&mut b, "llama.feed_forward_length", 16);
+        kv_u32(&mut b, "llama.context_length", 32);
+        gstr(&mut b, "tokenizer.ggml.tokens"); b.extend(9u32.to_le_bytes()); b.extend(8u32.to_le_bytes()); b.extend(4u64.to_le_bytes());
+        for t in ["<unk>", "<s>", "</s>", "a"] { gstr(&mut b, t); }
+        let mut off = 0u64;
+        let mut sizes = Vec::new();
+        for (name, dims) in &tensors {
+            gstr(&mut b, name);
+            b.extend((dims.len() as u32).to_le_bytes());
+            for d in dims { b.extend(d.to_le_bytes()); }
+            b.extend(0u32.to_le_bytes()); // F32
+            b.extend(off.to_le_bytes());
+            let bytes = dims.iter().product::<u64>() * 4;
+            sizes.push(bytes);
+            off += (bytes + 31) / 32 * 32;
+        }
+        while b.len() % 32 != 0 { b.push(0); }
+        for bytes in sizes {
+            b.extend(vec![0u8; ((bytes + 31) / 32 * 32) as usize]);
+        }
+        std::fs::write(path, b).unwrap();
+    }
+
+    #[test]
+    fn load_rejects_wrong_tensor_shape_instead_of_panicking() {
+        let dir = std::env::temp_dir().join(format!("killer_shape_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let bad = dir.join("bad.gguf");
+        tiny_gguf(&bad, 12); // attn_q out-dim 12 != n_heads*head_dim = 8
+        let err = KillerInference::load(bad.to_str().unwrap()).err().expect("must be rejected");
+        assert!(err.contains("attn_q.weight") && err.contains("shape"), "{}", err);
+        let good = dir.join("good.gguf");
+        tiny_gguf(&good, 8);
+        assert!(KillerInference::load(good.to_str().unwrap()).is_ok());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn validate_rejects_bad_config() {
+        let cfg = ModelConfig { arch: ArchType::LLaMA, n_layers: 1, n_heads: 3, n_kv_heads: 3, n_embd: 8,
+            n_ff: 16, vocab_size: 4, ctx_len: 32, head_dim: 2, rope_theta: 1e4, norm_eps: 1e-5 };
+        let t = HashMap::new();
+        assert!(validate_model_shapes(&cfg, &t, 4).unwrap_err().contains("divisible"));
+        let cfg0 = ModelConfig { n_heads: 0, ..cfg.clone() };
+        assert!(validate_model_shapes(&cfg0, &t, 4).is_err());
+        let cfg1 = ModelConfig { n_heads: 4, n_kv_heads: 3, ..cfg };
+        assert!(validate_model_shapes(&cfg1, &t, 4).unwrap_err().contains("multiple"));
     }
 }
