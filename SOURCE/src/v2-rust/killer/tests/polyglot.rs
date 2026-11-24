@@ -497,3 +497,46 @@ fn audit_log_records_stream_denials_and_timeouts() {
     assert!(lines[1].contains("\"lang\":\"bash\"") && lines[1].contains("POLYGLOT_E_POLICY_DENIED"), "{:?}", lines);
     assert!(lines[2].contains("POLYGLOT_E_TIMEOUT"), "{:?}", lines);
 }
+
+// --- Item 9: `killer polyglot list` and `killer doctor` ----------------------------------------
+
+fn cli(args: &[&str], env: &[(&str, &str)]) -> Out {
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_killer"));
+    cmd.args(args);
+    for (k, v) in env {
+        cmd.env(k, v);
+    }
+    let out = cmd.output().unwrap();
+    Out { stdout: norm(&out.stdout), stderr: norm(&out.stderr), code: out.status.code().unwrap_or(-1) }
+}
+
+#[test]
+fn polyglot_list_json_has_paths_and_versions() {
+    let o = cli(&["polyglot", "list", "--json"], &[]);
+    assert_eq!(o.code, 0, "{}", o.all());
+    assert!(o.stdout.starts_with('[') && o.stdout.ends_with(']'), "{}", o.all());
+    assert!(o.stdout.contains("\"name\":\"python\"") && o.stdout.contains("\"override\":\"KILLER_POLYGLOT_PYTHON\""), "{}", o.all());
+    if works("python") {
+        let row = o.stdout.split("},").find(|r| r.contains("\"name\":\"python\"")).unwrap();
+        assert!(row.contains("\"status\":\"ok\"") && row.contains("\"version\":\"Python"), "{row}");
+    }
+}
+
+#[test]
+fn doctor_require_reports_missing_languages() {
+    let o = cli(&["doctor", "--require", "definitely_not_a_lang"], &[]);
+    assert_eq!(o.code, 1, "{}", o.all());
+    assert!(o.all().contains("definitely_not_a_lang"), "{}", o.all());
+    if works("python") && works("bash") {
+        let o = cli(&["doctor", "--require", "python,bash"], &[]);
+        assert_eq!(o.code, 0, "{}", o.all());
+    }
+}
+
+#[test]
+fn polyglot_list_shows_denied_languages() {
+    let o = cli(&["polyglot", "list"], &[("KILLER_POLYGLOT_ALLOW", "python")]);
+    assert_eq!(o.code, 0, "{}", o.all());
+    let bash = o.stdout.lines().find(|l| l.split_whitespace().next() == Some("bash")).unwrap_or("").to_string();
+    assert!(bash.contains("denied"), "{}", o.all());
+}
