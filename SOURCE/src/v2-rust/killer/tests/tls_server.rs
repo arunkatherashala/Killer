@@ -318,7 +318,7 @@ fn serve_over_https_runs_slow_handlers_in_parallel_on_the_worker_pool() {
     sleep_ms(3000)
     return "slow " + req["path"]
 }}
-n = serve({port}, h, {{"workers": 4, "max_requests": 4, "tls": {{"cert": "{cert}", "key": "{key}"}}}})
+n = serve({port}, h, {{"workers": 4, "max_requests": 7, "tls": {{"cert": "{cert}", "key": "{key}"}}}})
 println("served", n)
 "#
     );
@@ -337,21 +337,27 @@ println("served", n)
         std::thread::sleep(std::time::Duration::from_millis(200));
     }
     assert!(up, "the https server never answered");
-    let started = std::time::Instant::now();
-    let clients: Vec<_> = ["/a", "/b", "/c"].iter().map(|p| {
-        let p = p.to_string();
-        std::thread::spawn(move || (p.clone(), curl(&p)))
-    }).collect();
-    for c in clients {
-        let (p, o) = c.join().unwrap();
-        assert!(o.status.success(), "{p}: {}", String::from_utf8_lossy(&o.stderr));
-        assert_eq!(String::from_utf8_lossy(&o.stdout), format!("slow {p}"));
-    }
-    // three 3 s handlers on four workers overlap; one at a time they would take 9 s
-    assert!(started.elapsed() < std::time::Duration::from_secs(8), "took {:?}", started.elapsed());
+    let parallel = |paths: &[&str], want: &dyn Fn(&str) -> String| {
+        let started = std::time::Instant::now();
+        let clients: Vec<_> = paths.iter().map(|p| {
+            let p = p.to_string();
+            std::thread::spawn(move || (p.clone(), curl(&p)))
+        }).collect();
+        for c in clients {
+            let (p, o) = c.join().unwrap();
+            assert!(o.status.success(), "{p}: {}", String::from_utf8_lossy(&o.stderr));
+            assert_eq!(String::from_utf8_lossy(&o.stdout), want(&p));
+        }
+        started.elapsed()
+    };
+    // the TLS helpers cost time per connection (seconds on Windows): measure that with fast requests first
+    let overhead = parallel(&["/ping", "/ping", "/ping"], &|_| "pong".to_string());
+    let slow = parallel(&["/a", "/b", "/c"], &|p| format!("slow {p}"));
+    // three 3 s handlers on four workers overlap (about overhead + 3 s); one at a time: overhead + 9 s
+    assert!(slow < overhead + std::time::Duration::from_secs(7), "slow {:?}, overhead {:?}", slow, overhead);
     let mut line = String::new();
     BufReader::new(server.stdout.take().unwrap()).read_line(&mut line).unwrap();
-    assert_eq!(line.trim(), "served 4", "server report");
+    assert_eq!(line.trim(), "served 7", "server report");
     assert!(server.wait().unwrap().success());
     guard.0 = None;
     let _ = std::fs::remove_dir_all(file.parent().unwrap());
