@@ -213,7 +213,8 @@ case applies. `tests/eval_memory_embedded.rs` covers the no-allocator case.
 - *Tool calling.* `http_*` and `readFile` tools are denied unless enabled with `tool_calling::enable_tool(name)` or
   `KILLER_TOOL_ALLOW=name1,name2` (or `*`).
 - *Installers.* Version tags must match `[A-Za-z0-9._-]`; setting `KILLER_BASE_URL` prints a notice. Release archives are
-  checked against a SHA256 file from the same location; there are no signatures.
+  checked against a SHA256 file from the same location, and, independently, against a pinned checksum (see below).
+  There are no signatures.
 
 ## Network targets (SSRF guard)
 
@@ -262,9 +263,6 @@ than 32 MiB is refused with an error (and discarded without being allocated), he
 that are not UTF-8 are replaced instead of ending the session. LSP positions use UTF-16 code units as the protocol
 requires. The debug adapter reports `exited` and `terminated` also when the debuggee dies before it connects, and
 `setBreakpoints` only applies to the launched program (other files are answered with unverified breakpoints).
-
-  checked against a SHA256 file from the same location, and, independently, against a pinned checksum (see below).
-  There are no signatures.
 
 ## Download and package integrity (trust model)
 
