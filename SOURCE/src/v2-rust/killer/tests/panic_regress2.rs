@@ -51,3 +51,33 @@ fn to_yaml_huge_indent_is_clamped() {
         other => panic!("{:?}", other),
     }
 }
+
+fn run_bin(dir: &std::path::Path, file: &str) -> (Option<i32>, String) {
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_killer"))
+        .arg(file)
+        .current_dir(dir)
+        .output()
+        .expect("spawn killer");
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    (out.status.code(), text)
+}
+
+#[test]
+fn runtime_self_import_is_an_error_not_a_stack_overflow() {
+    let dir = std::env::temp_dir().join(format!("killer_selfimp_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("x.killer"), "import 'x.killer'\nprint(1)\n").unwrap();
+    std::fs::write(dir.join("a.killer"), "import 'b.killer'\n").unwrap();
+    std::fs::write(dir.join("b.killer"), "import 'a.killer'\n").unwrap();
+    for f in ["x.killer", "a.killer"] {
+        let (code, text) = run_bin(&dir, f);
+        assert!(!text.contains("overflowed") && !text.contains("panicked"), "{f}: {text}");
+        assert!(text.to_lowercase().contains("circular import"), "{f}: {text}");
+        assert_ne!(code, Some(0));
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
