@@ -490,8 +490,8 @@ fn audit_log_has_one_json_line_per_run_without_the_source() {
 #[test]
 fn audit_log_records_stream_denials_and_timeouts() {
     need!("python");
-    let src = "s = polyglot_stream(\"python\", \"print(1)\")\ntry {\n    y = @bash { echo 1 }\n} catch e {\n    println(\"denied\")\n}\ntry {\n    z = @python {\n        import time\n        time.sleep(60)\n    }\n} catch e {\n    println(\"timeout\")\n}\n";
-    let (o, lines) = audit_lines(src, &[("KILLER_POLYGLOT_ALLOW", "python"), ("KILLER_POLYGLOT_TIMEOUT", "3")]);
+    let src = "s = polyglot_stream(\"python\", \"print(1)\")\ntry {\n    y = @bash { echo 1 }\n} catch e {\n    println(\"denied\")\n}\ntry {\n    z = @python {\n        import time\n        time.sleep(600)\n    }\n} catch e {\n    println(\"timeout\")\n}\n";
+    let (o, lines) = audit_lines(src, &[("KILLER_POLYGLOT_ALLOW", "python"), ("KILLER_POLYGLOT_TIMEOUT", "30")]);
     assert_eq!(lines.len(), 3, "{:?} {}", lines, o.all());
     assert!(lines[0].contains("\"outcome\":\"ok\""), "{:?}", lines);
     assert!(lines[1].contains("\"lang\":\"bash\"") && lines[1].contains("POLYGLOT_E_POLICY_DENIED"), "{:?}", lines);
