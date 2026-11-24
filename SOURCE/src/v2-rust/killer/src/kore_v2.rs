@@ -1685,7 +1685,7 @@ fn decode_for(data: &[u8], pos: usize, nrows: usize) -> (Vec<i64>, usize) {
         let bit_offset = (bitpos & 7) as u32;
         let mut tmp = [0u8; 8];
         let tail = packed.len().saturating_sub(byte_start).min(8);
-        tmp[..tail].copy_from_slice(&packed[byte_start..byte_start + tail]);
+        if tail > 0 { tmp[..tail].copy_from_slice(&packed[byte_start..byte_start + tail]); }
         let word = u64::from_le_bytes(tmp);
         out.push(min_val.wrapping_add(((word >> bit_offset) & mask) as i64));
         bitpos += bits_per;
