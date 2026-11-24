@@ -57,21 +57,21 @@ def sanitize(src):
                     j += 2
                 else:
                     j += 1
-            out.append("".join("\n" if ch == "\n" else " " for ch in src[i:j]))
+            out.append("".join(ch if ch in ("\r", "\n") else " " for ch in src[i:j]))
             i = j
         elif c == "r" and re.match(r'r#*"', src[i:i + 12]) and (i == 0 or not (src[i - 1].isalnum() or src[i - 1] == "_")):
             m = re.match(r'r(#*)"', src[i:])
             hashes = m.group(1)
             end = src.find('"' + hashes, i + len(m.group(0)))
             j = n if end < 0 else end + 1 + len(hashes)
-            out.append("".join("\n" if ch == "\n" else " " for ch in src[i:j]))
+            out.append("".join(ch if ch in ("\r", "\n") else " " for ch in src[i:j]))
             i = j
         elif c == '"':
             j = i + 1
             while j < n and src[j] != '"':
                 j += 2 if src[j] == "\\" else 1
             j = min(j + 1, n)
-            out.append("".join("\n" if ch == "\n" else " " for ch in src[i:j]))
+            out.append("".join(ch if ch in ("\r", "\n") else " " for ch in src[i:j]))
             i = j
         elif c == "'":
             m = re.match(r"'(\\.[^']*|[^\\'])'", src[i:i + 12])
@@ -146,16 +146,16 @@ def main(argv):
     if "--sites" in argv:
         path = argv[argv.index("--sites") + 1]
         text, raw = prod_text(path)
-        raw_lines = raw.splitlines()
-        for ln, line in enumerate(text.splitlines(), 1):
+        raw_lines = raw.split("\n")
+        for ln, line in enumerate(text.split("\n"), 1):
             if any(p.search(line) for p in PATTERNS.values()):
                 print("%s:%d: %s" % (path, ln, raw_lines[ln - 1].strip()))
         return 0
     if "--locks" in argv:
         for path in sorted(rust_files(SRC)):
             text, raw = prod_text(path)
-            raw_lines = raw.splitlines()
-            for ln, line in enumerate(text.splitlines(), 1):
+            raw_lines = raw.split("\n")
+            for ln, line in enumerate(text.split("\n"), 1):
                 if LOCK_RE.search(line):
                     print("%s:%d: %s" % (os.path.relpath(path, ROOT), ln, raw_lines[ln - 1].strip()))
         return 0
