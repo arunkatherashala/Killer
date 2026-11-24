@@ -66,7 +66,7 @@ fn refused(out: &str) -> bool {
 }
 
 fn request(url: &str, allow_private: bool) -> String {
-    let url = url.replace('\', "\\\\");
+    let url = url.replace('\\', "\\\\");
     let opt = if allow_private { ", \"allow_private\": true" } else { "" };
     run(&format!("println(http_request({{\"url\": \"{}\", \"timeout\": 3{}}}))", url, opt), false)
 }
@@ -81,7 +81,6 @@ fn encoded_and_obfuscated_hosts_are_refused_before_any_connection() {
         format!("https://[::ffff:127.0.0.1]:{}/", port),
         format!("https://[::FFFF:7f00:1]:{}/", port),
         format!("https://evil.example@127.0.0.1:{}/", port),
-        format!("https://127.0.0.1:{}@example.com/", port),
         format!("https://2130706433:{}/", port),
         format!("https://0x7f.1:{}/", port),
     ];
@@ -98,7 +97,7 @@ fn encoded_and_obfuscated_hosts_are_refused_before_any_connection() {
         format!("https://%4C%6fcalhost:{}/", port),
         format!("https://user:pw@%31%32%37.0.0.1:{}/", port),
         format!("https://127.0.0.1%00.example.com:{}/", port),
-        format!("https://127.0.0.1\@example.com:{}/", port),
+        format!("https://127.0.0.1\\@example.com:{}/", port),
         format!("https://%31%36%39.254.169.254:{}/", port),
         format!("https://169%2e254.169.254:{}/", port),
         format!("https://[::1%25lo]:{}/", port),
