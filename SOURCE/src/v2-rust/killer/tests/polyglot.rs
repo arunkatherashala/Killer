@@ -46,6 +46,45 @@ fn run_env(src: &str, env: &[(&str, &str)]) -> Out {
     Out { stdout: norm(&out.stdout), stderr: norm(&out.stderr), code: out.status.code().unwrap_or(-1) }
 }
 
+/// Like [`run_env`] but kills the run after `limit` (the test then fails instead of hanging) and
+/// lets the caller pick the working directory. Returns the output and the elapsed time.
+fn run_watch(src: &str, env: &[(&str, &str)], cwd: Option<&std::path::Path>, limit: std::time::Duration) -> (Out, std::time::Duration) {
+    let path = unique("src").with_extension("killer");
+    std::fs::write(&path, src).unwrap();
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_killer"));
+    cmd.arg("run").arg(&path).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped());
+    if let Some(d) = cwd {
+        cmd.current_dir(d);
+    }
+    for (k, v) in env {
+        cmd.env(k, v);
+    }
+    let start = std::time::Instant::now();
+    let mut child = cmd.spawn().unwrap();
+    let mut so = child.stdout.take().unwrap();
+    let mut se = child.stderr.take().unwrap();
+    let t1 = std::thread::spawn(move || { let mut v = Vec::new(); let _ = std::io::Read::read_to_end(&mut so, &mut v); v });
+    let t2 = std::thread::spawn(move || { let mut v = Vec::new(); let _ = std::io::Read::read_to_end(&mut se, &mut v); v });
+    let mut code = -2;
+    while start.elapsed() < limit {
+        if let Ok(Some(st)) = child.try_wait() {
+            code = st.code().unwrap_or(-1);
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    if code == -2 {
+        let _ = child.kill();
+        let _ = child.wait();
+        let _ = std::fs::remove_file(&path);
+        panic!("killer run did not finish within {:?}", limit);
+    }
+    let elapsed = start.elapsed();
+    let _ = std::fs::remove_file(&path);
+    let (o, e) = (t1.join().unwrap(), t2.join().unwrap());
+    (Out { stdout: norm(&o), stderr: norm(&e), code }, elapsed)
+}
+
 fn run(src: &str) -> Out {
     run_env(src, &[])
 }
@@ -155,4 +194,70 @@ fn statement_form_prints_the_output() {
 fn at_sign_inside_killer_strings_and_comments_is_not_a_block() {
     let o = run("s = \"mail@python { not code }\"\nprintln(s)\n# @python { print(1) }\nprintln(2)\n");
     assert_eq!(o.stdout, "mail@python { not code }\n2", "{}", o.all());
+}
+
+// --- Item 2: timeouts, output cap, process-tree kill ---------------------------------------------
+
+const WATCH: std::time::Duration = std::time::Duration::from_secs(120);
+
+#[test]
+fn timeout_kills_python_and_is_catchable() {
+    need!("python");
+    let src = "try {
+    x = @python {
+        import time
+        time.sleep(60)
+    }
+    println(\"no\")
+} catch e {
+    println(\"caught: \" + str(e))
+}
+println(\"after\")
+";
+    let (o, took) = run_watch(src, &[("KILLER_POLYGLOT_TIMEOUT", "2")], None, WATCH);
+    assert!(o.stdout.contains("caught") && o.stdout.to_lowercase().contains("timed out"), "{}", o.all());
+    assert!(o.stdout.ends_with("after"), "{}", o.all());
+    assert!(took < std::time::Duration::from_secs(40), "took {:?}", took);
+}
+
+#[test]
+fn bash_sleep_timeout_kills_the_process_tree() {
+    need!("bash");
+    // `sleep` is a child of bash: unless the whole tree dies it keeps the output pipe open
+    let src = "try {
+    x = @bash {
+        sleep 30
+        echo late
+    }
+} catch e {
+    println(\"caught: \" + str(e))
+}
+";
+    let (o, took) = run_watch(src, &[("KILLER_POLYGLOT_TIMEOUT", "2")], None, WATCH);
+    assert!(o.stdout.to_lowercase().contains("timed out"), "{}", o.all());
+    assert!(took < std::time::Duration::from_secs(25), "took {:?}", took);
+}
+
+#[test]
+fn output_cap_stops_a_flood() {
+    need!("python");
+    let src = "try {
+    x = @python { print('x' * 50000000) }
+    println(len(x))
+} catch e {
+    println(\"caught: \" + str(e))
+}
+";
+    let (o, _) = run_watch(src, &[("KILLER_POLYGLOT_MAX_OUTPUT", "1048576")], None, WATCH);
+    assert!(o.stdout.contains("output limit exceeded"), "{}", &o.all()[..o.all().len().min(400)]);
+}
+
+#[test]
+fn stream_with_lots_of_stderr_does_not_deadlock() {
+    need!("python");
+    let src = "s = polyglot_stream(\"python\", \"import sys\nsys.stderr.write('e' * 1000000)\nprint('done')\")
+println(\"got \" + s)
+";
+    let (o, _) = run_watch(src, &[], None, WATCH);
+    assert!(o.stdout.ends_with("got done"), "{}", &o.all()[..o.all().len().min(400)]);
 }
