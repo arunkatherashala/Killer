@@ -258,6 +258,17 @@ impl<'a> Parser<'a> {
         self.parse_string_inner()
     }
 
+    /// Four hex digits after `\u`.
+    fn read_hex4(&mut self) -> Result<u32, String> {
+        let mut v = 0u32;
+        for _ in 0..4 {
+            let h = self.bump().ok_or_else(|| "bad \\u".to_string())?;
+            let d = (h as char).to_digit(16).ok_or_else(|| "bad \\u".to_string())?;
+            v = v * 16 + d;
+        }
+        Ok(v)
+    }
+
     fn parse_string_inner(&mut self) -> Result<String, String> {
         let mut raw: Vec<u8> = Vec::new();
         loop {
@@ -276,15 +287,24 @@ impl<'a> Parser<'a> {
                         b'r' => raw.push(b'\r'),
                         b't' => raw.push(b'\t'),
                         b'u' => {
-                            let mut hex = String::new();
-                            for _ in 0..4 {
-                                let h = self.bump().ok_or_else(|| "bad \\u".to_string())?;
-                                if !h.is_ascii_hexdigit() {
-                                    return Err("bad \\u".into());
+                            let cp = self.read_hex4()?;
+                            let cp = match cp {
+                                // a high surrogate must be followed by `\uXXXX` holding a low surrogate: the pair is one code point
+                                0xD800..=0xDBFF => {
+                                    if self.bytes.get(self.i) != Some(&b'\\') || self.bytes.get(self.i + 1) != Some(&b'u') {
+                                        return Err("lone high surrogate in \\u escape".into());
+                                    }
+                                    self.i += 2;
+                                    let lo = self.read_hex4()?;
+                                    if !(0xDC00..=0xDFFF).contains(&lo) {
+                                        return Err("high surrogate not followed by a low surrogate".into());
+                                    }
+                                    0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00)
                                 }
-                                hex.push(h as char);
-                            }
-                            let cp = u32::from_str_radix(&hex, 16).map_err(|_| "bad \\u".to_string())?;
+                                // a low surrogate with no high one before it has no meaning: an error, never U+FFFD
+                                0xDC00..=0xDFFF => return Err("lone low surrogate in \\u escape".into()),
+                                _ => cp,
+                            };
                             let ch = char::from_u32(cp).ok_or_else(|| "bad codepoint".to_string())?;
                             let mut buf = [0u8; 4];
                             let se = ch.encode_utf8(&mut buf);
@@ -332,3 +352,30 @@ impl<'a> Parser<'a> {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn s(src: &str) -> Result<String, String> {
+        match parse(src)? {
+            Json::Str(x) => Ok(x),
+            _ => Err("not a string".into()),
+        }
+    }
+
+    #[test]
+    fn surrogate_pairs_decode_to_one_code_point() {
+        assert_eq!(s(r#""\ud83d\ude00""#).unwrap(), "\u{1F600}");
+        assert_eq!(s(r#""a\uD834\uDD1Eb""#).unwrap(), "a\u{1D11E}b");
+        assert_eq!(s(r#""\u00e9\u20ac""#).unwrap(), "\u{e9}\u{20ac}");
+    }
+
+    /// A lone surrogate is an error (never silently U+FFFD), so a malformed request is reported, not altered.
+    #[test]
+    fn lone_or_malformed_surrogates_are_errors() {
+        for bad in [r#"\ud83d"#, r#"\ud83dx"#, r#"\ud83d\u0041"#, r#"\ud83d\ud83d"#, r#"\ude00"#, r#"\ude00\ud83d"#, r#"\ud83d\n"#, r#"\ud83d\ude0"#] {
+            let src = format!("{}{bad}{}", '"', '"');
+            assert!(s(&src).is_err(), "{src}");
+        }
+    }
+}
