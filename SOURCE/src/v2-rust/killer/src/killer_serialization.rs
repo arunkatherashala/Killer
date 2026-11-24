@@ -308,11 +308,15 @@ fn msgpack_encode_value(value: &SerValue, buf: &mut Vec<u8>) {
 
 /// Decode MessagePack binary data into a SerValue.
 pub fn msgpack_decode(data: &[u8]) -> Result<SerValue, String> {
-    let (val, _) = msgpack_decode_value(data, 0)?;
+    let (val, _) = msgpack_decode_value(data, 0, 0)?;
     Ok(val)
 }
 
-fn msgpack_decode_value(data: &[u8], pos: usize) -> Result<(SerValue, usize), String> {
+/// Maximum container nesting accepted by `msgpack_decode`.
+const MSGPACK_MAX_DEPTH: usize = 128;
+
+fn msgpack_decode_value(data: &[u8], pos: usize, depth: usize) -> Result<(SerValue, usize), String> {
+    if depth > MSGPACK_MAX_DEPTH { return Err("msgpack nesting too deep".into()); }
     if pos >= data.len() { return Err("unexpected end of data".into()); }
     let byte = data[pos];
 
@@ -338,10 +342,10 @@ fn msgpack_decode_value(data: &[u8], pos: usize) -> Result<(SerValue, usize), St
     // Fixarray (0x90 - 0x9f)
     if byte >= 0x90 && byte <= 0x9f {
         let len = (byte & 0x0f) as usize;
-        let mut arr = Vec::with_capacity(len);
+        let mut arr = Vec::with_capacity(len.min(data.len() - pos));
         let mut p = pos + 1;
         for _ in 0..len {
-            let (val, next) = msgpack_decode_value(data, p)?;
+            let (val, next) = msgpack_decode_value(data, p, depth + 1)?;
             arr.push(val);
             p = next;
         }
@@ -351,15 +355,15 @@ fn msgpack_decode_value(data: &[u8], pos: usize) -> Result<(SerValue, usize), St
     // Fixmap (0x80 - 0x8f)
     if byte >= 0x80 && byte <= 0x8f {
         let len = (byte & 0x0f) as usize;
-        let mut entries = Vec::with_capacity(len);
+        let mut entries = Vec::with_capacity(len.min(data.len() - pos));
         let mut p = pos + 1;
         for _ in 0..len {
-            let (key_val, next) = msgpack_decode_value(data, p)?;
+            let (key_val, next) = msgpack_decode_value(data, p, depth + 1)?;
             let key = match key_val {
                 SerValue::Str(s) => s,
                 other => format!("{}", other),
             };
-            let (val, next2) = msgpack_decode_value(data, next)?;
+            let (val, next2) = msgpack_decode_value(data, next, depth + 1)?;
             entries.push((key, val));
             p = next2;
         }
@@ -413,10 +417,10 @@ fn msgpack_decode_value(data: &[u8], pos: usize) -> Result<(SerValue, usize), St
         0xdc => { // array16
             if pos + 3 > data.len() { return Err("truncated".into()); }
             let len = u16::from_be_bytes([data[pos+1], data[pos+2]]) as usize;
-            let mut arr = Vec::with_capacity(len);
+            let mut arr = Vec::with_capacity(len.min(data.len() - pos));
             let mut p = pos + 3;
             for _ in 0..len {
-                let (val, next) = msgpack_decode_value(data, p)?;
+                let (val, next) = msgpack_decode_value(data, p, depth + 1)?;
                 arr.push(val);
                 p = next;
             }
@@ -425,15 +429,15 @@ fn msgpack_decode_value(data: &[u8], pos: usize) -> Result<(SerValue, usize), St
         0xde => { // map16
             if pos + 3 > data.len() { return Err("truncated".into()); }
             let len = u16::from_be_bytes([data[pos+1], data[pos+2]]) as usize;
-            let mut entries = Vec::with_capacity(len);
+            let mut entries = Vec::with_capacity(len.min(data.len() - pos));
             let mut p = pos + 3;
             for _ in 0..len {
-                let (key_val, next) = msgpack_decode_value(data, p)?;
+                let (key_val, next) = msgpack_decode_value(data, p, depth + 1)?;
                 let key = match key_val {
                     SerValue::Str(s) => s,
                     other => format!("{}", other),
                 };
-                let (val, next2) = msgpack_decode_value(data, next)?;
+                let (val, next2) = msgpack_decode_value(data, next, depth + 1)?;
                 entries.push((key, val));
                 p = next2;
             }

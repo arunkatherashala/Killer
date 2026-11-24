@@ -81,3 +81,21 @@ fn runtime_self_import_is_an_error_not_a_stack_overflow() {
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn msgpack_decode_deep_nesting_is_error() {
+    use killer_native::killer_serialization::msgpack_decode;
+    let mut data = vec![0x91u8; 100_000];
+    data.push(0xc0);
+    // run on a small stack to prove the decoder does not recurse unboundedly
+    let h = std::thread::Builder::new()
+        .stack_size(2 * 1024 * 1024)
+        .spawn(move || msgpack_decode(&data).is_err())
+        .unwrap();
+    assert!(h.join().expect("decoder must not overflow the stack"));
+    // legit nesting still works
+    let mut ok = vec![0x91u8; 50];
+    ok.push(0xc0);
+    assert!(msgpack_decode(&ok).is_ok());
+}
+
