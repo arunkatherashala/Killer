@@ -99,3 +99,16 @@ fn msgpack_decode_deep_nesting_is_error() {
     assert!(msgpack_decode(&ok).is_ok());
 }
 
+#[test]
+fn toml_parse_truncated_values_do_not_panic() {
+    use killer_native::killer_serialization::toml_parse;
+    for src in ["title = \"", "a = [", "a = '", "a = ]", "a = \"\"", "a = []", "a = [\"", "[", "[a", "= 1"] {
+        let _ = toml_parse(src);
+    }
+    let deep = format!("a = {}1{}", "[".repeat(100_000), "]".repeat(100_000));
+    let h = std::thread::Builder::new()
+        .stack_size(2 * 1024 * 1024)
+        .spawn(move || toml_parse(&deep).is_err())
+        .unwrap();
+    assert!(h.join().expect("toml must not overflow the stack"));
+}

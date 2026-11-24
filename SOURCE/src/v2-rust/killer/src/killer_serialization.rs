@@ -98,7 +98,7 @@ pub fn toml_parse(input: &str) -> Result<SerValue, String> {
         let eq_pos = line.find('=').ok_or_else(|| format!("line {}: expected key = value", line_no + 1))?;
         let key = line[..eq_pos].trim().to_string();
         let val_str = line[eq_pos+1..].trim();
-        let value = toml_parse_value(val_str)
+        let value = toml_parse_value(val_str, 0)
             .map_err(|e| format!("line {}: {}", line_no + 1, e))?;
 
         if let Some(ref section) = current_section {
@@ -123,7 +123,11 @@ pub fn toml_parse(input: &str) -> Result<SerValue, String> {
     Ok(SerValue::Map(root))
 }
 
-fn toml_parse_value(s: &str) -> Result<SerValue, String> {
+/// Maximum array nesting accepted by `toml_parse`.
+const TOML_MAX_DEPTH: usize = 64;
+
+fn toml_parse_value(s: &str, depth: usize) -> Result<SerValue, String> {
+    if depth > TOML_MAX_DEPTH { return Err("array nesting too deep".into()); }
     let s = s.trim();
     if s.is_empty() { return Err("empty value".into()); }
 
@@ -132,17 +136,17 @@ fn toml_parse_value(s: &str) -> Result<SerValue, String> {
     if s == "false" { return Ok(SerValue::Bool(false)); }
 
     // String (quoted)
-    if (s.starts_with('"') && s.ends_with('"')) || (s.starts_with('\'') && s.ends_with('\'')) {
+    if s.len() >= 2 && ((s.starts_with('"') && s.ends_with('"')) || (s.starts_with('\'') && s.ends_with('\''))) {
         return Ok(SerValue::Str(s[1..s.len()-1].to_string()));
     }
 
     // Array: [a, b, c]
-    if s.starts_with('[') && s.ends_with(']') {
+    if s.len() >= 2 && s.starts_with('[') && s.ends_with(']') {
         let inner = s[1..s.len()-1].trim();
         if inner.is_empty() { return Ok(SerValue::Array(Vec::new())); }
         let items: Result<Vec<SerValue>, String> = split_toml_array(inner)
             .iter()
-            .map(|item| toml_parse_value(item.trim()))
+            .map(|item| toml_parse_value(item.trim(), depth + 1))
             .collect();
         return Ok(SerValue::Array(items?));
     }
