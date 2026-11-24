@@ -54,13 +54,13 @@ pub fn open(path: &str) -> Result<usize, String> {
     if h.is_null() {
         return Err(format!("ffi_open: cannot load '{}'", path));
     }
-    let mut libs = LIBS.lock().unwrap();
+    let mut libs = LIBS.lock().unwrap_or_else(|e| e.into_inner());
     libs.push(h as usize);
     Ok(libs.len())
 }
 
 pub fn close(id: usize) -> Result<(), String> {
-    let mut libs = LIBS.lock().unwrap();
+    let mut libs = LIBS.lock().unwrap_or_else(|e| e.into_inner());
     match libs.get_mut(id.wrapping_sub(1)) {
         Some(h) if *h != 0 => {
             unsafe { sys::close(*h as *mut c_void) };
@@ -117,7 +117,7 @@ pub fn call(id: usize, symbol: &str, sig: &str, args: &[FfiArg]) -> Result<FfiRe
         return Err(format!("ffi_call: signature has {} args, got {}", codes.len(), args.len()));
     }
     let handle = {
-        let libs = LIBS.lock().unwrap();
+        let libs = LIBS.lock().unwrap_or_else(|e| e.into_inner());
         match libs.get(id.wrapping_sub(1)) {
             Some(h) if *h != 0 => *h,
             _ => return Err(format!("ffi_call: invalid handle {}", id)),
@@ -210,19 +210,19 @@ pub fn mem_alloc(size: usize) -> Result<usize, String> {
     if p.is_null() {
         return Err("ffi_alloc: out of memory".into());
     }
-    BLOCKS.lock().unwrap().get_or_insert_with(HashMap::new).insert(p as usize, size);
+    BLOCKS.lock().unwrap_or_else(|e| e.into_inner()).get_or_insert_with(HashMap::new).insert(p as usize, size);
     Ok(p as usize)
 }
 
 pub fn mem_free(ptr: usize) -> Result<(), String> {
-    let size = BLOCKS.lock().unwrap().as_mut().and_then(|m| m.remove(&ptr))
+    let size = BLOCKS.lock().unwrap_or_else(|e| e.into_inner()).as_mut().and_then(|m| m.remove(&ptr))
         .ok_or_else(|| "ffi_free: not a pointer from ffi_alloc (or already freed)".to_string())?;
     unsafe { dealloc(ptr as *mut u8, Layout::from_size_align(size, 16).unwrap()) };
     Ok(())
 }
 
 fn check(ptr: usize, off: usize, len: usize) -> Result<usize, String> {
-    let guard = BLOCKS.lock().unwrap();
+    let guard = BLOCKS.lock().unwrap_or_else(|e| e.into_inner());
     let size = guard.as_ref().and_then(|m| m.get(&ptr)).ok_or("ffi: pointer was not allocated by ffi_alloc")?;
     match off.checked_add(len) {
         Some(end) if end <= *size => Ok(ptr + off),
@@ -266,7 +266,7 @@ pub fn poke(ptr: usize, off: usize, kind: &str, v: &FfiArg) -> Result<(), String
 
 pub fn peek(ptr: usize, off: usize, kind: &str) -> Result<FfiRet, String> {
     if kind == "str" {
-        let size = BLOCKS.lock().unwrap().as_ref().and_then(|m| m.get(&ptr).copied())
+        let size = BLOCKS.lock().unwrap_or_else(|e| e.into_inner()).as_ref().and_then(|m| m.get(&ptr).copied())
             .ok_or("ffi: pointer was not allocated by ffi_alloc")?;
         if off >= size { return Err("ffi_peek: offset out of bounds".into()); }
         let base = (ptr + off) as *const u8;

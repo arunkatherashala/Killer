@@ -3404,7 +3404,7 @@ impl BuiltinFunctions {
             std::sync::Arc::new(std::sync::Mutex::new(None));
         let slot_clone = std::sync::Arc::clone(&slot);
         std::thread::spawn(move || {
-            *slot_clone.lock().unwrap() = Some(Box::new(val));
+            *slot_clone.lock().unwrap_or_else(|e| e.into_inner()) = Some(Box::new(val));
         });
         Ok(Value::Future(crate::value::FutureHandle(slot)))
     }
@@ -3433,7 +3433,7 @@ impl BuiltinFunctions {
             std::sync::Arc::new(std::sync::Mutex::new(None));
         let slot_clone = std::sync::Arc::clone(&slot);
         std::thread::spawn(move || {
-            *slot_clone.lock().unwrap() = Some(Box::new(val));
+            *slot_clone.lock().unwrap_or_else(|e| e.into_inner()) = Some(Box::new(val));
         });
         Ok(Value::Future(crate::value::FutureHandle(slot)))
     }
@@ -3484,7 +3484,7 @@ impl BuiltinFunctions {
             std::sync::Arc::new(std::sync::Mutex::new(None));
         let slot_clone = std::sync::Arc::clone(&slot);
         std::thread::spawn(move || {
-            *slot_clone.lock().unwrap() = Some(Box::new(val));
+            *slot_clone.lock().unwrap_or_else(|e| e.into_inner()) = Some(Box::new(val));
         });
         Ok(Value::Future(crate::value::FutureHandle(slot)))
     }
@@ -8838,7 +8838,7 @@ impl BuiltinFunctions {
                         *Just name a topic and I'll dive right in!*".to_string();
                 }
                 // With an API LLM configured, defer to kala_expert_ask (online-first) instead of static KB.
-                let skip_embedded_kb = crate::khlm_polyglot::config().lock().unwrap().llm_available();
+                let skip_embedded_kb = crate::khlm_polyglot::config().lock().unwrap_or_else(|e| e.into_inner()).llm_available();
                 if !topic.is_empty() && !skip_embedded_kb {
                     if let Some(answer) = crate::llm::knowledge_base_lookup_pub(topic) {
                         let result = if wants_simple_here {
@@ -9582,7 +9582,7 @@ impl BuiltinFunctions {
 
         let lq = Self::expert_normalize_kb_query(&q_lower);
 
-        let llm_available = crate::khlm_polyglot::config().lock().unwrap().llm_available();
+        let llm_available = crate::khlm_polyglot::config().lock().unwrap_or_else(|e| e.into_inner()).llm_available();
 
         // -- ONLINE-FIRST (when an API LLM is configured) --------------------
         // Prefer cloud LLM → live KhLM/Ghost-108 → only then embedded KB / offline templates.
@@ -9705,7 +9705,7 @@ impl BuiltinFunctions {
     fn kala_smart_answer(question: &str, q_lower: &str) -> String {
         // With Tier-2 LLM configured, `kala_expert_ask` already did online-first (API + web + embedded KB).
         // Do not blend another offline KB mosaic  fall through to the final router / garbage handlers.
-        if crate::khlm_polyglot::config().lock().unwrap().llm_available() {
+        if crate::khlm_polyglot::config().lock().unwrap_or_else(|e| e.into_inner()).llm_available() {
             return String::new();
         }
         // Step 1: Extract keywords from the query
@@ -9819,7 +9819,7 @@ impl BuiltinFunctions {
 
         // Step 6: Honest fallback  nudge toward LLM configuration
         let llm_available = {
-            crate::khlm_polyglot::config().lock().unwrap().llm_available()
+            crate::khlm_polyglot::config().lock().unwrap_or_else(|e| e.into_inner()).llm_available()
         };
 
         if !llm_available {
@@ -9886,7 +9886,7 @@ impl BuiltinFunctions {
         }
 
         let q_short = if question.len() > 80 { &question[..80] } else { question };
-        let llm_hint = if !crate::khlm_polyglot::config().lock().unwrap().llm_available() {
+        let llm_hint = if !crate::khlm_polyglot::config().lock().unwrap_or_else(|e| e.into_inner()).llm_available() {
             "\n\n**Tip:** Click the **\u{2699}\u{fe0f} LLM** button to connect an AI provider (Ollama, Groq, OpenAI) for full answers on any topic!"
         } else {
             ""

@@ -253,7 +253,7 @@ impl LazyScheduler {
 
     /// Create a lazy batch
     pub fn submit_batch(&mut self, operations: Vec<Vec<u8>>, priority: u32) -> Result<LazyBatch, String> {
-        let mut queue = self.queue.lock().unwrap();
+        let mut queue = self.queue.lock().unwrap_or_else(|e| e.into_inner());
         let handle = queue.submit_lazy(operations, priority)?;
 
         let batch = LazyBatch {
@@ -277,7 +277,7 @@ impl LazyScheduler {
             .find(|b| b.batch_id == batch_id)
             .ok_or("Batch not found".to_string())?;
 
-        let mut queue = self.queue.lock().unwrap();
+        let mut queue = self.queue.lock().unwrap_or_else(|e| e.into_inner());
         let mut results = Vec::new();
 
         for task_id in &batch.task_ids {

@@ -534,7 +534,7 @@ fn spawn_task_thread(
             run_spawned_task(task, func, args, slot)
         });
     if spawned.is_err() {
-        *failed_slot.lock().unwrap() = Some(Box::new(Value::TaskError(Box::new(Value::Str(
+        *failed_slot.lock().unwrap_or_else(|e| e.into_inner()) = Some(Box::new(Value::TaskError(Box::new(Value::Str(
             "could not start a thread for this task".to_string(),
         )))));
     }
@@ -571,7 +571,7 @@ fn run_spawned_task(
         result
     }));
     let result = outcome.unwrap_or_else(|_| Value::TaskError(Box::new(Value::Str("task panicked".to_string()))));
-    *slot.lock().unwrap() = Some(Box::new(result));
+    *slot.lock().unwrap_or_else(|e| e.into_inner()) = Some(Box::new(result));
 }
 
 /// Maximum nesting of runtime `import` statements.
@@ -6361,7 +6361,7 @@ impl VirtualMachine {
                         }
                         other => {
                             // a plain value resolves immediately, as an independent copy
-                            *fut_clone.lock().unwrap() = Some(Box::new(other.detached()));
+                            *fut_clone.lock().unwrap_or_else(|e| e.into_inner()) = Some(Box::new(other.detached()));
                         }
                     }
                     self.stack.push(Value::Future(crate::value::FutureHandle(future)));

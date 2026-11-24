@@ -201,7 +201,7 @@ pub fn complete(config: &LlmConfig, messages: &[LlmMessage]) -> Result<LlmRespon
         k
     };
     {
-        let cache = khlm_cache().lock().unwrap();
+        let cache = khlm_cache().lock().unwrap_or_else(|e| e.into_inner());
         if let Some(cached) = cache.get(&cache_key) {
             return Ok(LlmResponse {
                 content: cached.clone(),
@@ -218,7 +218,7 @@ pub fn complete(config: &LlmConfig, messages: &[LlmMessage]) -> Result<LlmRespon
         LlmProvider::Groq      => complete_groq(config, messages),
     };
     if let Ok(ref resp) = result {
-        khlm_cache().lock().unwrap().insert(cache_key, resp.content.clone());
+        khlm_cache().lock().unwrap_or_else(|e| e.into_inner()).insert(cache_key, resp.content.clone());
     }
     result
 }

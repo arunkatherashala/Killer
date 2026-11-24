@@ -79,7 +79,7 @@ impl<T> SharedMutex<T> {
 
     /// Lock and access value
     pub fn lock(&self) -> Result<std::sync::MutexGuard<'_, T>> {
-        Ok(self.inner.lock().unwrap())
+        Ok(self.inner.lock().unwrap_or_else(|e| e.into_inner()))
     }
 
     /// Try to lock without blocking
@@ -114,12 +114,12 @@ impl<T> SharedRwLock<T> {
 
     /// Acquire read lock
     pub fn read(&self) -> Result<std::sync::RwLockReadGuard<'_, T>> {
-        Ok(self.inner.read().unwrap())
+        Ok(self.inner.read().unwrap_or_else(|e| e.into_inner()))
     }
 
     /// Acquire write lock
     pub fn write(&self) -> Result<std::sync::RwLockWriteGuard<'_, T>> {
-        Ok(self.inner.write().unwrap())
+        Ok(self.inner.write().unwrap_or_else(|e| e.into_inner()))
     }
 }
 
