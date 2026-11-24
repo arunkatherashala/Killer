@@ -1,5 +1,4 @@
 id,opened,area,title,detail,where,status,next_step
-1,2026-11-24,merge,Merge wt-fixmem and wt-fixmisc,"Review fixes #10 (memory counter) and #4-#9,#12 (linemask, checksum pins, MCP, OpenAI); verifiers ok; merge one at a time with full suite + parity after each","wt-fixmem, wt-fixmisc",in-progress,"wt-fixssrf merged (e6b7fab), suite running; then mem, then misc"
 2,2026-11-24,release,Push verified merges,Push after the fix merges pass the full suite; HTTPS remote + personal token only,origin feature/assistant-ki,open,after merges
 3,2026-11-24,ci,Decide how CI is watched,Spec says no gh; watching CI needs gh or the API with the personal token,,blocked-user,user decision
 4,2026-11-24,robustness,Track C: reachable panics (wt-panic2),"18 commits; stalled; finish items (enumerate overflow, json_pretty clamp, self-import, msgpack depth, toml, kore_v2, lock poison), panic budget test, torture tests; merge",wt_panic2,in-progress,agent done (433->235 panic sites); merge after wt-fixmisc; full suite not re-run after its last test-only fix
