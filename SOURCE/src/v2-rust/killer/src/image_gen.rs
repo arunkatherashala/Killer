@@ -578,17 +578,26 @@ fn curl_post(url: &str, headers: &[String], body: &str, timeout_s: u64) -> Resul
     if !url.starts_with("https://") {
         return Err(format!("URL must use HTTPS: {}", &url[..url.len().min(50)]));
     }
-    let timeout_str = timeout_s.to_string();
-    let mut args = vec!["-s", "--fail-with-body", "--max-time", &timeout_str, "-X", "POST", url];
-    let header_args: Vec<String> = headers.iter()
-        .flat_map(|h| vec!["-H".to_string(), h.clone()])
-        .collect();
-    let header_refs: Vec<&str> = header_args.iter().map(|s| s.as_str()).collect();
-    args.extend_from_slice(&header_refs);
-    args.extend_from_slice(&["-d", body]);
-
-    let output = Command::new(crate::tool_path::curl()?).args(&args).output()
+    // The URL, headers (the API key!) and body go to curl on stdin as a `-K -` config, never on the command line
+    // where `ps` / Task Manager would show them.
+    let q = crate::http_req::cfg_quote;
+    let mut cfg = format!("url = {}\nrequest = \"POST\"\n", q(url));
+    for h in headers {
+        cfg.push_str(&format!("header = {}\n", q(h)));
+    }
+    cfg.push_str(&format!("data-raw = {}\n", q(body)));
+    let mut child = Command::new(crate::tool_path::curl()?)
+        .args(["-s", "--fail-with-body", "--max-time", &timeout_s.to_string(), "-K", "-"])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
         .map_err(|e| format!("curl not found: {}", e))?;
+    if let Some(mut stdin) = child.stdin.take() {
+        use std::io::Write;
+        let _ = stdin.write_all(cfg.as_bytes());
+    }
+    let output = child.wait_with_output().map_err(|e| format!("curl failed: {}", e))?;
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
     if stdout.is_empty() && !stderr.is_empty() {
