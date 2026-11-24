@@ -45,10 +45,14 @@ impl Json {
     }
 }
 
+/// Maximum nesting of arrays/objects accepted by [`parse`] (a request nested deeper is an error, not a stack overflow).
+pub const MAX_DEPTH: usize = 64;
+
 pub fn parse(input: &str) -> Result<Json, String> {
     let mut p = Parser {
         bytes: input.as_bytes(),
         i: 0,
+        depth: 0,
     };
     p.skip_ws();
     let v = p.parse_value()?;
@@ -132,6 +136,7 @@ fn escape_str(s: &str, out: &mut String) {
 struct Parser<'a> {
     bytes: &'a [u8],
     i: usize,
+    depth: usize,
 }
 
 impl<'a> Parser<'a> {
@@ -177,8 +182,15 @@ impl<'a> Parser<'a> {
     fn parse_value(&mut self) -> Result<Json, String> {
         self.skip_ws();
         match self.peek() {
-            Some(b'{') => self.parse_object(),
-            Some(b'[') => self.parse_array(),
+            Some(b'{') | Some(b'[') => {
+                if self.depth >= MAX_DEPTH {
+                    return Err(format!("JSON nested deeper than {MAX_DEPTH} levels"));
+                }
+                self.depth += 1;
+                let r = if self.peek() == Some(b'{') { self.parse_object() } else { self.parse_array() };
+                self.depth -= 1;
+                r
+            }
             Some(b'"') => Ok(Json::Str(self.parse_string()?)),
             Some(b'-') | Some(b'0'..=b'9') => self.parse_number(),
             Some(b't') => {

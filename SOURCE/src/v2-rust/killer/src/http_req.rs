@@ -5,6 +5,8 @@
 //!   config file on stdin (`curl -K -`), so API keys do not show up in `ps` or the task manager;
 //! - TLS verification is on; `-k` is only added with `insecure: true`;
 //! - `https://` is required, except `http://` to localhost / 127.0.0.1 / ::1 (or `allow_http: true`);
+//! - SSRF guard: link-local / cloud-metadata targets are always refused, loopback / private ranges unless
+//!   `allow_private` or KILLER_ALLOW_PRIVATE_NET=1 (see docs/project/SECURITY.md);
 //! - header names/values and URLs containing control characters are rejected (no header injection);
 //! - timeouts always apply; retries use exponential backoff on connection errors and 5xx.
 
@@ -29,6 +31,10 @@ pub struct ReqSpec {
     pub head: bool,
     /// write the body to this file instead of returning it
     pub output: Option<String>,
+    /// allow loopback / private-range targets (default off; env KILLER_ALLOW_PRIVATE_NET=1 also allows)
+    pub allow_private: bool,
+    /// allow link-local / cloud-metadata targets (Rust-only override; env KILLER_ALLOW_METADATA_NET=1)
+    pub allow_metadata: bool,
 }
 
 impl ReqSpec {
@@ -44,6 +50,8 @@ impl ReqSpec {
             allow_http: false,
             head: false,
             output: None,
+            allow_private: false,
+            allow_metadata: false,
         }
     }
 }
@@ -76,6 +84,176 @@ pub fn url_host(url: &str) -> Option<String> {
 
 pub fn is_loopback_host(h: &str) -> bool {
     h == "localhost" || h == "127.0.0.1" || h == "::1"
+}
+
+// --- SSRF policy ------------------------------------------------------------------
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NetClass {
+    Public,
+    Loopback,
+    Private,
+    /// 169.254.0.0/16, fe80::/10
+    LinkLocal,
+    /// cloud instance-metadata endpoints (169.254.169.254, fd00:ec2::254, 100.100.100.200)
+    Metadata,
+}
+
+fn classify_v4(a: std::net::Ipv4Addr) -> NetClass {
+    let o = a.octets();
+    if o == [169, 254, 169, 254] || o == [100, 100, 100, 200] || o == [192, 0, 0, 192] {
+        NetClass::Metadata
+    } else if o[0] == 169 && o[1] == 254 {
+        NetClass::LinkLocal
+    } else if o[0] == 127 || o[0] == 0 {
+        NetClass::Loopback
+    } else if o[0] == 10
+        || (o[0] == 172 && (o[1] & 0xf0) == 16)
+        || (o[0] == 192 && o[1] == 168)
+        || (o[0] == 100 && (o[1] & 0xc0) == 64)
+        || o[0] >= 240
+    {
+        NetClass::Private
+    } else {
+        NetClass::Public
+    }
+}
+
+/// Classify an address; IPv4-mapped (::ffff:a.b.c.d), IPv4-compatible and NAT64 (64:ff9b::/96) forms
+/// are judged by the IPv4 address they carry.
+pub fn classify_ip(ip: std::net::IpAddr) -> NetClass {
+    match ip {
+        std::net::IpAddr::V4(a) => classify_v4(a),
+        std::net::IpAddr::V6(a) => {
+            let seg = a.segments();
+            if let Some(v4) = a.to_ipv4_mapped() {
+                return classify_v4(v4);
+            }
+            if seg[..6] == [0, 0, 0, 0, 0, 0] && !(seg[6] == 0 && seg[7] <= 1) {
+                return classify_v4(std::net::Ipv4Addr::new((seg[6] >> 8) as u8, seg[6] as u8, (seg[7] >> 8) as u8, seg[7] as u8));
+            }
+            if seg[..6] == [0x64, 0xff9b, 0, 0, 0, 0] {
+                return classify_v4(std::net::Ipv4Addr::new((seg[6] >> 8) as u8, seg[6] as u8, (seg[7] >> 8) as u8, seg[7] as u8));
+            }
+            if a.is_loopback() || a.is_unspecified() {
+                NetClass::Loopback
+            } else if seg == [0xfd00, 0x0ec2, 0, 0, 0, 0, 0, 0x0254] {
+                NetClass::Metadata
+            } else if (seg[0] & 0xffc0) == 0xfe80 {
+                NetClass::LinkLocal
+            } else if (seg[0] & 0xfe00) == 0xfc00 {
+                NetClass::Private
+            } else {
+                NetClass::Public
+            }
+        }
+    }
+}
+
+/// inet_aton-style IPv4 ("2130706433", "0x7f.1", "0177.0.0.1", "127.1"): curl and libc accept these, so the
+/// guard must judge the address they mean.
+fn parse_ipv4_loose(host: &str) -> Option<std::net::Ipv4Addr> {
+    let parts: Vec<&str> = host.split('.').collect();
+    if parts.is_empty() || parts.len() > 4 {
+        return None;
+    }
+    let mut nums = Vec::new();
+    for p in &parts {
+        let v = if let Some(h) = p.strip_prefix("0x").or_else(|| p.strip_prefix("0X")) {
+            u64::from_str_radix(h, 16).ok()?
+        } else if p.len() > 1 && p.starts_with('0') {
+            u64::from_str_radix(&p[1..], 8).ok()?
+        } else {
+            p.parse::<u64>().ok()?
+        };
+        nums.push(v);
+    }
+    let (last, head) = nums.split_last()?;
+    let mut addr: u64 = 0;
+    for (i, h) in head.iter().enumerate() {
+        if *h > 255 {
+            return None;
+        }
+        addr |= h << (24 - 8 * i as u64);
+    }
+    let room = 8 * (4 - head.len() as u32);
+    if room < 32 && *last >= (1u64 << room) || *last > u32::MAX as u64 {
+        return None;
+    }
+    Some(std::net::Ipv4Addr::from((addr | last) as u32))
+}
+
+fn env_on(name: &str) -> bool {
+    matches!(std::env::var(name).as_deref(), Ok("1") | Ok("true") | Ok("yes"))
+}
+
+/// Port of the URL (explicit, else the scheme default).
+pub fn url_port(url: &str) -> u16 {
+    let (scheme, rest) = url.split_once("://").unwrap_or(("http", url));
+    let end = rest.find(|c| c == '/' || c == '?' || c == '#').unwrap_or(rest.len());
+    let auth = rest[..end].rsplit('@').next().unwrap_or("");
+    let after_host = if auth.starts_with('[') { auth.split_once(']').map(|x| x.1).unwrap_or("") } else { &auth[auth.find(':').unwrap_or(auth.len())..] };
+    after_host.strip_prefix(':').and_then(|p| p.parse().ok()).unwrap_or(if scheme.eq_ignore_ascii_case("https") { 443 } else { 80 })
+}
+
+fn is_metadata_name(h: &str) -> bool {
+    let h = h.trim_end_matches('.');
+    h == "metadata.google.internal" || h == "metadata" || h == "instance-data" || h.ends_with(".metadata.google.internal")
+}
+
+fn check_class(class: NetClass, host: &str, spec: &ReqSpec) -> Result<(), String> {
+    match class {
+        NetClass::Public => Ok(()),
+        NetClass::Metadata | NetClass::LinkLocal => {
+            if spec.allow_metadata || env_on("KILLER_ALLOW_METADATA_NET") {
+                Ok(())
+            } else {
+                Err(format!("Security: {} is a link-local / cloud-metadata address and is blocked (SSRF). Set KILLER_ALLOW_METADATA_NET=1 only if you really mean it.", host))
+            }
+        }
+        NetClass::Loopback | NetClass::Private => {
+            if spec.allow_private || env_on("KILLER_ALLOW_PRIVATE_NET") {
+                Ok(())
+            } else {
+                Err(format!("Security: {} is a loopback / private-network address and is blocked (SSRF). Pass allow_private: true or set KILLER_ALLOW_PRIVATE_NET=1 to allow it.", host))
+            }
+        }
+    }
+}
+
+/// SSRF guard. Checks IP literals, and resolves host names, refusing when any resolved address is blocked.
+/// Returns curl `resolve` pins for resolved names so curl connects to exactly the addresses checked (no DNS
+/// rebinding between check and connect). curl is run without -L, so redirects are never followed.
+pub fn check_target(spec: &ReqSpec) -> Result<Vec<String>, String> {
+    let host = match url_host(&spec.url) {
+        Some(h) => h,
+        None => return Ok(Vec::new()),
+    };
+    if is_metadata_name(&host) {
+        check_class(NetClass::Metadata, &host, spec)?;
+    }
+    if let Ok(ip) = host.parse::<std::net::IpAddr>() {
+        check_class(classify_ip(ip), &host, spec)?;
+        return Ok(Vec::new());
+    }
+    if let Some(ip) = parse_ipv4_loose(&host) {
+        check_class(classify_v4(ip), &format!("{} ({})", host, ip), spec)?;
+        return Ok(Vec::new());
+    }
+    use std::net::ToSocketAddrs;
+    let port = url_port(&spec.url);
+    let addrs: Vec<std::net::IpAddr> = match (host.as_str(), port).to_socket_addrs() {
+        Ok(it) => it.map(|a| a.ip()).collect(),
+        Err(_) => return Ok(Vec::new()), // unresolvable: curl will report the error itself
+    };
+    for ip in &addrs {
+        check_class(classify_ip(*ip), &format!("{} (resolves to {})", host, ip), spec)?;
+    }
+    if addrs.is_empty() {
+        return Ok(Vec::new());
+    }
+    let list: Vec<String> = addrs.iter().map(|ip| if ip.is_ipv6() { format!("[{}]", ip) } else { ip.to_string() }).collect();
+    Ok(vec![format!("{}:{}:{}", host, port, list.join(","))])
 }
 
 /// Validate the URL against the scheme policy.
@@ -168,7 +346,11 @@ pub fn build_argv(spec: &ReqSpec) -> Vec<String> {
 /// The curl config text (written to curl's stdin): URL, method, headers and body.
 pub fn build_config(spec: &ReqSpec) -> Result<String, String> {
     validate_url(&spec.url, spec.allow_http)?;
+    let pins = check_target(spec)?;
     let mut c = String::new();
+    for pin in &pins {
+        c.push_str(&format!("resolve = {}\n", cfg_quote(pin)));
+    }
     c.push_str(&format!("url = {}\n", cfg_quote(&spec.url)));
     if spec.head {
         c.push_str("head\n");
@@ -302,7 +484,7 @@ fn num(v: &Value) -> Option<f64> {
     }
 }
 
-/// `http_request({method, url, headers, body, timeout, retries, insecure, allow_http})`
+/// `http_request({method, url, headers, body, timeout, retries, insecure, allow_http, allow_private})`
 pub fn builtin_http_request(args: &[Value]) -> Result<Value, VmError> {
     crate::security::require_network()?;
     let d = match args {
@@ -344,6 +526,7 @@ pub fn builtin_http_request(args: &[Value]) -> Result<Value, VmError> {
     }
     spec.insecure = matches!(d.get("insecure"), Some(Value::Bool(true)));
     spec.allow_http = matches!(d.get("allow_http"), Some(Value::Bool(true)));
+    spec.allow_private = matches!(d.get("allow_private"), Some(Value::Bool(true)));
     match exec(&spec) {
         Ok(r) => Ok(resp_to_value(&r)),
         Err(e) => Err(VmError::runtime_error(format!("http_request: {}", e))),
@@ -449,5 +632,74 @@ mod tests {
     fn host_extraction() {
         assert_eq!(url_host("https://User:pw@Example.com:8443/p?q=1").as_deref(), Some("example.com"));
         assert_eq!(url_host("http://[::1]:9/").as_deref(), Some("::1"));
+    }
+
+    fn blocked(url: &str, private: bool, meta: bool) -> bool {
+        let mut s = ReqSpec::new("GET", url);
+        s.allow_http = true;
+        s.allow_private = private;
+        s.allow_metadata = meta;
+        build_config(&s).is_err()
+    }
+
+    #[test]
+    fn ssrf_classification() {
+        use std::net::IpAddr;
+        let c = |s: &str| classify_ip(s.parse::<IpAddr>().unwrap());
+        assert_eq!(c("127.0.0.1"), NetClass::Loopback);
+        assert_eq!(c("10.1.2.3"), NetClass::Private);
+        assert_eq!(c("172.16.0.1"), NetClass::Private);
+        assert_eq!(c("172.32.0.1"), NetClass::Public);
+        assert_eq!(c("192.168.1.1"), NetClass::Private);
+        assert_eq!(c("169.254.1.1"), NetClass::LinkLocal);
+        assert_eq!(c("169.254.169.254"), NetClass::Metadata);
+        assert_eq!(c("::1"), NetClass::Loopback);
+        assert_eq!(c("fe80::1"), NetClass::LinkLocal);
+        assert_eq!(c("fd12::1"), NetClass::Private);
+        assert_eq!(c("fd00:ec2::254"), NetClass::Metadata);
+        assert_eq!(c("::ffff:127.0.0.1"), NetClass::Loopback);
+        assert_eq!(c("::ffff:169.254.169.254"), NetClass::Metadata);
+        assert_eq!(c("8.8.8.8"), NetClass::Public);
+        assert_eq!(c("2606:4700::1111"), NetClass::Public);
+    }
+
+    #[test]
+    fn ssrf_blocks_loopback_private_and_metadata_by_default() {
+        for u in ["http://127.0.0.1:9/", "http://[::1]:9/", "http://10.0.0.5/", "http://192.168.0.1/", "http://[fc00::1]/",
+                  "http://[::ffff:7f00:1]/", "http://[::ffff:127.0.0.1]/", "http://localhost:9/", "http://0.0.0.0/",
+                  "http://2130706433/", "http://0x7f.1/", "http://0177.0.0.1/", "http://127.1/", "http://0xa9fea9fe/", "http://169.254.169.254/latest/meta-data/", "http://[fe80::1]/",
+                  "http://[fd00:ec2::254]/", "http://metadata.google.internal/computeMetadata/v1/"] {
+            assert!(blocked(u, false, false), "{} should be blocked", u);
+        }
+    }
+
+    #[test]
+    fn ssrf_allow_private_does_not_unlock_metadata() {
+        assert!(!blocked("http://127.0.0.1:9/", true, false));
+        assert!(!blocked("http://[::1]:9/", true, false));
+        assert!(!blocked("http://localhost:9/", true, false));
+        for u in ["http://169.254.169.254/", "http://[fd00:ec2::254]/", "http://[::ffff:169.254.169.254]/", "http://169.254.1.1/",
+                  "http://[fe80::1]/", "http://metadata.google.internal/"] {
+            assert!(blocked(u, true, false), "{} must stay blocked with allow_private", u);
+            assert!(!blocked(u, true, true) || u.contains("metadata.google"), "{} should unlock with allow_metadata", u);
+        }
+    }
+
+    #[test]
+    fn ssrf_public_ip_literals_pass_and_error_mentions_option() {
+        assert!(!blocked("https://8.8.8.8/", false, false));
+        let mut s = ReqSpec::new("GET", "http://127.0.0.1:9/");
+        s.allow_http = true;
+        let e = build_config(&s).unwrap_err();
+        assert!(e.contains("allow_private") && e.contains("KILLER_ALLOW_PRIVATE_NET"), "{}", e);
+    }
+
+    #[test]
+    fn url_port_forms() {
+        assert_eq!(url_port("https://a.b/x"), 443);
+        assert_eq!(url_port("http://a.b/x"), 80);
+        assert_eq!(url_port("http://u:p@a.b:8081/x"), 8081);
+        assert_eq!(url_port("http://[::1]:7000/"), 7000);
+        assert_eq!(url_port("http://[::1]/"), 80);
     }
 }

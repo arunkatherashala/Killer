@@ -296,6 +296,7 @@ pub fn build_plan(opts: &SharedDict, messages: &[(String, String)]) -> Result<Pl
     spec.headers.push(("Accept".to_string(), if wire == Wire::Ollama { "application/x-ndjson" } else { "text/event-stream" }.to_string()));
     spec.body = Some(crate::json_lang::stringify(&body, 0)?);
     spec.timeout_s = opt_num(opts, "timeout").unwrap_or(120.0);
+    spec.allow_private = true; // user-configured provider endpoint (local Ollama / gateway)
     spec.insecure = matches!(opts.get("insecure"), Some(Value::Bool(true)));
     spec.allow_http = matches!(opts.get("allow_http"), Some(Value::Bool(true)));
     Ok(Plan { wire, spec })

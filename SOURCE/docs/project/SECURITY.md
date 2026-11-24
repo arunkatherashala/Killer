@@ -214,3 +214,51 @@ case applies. `tests/eval_memory_embedded.rs` covers the no-allocator case.
   `KILLER_TOOL_ALLOW=name1,name2` (or `*`).
 - *Installers.* Version tags must match `[A-Za-z0-9._-]`; setting `KILLER_BASE_URL` prints a notice. Release archives are
   checked against a SHA256 file from the same location; there are no signatures.
+
+## Network targets (SSRF guard)
+
+Every request made through `http_req` (all `http_*` builtins, `llm_stream`, embeddings, the LLM providers) checks its
+target before curl runs:
+
+* **Link-local and cloud-metadata addresses are always blocked**: 169.254.0.0/16 (including 169.254.169.254),
+  fe80::/10, fd00:ec2::254, 100.100.100.200, 192.0.0.192 and the names `metadata.google.internal`, `metadata`,
+  `instance-data`. `allow_private` does NOT unlock them. The only overrides are the environment variable
+  `KILLER_ALLOW_METADATA_NET=1` (or the Rust-only `ReqSpec.allow_metadata`); scripts cannot set it through an option.
+* **Loopback and private ranges are blocked by default** for the script-facing `http_get/post/put/patch/delete/head/status/download/request`
+  builtins: 127.0.0.0/8, 0.0.0.0/8, ::1, 10/8, 172.16/12, 192.168/16, 100.64/10, fc00::/7, reserved 240/4. Opt in per call with
+  `http_request({..., "allow_private": true})`, or process-wide with `KILLER_ALLOW_PRIVATE_NET=1` (the simple verbs such
+  as `http_get(url)` have no options dict, so they need the environment variable).
+* IPv4-mapped / compatible / NAT64 IPv6 forms are judged by the IPv4 address inside; odd IPv4 spellings such as
+  `2130706433`, `0x7f.1`, `0177.0.0.1`, `127.1` are decoded the way curl and libc would.
+* Host names are resolved up front and every address is checked; curl is then pinned to exactly those addresses
+  (`resolve =` in the stdin config), so a DNS-rebinding answer cannot differ between check and connect. curl runs
+  without `-L`, so redirects are never followed (a redirect cannot lead to a blocked address).
+* Not subject to the loopback/private default: the endpoint of an LLM/embedding provider the user configured
+  (`base_url`, local Ollama on localhost, a LAN gateway): these set `allow_private` themselves. Metadata addresses
+  stay blocked for them too.
+* Not covered: the raw-socket Ollama client in `llm.rs` (fixed localhost:11434) and the package-registry client
+  (`pkg_registry.rs`, plain HTTP to a registry the user names; a publish token travels in clear text unless the
+  registry is behind a TLS terminator). That registry behaviour is an open decision.
+
+## killer-mcp server limits
+
+`killer-mcp` (MCP over stdio) enforces: message bodies of at most 8 MiB (larger `Content-Length` is answered with
+error -32600 and discarded without being allocated), JSON nesting of at most 64 levels (error -32700), a wall-clock
+budget for `killer_run` (`KILLER_MCP_RUN_TIMEOUT_S`, default 30 s, the child is killed; its captured output is capped at
+1 MiB), and tool calls run on a large-stack worker thread under `catch_unwind`, so a compiler panic is an error result.
+There is no step budget: the time budget is the execution limit.
+
+Authentication is opt-in: set `KILLER_MCP_TOKEN` and every request must carry the same value as `params._meta.token`
+(or a top-level `token`), compared in constant time; others get error -32001 (notifications are dropped silently). The
+token is a shared secret on a stdio pipe, not transport security: anything that can read the launching client's
+environment or process can use it. `killer_run` can still execute any `.killer` file the server user can read, so keep
+the server off untrusted clients.
+
+
+## Language server and debug adapter framing (LSP / DAP)
+
+`killer lsp` and `killer_dap` read `Content-Length` frames through one shared reader (`lsp_core::read_frame`): a body larger
+than 32 MiB is refused with an error (and discarded without being allocated), header lines are length-limited, and bytes
+that are not UTF-8 are replaced instead of ending the session. LSP positions use UTF-16 code units as the protocol
+requires. The debug adapter reports `exited` and `terminated` also when the debuggee dies before it connects, and
+`setBreakpoints` only applies to the launched program (other files are answered with unverified breakpoints).

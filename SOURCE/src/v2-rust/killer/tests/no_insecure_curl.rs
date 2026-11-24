@@ -107,3 +107,28 @@ fn normal_requests_print_no_warning() {
     let (_, err) = run_script("quiet", src);
     assert!(!err.contains("DISABLED"), "{err}");
 }
+
+/// A bearer key must never be written to a raw socket: no source file may format an `Authorization: Bearer`
+/// header while also holding a `TcpStream`, except the two audited ones (llm.rs hands its headers to http_req;
+/// pkg_registry.rs talks to a user-chosen registry and is tracked as an open decision in SECURITY.md).
+#[test]
+fn no_source_file_writes_a_bearer_key_to_a_raw_socket() {
+    let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let mut files = Vec::new();
+    rust_files(&src, &mut files);
+    let mut found = Vec::new();
+    for file in files {
+        let name = file.to_string_lossy().replace(std::path::MAIN_SEPARATOR, "/");
+        if name.ends_with("/src/llm.rs") || name.ends_with("/src/pkg_registry.rs") || name.contains("/archive/") {
+            continue;
+        }
+        let text = std::fs::read_to_string(&file).unwrap_or_default();
+        let prod = text.split("#[cfg(test)]").next().unwrap_or("");
+        let has_sock = prod.lines().any(|l| !l.trim_start().starts_with("//") && l.contains("TcpStream"));
+        let has_bearer = prod.lines().any(|l| !l.trim_start().starts_with("//") && l.contains("Bearer {"));
+        if has_sock && has_bearer {
+            found.push(name);
+        }
+    }
+    assert!(found.is_empty(), "bearer key near a raw socket in: {:?}", found);
+}

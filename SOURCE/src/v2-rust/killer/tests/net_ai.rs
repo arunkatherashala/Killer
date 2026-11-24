@@ -2,12 +2,20 @@
 use std::process::Command;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+/// These tests talk to servers on 127.0.0.1; http_* refuses loopback unless KILLER_ALLOW_PRIVATE_NET=1 (SSRF guard).
+fn net_cmd(bin: &str) -> Command {
+    let mut c = Command::new(bin);
+    c.env("KILLER_ALLOW_PRIVATE_NET", "1");
+    c
+}
+
+
 static NEXT: AtomicUsize = AtomicUsize::new(0);
 
 fn run_with_env(src: &str, env: &[(&str, &str)]) -> String {
     let path = std::env::temp_dir().join(format!("killer_na_{}_{}.killer", std::process::id(), NEXT.fetch_add(1, Ordering::SeqCst)));
     std::fs::write(&path, src).unwrap();
-    let mut cmd = Command::new(env!("CARGO_BIN_EXE_killer_super"));
+    let mut cmd = net_cmd(env!("CARGO_BIN_EXE_killer_super"));
     cmd.arg(&path).arg("--run");
     for (k, v) in env {
         cmd.env(k, v);
@@ -362,7 +370,7 @@ fn rag_demo_answers_from_the_right_chunk() {
     use std::time::{Duration, Instant};
     let demo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("examples").join("rag_demo.killer");
     let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
-    let mut server = Command::new(env!("CARGO_BIN_EXE_killer_super"))
+    let mut server = net_cmd(env!("CARGO_BIN_EXE_killer_super"))
         .arg(&demo)
         .arg("--run")
         .env("RAG_PORT", port.to_string())
@@ -402,7 +410,7 @@ println(http_post_json(base + "/ask", "{{}}", 20))
 fn run_watchdog(src: &str, secs: u64) -> String {
     let path = std::env::temp_dir().join(format!("killer_na_wd_{}_{}.killer", std::process::id(), NEXT.fetch_add(1, Ordering::SeqCst)));
     std::fs::write(&path, src).unwrap();
-    let mut child = Command::new(env!("CARGO_BIN_EXE_killer_super"))
+    let mut child = net_cmd(env!("CARGO_BIN_EXE_killer_super"))
         .arg(&path)
         .arg("--run")
         .stdout(std::process::Stdio::piped())

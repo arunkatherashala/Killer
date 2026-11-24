@@ -8,7 +8,7 @@ static NEXT: AtomicUsize = AtomicUsize::new(0);
 fn run(src: &str) -> String {
     let path = std::env::temp_dir().join(format!("killer_sp_{}_{}.killer", std::process::id(), NEXT.fetch_add(1, Ordering::SeqCst)));
     std::fs::write(&path, src).unwrap();
-    let out = Command::new(env!("CARGO_BIN_EXE_killer_super")).arg(&path).arg("--run").output().unwrap();
+    let out = net_cmd(env!("CARGO_BIN_EXE_killer_super")).arg(&path).arg("--run").output().unwrap();
     let _ = std::fs::remove_file(&path);
     format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr)).replace("\r\n", "\n").trim().to_string()
 }
@@ -313,7 +313,7 @@ println(r[1])
 fn run_super(src: &str, extra: &[&str]) -> String {
     let path = std::env::temp_dir().join(format!("killer_sp_{}_{}.killer", std::process::id(), NEXT.fetch_add(1, Ordering::SeqCst)));
     std::fs::write(&path, src).unwrap();
-    let out = Command::new(env!("CARGO_BIN_EXE_killer_super")).arg(&path).args(extra).output().unwrap();
+    let out = net_cmd(env!("CARGO_BIN_EXE_killer_super")).arg(&path).args(extra).output().unwrap();
     let _ = std::fs::remove_file(&path);
     format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr)).replace("\r\n", "\n")
 }
@@ -419,7 +419,7 @@ fn killer_profile_command_prints_a_table_sorted_by_self_time_and_writes_html() {
     let script = dir.join(format!("killer_prof_{}_{}.killer", std::process::id(), id));
     let html = dir.join(format!("killer_prof_{}_{}.html", std::process::id(), id));
     std::fs::write(&script, format!("{}driver()\nprintln(\"done\")\n", PROFILED)).unwrap();
-    let out = Command::new(env!("CARGO_BIN_EXE_killer")).arg("profile").arg(&script).arg("--html").arg(&html).output().unwrap();
+    let out = net_cmd(env!("CARGO_BIN_EXE_killer")).arg("profile").arg(&script).arg("--html").arg(&html).output().unwrap();
     let text = String::from_utf8_lossy(&out.stdout).replace("\r\n", "\n");
     assert!(out.status.success(), "{}{}", text, String::from_utf8_lossy(&out.stderr));
     assert!(text.starts_with("done\n"), "{}", text);
@@ -439,7 +439,7 @@ fn killer_profile_command_prints_a_table_sorted_by_self_time_and_writes_html() {
     assert!(page.contains("heavy") && page.contains("<script>") && page.contains("<style>"));
     assert!(!page.contains("http://") && !page.contains("https://") && !page.contains("src="), "must be self-contained");
     // help lists the command
-    let help = Command::new(env!("CARGO_BIN_EXE_killer")).arg("--help").output().unwrap();
+    let help = net_cmd(env!("CARGO_BIN_EXE_killer")).arg("--help").output().unwrap();
     assert!(String::from_utf8_lossy(&help.stdout).contains("profile"));
 }
 
@@ -460,6 +460,14 @@ use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::process::Stdio;
 use std::time::{Duration, Instant};
+
+/// These tests talk to servers on 127.0.0.1; http_* refuses loopback unless KILLER_ALLOW_PRIVATE_NET=1 (SSRF guard).
+fn net_cmd(bin: &str) -> Command {
+    let mut c = Command::new(bin);
+    c.env("KILLER_ALLOW_PRIVATE_NET", "1");
+    c
+}
+
 
 fn free_port() -> u16 {
     // Windows hands a just-released port to the next caller, so two parallel tests could be given the same one:
@@ -487,7 +495,7 @@ fn free_port() -> u16 {
 fn spawn_script(src: &str) -> (std::process::Child, std::path::PathBuf) {
     let path = std::env::temp_dir().join(format!("killer_sp_{}_{}.killer", std::process::id(), NEXT.fetch_add(1, Ordering::SeqCst)));
     std::fs::write(&path, src).unwrap();
-    let child = Command::new(env!("CARGO_BIN_EXE_killer_super"))
+    let child = net_cmd(env!("CARGO_BIN_EXE_killer_super"))
         .arg(&path)
         .arg("--run")
         .stdout(Stdio::piped())

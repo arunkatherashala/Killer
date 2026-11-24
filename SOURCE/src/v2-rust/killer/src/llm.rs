@@ -565,6 +565,7 @@ fn curl_post(url: &str, headers: &[String], body: &str, timeout_s: u64) -> Resul
         .collect();
     spec.body = Some(body.to_string());
     spec.timeout_s = timeout_s as f64;
+    spec.allow_private = true; // the endpoint is the user's configured provider (local Ollama, LAN gateway)
     crate::http_req::exec(&spec).map(|r| r.body)
 }
 
