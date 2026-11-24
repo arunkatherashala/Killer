@@ -286,14 +286,18 @@ fn find_route(routes: &[Route], method: &str, path: &str) -> Option<(Value, Vec<
     None
 }
 
-/// A private copy of this thread's routes (handlers detached) for one worker.
-fn routes_for_worker() -> Vec<Route> {
-    ROUTES.with(|r| {
-        r.borrow()
-            .iter()
-            .map(|route| Route { method: route.method.clone(), segments: route.segments.clone(), handler: route.handler.detached() })
-            .collect()
-    })
+/// The seed of one worker: a detached snapshot of the VM state plus copies of the catch-all
+/// handler and of this thread's routes, all copied in one walk so that route closures sharing a
+/// captured object (a store, a cache) still share it inside the worker.
+fn seed_worker(vm: &mut VirtualMachine, program: &Program, handler: &Option<Value>) -> (crate::vm::WorkerSeed, Option<Value>, Vec<Route>) {
+    let (meta, mut extra): (Vec<(String, Vec<String>)>, Vec<Value>) =
+        ROUTES.with(|r| r.borrow().iter().map(|route| ((route.method.clone(), route.segments.clone()), route.handler.clone())).unzip());
+    extra.insert(0, handler.clone().unwrap_or(Value::Null));
+    let (seed, mut copies) = vm.worker_seed(program, &extra);
+    let rest = copies.split_off(1.min(copies.len()));
+    let handler = handler.as_ref().and(copies.into_iter().next());
+    let routes = meta.into_iter().zip(rest).map(|((method, segments), handler)| Route { method, segments, handler }).collect();
+    (seed, handler, routes)
 }
 
 // --- responses ----------------------------------------------------------------
@@ -710,9 +714,7 @@ fn serve_loop(vm: &mut VirtualMachine, args: &[Value], program: &Program, once: 
     let rx = Arc::new(Mutex::new(rx));
     for i in 0..workers {
         // every worker gets its own detached copy of the globals, the routes and the handler
-        let seed = vm.worker_seed(program);
-        let routes = routes_for_worker();
-        let handler = handler.as_ref().map(Value::detached);
+        let (seed, handler, routes) = seed_worker(vm, program, &handler);
         let (rx, pool) = (Arc::clone(&rx), Arc::clone(&pool));
         seed.spawn(format!("killer-http-{}", i), move |wvm, prog| worker_loop(wvm, prog, &routes, &handler, lim, &pool, &rx))
             .map_err(|e| VmError::runtime_error(format!("{}: cannot start worker thread: {}", who, e)))?;

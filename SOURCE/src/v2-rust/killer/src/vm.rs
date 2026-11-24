@@ -608,9 +608,32 @@ impl WorkerSeed {
 }
 
 impl VirtualMachine {
-    /// A fresh detached snapshot of this VM's state for a worker thread (see [`WorkerSeed`]).
-    pub(crate) fn worker_seed(&mut self, program: &Program) -> WorkerSeed {
-        WorkerSeed { task: self.task_context(program), cap: crate::memcap::inherit() }
+    /// A fresh detached snapshot of this VM's state for a worker thread (see [`WorkerSeed`]),
+    /// together with detached copies of `extra` (handlers, for instance). The top-level variables
+    /// and `extra` are copied in one walk, so sharing between them survives inside the snapshot: two
+    /// closures that capture the same object (or a closure and the global holding that object) still
+    /// see one object in the worker.
+    pub(crate) fn worker_seed(&mut self, program: &Program, extra: &[Value]) -> (WorkerSeed, Vec<Value>) {
+        let names: Vec<String>;
+        let mut values: Vec<Value> = extra.to_vec();
+        {
+            let root: Vec<(String, Value)> = self.scopes.first().map(|r| r.iter().map(|(k, v)| (k.clone(), v.clone())).collect()).unwrap_or_default();
+            names = root.iter().map(|(k, _)| k.clone()).collect();
+            values.extend(root.into_iter().map(|(_, v)| v));
+        }
+        let copied = match Value::Array(crate::value::SharedArray::new(values)).detached() {
+            Value::Array(a) => a.to_vec(),
+            _ => Vec::new(),
+        };
+        let (extra_copies, global_copies) = copied.split_at(extra.len().min(copied.len()));
+        let task = TaskContext {
+            program: self.program_arc_for_spawn(program),
+            capabilities: crate::security::current_capabilities(),
+            globals: names.into_iter().zip(global_copies.iter().cloned()).collect(),
+            classes: self.classes.clone(),
+            method_names: self.method_names.clone(),
+        };
+        (WorkerSeed { task, cap: crate::memcap::inherit() }, extra_copies.to_vec())
     }
 
     pub fn new() -> Self {
