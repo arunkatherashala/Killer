@@ -13,6 +13,13 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 CRATE = os.path.dirname(HERE)
 
 DESC = {
+    # polyglot @lang { } blocks (docs/LANGUAGE.md "Polyglot blocks")
+    "polyglot_check": "polyglot_check(lang): true when the language is allowed and its runtime is installed",
+    "polyglot_exec": "polyglot_exec(lang, code): stdout of the block; a non-zero exit is a POLYGLOT_E_EXIT error",
+    "polyglot_exec_args": "what @lang(a, b) { } compiles to: polyglot_exec_args(lang, code, \"a,b\", a, b)",
+    "polyglot_list": "polyglot_list(): installed runtimes with absolute paths and versions",
+    "polyglot_run": "polyglot_run(lang, code): dict of stdout, stderr and code; a non-zero exit is not an error",
+    "polyglot_stream": "polyglot_stream(lang, code): like polyglot_exec, printing lines as they arrive",
     # core / output
     "print": "write values separated by spaces, then a newline (same as println; use stdout_write for no newline)", "println": "write values separated by spaces, then a newline",
     "len": "length of a string, list, dict, set", "length": "alias of len",

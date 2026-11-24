@@ -4,6 +4,48 @@ All notable changes to this repository are summarized here. The crate **version*
 
 ## Unreleased
 
+### Polyglot `@lang { }` blocks hardened (behavior changes)
+
+Details: `docs/LANGUAGE.md` ("Polyglot blocks"), `docs/OPERATIONS.md` (variables), `SOURCE/docs/project/THREAT_MODEL.md`.
+Tests: `tests/polyglot.rs`.
+
+- **Block bodies are verbatim.** They are taken from the source before any Killer rewriting: Python indentation,
+  `//`, `--`, `#` and quotes inside a block now reach the runtime unchanged (before, indentation was stripped and
+  `//` / `--` were removed as Killer comments). The common indentation is removed. Blocks work in expression
+  position (`println(@python { ... })`, `return @python { ... }`).
+- **Timeouts and an output cap.** 60 s per run step (120 s for javac / rustc / gcc compile steps,
+  `KILLER_POLYGLOT_TIMEOUT`) and 8 MiB of stdout + stderr (`KILLER_POLYGLOT_MAX_OUTPUT`); the process tree is killed.
+  Before, a block could run and buffer output forever. A long-running block now needs a larger timeout.
+- **Scrubbed environment.** A block gets only an allowlist of variables (PATH, SYSTEMROOT, TEMP, HOME, ...) plus
+  `KILLER_POLYGLOT_ENV_PASS`; API keys and tokens are no longer inherited. Scripts that relied on `VIRTUAL_ENV`,
+  proxy or custom variables must list them in `KILLER_POLYGLOT_ENV_PASS`. `PYTHONIOENCODING=utf-8` / `PYTHONUTF8=1`
+  are set, so non-ASCII output works on Windows.
+- **Private working directory.** A block runs in a fresh temp directory that is always removed (also after errors
+  and timeouts). Relative paths in a block no longer resolve against the Killer process's directory; use
+  `KILLER_CWD`. stdin is closed.
+- **Absolute runtimes.** Runtimes are resolved once to absolute paths (absolute PATH entries only, never the current
+  directory); `KILLER_POLYGLOT_<LANG>` / `KILLER_PYTHON`-style overrides must be absolute paths. `@bash` no longer
+  falls back to `sh`. `@ts` runs `ts-node` directly (no `npx`, which could download packages). `@lua` detection uses
+  `lua -v`. PowerShell blocks run with `-NoProfile -NonInteractive -ExecutionPolicy Bypass -File` (before, every
+  PowerShell block failed under the default execution policy).
+- **Error codes.** Errors start with `POLYGLOT_E_UNKNOWN_LANG`, `_RUNTIME_MISSING`, `_POLICY_DENIED`, `_TIMEOUT`,
+  `_OUTPUT_LIMIT`, `_SPAWN` or `_EXIT` (`exit code N` plus the last 2 KiB of stderr). The old `Nova Galaxy Engine:`
+  prefix and `python execution failed` texts are gone; the supported-language list in errors comes from the runtime
+  table.
+- **AI assist is opt-in.** A failing block's code and stderr go to the KhLM / LLM backend only with
+  `KILLER_POLYGLOT_AI=1` plus the LLM and network capabilities; the `AI Assassin Assist` text is no longer appended to
+  errors (see `nova_assist_log()`). `nova_assist_set_log` needs the file-write capability; its log stores a SHA-256
+  of the block unless `KILLER_AUDIT_CODE=1`.
+- **Policy.** `killer run` still allows blocks but prints a one-time warning per process unless
+  `KILLER_POLYGLOT_ALLOW` is set; `KILLER_PROFILE=strict|prod` denies blocks unless `KILLER_POLYGLOT_ALLOW=python,...`
+  lists the language; a restricted capability set (no process capability) denies them. Settings are read once, so
+  `env_set` in a script cannot change them.
+- **New:** `@lang(a, b) { }` passes Killer values in as JSON (`KILLER_ARGS`, or `KILLER_ARGS_FILE` above 8 KiB) with
+  variable preludes for Python, Ruby, Node and bash/sh; `polyglot_run(lang, code)` returns `{stdout, stderr, code}`;
+  `KILLER_AUDIT_LOG` writes one JSON line per run; `killer polyglot list [--json]` and
+  `killer doctor [--require a,b]` report runtimes, versions, status and the effective policy.
+- Not built: memory / CPU limits for blocks (Windows would need a new dependency; on Unix wrap `killer` in `ulimit`).
+
 ### Language development line (branch `feature/assistant-ki`)
 
 Status: beta / pre-release. Summarised from `git log --oneline`; the measured numbers are in

@@ -2196,6 +2196,50 @@ for row in profile_report("functions") {
 # expect: 5
 ```
 
+## Polyglot blocks (`@lang { }`)
+
+A block of another language runs with the interpreter or compiler installed on this machine; its stdout (UTF-8,
+invalid bytes replaced, trailing whitespace removed) is the value. The block is not transpiled and does not run in
+the Killer VM.
+
+```text
+x = @python {
+    for i in range(3):
+        print(i // 1)
+}
+println(x)                                   # 0, 1, 2 on three lines
+println(@bash { echo a--b })                 # a block is an expression
+@python { print("statement form prints") }   # alone on a line: the output is printed
+name = "World"
+r = @python(name) { print("Hello " + name) } # pass Killer values in
+d = json_parse(@python { import json; print(json.dumps({"a": 1})) })
+```
+
+* **Verbatim body.** The text between the braces reaches the runtime unchanged except that the common indentation
+  is removed: `//`, `--`, `#`, quotes and indentation are not Killer syntax inside a block. Braces are counted
+  outside `"` strings, so a `}` inside a `'...'` string closes the block early. Lines after a block keep their line
+  numbers in error messages.
+* **Languages:** python (python3), node (js), ts (typescript), ruby, perl, php, lua, r, go, bash, sh, powershell (ps,
+  pwsh), swift, kotlin, scala, elixir, haskell, zig, java, rust, c, cpp (c++). Java, Rust, C and C++ are compiled
+  first; bare statements are wrapped in `main`. The runtime must be installed: `killer polyglot list` shows what is.
+* **Variables:** a block sees no Killer variables unless they are named in the header, `@python(a, b) { }`. The
+  values are passed as a JSON object in the environment variable `KILLER_ARGS` (or, above 8 KiB, in a file named by
+  `KILLER_ARGS_FILE`). Python, Ruby and Node get a one-line prelude that defines `a` and `b` (their error line
+  numbers are one higher); bash and sh get `a='...'` assignments (strings as text, other values as JSON); every other
+  language reads `KILLER_ARGS` itself. Return structured data by printing JSON and calling `json_parse`.
+* **Where it runs:** in a fresh private temp directory that is removed afterwards; `KILLER_CWD` holds the directory
+  Killer was started in. The environment is reduced to an allowlist (see OPERATIONS.md, `KILLER_POLYGLOT_ENV_PASS`).
+* **Limits:** 60 s per run step (twice that for compile steps) and 8 MiB of output; then the process tree is killed.
+* **Errors** are catchable with `try` / `catch` and start with a stable code: `POLYGLOT_E_UNKNOWN_LANG`,
+  `POLYGLOT_E_RUNTIME_MISSING`, `POLYGLOT_E_POLICY_DENIED`, `POLYGLOT_E_TIMEOUT`, `POLYGLOT_E_OUTPUT_LIMIT`,
+  `POLYGLOT_E_SPAWN`, `POLYGLOT_E_EXIT` (with `exit code N` and the last 2 KiB of stderr).
+* **Functions:** `polyglot_exec(lang, code)` (stdout or an error), `polyglot_run(lang, code)` (a dict with `stdout`,
+  `stderr` and `code`; a non-zero exit is not an error), `polyglot_stream(lang, code)` (prints lines as they arrive),
+  `polyglot_check(lang)`, `polyglot_list()`.
+* **Permissions:** blocks need the process capability. `killer run` allows them and warns once per process;
+  `KILLER_PROFILE=strict` denies them unless `KILLER_POLYGLOT_ALLOW` lists the language. A block runs with your OS
+  account's full permissions: it is not a sandbox.
+
 ## Standard library
 
 The full list of registered builtin names, grouped, with one-line descriptions, is in

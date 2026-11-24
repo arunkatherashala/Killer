@@ -649,3 +649,17 @@ fn optional_runtimes_run_when_present() {
         assert_eq!(o.stdout, "42", "{lang}: {}", o.all());
     }
 }
+
+// --- Item 13: docs name every polyglot variable the code reads ----------------------------------
+
+#[test]
+fn operations_doc_lists_every_polyglot_variable() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let ops = std::fs::read_to_string(root.join("docs").join("OPERATIONS.md")).unwrap();
+    let src = std::fs::read_to_string(root.join("src").join("polyglot.rs")).unwrap();
+    for name in ["KILLER_POLYGLOT_ALLOW", "KILLER_PROFILE", "KILLER_POLYGLOT_TIMEOUT", "KILLER_POLYGLOT_MAX_OUTPUT", "KILLER_POLYGLOT_ENV_PASS", "KILLER_POLYGLOT_AI", "KILLER_AUDIT_LOG", "KILLER_AUDIT_CODE"] {
+        assert!(src.contains(&format!("\"{}\"", name)), "{name} is documented but not read in src/polyglot.rs");
+        assert!(ops.contains(&format!("`{}`", name)), "{name} is read in src/polyglot.rs but not documented in OPERATIONS.md");
+    }
+    assert!(ops.contains("KILLER_POLYGLOT_<LANG>"));
+}

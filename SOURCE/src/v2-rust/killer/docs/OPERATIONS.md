@@ -38,6 +38,28 @@ Read in the source (`grep 'env::var("KILLER_'`) or by the installers. Booleans: 
 | `KILLER_KHLM_LLM_API_KEY` | unset | API key for the KhLM router's LLM tier | secret in the environment |
 | `KILLER_TLS_DEBUG` | off (any value turns on) | trace the TLS server helper | may log connection details to stderr |
 
+### Polyglot blocks (`@lang { }`)
+
+Read once from the environment at first use; a script's `env_set` cannot change them. Details: LANGUAGE.md
+"Polyglot blocks", threat model "Polyglot blocks".
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `KILLER_POLYGLOT_ALLOW` | unset | comma list of languages allowed (`python,bash`; aliases count: `js` = `node`), `all` / `*`, or `none`. When set, nothing else is allowed and the one-time warning is not printed |
+| `KILLER_PROFILE` | unset | `strict`, `prod` or `production`: polyglot blocks are denied unless `KILLER_POLYGLOT_ALLOW` lists the language |
+| `KILLER_POLYGLOT_TIMEOUT` | 60 (s) | wall-clock limit of a block's run step; compile steps (javac, rustc, gcc) get twice this. Fractions allowed; `0` = no limit. On expiry the process tree is killed and the error is `POLYGLOT_E_TIMEOUT` |
+| `KILLER_POLYGLOT_MAX_OUTPUT` | 8388608 (bytes) | cap on stdout + stderr of one step; above it the process tree is killed (`POLYGLOT_E_OUTPUT_LIMIT`) |
+| `KILLER_POLYGLOT_ENV_PASS` | unset | comma list of extra environment variables passed to blocks. Otherwise a block only gets `PATH`, `SYSTEMROOT`, `SystemDrive`, `TEMP`, `TMP`, `TMPDIR`, `HOME`, `USERPROFILE`, `LANG`, `LC_ALL`, `TZ`, `RUSTUP_HOME`, `CARGO_HOME`, `RUSTUP_TOOLCHAIN`, the OS basics (Windows: `WINDIR`, `COMSPEC`, `PATHEXT`, `ProgramFiles*`, `ProgramData`, `APPDATA`, `LOCALAPPDATA`, `NUMBER_OF_PROCESSORS`, `PROCESSOR_ARCHITECTURE`, `OS`, `USERNAME`; Unix: `USER`, `LOGNAME`), plus `PYTHONIOENCODING=utf-8`, `PYTHONUTF8=1`, `KILLER_CWD` and `KILLER_ARGS` / `KILLER_ARGS_FILE` |
+| `KILLER_POLYGLOT_AI` | off | send a failing block's code and stderr to the AI assist layer (also needs the LLM and network capabilities); the suggestion goes to `nova_assist_log()` |
+| `KILLER_POLYGLOT_<LANG>` | PATH search, absolute only | absolute path of the runtime for one language (`KILLER_POLYGLOT_PYTHON`, `KILLER_POLYGLOT_JAVA`, `KILLER_POLYGLOT_JAVAC`, `KILLER_POLYGLOT_CPP`, ...); a relative path is an error. Short forms `KILLER_PYTHON`, `KILLER_NODE`, `KILLER_BASH`, `KILLER_SH`, `KILLER_RUBY`, `KILLER_PERL`, `KILLER_PHP`, `KILLER_LUA` |
+| `KILLER_AUDIT_LOG` | unset | append one JSON line per block run (ts in ms, pid, lang, exe, version, code_sha256, code_len, duration_ms, exit_code, outcome) to this file (0600 on Unix). No rotation: use logrotate |
+| `KILLER_AUDIT_CODE` | off | include the block source in audit lines and the assist log (otherwise only its SHA-256) |
+
+`killer polyglot list [--json]` shows every language with its status (`ok`, `missing`, `denied`), absolute path,
+version and override variable; `killer doctor [--require python,bash]` also prints the effective policy and limits
+and exits 1 when a required language is missing or denied. Memory limits are not built: on Unix wrap the process
+(`sh -c 'ulimit -v 1048576; exec killer run app.killer'`); on Windows there is no equivalent without a new dependency.
+
 ### Resource limits
 
 | Variable | Default | Meaning |

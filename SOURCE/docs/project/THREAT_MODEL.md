@@ -23,6 +23,7 @@ test file, not re-run for this document. Killer itself has not been independentl
 | Network peers (HTTP/WebSocket/TLS clients, registry, LLM providers, MCP clients) | no | |
 | Text passed to `eval`/`exec` | as trusted as the caller | inherits all of the caller's capabilities |
 | Helper programs `openssl`, `curl`, `git`, `powershell` | trusted, found via absolute PATH lookup | |
+| Runtimes started by `@lang { }` polyglot blocks (`python3`, `bash`, `javac`, `rustc`, ...) | trusted, found via absolute PATH lookup or `KILLER_POLYGLOT_<LANG>` | the block's code runs **outside** the Killer VM with the OS account's full powers; see "Polyglot blocks" below |
 
 ## Attacker models
 
@@ -55,6 +56,11 @@ test file, not re-run for this document. Killer itself has not been independentl
 | WebSocket abuse | 64 MB message cap, control-frame limits, Origin check option | unit tests in `src/` socket code; `tests/sockets.rs` | origin check is opt-in per `ws_accept` |
 | Memory leaks in long runs (cycles, generators) | cycle collection | `tests/memory_soak.rs` | only the cases tested |
 | Data races in tasks | tasks get deep copies; channels and mutex cells | `tests/concurrency_stress.rs`, `tests/thread_safety.rs` | tested by stress, not proven |
+| Polyglot block hangs or floods output | wall-clock timeout (`KILLER_POLYGLOT_TIMEOUT`, 60 s run / 120 s compile) and output cap (`KILLER_POLYGLOT_MAX_OUTPUT`, 8 MiB); the process tree is killed (Unix process group, Windows `taskkill /T`) | `tests/polyglot.rs` (`timeout_kills_python_and_is_catchable`, `bash_sleep_timeout_kills_the_process_tree`, `output_cap_stops_a_flood`) | a grandchild that leaves its process group / job survives; no memory or CPU limit (see below) |
+| Polyglot block reads secrets from the environment | child environment cleared and rebuilt from an allowlist; `KILLER_POLYGLOT_ENV_PASS` for explicit pass-through | `tests/polyglot.rs` (`env_is_scrubbed_and_pass_through_is_explicit`) | the child can still read every file the user can (`~/.aws`, `.env`); hygiene, not a boundary |
+| Planted `python3` / `bash` in cwd or a relative PATH entry | runtimes resolved once to absolute paths from the startup PATH snapshot, cwd and relative entries skipped; overrides must be absolute | `tests/polyglot.rs` (`planted_runtime_in_a_relative_path_entry_is_not_run`, Unix), unit test `tool_path::tests::relative_and_current_directory_entries_are_skipped` | a writable directory already on the startup PATH |
+| Polyglot blocks where none are wanted | policy: process capability, `KILLER_POLYGLOT_ALLOW`, `KILLER_PROFILE=strict` (default deny); checked before any runtime is probed | `tests/polyglot.rs` (`allow_list_admits_only_the_listed_languages`, `allow_none_and_strict_profile_deny`), `tests/capabilities.rs` | `killer run` default is allow (with a one-time warning) |
+| Block code and stderr sent to an LLM provider | AI assist is opt-in (`KILLER_POLYGLOT_AI=1`) and needs the LLM and network capabilities; never for timeouts, denials or missing runtimes | unit tests `polyglot::tests::ai_assist_needs_opt_in_capabilities_and_a_block_failure`, `tests/polyglot.rs` (`errors_carry_no_ai_boilerplate`) | once opted in, the code and stderr of failing blocks leave the machine |
 | `http_download` writes to sensitive paths | canonical-path destination policy | commit 954ba86; unit tests in `src/` | list of protected locations is not exhaustive |
 
 ## What the controls do NOT protect
@@ -63,15 +69,42 @@ test file, not re-run for this document. Killer itself has not been independentl
 * **`eval`/`exec` run with the caller's powers.** The limits stop accidents and runaway code, not a determined attacker.
 * **Memory cap only with the allocator.** Without `CountingAlloc` there is no live-memory check.
 * **`panic=abort`.** A panic anywhere ends the process; a server has no supervisor built in.
+* **Polyglot blocks are not sandboxed.** `@python { }` and friends run an installed interpreter as a subprocess
+  with the OS account's permissions. The trust boundary is the user's OS account: the block can read and write any
+  file the user can, open network connections and start programs. The capability flags `allow_network` and
+  `allow_file_*` do not apply inside the block (only `allow_process_spawn` decides whether it starts at all). The
+  environment scrub, private working directory, timeout and output cap are hygiene and accident protection, not a
+  security boundary. There is no memory or CPU limit (on Unix an operator can wrap `killer` in `ulimit -v`; Windows
+  would need a Job Object, which needs a new dependency, so it is not built).
 * **External helper programs.** `curl`, `openssl`, `git` (and `powershell` on Windows) are trusted; a compromised one defeats TLS and HTTP safety.
 * **No signatures** on release binaries, packages, or scripts. Checksums only detect tampering if the expected hash comes from an independent place.
 * **No secrets management**: environment variables and files holding keys are readable by any script with those capabilities.
 * **No audit logging, authentication or authorization** for servers written in Killer.
 * The old planned features in `SECURITY.md` ("Planned" section: `@permission`, `--sandbox`, code signing) are **not built**.
 
+## Polyglot blocks
+
+What runs: the block body (taken verbatim from the source) in a file in a fresh 0700 temp directory, by a runtime
+resolved to an absolute path. Defaults and switches are in [OPERATIONS.md](../../src/v2-rust/killer/docs/OPERATIONS.md).
+
+* Policy order for every block: unknown language (error), process capability, `KILLER_POLYGLOT_ALLOW`,
+  `KILLER_PROFILE=strict|prod` (default deny), then the one-time warning for the default allow. All are decided
+  before any runtime is probed or started.
+* Settings are read from the environment snapshot taken at first use (or just before the first `env_set`), so a
+  script cannot widen the policy, raise the limits or turn on AI assist by changing its own environment.
+* Data egress: the AI assist layer sends a failing block's code and stderr to the configured KhLM / LLM backend
+  only with `KILLER_POLYGLOT_AI=1` and both the LLM and network capabilities.
+* Audit: `KILLER_AUDIT_LOG` records every run (language, absolute runtime path, version, SHA-256 of the code, exit
+  code, outcome); the code only with `KILLER_AUDIT_CODE=1`, the output never. The log is not tamper-evident.
+* Minimal deployment for scripts that need polyglot: an image with only `python3` and `bash`, read-only root file
+  system, a non-root user, no network (`docker run --read-only --tmpfs /tmp --user 1000 --network none`),
+  `KILLER_PROFILE=strict` and `KILLER_POLYGLOT_ALLOW=python,bash`.
+
 ## Known gaps
 
 * Registry client and raw Ollama client bypass the SSRF guard.
 * No fuzzing in CI beyond the seeded short runs in `tests/robustness.rs`; long runs are `#[ignore]`.
 * Socket builtins (`tcp_connect`, `udp_send`) have no destination filter.
+* Polyglot blocks: no memory / CPU limits, no per-block network or file restriction, daemonized grandchildren can
+  survive the process-tree kill.
 * No dependency-vulnerability scan is run from this document's checks (CI has a `cargo audit` step per the tracker; not verified here).
