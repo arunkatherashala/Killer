@@ -2,6 +2,7 @@
 """Count panic sites (.unwrap(), .expect(, panic!, unreachable!, todo!, unimplemented!)
 in NON-test Rust code.
 
+A parser-style `self.expect(...)` method call is not counted (it returns a Result).
 Comments, string/char literals, #[cfg(test)] / #[test] items, tests/, benches/ and
 archive/ are ignored.
 
@@ -23,7 +24,7 @@ if hasattr(sys.stdout, "reconfigure"):
 
 PATTERNS = {
     "unwrap": re.compile(r"\.unwrap\(\)"),
-    "expect": re.compile(r"\.expect\("),
+    "expect": re.compile(r"(?<!self)\.expect\("),
     "panic": re.compile(r"\bpanic!"),
     "unreachable": re.compile(r"\bunreachable!"),
     "todo": re.compile(r"\btodo!"),
