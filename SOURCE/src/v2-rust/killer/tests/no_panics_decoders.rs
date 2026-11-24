@@ -43,7 +43,7 @@ where
 }
 
 fn sample_kore() -> Vec<u8> {
-    let dir = std::env::temp_dir().join(format!("killer_fuzz_kore_{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("killer_fuzz_kore_{}_{}", std::process::id(), { static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0); N.fetch_add(1, std::sync::atomic::Ordering::SeqCst) }));
     std::fs::create_dir_all(&dir).unwrap();
     let csv = dir.join("s.csv");
     let kore = dir.join("s.kore");
