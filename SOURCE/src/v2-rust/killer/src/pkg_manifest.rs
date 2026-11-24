@@ -144,8 +144,15 @@ fn parse_checksums(t: Option<&Table>) -> Result<Vec<(String, String, String)>, S
     let mut out = Vec::new();
     for (key, v) in &t.entries {
         let (name, ver) = key.split_once('@').ok_or_else(|| format!("killer.toml: [checksums] key '{}' must look like \"name@1.2.3\"", key))?;
-        if !valid_name(name) || Version::parse(ver).is_err() {
-            return Err(format!("killer.toml: [checksums] key '{}' must look like \"name@1.2.3\"", key));
+        let parsed = match Version::parse(ver) {
+            Ok(v) if valid_name(name) => v,
+            _ => return Err(format!("killer.toml: [checksums] key '{}' must look like \"name@1.2.3\"", key)),
+        };
+        // Pins are matched against the locked version by exact text, so a form that parses but is not canonical
+        // ("01.0.0", "1.0.0+b", " 1.0.0") would validate and then never match: an integrity pin that is
+        // silently ignored. Refuse it and say what to write instead.
+        if parsed.to_string() != ver {
+            return Err(format!("killer.toml: [checksums] key '{}' is not in canonical form; write \"{}@{}\"", key, name, parsed));
         }
         let hash = match v {
             Value::Str(s) => s.trim().to_ascii_lowercase(),
@@ -309,6 +316,25 @@ mod tests {
         assert!(Manifest::parse("[package]\nname = \"../evil\"\n").unwrap_err().contains("invalid package name"));
         let e = Manifest::parse("[package]\nname = \"a\"\n[dependencies]\nb = \"^x\"\n").unwrap_err();
         assert!(e.contains("dependency 'b'") && e.contains("invalid version requirement"), "{e}");
+    }
+
+    #[test]
+    fn non_canonical_checksum_versions_are_refused_not_ignored() {
+        let h = "a".repeat(64);
+        for bad in ["01.0.0", "1.0.0+build", "1.00.0"] {
+            let e = Manifest::parse(&format!("[package]
+name = \"a\"
+[checksums]
+\"dep@{bad}\" = \"{h}\"
+")).unwrap_err();
+            assert!(e.contains("canonical form") && e.contains("dep@1.0.0"), "{bad}: {e}");
+        }
+        let m = Manifest::parse(&format!("[package]
+name = \"a\"
+[checksums]
+\"dep@1.0.0\" = \"{h}\"
+")).unwrap();
+        assert_eq!(m.pinned("dep", "1.0.0"), Some(h.as_str()));
     }
 
     #[test]

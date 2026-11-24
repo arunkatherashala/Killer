@@ -11,7 +11,12 @@
 //! * JSON nesting deeper than 64 levels is rejected;
 //! * `killer_run` has a wall-clock budget (`KILLER_MCP_RUN_TIMEOUT_S`, default 30 s; the child is killed) and its
 //!   captured output is capped at 1 MiB;
-//! * tool calls run on a worker thread with a large stack under `catch_unwind`: a compiler panic is an error result;
+//! * tool calls run on a worker thread with a large stack and the join result is checked, so a compiler panic is
+//!   answered with an error result *only in a build that unwinds* (the dev and test profiles). The release profile
+//!   sets `panic = "abort"`, where a panic ends the whole server process and this isolation is inert;
+//! * framing: headers are `Name: value` lines in any order (names case-insensitive, unknown ones such as
+//!   `Content-Type` ignored); a missing or unparsable `Content-Length` cannot be framed, so the error is
+//!   answered and the connection is closed rather than guessing where the next message starts;
 //! * optional token: when `KILLER_MCP_TOKEN` is set, every request must carry it as `params._meta.token` (or a
 //!   top-level `token`), otherwise it is answered with error -32001. stdio MCP has no transport authentication,
 //!   so set it when the server is reachable by anything but the launching client.
@@ -61,8 +66,9 @@ fn main() -> io::Result<()> {
                 continue;
             }
             Incoming::BadHeader(e) => {
-                write_error(&mut stdout, None, -32700, &format!("bad header: {e}"))?;
-                continue;
+                // the body that follows cannot be framed, so reading on would take it for a request: report and close
+                write_error(&mut stdout, None, -32700, &format!("bad header: {e}; closing the connection"))?;
+                break;
             }
         };
         let v = match minjson::parse(raw.trim()) {
@@ -217,22 +223,61 @@ fn read_mcp_message<R: BufRead>(r: &mut R) -> io::Result<Incoming> {
         if t.is_empty() {
             continue;
         }
-        if let Some(rest) = t.strip_prefix("Content-Length:") {
-            let n: usize = match rest.trim().parse() {
-                Ok(n) => n,
-                Err(e) => return Ok(Incoming::BadHeader(format!("Content-Length: {e}"))),
-            };
-            let _ = read_line_capped(r)?; // the blank line after the header
-            if n > MAX_BODY {
-                // never allocate it; the caller discards the body after replying
-                return Ok(Incoming::TooLarge(n, n as u64));
-            }
-            let mut buf = vec![0u8; n];
-            r.read_exact(&mut buf)?;
-            return Ok(Incoming::Msg(String::from_utf8_lossy(&buf).into_owned()));
+        if header_line(t).is_none() {
+            // a bare JSON line (no framing)
+            return Ok(Incoming::Msg(t.to_string()));
         }
-        return Ok(Incoming::Msg(t.to_string()));
+        // a header block: `Name: value` lines (any order, names case-insensitive, unknown ones ignored) up to a blank line
+        let mut len: Option<Result<usize, String>> = None;
+        let mut line = t.to_string();
+        let mut count = 0;
+        loop {
+            if let Some((name, value)) = header_line(&line) {
+                if name.eq_ignore_ascii_case("content-length") {
+                    let parsed = value.parse::<usize>().map_err(|e| format!("Content-Length: {e}"));
+                    len = match (len, parsed) {
+                        (Some(Ok(a)), Ok(b)) if a != b => Some(Err("conflicting Content-Length headers".to_string())),
+                        (Some(Err(e)), _) => Some(Err(e)),
+                        (_, p) => Some(p),
+                    };
+                }
+            }
+            count += 1;
+            let (next, too_long) = match read_line_capped(r)? {
+                None => return Ok(Incoming::Eof),
+                Some(x) => x,
+            };
+            if too_long {
+                return Ok(Incoming::TooLarge(MAX_BODY + 1, 0));
+            }
+            line = next.trim().to_string();
+            if line.is_empty() {
+                break;
+            }
+            if count >= 64 {
+                return Ok(Incoming::BadHeader("too many header lines".into()));
+            }
+        }
+        let n = match len {
+            Some(Ok(n)) => n,
+            Some(Err(e)) => return Ok(Incoming::BadHeader(e)),
+            None => return Ok(Incoming::BadHeader("missing Content-Length".into())),
+        };
+        if n > MAX_BODY {
+            // never allocate it; the caller discards the body after replying
+            return Ok(Incoming::TooLarge(n, n as u64));
+        }
+        let mut buf = vec![0u8; n];
+        r.read_exact(&mut buf)?;
+        return Ok(Incoming::Msg(String::from_utf8_lossy(&buf).into_owned()));
     }
+}
+
+/// `Name: value` when `t` is an HTTP/LSP-style header line (the name is a token: JSON text never is one).
+fn header_line(t: &str) -> Option<(&str, &str)> {
+    let (name, value) = t.split_once(':')?;
+    let token = !name.is_empty() && name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_');
+    token.then(|| (name, value.trim()))
 }
 
 fn write_framed<W: Write>(w: &mut W, body: &str) -> io::Result<()> {
@@ -398,6 +443,27 @@ fn killer_native_binary() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(name))
 }
 
+/// A temp script that is deleted when dropped.
+struct TempScript(PathBuf);
+
+impl Drop for TempScript {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.0);
+    }
+}
+
+const MIN_RUN_TIMEOUT_S: f64 = 0.1;
+const MAX_RUN_TIMEOUT_S: f64 = 3600.0;
+
+/// The `killer_run` wall-clock budget in seconds from `KILLER_MCP_RUN_TIMEOUT_S`: a finite positive number clamped to
+/// 0.1..=3600; anything else (unset, empty, `inf`, `NaN`, zero, negative, junk) is the default. Never panics in
+/// `Duration::from_secs_f64`.
+fn run_budget_secs(raw: Option<&str>) -> f64 {
+    raw.and_then(|s| s.trim().parse::<f64>().ok())
+        .filter(|s| s.is_finite() && *s > 0.0)
+        .map_or(DEFAULT_RUN_TIMEOUT_S as f64, |s| s.clamp(MIN_RUN_TIMEOUT_S, MAX_RUN_TIMEOUT_S))
+}
+
 /// Run `killer-native` on a script; capture combined output for MCP.
 fn execute_killer_subprocess(source: Option<&str>, path: Option<&str>) -> Result<String, String> {
     let bin = killer_native_binary();
@@ -408,13 +474,17 @@ fn execute_killer_subprocess(source: Option<&str>, path: Option<&str>) -> Result
         ));
     }
 
+    let mut temp_guard: Option<TempScript> = None;
     let arg_path: PathBuf = match (source, path) {
         (Some(src), None) => {
             let tmp = std::env::temp_dir().join(format!(
                 "killer_mcp_{}.killer",
                 std::process::id()
             ));
+            // the guard removes the file on every exit path, including an early return or a panic
+            let guard = TempScript(tmp.clone());
             fs::write(&tmp, src).map_err(|e| format!("temp write: {e}"))?;
+            temp_guard = Some(guard);
             tmp
         }
         (None, Some(p)) => {
@@ -436,16 +506,9 @@ fn execute_killer_subprocess(source: Option<&str>, path: Option<&str>) -> Result
         }
     };
 
-    let budget = std::env::var("KILLER_MCP_RUN_TIMEOUT_S")
-        .ok()
-        .and_then(|s| s.trim().parse::<f64>().ok())
-        .filter(|s| *s > 0.0)
-        .unwrap_or(DEFAULT_RUN_TIMEOUT_S as f64);
+    let budget = run_budget_secs(std::env::var("KILLER_MCP_RUN_TIMEOUT_S").ok().as_deref());
     let run = run_with_budget(&bin, &arg_path, std::time::Duration::from_secs_f64(budget));
-
-    if source.is_some() {
-        let _ = fs::remove_file(&arg_path);
-    }
+    drop(temp_guard);
     let (status, stdout, stderr, timed_out) = run?;
     if timed_out {
         return Err(format!("killer_run exceeded its {budget} s budget and was killed (KILLER_MCP_RUN_TIMEOUT_S)"));
@@ -528,8 +591,9 @@ fn run_with_budget(
     Ok((status, stdout, stderr, timed_out))
 }
 
-/// Run a tool call on a worker thread with a big stack and catch panics: a compiler bug or very deep source must
-/// not take the server down.
+/// Run a tool call on a worker thread with a big stack and turn a panic into an error result: a compiler bug or very
+/// deep source must not take the server down. This only works when panics unwind; under `panic = "abort"` (the
+/// release profile) the process ends at the panic and `join` never returns `Err`.
 fn guarded_tool_call(params: Option<&Json>) -> Json {
     let owned = params.cloned();
     let worker = std::thread::Builder::new().stack_size(256 * 1024 * 1024).spawn(move || handle_tool_call(owned.as_ref()));
@@ -602,5 +666,52 @@ fn handle_tool_call(params: Option<&Json>) -> Json {
             }
         }
         other => tool_text(format!("unknown tool: {other}"), true),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn run_budget_is_always_finite_and_in_range() {
+        assert_eq!(run_budget_secs(None), 30.0);
+        assert_eq!(run_budget_secs(Some("2")), 2.0);
+        assert_eq!(run_budget_secs(Some(" 1.5 ")), 1.5);
+        assert_eq!(run_budget_secs(Some("1e300")), MAX_RUN_TIMEOUT_S);
+        assert_eq!(run_budget_secs(Some("100000")), MAX_RUN_TIMEOUT_S);
+        assert_eq!(run_budget_secs(Some("0.0001")), MIN_RUN_TIMEOUT_S);
+        for junk in ["inf", "-inf", "NaN", "0", "-3", "", "abc"] {
+            assert_eq!(run_budget_secs(Some(junk)), 30.0, "{junk}");
+        }
+    }
+
+    fn read(bytes: &[u8]) -> Vec<String> {
+        let mut r = io::BufReader::new(bytes);
+        let mut out = Vec::new();
+        loop {
+            match read_mcp_message(&mut r).unwrap() {
+                Incoming::Msg(m) => out.push(m),
+                Incoming::Eof => return out,
+                Incoming::BadHeader(e) => {
+                    out.push(format!("BAD {e}"));
+                    return out;
+                }
+                Incoming::TooLarge(n, _) => {
+                    out.push(format!("BIG {n}"));
+                    return out;
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn headers_are_parsed_case_insensitively_in_any_order() {
+        assert_eq!(read(b"content-length: 2\r\n\r\nab"), ["ab"]);
+        assert_eq!(read(b"Content-Type: x\r\nCONTENT-LENGTH:3\r\n\r\nabc"), ["abc"]);
+        assert_eq!(read(b"Content-Length: 1\r\nX: y\r\n\r\na\n{\"k\":1}\n"), ["a", "{\"k\":1}"]);
+        assert!(read(b"Content-Length: 1\r\nContent-Length: 2\r\n\r\nab")[0].starts_with("BAD"));
+        assert!(read(b"Content-Length: -1\r\n\r\n")[0].starts_with("BAD"));
+        assert!(read(b"X: 1\r\n\r\n")[0].starts_with("BAD missing"));
     }
 }

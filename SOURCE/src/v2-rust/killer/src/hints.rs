@@ -228,6 +228,17 @@ mod tests {
         assert!(floor_division_hint("// just a comment").is_none());
         assert!(floor_division_hint("s = \"a // b\" + (1").is_none());
     }
+
+    #[test]
+    fn prefixed_single_quote_strings_hide_their_slashes() {
+        // `//` inside f'..' / k'..' is string text, not a comment, so no false hint even with a bracket open
+        assert!(floor_division_hint("s = (f'a//b2'").is_none());
+        assert!(floor_division_hint("s = (k'a//b2'").is_none());
+        assert!(floor_division_hint("s = f'a//b'").is_none());
+        // a real floor division after such a string still gets the hint
+        assert!(floor_division_hint("x = (f'ab' + a // 2").is_some());
+        assert!(floor_division_hint("x = (n // 2").is_some());
+    }
 }
 
 /// The message for a `x--` that was meant as a decrement.

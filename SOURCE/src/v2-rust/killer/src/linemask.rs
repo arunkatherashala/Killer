@@ -37,6 +37,17 @@ fn prev_is_word(src: &str, i: usize) -> bool {
     src[..i].chars().next_back().map_or(false, |c| c.is_alphanumeric())
 }
 
+/// True when the quote at `i` is glued to a string prefix (`f'..'`, `k'..'`, either case) that is itself a whole
+/// word: the sugar pass turns `f'` into `k"` and the compiler reads `k'..'` as a string, so the mask must too.
+/// A letter that ends a longer word (`if'`, `don't`) is not a prefix.
+fn prefix_before(src: &str, i: usize) -> bool {
+    let mut it = src[..i].chars().rev();
+    match it.next() {
+        Some('f' | 'F' | 'k' | 'K') => it.next().map_or(true, |c| !(c.is_alphanumeric() || c == '_')),
+        _ => false,
+    }
+}
+
 /// The strings and comments in `src`, in order. `src` may be one line or a whole file: a `"` or backtick string can
 /// run over line breaks (so a triple-quoted block is covered), a `'` string and a comment end at the line break.
 pub fn spans(src: &str) -> Vec<Span> {
@@ -73,7 +84,7 @@ pub fn spans(src: &str) -> Vec<Span> {
             i = end;
             continue;
         }
-        if c == b'"' || c == b'`' || (c == b'\'' && !prev_is_word(src, i)) {
+        if c == b'"' || c == b'`' || (c == b'\'' && (!prev_is_word(src, i) || prefix_before(src, i))) {
             let q = c;
             let mut j = i + 1;
             let mut end = None;
@@ -265,6 +276,21 @@ mod tests {
         // a lone quote that is never closed on its line is an apostrophe, not a string to the end of the text
         assert_eq!(code("fn f<'a>(x) { y }"), "fn f<'a>(x) { y }");
         assert_eq!(src_mask("x = 'a\ny = 2 // c"), format!("x = 'a\ny = 2 {}", sp(4)));
+    }
+
+    #[test]
+    fn prefixed_single_quote_strings_are_strings() {
+        assert_eq!(code("s = f'a]b' + t[1]"), format!("s = f{} + t[1]", sp(5)));
+        assert_eq!(code("s = k'a//b'"), format!("s = k{}", sp(6)));
+        assert_eq!(code("s = F'a]b'"), format!("s = F{}", sp(5)));
+        assert_eq!(code("s = K'x'"), format!("s = K{}", sp(3)));
+        assert_eq!(comment_start("s = f'a//b'"), None);
+        assert_eq!(comment_start("s = f'a//b' // c"), Some(12));
+        assert_eq!(code("f('x[')"), format!("f({})", sp(4)));
+        // not prefixes: the letter ends a longer word
+        assert_eq!(code("if'a"), "if'a");
+        assert_eq!(code("of's] x'"), "of's] x'");
+        assert_eq!(code("x = 1 // don't"), format!("x = 1 {}", sp(8)));
     }
 
     #[test]

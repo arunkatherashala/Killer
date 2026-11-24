@@ -61,7 +61,9 @@ impl OpenAIProvider {
     }
 
     /// Attempt a real HTTPS call to the OpenAI-compatible chat endpoint.
-    /// Returns `None` when no API key is available so the caller can fall back.
+    /// Returns `None` when no API key is available so the caller can fall back. The `Ok` value is the raw JSON
+    /// response body, exactly like the simulated one: [`Self::parse_chat_response`] is the only place that
+    /// extracts the message text.
     fn try_real_chat(&self, body: &str) -> Option<Result<String, String>> {
         let api_key = self.resolve_api_key()?;
         let spec = self.build_chat_spec(&api_key, body);
@@ -70,12 +72,7 @@ impl OpenAIProvider {
             Err(e) => return Some(Err(format!("OpenAI request failed: {}", e))),
         };
 
-        // Extract choices[0].message.content from JSON via string searching
-        if let Some(content) = extract_json_content_value(&body_str) {
-            Some(Ok(content))
-        } else {
-            Some(Err(format!("Failed to parse OpenAI response: {}", body_str)))
-        }
+        Some(Ok(body_str))
     }
 
     /// Make HTTP request to OpenAI
@@ -145,14 +142,11 @@ impl OpenAIProvider {
 
     /// Parse JSON response
     fn parse_chat_response(&self, response: &str) -> Result<String, String> {
-        // Simple JSON parsing for testing
-        if let Some(start) = response.find("\"content\": \"") {
-            let start = start + 12;
-            if let Some(end) = response[start..].find("\"") {
-                return Ok(response[start..start + end].to_string());
-            }
-        }
-        Err("Failed to parse response".to_string())
+        // choices[0].message.content from the raw response body (handles whitespace and escapes)
+        extract_json_content_value(response).ok_or_else(|| {
+            let shown: String = response.chars().take(300).collect();
+            format!("Failed to parse OpenAI response: {}", shown)
+        })
     }
 }
 
@@ -384,5 +378,67 @@ mod tests {
 
         let no_content = r#"{"error":"something"}"#;
         assert_eq!(extract_json_content_value(no_content), None);
+    }
+
+    /// A one-shot fake chat endpoint on a port in 20000..32000; returns (port, handle giving the request text).
+    fn fake_chat_server(reply_body: &'static str) -> (u16, std::thread::JoinHandle<String>) {
+        use std::io::{Read, Write};
+        let base = 20000 + (std::process::id() % 11000) as u16;
+        let (listener, port) = (0..1000u16)
+            .find_map(|k| {
+                let port = 20000 + (base - 20000 + k * 7) % 12000;
+                std::net::TcpListener::bind(("127.0.0.1", port)).ok().map(|l| (l, port))
+            })
+            .expect("no free port in 20000..32000");
+        let h = std::thread::spawn(move || {
+            let (mut sock, _) = listener.accept().unwrap();
+            sock.set_read_timeout(Some(std::time::Duration::from_secs(20))).unwrap();
+            let mut req = Vec::new();
+            let mut buf = [0u8; 4096];
+            loop {
+                let n = sock.read(&mut buf).unwrap_or(0);
+                req.extend_from_slice(&buf[..n]);
+                let text = String::from_utf8_lossy(&req).into_owned();
+                if let Some(at) = text.find("\r\n\r\n") {
+                    let want = text.to_ascii_lowercase().split("content-length:").nth(1)
+                        .and_then(|r| r.trim_start().split(|c: char| !c.is_ascii_digit()).next().and_then(|d| d.parse::<usize>().ok()))
+                        .unwrap_or(0);
+                    if text.len() >= at + 4 + want {
+                        break;
+                    }
+                }
+                if n == 0 {
+                    break;
+                }
+            }
+            let resp = format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", reply_body.len(), reply_body);
+            let _ = sock.write_all(resp.as_bytes());
+            let _ = sock.flush();
+            String::from_utf8_lossy(&req).into_owned()
+        });
+        (port, h)
+    }
+
+    /// With a real key, generate() used to fail every time: try_real_chat returned the extracted text and
+    /// parse_chat_response then searched that text for the literal `"content": "`.
+    #[test]
+    fn generate_with_a_key_returns_the_message_text_from_the_server() {
+        let (port, server) = fake_chat_server(r#"{"id":"c1","choices":[{"index":0,"message":{"role":"assistant","content":"pong \"quoted\" ok"},"finish_reason":"stop"}]}"#);
+        let provider = OpenAIProvider::new().with_api_key("sk-test-fake".into()).with_base_url(&format!("http://127.0.0.1:{port}/v1"));
+        let out = provider.generate("ping", "gpt-4", 0.0, 10);
+        let request = server.join().unwrap();
+        assert_eq!(out.unwrap(), "pong \"quoted\" ok");
+        assert!(request.starts_with("POST /v1/chat/completions"), "{request}");
+        assert!(request.to_ascii_lowercase().contains("authorization: bearer sk-test-fake"), "{request}");
+        assert!(request.contains("ping"), "{request}");
+    }
+
+    #[test]
+    fn an_unparsable_reply_is_a_clear_error() {
+        let (port, server) = fake_chat_server(r#"{"error":{"message":"bad key"}}"#);
+        let provider = OpenAIProvider::new().with_api_key("sk-test-fake".into()).with_base_url(&format!("http://127.0.0.1:{port}/v1"));
+        let err = provider.generate("ping", "gpt-4", 0.0, 10).unwrap_err();
+        let _ = server.join();
+        assert!(err.contains("Failed to parse OpenAI response") && err.contains("bad key"), "{err}");
     }
 }
