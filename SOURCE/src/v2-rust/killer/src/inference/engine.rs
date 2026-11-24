@@ -30,6 +30,12 @@ impl ArchType {
         }
     }
 
+    /// RoPE pairing: true = NEOX style (rotate element i with i + head_dim/2: Qwen2, Phi,
+    /// Gemma), false = interleaved (i, i+1: LLaMA/Mistral, whose GGUF Q/K are pre-permuted).
+    pub fn rope_neox(&self) -> bool {
+        matches!(self, ArchType::Qwen2 | ArchType::Phi | ArchType::Gemma)
+    }
+
     /// Whether this architecture uses QKV attention biases.
     /// Qwen2 and Phi-3 add learned bias vectors to Q, K, V projections.
     pub fn has_qkv_bias(&self) -> bool {
@@ -822,8 +828,8 @@ impl KillerInference {
                                          kv_dim, cfg.n_embd);
 
         // Apply RoPE positional encoding to Q and K
-        let q = rope(&q, pos, cfg.n_heads,    hd, cfg.rope_theta);
-        let k = rope(&k, pos, cfg.n_kv_heads, hd, cfg.rope_theta);
+        let q = rope(&q, pos, cfg.n_heads,    hd, cfg.rope_theta, cfg.arch.rope_neox());
+        let k = rope(&k, pos, cfg.n_kv_heads, hd, cfg.rope_theta, cfg.arch.rope_neox());
 
         // Write current K/V into cache (guard against pos >= kv_cap)
         let stride = cfg.n_kv_heads * hd;
@@ -1011,18 +1017,22 @@ fn softmax(x: &[f32]) -> Vec<f32> {
 fn silu(x: f32) -> f32 { x / (1.0 + (-x).exp()) }
 
 /// Rotary Position Embedding (RoPE) — in-place rotate pairs (x0, x1) per head.
-fn rope(x: &[f32], pos: usize, n_heads: usize, head_dim: usize, theta: f32) -> Vec<f32> {
+fn rope(x: &[f32], pos: usize, n_heads: usize, head_dim: usize, theta: f32, neox: bool) -> Vec<f32> {
     let mut out = x.to_vec();
     for h in 0..n_heads {
         for i in 0..head_dim / 2 {
             let freq  = 1.0 / theta.powf(2.0 * i as f32 / head_dim as f32);
             let angle = pos as f32 * freq;
             let (sin, cos) = angle.sin_cos();
-            let base = h * head_dim + i * 2;
-            if base + 1 < out.len() {
-                let (x0, x1) = (out[base], out[base + 1]);
-                out[base]     = x0 * cos - x1 * sin;
-                out[base + 1] = x0 * sin + x1 * cos;
+            let (ia, ib) = if neox {
+                (h * head_dim + i, h * head_dim + i + head_dim / 2)
+            } else {
+                (h * head_dim + i * 2, h * head_dim + i * 2 + 1)
+            };
+            if ib < out.len() {
+                let (x0, x1) = (out[ia], out[ib]);
+                out[ia] = x0 * cos - x1 * sin;
+                out[ib] = x0 * sin + x1 * cos;
             }
         }
     }
@@ -1076,8 +1086,26 @@ mod tests {
     #[test]
     fn test_rope_output_length() {
         let x = vec![1.0f32; 64];  // 2 heads × 32 head_dim
-        let out = rope(&x, 5, 2, 32, 10000.0);
+        let out = rope(&x, 5, 2, 32, 10000.0, false);
         assert_eq!(out.len(), x.len());
+    }
+
+    // Python reference (x=[1,2,3,4], head_dim=4, pos=1, theta=10000, angle_i = pos*theta^(-2i/d)):
+    //   interleaved pairs (0,1),(2,3): [-1.14264, 1.922076, 2.959851, 4.0298]
+    //   NEOX pairs (0,2),(1,3):        [-1.984111, 1.959901, 2.462378, 4.0198]
+    #[test]
+    fn test_rope_interleaved_vs_neox() {
+        let x = [1.0f32, 2.0, 3.0, 4.0];
+        let a = rope(&x, 1, 1, 4, 10000.0, false);
+        let b = rope(&x, 1, 1, 4, 10000.0, true);
+        for (g, e) in a.iter().zip([-1.14264f32, 1.922076, 2.959851, 4.0298]) { assert!((g - e).abs() < 1e-4, "{:?}", a); }
+        for (g, e) in b.iter().zip([-1.984111f32, 1.959901, 2.462378, 4.0198]) { assert!((g - e).abs() < 1e-4, "{:?}", b); }
+    }
+
+    #[test]
+    fn test_rope_pairing_per_arch() {
+        assert!(ArchType::Qwen2.rope_neox() && ArchType::Phi.rope_neox() && ArchType::Gemma.rope_neox());
+        assert!(!ArchType::LLaMA.rope_neox() && !ArchType::Mistral.rope_neox());
     }
 
     #[test]
