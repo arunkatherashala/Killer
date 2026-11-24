@@ -39,6 +39,10 @@ fn import_inside_string_or_polyglot_block_is_not_resolved() {
     assert_eq!(out, "true");
     let out = run("@python {\nimport nonexistent_pkg_zz\n}\nprintln(1)\n");
     assert!(!out.contains("cannot find import"), "{out}");
+    // with python installed the block really ran: python itself reports the missing module
+    if run("println(polyglot_check(\"python\"))") == "true" {
+        assert!(out.contains("ModuleNotFoundError") && out.contains("POLYGLOT_E_EXIT"), "{out}");
+    }
 }
 
 #[test]
