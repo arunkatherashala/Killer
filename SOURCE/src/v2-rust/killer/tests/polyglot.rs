@@ -457,3 +457,43 @@ fn default_policy_warns_once_per_process() {
     assert_eq!(o.stdout, "12", "{}", o.all());
     assert_eq!(o.stderr.matches("warning").count(), 1, "{}", o.all());
 }
+
+// --- Item 8: audit log -------------------------------------------------------------------------
+
+fn audit_lines(src: &str, extra: &[(&str, &str)]) -> (Out, Vec<String>) {
+    let log = unique("audit").with_extension("jsonl");
+    let l = log.to_string_lossy().to_string();
+    let mut env: Vec<(&str, &str)> = vec![("KILLER_AUDIT_LOG", l.as_str())];
+    env.extend_from_slice(extra);
+    let (o, _) = run_watch(src, &env, None, WATCH);
+    let lines = std::fs::read_to_string(&log).unwrap_or_default().lines().map(str::to_string).collect();
+    let _ = std::fs::remove_file(&log);
+    (o, lines)
+}
+
+#[test]
+fn audit_log_has_one_json_line_per_run_without_the_source() {
+    need!("python");
+    let (o, lines) = audit_lines("x = @python { print(41 + 1) }\nprintln(x)\n", &[]);
+    assert_eq!(o.stdout, "42", "{}", o.all());
+    assert_eq!(lines.len(), 1, "{:?}", lines);
+    let l = &lines[0];
+    assert!(l.starts_with('{') && l.ends_with('}'), "{l}");
+    for key in ["\"ts\":", "\"lang\":\"python\"", "\"exe\":", "\"code_sha256\":\"", "\"code_len\":", "\"duration_ms\":", "\"exit_code\":0", "\"outcome\":\"ok\""] {
+        assert!(l.contains(key), "{key} missing: {l}");
+    }
+    assert!(!l.contains("41 + 1"), "the source must not be logged: {l}");
+    let (_, lines) = audit_lines("x = @python { print(41 + 1) }\n", &[("KILLER_AUDIT_CODE", "1")]);
+    assert!(lines.len() == 1 && lines[0].contains("41 + 1"), "{:?}", lines);
+}
+
+#[test]
+fn audit_log_records_stream_denials_and_timeouts() {
+    need!("python");
+    let src = "s = polyglot_stream(\"python\", \"print(1)\")\ntry {\n    y = @bash { echo 1 }\n} catch e {\n    println(\"denied\")\n}\ntry {\n    z = @python {\n        import time\n        time.sleep(60)\n    }\n} catch e {\n    println(\"timeout\")\n}\n";
+    let (o, lines) = audit_lines(src, &[("KILLER_POLYGLOT_ALLOW", "python"), ("KILLER_POLYGLOT_TIMEOUT", "3")]);
+    assert_eq!(lines.len(), 3, "{:?} {}", lines, o.all());
+    assert!(lines[0].contains("\"outcome\":\"ok\""), "{:?}", lines);
+    assert!(lines[1].contains("\"lang\":\"bash\"") && lines[1].contains("POLYGLOT_E_POLICY_DENIED"), "{:?}", lines);
+    assert!(lines[2].contains("POLYGLOT_E_TIMEOUT"), "{:?}", lines);
+}
