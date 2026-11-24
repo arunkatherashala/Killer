@@ -574,7 +574,45 @@ fn run_spawned_task(
     *slot.lock().unwrap() = Some(Box::new(result));
 }
 
+/// A private, detached copy of a VM's program state (top-level variables, classes, capabilities,
+/// memory-cap membership) for one long-lived worker thread, such as an HTTP server worker (see
+/// `http_serve`). Every seed holds its own copies, so two workers never share an `Rc`.
+pub(crate) struct WorkerSeed {
+    task: TaskContext,
+    cap: Option<crate::memcap::Inherited>,
+}
+
+impl WorkerSeed {
+    /// Start `body` on a new named OS thread (same stack size as task threads) with a VM built from
+    /// this seed. `body` receives the VM and the program to call functions of.
+    pub(crate) fn spawn<F>(self, name: String, body: F) -> std::io::Result<std::thread::JoinHandle<()>>
+    where
+        F: FnOnce(&mut VirtualMachine, &Program) + Send + 'static,
+    {
+        std::thread::Builder::new().name(name).stack_size(SPAWN_STACK_BYTES).spawn(move || {
+            let WorkerSeed { task, cap } = self;
+            let _cap = crate::memcap::adopt(cap);
+            let _cap_guard = CapabilityScopeGuard::install(task.capabilities.clone());
+            let mut child = VirtualMachine::new_for_spawn();
+            child.capabilities = task.capabilities.clone();
+            child.current_program = Some(std::sync::Arc::clone(&task.program));
+            child.classes = task.classes;
+            child.method_names = task.method_names;
+            let mut root = Scope::default();
+            root.extend(task.globals.into_iter());
+            child.scopes.push(root);
+            let program = std::sync::Arc::clone(&task.program);
+            body(&mut child, &program);
+        })
+    }
+}
+
 impl VirtualMachine {
+    /// A fresh detached snapshot of this VM's state for a worker thread (see [`WorkerSeed`]).
+    pub(crate) fn worker_seed(&mut self, program: &Program) -> WorkerSeed {
+        WorkerSeed { task: self.task_context(program), cap: crate::memcap::inherit() }
+    }
+
     pub fn new() -> Self {
         Self::default()
     }
