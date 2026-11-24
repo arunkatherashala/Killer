@@ -93,7 +93,7 @@ fn encoded_and_obfuscated_hosts_are_refused_before_any_connection() {
     ];
     for url in &urls {
         for opt in ["", ", \"allow_private\": true"] {
-            let src = format!("println(http_request({{\"url\": \"{}\", \"timeout\": 3{}}}))", url.replace('\', "\\\\"), opt);
+            let src = format!("println(http_request({{\"url\": \"{}\", \"timeout\": 3{}}}))", url.replace('\\', "\\\\"), opt);
             let out = run(&src, false);
             assert!(refused(&out), "{} (opts '{}') not refused: {}", url, opt, out);
         }
