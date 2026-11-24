@@ -159,6 +159,10 @@ fn hostile_arguments_never_crash_a_builtin() {
         let (to, code, text) = run_script(&file, Duration::from_secs(90));
         if let Some(why) = crashed(to, code, &text) {
             failures.push(format!("{name}: {why}"));
+        } else if !text.contains("done") {
+            // the script must really have run: an unknown name or a parse error would make
+            // this test vacuous
+            failures.push(format!("{name}: script did not run to completion: {}", text.lines().next().unwrap_or("")));
         }
     }
     let _ = std::fs::remove_dir_all(&dir);
