@@ -30,6 +30,12 @@ impl ArchType {
         }
     }
 
+    /// RoPE pairing: true = NEOX style (rotate element i with i + head_dim/2: Qwen2, Phi,
+    /// Gemma), false = interleaved (i, i+1: LLaMA/Mistral, whose GGUF Q/K are pre-permuted).
+    pub fn rope_neox(&self) -> bool {
+        matches!(self, ArchType::Qwen2 | ArchType::Phi | ArchType::Gemma)
+    }
+
     /// Whether this architecture uses QKV attention biases.
     /// Qwen2 and Phi-3 add learned bias vectors to Q, K, V projections.
     pub fn has_qkv_bias(&self) -> bool {
@@ -87,6 +93,68 @@ impl ModelConfig {
 
         Ok(ModelConfig { arch, n_layers, n_heads, n_kv_heads, n_embd, n_ff, vocab_size, ctx_len, head_dim, rope_theta, norm_eps })
     }
+}
+
+/// Validate the model config and the tensor shapes it implies. Returns an error (never panics)
+/// when dimensions are zero/inconsistent, a required tensor is missing, or a shape disagrees
+/// with the config. GGUF shape convention: shape[0] = in_dim, shape[1] = out_dim.
+/// `tokenizer_vocab` is the number of tokens in the embedded tokenizer.
+pub fn validate_model_shapes(
+    cfg: &ModelConfig,
+    tensors: &HashMap<String, super::gguf::TensorInfo>,
+    tokenizer_vocab: usize,
+) -> Result<(), String> {
+    if cfg.n_layers == 0 || cfg.n_layers > 4096 { return Err(format!("invalid block_count {}", cfg.n_layers)); }
+    if cfg.n_heads == 0 { return Err("invalid head_count 0".to_string()); }
+    if cfg.n_kv_heads == 0 { return Err("invalid head_count_kv 0".to_string()); }
+    if cfg.n_embd == 0 { return Err("invalid embedding_length 0".to_string()); }
+    if cfg.n_ff == 0 { return Err("invalid feed_forward_length 0".to_string()); }
+    if cfg.n_embd % cfg.n_heads != 0 {
+        return Err(format!("embedding_length {} is not divisible by head_count {}", cfg.n_embd, cfg.n_heads));
+    }
+    if cfg.n_heads % cfg.n_kv_heads != 0 {
+        return Err(format!("head_count {} is not a multiple of head_count_kv {}", cfg.n_heads, cfg.n_kv_heads));
+    }
+    if cfg.head_dim % 2 != 0 {
+        return Err(format!("head_dim {} must be even for RoPE", cfg.head_dim));
+    }
+    let q_dim = cfg.n_heads.checked_mul(cfg.head_dim).ok_or("q_dim overflows")?;
+    let kv_dim = cfg.n_kv_heads.checked_mul(cfg.head_dim).ok_or("kv_dim overflows")?;
+
+    let check = |name: &str, want: &[usize]| -> Result<(), String> {
+        let t = tensors.get(name).ok_or_else(|| format!("required tensor '{}' is missing", name))?;
+        let got: Vec<usize> = t.shape.iter().map(|&d| d as usize).collect();
+        // Trailing 1-dims are insignificant (a vector may be stored as [n] or [n, 1]).
+        let mut g = got.clone();
+        while g.len() > want.len() && g.last() == Some(&1) { g.pop(); }
+        if g != want {
+            return Err(format!("tensor '{}' has shape {:?}, expected {:?} for this model config", name, got, want));
+        }
+        if t.checked_n_bytes().is_none() { return Err(format!("tensor '{}' size overflows", name)); }
+        Ok(())
+    };
+
+    let emb = tensors.get("token_embd.weight").ok_or("required tensor 'token_embd.weight' is missing")?;
+    if emb.shape.len() != 2 || emb.shape[0] as usize != cfg.n_embd {
+        return Err(format!("tensor 'token_embd.weight' has shape {:?}, expected [{}, vocab]", emb.shape, cfg.n_embd));
+    }
+    if (emb.shape[1] as usize) < tokenizer_vocab {
+        return Err(format!("token_embd.weight has {} rows but the tokenizer has {} tokens", emb.shape[1], tokenizer_vocab));
+    }
+    check("output_norm.weight", &[cfg.n_embd])?;
+    for l in 0..cfg.n_layers {
+        let b = |n: &str| format!("blk.{}.{}", l, n);
+        check(&b("attn_norm.weight"), &[cfg.n_embd])?;
+        check(&b("attn_q.weight"), &[cfg.n_embd, q_dim])?;
+        check(&b("attn_k.weight"), &[cfg.n_embd, kv_dim])?;
+        check(&b("attn_v.weight"), &[cfg.n_embd, kv_dim])?;
+        check(&b("attn_output.weight"), &[q_dim, cfg.n_embd])?;
+        check(&b("ffn_norm.weight"), &[cfg.n_embd])?;
+        check(&b("ffn_gate.weight"), &[cfg.n_embd, cfg.n_ff])?;
+        check(&b("ffn_up.weight"), &[cfg.n_embd, cfg.n_ff])?;
+        check(&b("ffn_down.weight"), &[cfg.n_ff, cfg.n_embd])?;
+    }
+    Ok(())
 }
 
 // --- Quantized weight tensor -------------------------------------------------
@@ -154,30 +222,45 @@ impl QuantTensor {
 
         let n_threads = std::thread::available_parallelism()
             .map(|n| n.get()).unwrap_or(4).min(16);
-        let chunk = (out_dim + n_threads - 1) / n_threads;
 
         let mut y = vec![0.0f32; out_dim];
-        std::thread::scope(|scope| {
-            let chunks: Vec<&mut [f32]> = y.chunks_mut(chunk).collect();
-            let mut handles = Vec::with_capacity(chunks.len());
-            for (t, slice) in chunks.into_iter().enumerate() {
-                let row_start = t * chunk;
-                handles.push(scope.spawn(move || {
-                    // Temporary row dequant buffer (stack-allocated per thread,
-                    // only used for the fallback path of rare quant types)
-                    for (i, cell) in slice.iter_mut().enumerate() {
-                        let r     = row_start + i;
-                        let start = r * bytes_per_row;
-                        let end   = (start + bytes_per_row).min(data.len());
-                        if start >= data.len() { break; }
-                        *cell = dot_inline(&data[start..end], dtype, x_safe, in_dim);
-                    }
-                }));
-            }
-            for h in handles { h.join().unwrap_or_default(); }
+        let res = par_rows(&mut y, n_threads, |r, cell| {
+            let start = r * bytes_per_row;
+            if start >= data.len() { return; }
+            let end = (start + bytes_per_row).min(data.len());
+            *cell = dot_inline(&data[start..end], dtype, x_safe, in_dim);
         });
+        // A worker panic means `y` is incomplete: never return it as if it were valid.
+        if let Err(e) = res { panic!("matvec failed: {}", e); }
         y
     }
+}
+
+/// Run `f(row, cell)` for every element of `y`, split across `n_threads` scoped threads.
+/// A panicking worker is reported as `Err` (never swallowed).
+fn par_rows<F>(y: &mut [f32], n_threads: usize, f: F) -> Result<(), String>
+where F: Fn(usize, &mut f32) + Sync {
+    if y.is_empty() { return Ok(()); }
+    let chunk = ((y.len() + n_threads.max(1) - 1) / n_threads.max(1)).max(1);
+    let f = &f;
+    std::thread::scope(|scope| {
+        let handles: Vec<_> = y.chunks_mut(chunk).enumerate().map(|(t, slice)| {
+            let row_start = t * chunk;
+            scope.spawn(move || {
+                for (i, cell) in slice.iter_mut().enumerate() { f(row_start + i, cell); }
+            })
+        }).collect();
+        let mut err = None;
+        for h in handles {
+            if let Err(p) = h.join() {
+                let msg = p.downcast_ref::<&str>().map(|s| s.to_string())
+                    .or_else(|| p.downcast_ref::<String>().cloned())
+                    .unwrap_or_else(|| "unknown panic".to_string());
+                err.get_or_insert(format!("worker thread panicked: {}", msg));
+            }
+        }
+        match err { Some(e) => Err(e), None => Ok(()) }
+    })
 }
 
 /// Zero-allocation inline dot product: dispatches to the matching per-format function.
@@ -376,18 +459,8 @@ fn dequant_dispatch(data: &[u8], dtype: GgmlType, n_elem: usize) -> Vec<f32> {
                                     => quant::dequant_q5_k(data, n_elem),
         GgmlType::Q6K               => quant::dequant_q6_k(data, n_elem),
         GgmlType::Q8K               => quant::dequant_q8_k(data, n_elem),
-        GgmlType::IQ4NL | GgmlType::IQ4_NL_4_4 | GgmlType::IQ4_NL_4_8
-        | GgmlType::Q4_0_4x4 | GgmlType::Q4_0_4x8 | GgmlType::Q4_0_8x8
-                                    => quant::dequant_iq4_nl(data, n_elem),
+        GgmlType::IQ4NL             => quant::dequant_iq4_nl(data, n_elem),
         GgmlType::IQ4XS             => quant::dequant_iq4_xs(data, n_elem),
-        GgmlType::IQ3XXS            => quant::dequant_iq3_xxs(data, n_elem),
-        GgmlType::IQ3S              => quant::dequant_iq3_s(data, n_elem),
-        GgmlType::IQ2XXS            => quant::dequant_iq2_xxs(data, n_elem),
-        GgmlType::IQ2XS             => quant::dequant_iq2_xs(data, n_elem),
-        GgmlType::IQ2S              => quant::dequant_iq2_s(data, n_elem),
-        GgmlType::IQ1S              => quant::dequant_iq1_s(data, n_elem),
-        GgmlType::IQ1M              => quant::dequant_iq1_m(data, n_elem),
-        GgmlType::TQ1_0             => quant::dequant_tq1_0(data, n_elem),
         GgmlType::TQ2_0             => quant::dequant_tq2_0(data, n_elem),
         _                           => vec![0.0; n_elem],
     }
@@ -498,6 +571,8 @@ impl KillerInference {
         let gguf      = GgufFile::open(path)?;
         let mut config = ModelConfig::from_gguf(&gguf)?;
         let tokenizer  = KillerTokenizer::from_gguf(&gguf)?;
+        validate_model_shapes(&config, &gguf.tensors, tokenizer.vocab_size)
+            .map_err(|e| format!("Invalid model '{}': {}", path, e))?;
 
         eprintln!("[Killer] {:?} | layers={} heads={} kv_heads={} embd={} vocab={} rope_theta={} n_ff={} ctx_len={}",
             config.arch, config.n_layers, config.n_heads, config.n_kv_heads, config.n_embd, config.vocab_size, config.rope_theta, config.n_ff, config.ctx_len);
@@ -822,8 +897,8 @@ impl KillerInference {
                                          kv_dim, cfg.n_embd);
 
         // Apply RoPE positional encoding to Q and K
-        let q = rope(&q, pos, cfg.n_heads,    hd, cfg.rope_theta);
-        let k = rope(&k, pos, cfg.n_kv_heads, hd, cfg.rope_theta);
+        let q = rope(&q, pos, cfg.n_heads,    hd, cfg.rope_theta, cfg.arch.rope_neox());
+        let k = rope(&k, pos, cfg.n_kv_heads, hd, cfg.rope_theta, cfg.arch.rope_neox());
 
         // Write current K/V into cache (guard against pos >= kv_cap)
         let stride = cfg.n_kv_heads * hd;
@@ -1011,18 +1086,22 @@ fn softmax(x: &[f32]) -> Vec<f32> {
 fn silu(x: f32) -> f32 { x / (1.0 + (-x).exp()) }
 
 /// Rotary Position Embedding (RoPE) — in-place rotate pairs (x0, x1) per head.
-fn rope(x: &[f32], pos: usize, n_heads: usize, head_dim: usize, theta: f32) -> Vec<f32> {
+fn rope(x: &[f32], pos: usize, n_heads: usize, head_dim: usize, theta: f32, neox: bool) -> Vec<f32> {
     let mut out = x.to_vec();
     for h in 0..n_heads {
         for i in 0..head_dim / 2 {
             let freq  = 1.0 / theta.powf(2.0 * i as f32 / head_dim as f32);
             let angle = pos as f32 * freq;
             let (sin, cos) = angle.sin_cos();
-            let base = h * head_dim + i * 2;
-            if base + 1 < out.len() {
-                let (x0, x1) = (out[base], out[base + 1]);
-                out[base]     = x0 * cos - x1 * sin;
-                out[base + 1] = x0 * sin + x1 * cos;
+            let (ia, ib) = if neox {
+                (h * head_dim + i, h * head_dim + i + head_dim / 2)
+            } else {
+                (h * head_dim + i * 2, h * head_dim + i * 2 + 1)
+            };
+            if ib < out.len() {
+                let (x0, x1) = (out[ia], out[ib]);
+                out[ia] = x0 * cos - x1 * sin;
+                out[ib] = x0 * sin + x1 * cos;
             }
         }
     }
@@ -1076,8 +1155,26 @@ mod tests {
     #[test]
     fn test_rope_output_length() {
         let x = vec![1.0f32; 64];  // 2 heads × 32 head_dim
-        let out = rope(&x, 5, 2, 32, 10000.0);
+        let out = rope(&x, 5, 2, 32, 10000.0, false);
         assert_eq!(out.len(), x.len());
+    }
+
+    // Python reference (x=[1,2,3,4], head_dim=4, pos=1, theta=10000, angle_i = pos*theta^(-2i/d)):
+    //   interleaved pairs (0,1),(2,3): [-1.14264, 1.922076, 2.959851, 4.0298]
+    //   NEOX pairs (0,2),(1,3):        [-1.984111, 1.959901, 2.462378, 4.0198]
+    #[test]
+    fn test_rope_interleaved_vs_neox() {
+        let x = [1.0f32, 2.0, 3.0, 4.0];
+        let a = rope(&x, 1, 1, 4, 10000.0, false);
+        let b = rope(&x, 1, 1, 4, 10000.0, true);
+        for (g, e) in a.iter().zip([-1.14264f32, 1.922076, 2.959851, 4.0298]) { assert!((g - e).abs() < 1e-4, "{:?}", a); }
+        for (g, e) in b.iter().zip([-1.984111f32, 1.959901, 2.462378, 4.0198]) { assert!((g - e).abs() < 1e-4, "{:?}", b); }
+    }
+
+    #[test]
+    fn test_rope_pairing_per_arch() {
+        assert!(ArchType::Qwen2.rope_neox() && ArchType::Phi.rope_neox() && ArchType::Gemma.rope_neox());
+        assert!(!ArchType::LLaMA.rope_neox() && !ArchType::Mistral.rope_neox());
     }
 
     #[test]
@@ -1086,5 +1183,86 @@ mod tests {
         let b = vec![3.0f32, 4.0];
         let c = add(&a, &b);
         assert_eq!(c, vec![4.0, 6.0]);
+    }
+
+    // ---- crafted tiny GGUF (shape validation) ----
+    fn gstr(b: &mut Vec<u8>, s: &str) { b.extend((s.len() as u64).to_le_bytes()); b.extend(s.as_bytes()); }
+    fn kv_u32(b: &mut Vec<u8>, k: &str, v: u32) { gstr(b, k); b.extend(4u32.to_le_bytes()); b.extend(v.to_le_bytes()); }
+
+    /// Build a tiny llama GGUF (all F32). `q_cols` is the out-dim of attn_q (8 is correct).
+    fn tiny_gguf(path: &std::path::Path, q_cols: u64) {
+        let mut b = Vec::new();
+        let tensors: Vec<(String, Vec<u64>)> = {
+            let mut t = vec![("token_embd.weight".to_string(), vec![8, 4]), ("output_norm.weight".to_string(), vec![8])];
+            for (n, d) in [("attn_norm", vec![8]), ("attn_q", vec![8, q_cols]), ("attn_k", vec![8, 8]), ("attn_v", vec![8, 8]),
+                           ("attn_output", vec![8, 8]), ("ffn_norm", vec![8]), ("ffn_gate", vec![8, 16]),
+                           ("ffn_up", vec![8, 16]), ("ffn_down", vec![16, 8])] {
+                let suffix = if n.ends_with("norm") { "weight" } else { "weight" };
+                t.push((format!("blk.0.{}.{}", n, suffix), d));
+            }
+            t
+        };
+        b.extend(0x46554747u32.to_le_bytes()); b.extend(3u32.to_le_bytes());
+        b.extend((tensors.len() as u64).to_le_bytes()); b.extend(7u64.to_le_bytes());
+        gstr(&mut b, "general.architecture"); b.extend(8u32.to_le_bytes()); gstr(&mut b, "llama");
+        kv_u32(&mut b, "llama.block_count", 1);
+        kv_u32(&mut b, "llama.attention.head_count", 4);
+        kv_u32(&mut b, "llama.embedding_length", 8);
+        kv_u32(&mut b, "llama.feed_forward_length", 16);
+        kv_u32(&mut b, "llama.context_length", 32);
+        gstr(&mut b, "tokenizer.ggml.tokens"); b.extend(9u32.to_le_bytes()); b.extend(8u32.to_le_bytes()); b.extend(4u64.to_le_bytes());
+        for t in ["<unk>", "<s>", "</s>", "a"] { gstr(&mut b, t); }
+        let mut off = 0u64;
+        let mut sizes = Vec::new();
+        for (name, dims) in &tensors {
+            gstr(&mut b, name);
+            b.extend((dims.len() as u32).to_le_bytes());
+            for d in dims { b.extend(d.to_le_bytes()); }
+            b.extend(0u32.to_le_bytes()); // F32
+            b.extend(off.to_le_bytes());
+            let bytes = dims.iter().product::<u64>() * 4;
+            sizes.push(bytes);
+            off += (bytes + 31) / 32 * 32;
+        }
+        while b.len() % 32 != 0 { b.push(0); }
+        for bytes in sizes {
+            b.extend(vec![0u8; ((bytes + 31) / 32 * 32) as usize]);
+        }
+        std::fs::write(path, b).unwrap();
+    }
+
+    #[test]
+    fn load_rejects_wrong_tensor_shape_instead_of_panicking() {
+        let dir = std::env::temp_dir().join(format!("killer_shape_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let bad = dir.join("bad.gguf");
+        tiny_gguf(&bad, 12); // attn_q out-dim 12 != n_heads*head_dim = 8
+        let err = KillerInference::load(bad.to_str().unwrap()).err().expect("must be rejected");
+        assert!(err.contains("attn_q.weight") && err.contains("shape"), "{}", err);
+        let good = dir.join("good.gguf");
+        tiny_gguf(&good, 8);
+        assert!(KillerInference::load(good.to_str().unwrap()).is_ok());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn validate_rejects_bad_config() {
+        let cfg = ModelConfig { arch: ArchType::LLaMA, n_layers: 1, n_heads: 3, n_kv_heads: 3, n_embd: 8,
+            n_ff: 16, vocab_size: 4, ctx_len: 32, head_dim: 2, rope_theta: 1e4, norm_eps: 1e-5 };
+        let t = HashMap::new();
+        assert!(validate_model_shapes(&cfg, &t, 4).unwrap_err().contains("divisible"));
+        let cfg0 = ModelConfig { n_heads: 0, ..cfg.clone() };
+        assert!(validate_model_shapes(&cfg0, &t, 4).is_err());
+        let cfg1 = ModelConfig { n_heads: 4, n_kv_heads: 3, ..cfg };
+        assert!(validate_model_shapes(&cfg1, &t, 4).unwrap_err().contains("multiple"));
+    }
+
+    #[test]
+    fn par_rows_propagates_worker_panic() {
+        let mut y = vec![0.0f32; 64];
+        let ok = par_rows(&mut y, 4, |r, c| *c = r as f32);
+        assert!(ok.is_ok() && y[63] == 63.0);
+        let err = par_rows(&mut y, 4, |r, c| { if r == 40 { panic!("boom"); } *c = 1.0; }).unwrap_err();
+        assert!(err.contains("boom"), "{}", err);
     }
 }

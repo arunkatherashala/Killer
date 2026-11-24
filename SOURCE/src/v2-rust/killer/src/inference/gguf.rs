@@ -150,13 +150,13 @@ impl GgmlType {
             // IQ formats — all use QK_K=256 super-blocks
             // Byte counts from ggml-quants.h sizeof(block_iq*)
             GgmlType::IQ2XXS            => 66,   // 2+64  (f16 d + 64 packed 2-bit)
-            GgmlType::IQ2XS             => 66,   // 2+64  (same shell, different grid)
-            GgmlType::IQ2S              => 96,   // 2+64+32 (f16 d + qs + qh)
+            GgmlType::IQ2XS             => 74,   // 2+64+8 (d + u16 qs[32] + 8 scales)
+            GgmlType::IQ2S              => 82,   // 2+64+8+8 (d + qs + qh + scales)
             GgmlType::IQ3XXS            => 98,   // 2+96  scrambled 3-bit grid
-            GgmlType::IQ3S              => 98,   // 2+64+32 grid+signs
+            GgmlType::IQ3S              => 110,  // 2+64+8+32+4 (d + qs + qh + signs + scales)
             GgmlType::IQ1S              => 50,   // 2+48  1.5-bit ternary grid
             GgmlType::IQ1M              => 56,   // no d field — scale embedded
-            GgmlType::IQ4NL             => 144,  // same as Q4_K shell, NL codebook
+            GgmlType::IQ4NL             => 18,   // 32-element block: f16 d + 16B nibbles
             GgmlType::IQ4XS             => 136,  // 2+2+128 with 4-bit sub-scales
             GgmlType::BF16              => 2,    // bfloat16 — 1 element per "block"
             GgmlType::Q4_0_4x4 | GgmlType::Q4_0_4x8 | GgmlType::Q4_0_8x8 => 18,
@@ -164,6 +164,30 @@ impl GgmlType {
             GgmlType::TQ2_0             => 66,   // 2+64 ternary
             GgmlType::IQ4_NL_4_4 | GgmlType::IQ4_NL_4_8 => 144,
             _                           => 4,
+        }
+    }
+
+    /// `Some(reason)` if this type cannot be dequantized correctly. Verified types: F32 F16 BF16
+    /// Q4_0 Q4_1 Q5_0 Q5_1 Q8_0 Q2_K Q3_K Q4_K Q5_K Q6_K Q8_K IQ4_NL IQ4_XS TQ2_0. The IQ1/IQ2/IQ3
+    /// families (and TQ1_0) need codebook grids that are not verified against ggml reference
+    /// data, so they error instead of producing garbage.
+    pub fn unsupported_reason(&self) -> Option<String> {
+        let name = match self {
+            GgmlType::IQ2XXS => "IQ2_XXS", GgmlType::IQ2XS => "IQ2_XS", GgmlType::IQ2S => "IQ2_S",
+            GgmlType::IQ3XXS => "IQ3_XXS", GgmlType::IQ3S => "IQ3_S",
+            GgmlType::IQ1S => "IQ1_S", GgmlType::IQ1M => "IQ1_M",
+            GgmlType::TQ1_0 => "TQ1_0",
+            _ => "",
+        };
+        if !name.is_empty() {
+            return Some(format!("unsupported quantization {}: lookup table not verified", name));
+        }
+        match self {
+            GgmlType::Q8_1 | GgmlType::I8 | GgmlType::I16 | GgmlType::I32 | GgmlType::I64 | GgmlType::F64
+            | GgmlType::Q4_0_4x4 | GgmlType::Q4_0_4x8 | GgmlType::Q4_0_8x8
+            | GgmlType::IQ4_NL_4_4 | GgmlType::IQ4_NL_4_8 =>
+                Some(format!("unsupported quantization {:?}: no dequantizer", self)),
+            _ => None,
         }
     }
 
@@ -176,6 +200,7 @@ impl GgmlType {
             | GgmlType::Q5_0 | GgmlType::Q5_1
             | GgmlType::Q8_0 | GgmlType::Q8_1 => 32,
             // BF16 and tiled Q4_0 variants: 1 element per block
+            GgmlType::IQ4NL => 32,
             GgmlType::BF16
             | GgmlType::Q4_0_4x4 | GgmlType::Q4_0_4x8 | GgmlType::Q4_0_8x8 => 1,
             // All K-quant and IQ super-blocks use QK_K = 256
@@ -339,6 +364,9 @@ impl GgufFile {
     pub fn load_tensor_raw(&self, name: &str) -> Result<(Vec<u8>, GgmlType, Vec<u64>), String> {
         let info = self.tensors.get(name)
             .ok_or_else(|| format!("Tensor '{}' not found", name))?;
+        if let Some(why) = info.dtype.unsupported_reason() {
+            return Err(format!("Tensor '{}': {}", name, why));
+        }
         let (abs_offset, n_bytes) = self.tensor_span(info)?;
         let mut file = File::open(&self.file_path)
             .map_err(|e| format!("Reopen '{}': {}", self.file_path, e))?;
@@ -355,6 +383,9 @@ impl GgufFile {
         let info = self.tensors.get(name)
             .ok_or_else(|| format!("Tensor '{}' not found", name))?;
 
+        if let Some(why) = info.dtype.unsupported_reason() {
+            return Err(format!("Tensor '{}': {}", name, why));
+        }
         let (abs_offset, n_bytes) = self.tensor_span(info)?;
 
         let mut file = File::open(&self.file_path)
@@ -388,18 +419,8 @@ impl GgufFile {
             GgmlType::Q6K               => Ok(quant::dequant_q6_k(&raw, n_elem)),
             GgmlType::Q8K               => Ok(quant::dequant_q8_k(&raw, n_elem)),
             GgmlType::BF16              => Ok(quant::dequant_bf16(&raw, n_elem)),
-            GgmlType::IQ4NL | GgmlType::IQ4_NL_4_4 | GgmlType::IQ4_NL_4_8
-            | GgmlType::Q4_0_4x4 | GgmlType::Q4_0_4x8 | GgmlType::Q4_0_8x8
-                                        => Ok(quant::dequant_iq4_nl(&raw, n_elem)),
+            GgmlType::IQ4NL             => Ok(quant::dequant_iq4_nl(&raw, n_elem)),
             GgmlType::IQ4XS             => Ok(quant::dequant_iq4_xs(&raw, n_elem)),
-            GgmlType::IQ3XXS            => Ok(quant::dequant_iq3_xxs(&raw, n_elem)),
-            GgmlType::IQ3S              => Ok(quant::dequant_iq3_s(&raw, n_elem)),
-            GgmlType::IQ2XXS            => Ok(quant::dequant_iq2_xxs(&raw, n_elem)),
-            GgmlType::IQ2XS             => Ok(quant::dequant_iq2_xs(&raw, n_elem)),
-            GgmlType::IQ2S              => Ok(quant::dequant_iq2_s(&raw, n_elem)),
-            GgmlType::IQ1S              => Ok(quant::dequant_iq1_s(&raw, n_elem)),
-            GgmlType::IQ1M              => Ok(quant::dequant_iq1_m(&raw, n_elem)),
-            GgmlType::TQ1_0             => Ok(quant::dequant_tq1_0(&raw, n_elem)),
             GgmlType::TQ2_0             => Ok(quant::dequant_tq2_0(&raw, n_elem)),
             t => Err(format!(
                 "Tensor '{}' uses unsupported type {:?}.",
@@ -644,5 +665,22 @@ mod tests {
         };
         // 64 elements = 2 blocks × 18 bytes = 36
         assert_eq!(t.n_bytes(), 36);
+    }
+}
+
+#[cfg(test)]
+mod type_tests {
+    use super::*;
+
+    #[test]
+    fn unverified_iq_types_error_and_sizes_match_ggml() {
+        for t in [GgmlType::IQ2XXS, GgmlType::IQ2XS, GgmlType::IQ2S, GgmlType::IQ3XXS, GgmlType::IQ3S, GgmlType::IQ1S, GgmlType::IQ1M] {
+            let r = t.unsupported_reason().expect("must be unsupported");
+            assert!(r.contains("lookup table not verified"), "{}", r);
+        }
+        assert!(GgmlType::IQ4XS.unsupported_reason().is_none() && GgmlType::Q2K.unsupported_reason().is_none());
+        let sizes = [(GgmlType::IQ2XXS, 66), (GgmlType::IQ2XS, 74), (GgmlType::IQ2S, 82), (GgmlType::IQ3XXS, 98),
+                     (GgmlType::IQ3S, 110), (GgmlType::IQ4XS, 136), (GgmlType::Q2K, 84), (GgmlType::Q3KS, 110)];
+        for (t, n) in sizes { assert_eq!(t.bytes_per_block(), n, "{:?}", t); }
     }
 }

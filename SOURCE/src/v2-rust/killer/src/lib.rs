@@ -223,7 +223,6 @@ pub mod cryptography_solver;
 pub mod session;
 
 #[doc(hidden)]
-pub mod auth;
 
 #[doc(hidden)]
 pub mod streaming;
@@ -323,8 +322,6 @@ pub mod ai_optimizer;          // ML-driven JIT threshold tuning
 pub mod ai_workflow_engine;    // Secure workflow orchestration (Phase 3)
 
 // LLM client façade, multi-agent framework, super-agent workflows (see tests/ai_integration_tests.rs)
-pub mod llm_client;
-pub mod agent_framework;
 pub mod super_agent_layer;
 
 // -- Compression primitives (RLE, base64, hex) — wired as builtins -------------
@@ -366,7 +363,6 @@ pub mod net;             // Networking stdlib
 pub mod datetime;        // Date/time operations
 pub mod http;            // HTTP client utils
 pub mod json_csv;        // JSON and CSV parsing
-pub mod websocket;       // WebSocket support
 pub mod compiler;        // Killer → bytecode compiler
 pub mod regex_engine;    // Native regex engine (no external crates)
 pub mod channel_registry; // Global channel registry for chan_new/send/recv builtins

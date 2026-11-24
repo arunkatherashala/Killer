@@ -50,7 +50,7 @@ killer-ui-egui = []
 legacy-killer-rcore-tests = []
 # Spawns `cargo run --bin killer_super` — slow; not part of default CI.
 cli-e2e-tests = []
-# `cluster_coordinator` is not wired in killer-native yet.
+# `cluster_coordinator` and its test were archived (archive/uncompiled/); this feature gates nothing.
 cluster-demo-tests = []
 # Link against the kore-ffi static library (kore_ffi.lib / libkore_ffi.a).
 # Build path is controlled by KORE_FFI_DIR env var (default: KoreRepo/target/release).

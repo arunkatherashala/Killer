@@ -22,6 +22,9 @@ pub struct KillerTokenizer {
     pub pad_id:        u32,
     pub unk_id:        u32,
     token_to_id:       HashMap<String, u32>,
+    /// BPE merge ranks from `tokenizer.ggml.merges`: (left, right) -> rank (lower merges first).
+    /// Empty when the model ships no merge table (SentencePiece models use `token_scores`).
+    merge_ranks:       HashMap<(String, String), u32>,
     /// Whether this tokenizer uses SentencePiece (▁ word markers) or plain BPE (GPT-2/tiktoken style).
     /// SentencePiece: LLaMA 1/2, TinyLlama, Mistral, Gemma.
     /// BPE: Qwen2, GPT-2, LLaMA 3 (uses `<|begin_of_text|>` etc).
@@ -63,10 +66,17 @@ impl KillerTokenizer {
         let is_spm = matches!(tok_model.as_str(), "llama" | "spm" | "sentencepiece")
             || vocab.iter().take(1000).any(|s| s.contains('\u{2581}'));
 
+        let mut merge_ranks = HashMap::new();
+        for (rank, m) in gguf.meta_array_strings("tokenizer.ggml.merges").iter().enumerate() {
+            if let Some((a, b)) = m.split_once(' ') {
+                merge_ranks.entry((a.to_string(), b.to_string())).or_insert(rank as u32);
+            }
+        }
+
         eprintln!("[tok-info] is_spm={} bos={} eos={} vocab_size={}", is_spm, bos_id, eos_id, vocab_size);
         Ok(KillerTokenizer {
             vocab, token_scores, token_types, vocab_size,
-            bos_id, eos_id, pad_id, unk_id, token_to_id, is_spm,
+            bos_id, eos_id, pad_id, unk_id, token_to_id, merge_ranks, is_spm,
         })
     }
 
@@ -185,6 +195,27 @@ impl KillerTokenizer {
         }
     }
 
+    /// Rank-based BPE (GPT-2 style): repeatedly merge the adjacent pair with the lowest
+    /// rank in `tokenizer.ggml.merges` until no listed pair remains. Ties go leftmost.
+    fn bpe_merge_ranked(&self, pieces: &mut Vec<String>) {
+        loop {
+            if pieces.len() < 2 { break; }
+            let mut best: Option<(u32, usize)> = None;
+            for i in 0..pieces.len() - 1 {
+                if let Some(&r) = self.merge_ranks.get(&(pieces[i].clone(), pieces[i + 1].clone())) {
+                    if best.map_or(true, |(br, _)| r < br) { best = Some((r, i)); }
+                }
+            }
+            match best {
+                Some((_, i)) => {
+                    let right = pieces.remove(i + 1);
+                    pieces[i].push_str(&right);
+                }
+                None => break,
+            }
+        }
+    }
+
     /// BPE encoding for tiktoken/GPT-2 style models (Qwen2, LLaMA 3).
     /// Two-phase: first split on ONLY true special tokens (`<|...|>`, `<s>`, `</s>`),
     /// then apply GPT-2 byte-level encoding + BPE on each regular text segment.
@@ -228,8 +259,16 @@ impl KillerTokenizer {
                 // Qwen2/GPT-2 stores tokens with bytes mapped to specific Unicode chars
                 // (e.g. '\n' → 'Ċ', ' ' → 'Ġ'). We must encode the text the same way.
                 let gpt2_seg: String = seg.bytes().map(|b| Self::byte_to_unicode(b)).collect();
-                let mut pieces = self.initial_tokenize(&gpt2_seg, parse_special);
-                self.bpe_merge(&mut pieces, parse_special);
+                let mut pieces = if self.merge_ranks.is_empty() {
+                    let mut p = self.initial_tokenize(&gpt2_seg, parse_special);
+                    self.bpe_merge(&mut p, parse_special);
+                    p
+                } else {
+                    // Real BPE: start from single (byte-level) characters, merge by rank.
+                    let mut p: Vec<String> = gpt2_seg.chars().map(|c| c.to_string()).collect();
+                    self.bpe_merge_ranked(&mut p);
+                    p
+                };
                 for piece in pieces {
                     match self.token_to_id.get(&piece) {
                         Some(&id) => out.push(id),
@@ -379,7 +418,7 @@ mod tests {
             token_types:  vec![1u32; vocab_size],
             vocab_size,
             bos_id: 1, eos_id: 2, pad_id: 0, unk_id: 0,
-            vocab, token_to_id,
+            vocab, token_to_id, merge_ranks: HashMap::new(),
             is_spm: true,
         }
     }
@@ -405,7 +444,7 @@ mod tests {
             token_types,
             vocab_size,
             bos_id: 1, eos_id: 2, pad_id: 0, unk_id: 0,
-            vocab, token_to_id,
+            vocab, token_to_id, merge_ranks: HashMap::new(),
             is_spm: false,
         }
     }
@@ -438,6 +477,54 @@ mod tests {
         tok.vocab.push("<0xC3>".to_string());
         tok.vocab.push("<0xA9>".to_string());
         assert_eq!(tok.decode(&[8, 9]), "\u{e9}");
+    }
+
+    // Tiny merge table, ranks by order: 0:"a b" 1:"ab c" 2:"b c".
+    // Python reference (GPT-2 BPE):
+    //   w=list("abc"); ranks={("a","b"):0,("ab","c"):1,("b","c"):2}
+    //   loop: pick min-rank adjacent pair, merge  -> ["ab","c"] -> ["abc"]
+    // so "abc" -> [abc]. (Lowest rank wins over leftmost/longest: "bc" would merge
+    // only if "a b" were absent; "abcab" -> [abc, ab].)
+    fn make_ranked_tokenizer() -> KillerTokenizer {
+        let vocab: Vec<String> = ["<unk>", "<s>", "</s>", "a", "b", "c", "ab", "bc", "abc"]
+            .iter().map(|s| s.to_string()).collect();
+        let vocab_size = vocab.len();
+        let mut token_to_id = HashMap::new();
+        for (i, v) in vocab.iter().enumerate() { token_to_id.insert(v.clone(), i as u32); }
+        let mut merge_ranks = HashMap::new();
+        merge_ranks.insert(("a".to_string(), "b".to_string()), 0);
+        merge_ranks.insert(("ab".to_string(), "c".to_string()), 1);
+        merge_ranks.insert(("b".to_string(), "c".to_string()), 2);
+        KillerTokenizer {
+            token_scores: vec![0.0; vocab_size],
+            token_types: vec![1u32; vocab_size],
+            vocab_size, bos_id: 1, eos_id: 2, pad_id: 0, unk_id: 0,
+            vocab, token_to_id, merge_ranks, is_spm: false,
+        }
+    }
+
+    #[test]
+    fn bpe_uses_merge_ranks_not_vocab_greedy() {
+        let tok = make_ranked_tokenizer();
+        // ids: a=3 b=4 c=5 ab=6 bc=7 abc=8
+        assert_eq!(tok.encode("abc", false), vec![8]);
+        assert_eq!(tok.encode("abcab", false), vec![8, 6]);
+        // "bc" alone: only rank-2 merge applies
+        assert_eq!(tok.encode("bc", false), vec![7]);
+        // "cab": "a b" (rank 0) merges, "c" stays
+        assert_eq!(tok.encode("cab", false), vec![5, 6]);
+    }
+
+    #[test]
+    fn bpe_rank_beats_longest_match() {
+        // ranks: "b c"=0, "a b"=1, "ab c"=2. Python: abc -> a,bc (bc merges first, then
+        // "a bc" is not a listed pair) => ["a","bc"]. Greedy longest-match gives ["abc"].
+        let mut tok = make_ranked_tokenizer();
+        tok.merge_ranks.clear();
+        tok.merge_ranks.insert(("b".to_string(), "c".to_string()), 0);
+        tok.merge_ranks.insert(("a".to_string(), "b".to_string()), 1);
+        tok.merge_ranks.insert(("ab".to_string(), "c".to_string()), 2);
+        assert_eq!(tok.encode("abc", false), vec![3, 7]);
     }
 
     #[test]

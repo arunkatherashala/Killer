@@ -26,17 +26,12 @@ impl LocalProvider {
         }
     }
 
-    /// Load ONNX model (simplified for v3.2)
+    /// ONNX loading is not implemented (no ONNX runtime is linked).
     fn load_model(&self, model_path: &str) -> Result<(), String> {
-        // In production, this would use ONNX Runtime crate
-        // For v3.2, we check if model path is valid
-        
         if !model_path.ends_with(".onnx") {
             return Err(format!("Invalid model file: {}. Must be .onnx file", model_path));
         }
-
-        // Simulate successful load
-        Ok(())
+        Err("local ONNX inference is not implemented (no ONNX runtime is linked)".to_string())
     }
 
     /// Try connecting to a local Ollama instance for text generation.
@@ -133,13 +128,10 @@ impl LocalProvider {
         if result.is_empty() { None } else { Some(result) }
     }
 
-    /// Run ONNX inference (simplified)
+    /// ONNX inference is not implemented.
+    #[allow(dead_code)]
     fn run_inference(&self, _input: HashMap<String, Value>) -> Result<HashMap<String, Value>, String> {
-        // Simulated inference results
-        let mut output = HashMap::new();
-        output.insert("logits".to_string(), Value::Str("[0.1, 0.2, 0.3]".to_string()));
-        output.insert("status".to_string(), Value::Str("success".to_string()));
-        Ok(output)
+        Err("local ONNX inference is not implemented".to_string())
     }
 }
 
@@ -161,95 +153,33 @@ impl Provider for LocalProvider {
             return Ok(response);
         }
 
-        Ok("This is a response from local model inference. In production, this would be from Ollama or similar.".to_string())
+        Err("local provider: Ollama is not reachable at 127.0.0.1:11434 (no other local backend is implemented)".to_string())
     }
 
-    fn embed(&self, text: &str, model: &str) -> Result<Vec<f32>, String> {
-        // Use BERT or similar local embedding model
-        
+    fn embed(&self, text: &str, _model: &str) -> Result<Vec<f32>, String> {
         if text.is_empty() {
             return Err("Text cannot be empty".to_string());
         }
-
-        // For v3.2, return fixed-size embedding
-        // In production: ~384 dims for DistilBERT, 768 for BERT
-        let embedding_size = match model {
-            "distilbert" => 384,
-            "bert" => 768,
-            _ => 384,
-        };
-
-        // Create deterministic embedding based on text
-        let hash = text.len().wrapping_mul(31) as f32;
-        let embedding: Vec<f32> = (0..embedding_size)
-            .map(|i| {
-                let x = ((i as f32 * hash).sin() + 1.0) / 2.0;
-                x - 0.5
-            })
-            .collect();
-
-        Ok(embedding)
+        Err("local provider: embeddings are not implemented".to_string())
     }
 
-    fn classify(&self, text: &str, categories: Vec<String>, _model: &str) 
+    fn classify(&self, text: &str, categories: Vec<String>, _model: &str)
         -> Result<ClassifyResult, String> {
-        
         if text.is_empty() {
             return Err("Text cannot be empty".to_string());
         }
-
         if categories.is_empty() {
             return Err("Must provide at least one category".to_string());
         }
-
-        // Simulate zero-shot classification using local model
-        // In production: would use zero-shot classifier model
-        
-        let category = categories[0].clone(); // Simple heuristic
-        let confidence = 0.85;
-        
-        let mut all_scores = HashMap::new();
-        for (i, cat) in categories.iter().enumerate() {
-            let base_score = (text.len() as f64 % 100.0) / 100.0;
-            let variation = (i as f64) * 0.05;
-            all_scores.insert(cat.clone(), (base_score + variation).min(1.0).max(0.0));
-        }
-
-        Ok(ClassifyResult {
-            category,
-            confidence,
-            all_scores,
-        })
+        Err("local provider: classification is not implemented".to_string())
     }
 
-    fn extract(&self, text: &str, schema: HashMap<String, String>, _model: &str)
+    fn extract(&self, text: &str, _schema: HashMap<String, String>, _model: &str)
         -> Result<HashMap<String, Value>, String> {
-        
         if text.is_empty() {
             return Err("Text cannot be empty".to_string());
         }
-
-        // Use local NER/extraction model (SpaCy-like)
-        let mut result = HashMap::new();
-        
-        for (field_name, field_type) in schema {
-            // Simulate extraction
-            let value = match field_type.as_str() {
-                "number" => {
-                    Value::Number(text.len() as f64)
-                },
-                "boolean" => {
-                    Value::Bool(text.len() > 10)
-                },
-                "string" | _ => {
-                    Value::Str(format!("Extracted: {}", &text[..field_name.len().min(text.len())]))
-                }
-            };
-            
-            result.insert(field_name, value);
-        }
-        
-        Ok(result)
+        Err("local provider: extraction is not implemented".to_string())
     }
 
     fn local_infer(&self, model_path: &str, input: HashMap<String, Value>)
@@ -278,45 +208,12 @@ mod tests {
     }
 
     #[test]
-    fn test_embedding_deterministic() {
+    fn unimplemented_features_error_instead_of_returning_fake_results() {
         let provider = LocalProvider::new();
-        let text = "Hello world";
-        
-        let embed1 = provider.embed(text, "bert").unwrap();
-        let embed2 = provider.embed(text, "bert").unwrap();
-        
-        assert_eq!(embed1, embed2);
-    }
-
-    #[test]
-    fn test_local_infer_requires_model() {
-        let provider = LocalProvider::new();
-        let result = provider.local_infer("invalid.bin", HashMap::new());
-        
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_local_infer_valid_model() {
-        let provider = LocalProvider::new();
-        let result = provider.local_infer("model.onnx", HashMap::new());
-        
-        assert!(result.is_ok());
-        let output = result.unwrap();
-        assert!(output.contains_key("status"));
-    }
-
-    #[test]
-    fn test_local_fallback_no_ollama() {
-        // Ollama is almost certainly not running in the test environment,
-        // so generate() should fall back to the hardcoded response.
-        let provider = LocalProvider::new();
-        let result = provider.generate("Tell me a joke", "llama2", 0.7, 100);
-        assert!(result.is_ok(), "generate() should succeed even without Ollama");
-        let text = result.unwrap();
-        assert!(
-            text.contains("local model inference") || !text.is_empty(),
-            "Should return either Ollama response or simulated fallback"
-        );
+        assert!(provider.embed("hello", "bert").is_err());
+        assert!(provider.classify("hello", vec!["a".to_string()], "m").is_err());
+        assert!(provider.extract("hello", HashMap::new(), "m").is_err());
+        assert!(provider.local_infer("model.onnx", HashMap::new()).is_err());
+        assert!(provider.local_infer("invalid.bin", HashMap::new()).is_err());
     }
 }

@@ -590,8 +590,6 @@ impl BuiltinFunctions {
             "to_yaml" => Self::to_yaml(args),
             
             // WebSocket functions (Week 24: Real-time Communication)
-            "websocket_new" => Self::websocket_new(args),
-            "websocket_server_new" => Self::websocket_server_new(args),
             
             // Trait system functions (Week 24: Polymorphism)
             "trait_new" => Self::trait_new(args),
@@ -4369,62 +4367,6 @@ impl BuiltinFunctions {
         }
     }
 
-    fn websocket_new(args: &[Value]) -> Result<Value, VmError> {
-        crate::security::require_network()?;
-        use crate::websocket::{WebSocket, websocket_to_dict};
-        
-        if args.len() != 1 {
-            return Err(VmError::runtime_error(
-                "websocket_new() expects 1 argument (url)".to_string(),
-            ));
-        }
-
-        match &args[0] {
-            Value::Str(url) => {
-                let ws = WebSocket::new(url);
-                let dict = websocket_to_dict(&ws);
-                
-                // Create unique object reference
-                let mut result_dict = std::collections::HashMap::new();
-                for (k, v) in dict {
-                    result_dict.insert(k, Value::Str(v));
-                }
-                result_dict.insert("__type".to_string(), Value::Str("WebSocket".to_string()));
-                Ok(Value::Dict(crate::value::SharedDict::new(result_dict)))
-            }
-            _ => Err(VmError::runtime_error(
-                "websocket_new(): argument must be a URL string".to_string(),
-            )),
-        }
-    }
-
-    fn websocket_server_new(args: &[Value]) -> Result<Value, VmError> {
-        crate::security::require_network()?;
-        use crate::websocket::{WebSocketServer, server_to_dict};
-        
-        if args.len() != 2 {
-            return Err(VmError::runtime_error(
-                "websocket_server_new() expects 2 arguments (host, port)".to_string(),
-            ));
-        }
-
-        match (&args[0], &args[1]) {
-            (Value::Str(host), Value::Number(port)) => {
-                let server = WebSocketServer::new(host, *port as u16);
-                let dict = server_to_dict(&server);
-                
-                let mut result_dict = std::collections::HashMap::new();
-                for (k, v) in dict {
-                    result_dict.insert(k, Value::Str(v));
-                }
-                result_dict.insert("__type".to_string(), Value::Str("WebSocketServer".to_string()));
-                Ok(Value::Dict(crate::value::SharedDict::new(result_dict)))
-            }
-            _ => Err(VmError::runtime_error(
-                "websocket_server_new(): arguments must be (host: string, port: number)".to_string(),
-            )),
-        }
-    }
 
     fn ws_connect(args: &[Value]) -> Result<Value, VmError> {
         crate::security::require_network()?;

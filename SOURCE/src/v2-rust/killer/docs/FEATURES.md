@@ -61,7 +61,8 @@ The row-by-row history is in the root `tracker.csv`; the Python comparison is in
 
 | Feature | Status | Notes | Proof |
 |---|---|---|---|
-| Local model inference (GGUF) | untested | | NO test loads a model: no GGUF model on the dev machine (tracker row 122); code is in `src/inference/` |
+| Local model inference (GGUF) | partial | LLaMA-family decoder models. BPE merge ranks, NEOX RoPE (Qwen2/Phi/Gemma) and shape validation at load are unit tested; **not validated end to end against a real model in this repo**. Quantization: see `docs/INFERENCE_QUANT.md` (IQ1/IQ2/IQ3 and TQ1_0 return an error) | unit tests in `src/inference/` (BPE ranks, RoPE pairing, quant layouts, shape validation); no end-to-end run on a real model |
+| Local provider (`ai` runtime `local`) | Ollama only | `generate` calls a local Ollama; embeddings, classify, extract and ONNX inference return a "not implemented" error | `unimplemented_features_error_instead_of_returning_fake_results` |
 | LLM providers (OpenAI, Anthropic, Ollama) | partial | request building, headers, parsing, streaming and errors tested against a local fake server (`tests/llm_live.rs`); the opt-in live suite (`docs/LLM_TESTING.md`) is written but **NOT TESTED** against any real provider (waiting for an Ollama install or a key) | tests/llm_live.rs (offline fake-server tests); live suite never run |
 | Embeddings, vector store, chunking, RAG | yes | scale measured at 33k and 332k chunks | tests/apps.rs (RAG app), tests/net_ai.rs |
 | Streaming responses | yes | | tests/streaming_profile.rs, tests/llm_live.rs (fake server only) |
