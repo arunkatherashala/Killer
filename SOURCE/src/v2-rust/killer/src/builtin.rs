@@ -2507,7 +2507,7 @@ impl BuiltinFunctions {
                     .enumerate()
                     .map(|(i, v)| {
                         Value::from(vec![
-                            Value::Number((start + i as i64) as f64),
+                            Value::Number(start.saturating_add(i as i64) as f64),
                             v,
                         ])
                     })
