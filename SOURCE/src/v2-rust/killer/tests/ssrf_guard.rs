@@ -11,6 +11,9 @@ fn run(src: &str, allow_env: bool) -> String {
     std::fs::write(&path, src).unwrap();
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_killer_super"));
     cmd.arg(&path).arg("--run").env_remove("KILLER_ALLOW_PRIVATE_NET").env_remove("KILLER_ALLOW_METADATA_NET");
+    for k in ["https_proxy", "HTTPS_PROXY", "all_proxy", "ALL_PROXY", "http_proxy", "HTTP_PROXY"] {
+        cmd.env_remove(k);
+    }
     if allow_env {
         cmd.env("KILLER_ALLOW_PRIVATE_NET", "1");
     }
@@ -81,6 +84,8 @@ fn encoded_and_obfuscated_hosts_are_refused_before_any_connection() {
         format!("https://[::ffff:127.0.0.1]:{}/", port),
         format!("https://[::FFFF:7f00:1]:{}/", port),
         format!("https://evil.example@127.0.0.1:{}/", port),
+        format!("https://[::1%lo]:{}/", port),
+        format!("https://[::1%25lo]:{}/", port),
         format!("https://2130706433:{}/", port),
         format!("https://0x7f.1:{}/", port),
     ];
@@ -100,8 +105,6 @@ fn encoded_and_obfuscated_hosts_are_refused_before_any_connection() {
         format!("https://127.0.0.1\\@example.com:{}/", port),
         format!("https://%31%36%39.254.169.254:{}/", port),
         format!("https://169%2e254.169.254:{}/", port),
-        format!("https://[::1%25lo]:{}/", port),
-        format!("https://[::1%lo]:{}/", port),
         format!("https://[fe80::1%25eth0]:{}/", port),
         format!("https://[::ffff:169.254.169.254%25eth0]:{}/", port),
     ];

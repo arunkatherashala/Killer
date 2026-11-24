@@ -196,6 +196,12 @@ pub fn url_port(url: &str) -> u16 {
     after_host.strip_prefix(':').and_then(|p| p.parse().ok()).unwrap_or(if scheme.eq_ignore_ascii_case("https") { 443 } else { 80 })
 }
 
+fn proxy_configured() -> bool {
+    ["https_proxy", "HTTPS_PROXY", "all_proxy", "ALL_PROXY", "http_proxy", "HTTP_PROXY"]
+        .iter()
+        .any(|k| std::env::var(k).map_or(false, |v| !v.trim().is_empty()))
+}
+
 fn is_metadata_name(h: &str) -> bool {
     let h = h.trim_end_matches('.');
     h == "metadata.google.internal" || h == "metadata" || h == "instance-data" || h.ends_with(".metadata.google.internal")
@@ -281,6 +287,8 @@ pub fn check_target(spec: &ReqSpec) -> Result<Vec<String>, String> {
     // Fail closed: a name that cannot be resolved here is not handed to curl (curl may read it differently).
     let addrs: Vec<std::net::IpAddr> = match (host.as_str(), port).to_socket_addrs() {
         Ok(it) => it.map(|a| a.ip()).collect(),
+        // Behind a proxy the proxy resolves the name; the host is already restricted to plain DNS characters here.
+        Err(_) if proxy_configured() => return Ok(Vec::new()),
         Err(_) => return deny(&format!("cannot resolve host '{}' to check it", host)),
     };
     if addrs.is_empty() {
@@ -575,7 +583,7 @@ mod tests {
     use super::*;
 
     fn secret_spec() -> ReqSpec {
-        let mut s = ReqSpec::new("POST", "https://api.example.com/v1/x?token=URLSECRET");
+        let mut s = ReqSpec::new("POST", "https://93.184.216.34/v1/x?token=URLSECRET");
         s.headers.push(("Authorization".into(), "Bearer SK-TOPSECRET".into()));
         s.headers.push(("x-api-key".into(), "KEYSECRET".into()));
         s.body = Some("{\"prompt\":\"BODYSECRET\"}".into());
@@ -585,7 +593,7 @@ mod tests {
     #[test]
     fn no_secret_ever_appears_in_argv() {
         let argv = build_argv(&secret_spec()).join(" ");
-        for secret in ["SK-TOPSECRET", "KEYSECRET", "BODYSECRET", "URLSECRET", "Authorization", "api.example.com"] {
+        for secret in ["SK-TOPSECRET", "KEYSECRET", "BODYSECRET", "URLSECRET", "Authorization", "93.184.216.34"] {
             assert!(!argv.contains(secret), "{} leaked into argv: {}", secret, argv);
         }
         assert!(argv.contains("-K -"));
