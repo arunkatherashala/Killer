@@ -592,3 +592,60 @@ fn structured_output_through_json() {
     let (o, _) = run_watch(src, &[], None, WATCH);
     assert_eq!(o.stdout, "4", "{}", o.all());
 }
+
+// --- Item 11: PowerShell and detection --------------------------------------------------------
+
+#[cfg(windows)]
+#[test]
+fn powershell_block_runs_under_the_default_policy() {
+    let (o, _) = run_watch("println(polyglot_check(\"ps\"))\n", &[], None, WATCH);
+    if o.stdout != "true" {
+        eprintln!("skip: no PowerShell here");
+        return;
+    }
+    let (o, _) = run_watch("r = @ps { Write-Output 'ps ok' }\nprintln(r)\n", &[], None, WATCH);
+    assert_eq!(o.stdout, "ps ok", "{}", o.all());
+}
+
+#[test]
+fn polyglot_check_agrees_with_execution() {
+    for lang in ["python", "bash", "sh"] {
+        let (o, _) = run_watch(&format!("println(polyglot_check(\"{}\"))\n", lang), &[], None, WATCH);
+        assert_eq!(o.stdout == "true", works(lang), "{lang}: {}", o.all());
+    }
+}
+
+// --- Item 12: suite-level checks ----------------------------------------------------------------
+
+#[test]
+fn polyglot_exec_returns_stdout() {
+    need!("python");
+    let (o, _) = run_watch("println(polyglot_exec(\"python\", \"print(1)\"))\n", &[], None, WATCH);
+    assert_eq!(o.stdout, "1", "{}", o.all());
+}
+
+#[test]
+fn caught_block_error_lets_the_script_continue() {
+    need!("python");
+    let src = "try {\n    @python {\n        import sys\n        sys.exit(3)\n    }\n} catch e {\n    println(\"caught\")\n}\nprintln(\"continued\")\n";
+    let (o, _) = run_watch(src, &[], None, WATCH);
+    assert_eq!(o.stdout, "caught\ncontinued", "{}", o.all());
+}
+
+#[test]
+fn optional_runtimes_run_when_present() {
+    let cases = [
+        ("ruby", "r = @ruby { puts 6 * 7 }\nprintln(r)\n"),
+        ("node", "r = @node { console.log(6 * 7) }\nprintln(r)\n"),
+        ("perl", "r = @perl { print 6 * 7; }\nprintln(r)\n"),
+        ("java", "r = @java { System.out.println(6 * 7); }\nprintln(r)\n"),
+    ];
+    for (lang, src) in cases {
+        if !works(lang) {
+            eprintln!("skip: the {} runtime is not available here", lang);
+            continue;
+        }
+        let (o, _) = run_watch(src, &[], None, WATCH);
+        assert_eq!(o.stdout, "42", "{lang}: {}", o.all());
+    }
+}
