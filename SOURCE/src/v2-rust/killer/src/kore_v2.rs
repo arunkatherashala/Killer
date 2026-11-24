@@ -2777,19 +2777,23 @@ impl KoreReader {
         if pos + 4 > data.len() { return Err("Truncated schema length".to_string()); }
         let schema_comp_len = u32::from_le_bytes(data[pos..pos+4].try_into().unwrap_or([0; 4])) as usize;
         pos += 4;
-        if pos + schema_comp_len > data.len() { return Err("Truncated schema data".to_string()); }
+        if schema_comp_len > data.len() - pos { return Err("Truncated schema data".to_string()); }
         let schema_raw = decompress_block(&data[pos..pos + schema_comp_len]);
         pos += schema_comp_len;
 
-        let mut columns = Vec::with_capacity(ncols);
-        let mut sp = 0;
+        // every column needs at least 3 schema bytes (name length, type, encrypted flag)
+        if ncols.saturating_mul(3) > schema_raw.len() {
+            return Err("Corrupt KORE schema (column count exceeds schema size)".to_string());
+        }
+        let mut columns = Vec::with_capacity(cap_hint(ncols));
+        let mut sp = 0usize;
         for _ in 0..ncols {
             let (name_len, np) = read_varint(&schema_raw, sp); sp = np;
-            let name_end = sp + name_len as usize;
-            let name = String::from_utf8_lossy(&schema_raw[sp..name_end.min(schema_raw.len())]).into_owned();
+            let name_end = sp.saturating_add(name_len as usize);
+            let name = String::from_utf8_lossy(sub(&schema_raw, sp, name_end)).into_owned();
             sp = name_end;
-            let ktype = KType::from_u8(schema_raw.get(sp).copied().unwrap_or(4)); sp += 1;
-            let encrypted = schema_raw.get(sp).copied().unwrap_or(0) != 0; sp += 1;
+            let ktype = KType::from_u8(schema_raw.get(sp).copied().unwrap_or(4)); sp = sp.saturating_add(1);
+            let encrypted = schema_raw.get(sp).copied().unwrap_or(0) != 0; sp = sp.saturating_add(1);
             columns.push(KColumn { name, ktype, encrypted, enc_key: [0u8; 32] });
         }
 
@@ -2797,16 +2801,20 @@ impl KoreReader {
         if pos + 4 > data.len() { return Err("Truncated dict length".to_string()); }
         let dict_comp_len = u32::from_le_bytes(data[pos..pos+4].try_into().unwrap_or([0; 4])) as usize;
         pos += 4;
-        if pos + dict_comp_len > data.len() { return Err("Truncated dict data".to_string()); }
+        if dict_comp_len > data.len() - pos { return Err("Truncated dict data".to_string()); }
         let dict_raw = decompress_block(&data[pos..pos + dict_comp_len]);
         let _pos_after_dict = pos + dict_comp_len;
 
         let (dict_count, mut dp) = read_varint(&dict_raw, 0);
-        let mut dict = Vec::with_capacity(dict_count as usize);
+        // every entry needs at least one byte (its length)
+        if dict_count > dict_raw.len() as u64 {
+            return Err("Corrupt KORE dictionary (entry count exceeds dictionary size)".to_string());
+        }
+        let mut dict = Vec::with_capacity(cap_hint(dict_count as usize));
         for _ in 0..dict_count {
             let (slen, np) = read_varint(&dict_raw, dp);
-            let end = np + slen as usize;
-            dict.push(String::from_utf8_lossy(&dict_raw[np..end.min(dict_raw.len())]).into_owned());
+            let end = np.saturating_add(slen as usize);
+            dict.push(String::from_utf8_lossy(sub(&dict_raw, np, end)).into_owned());
             dp = end;
         }
 
@@ -2819,7 +2827,7 @@ impl KoreReader {
             data[footer_trailer_start+4..footer_trailer_start+12].try_into().unwrap_or([0; 8])
         ) as usize;
 
-        if footer_offset + footer_comp_len > data.len() {
+        if footer_offset.checked_add(footer_comp_len).map_or(true, |e| e > data.len()) {
             return Err("Corrupt footer offset".to_string());
         }
         let footer_raw = decompress_block(&data[footer_offset..footer_offset + footer_comp_len]);
@@ -2835,18 +2843,37 @@ impl KoreReader {
         ) as usize;
         fp += 2;
 
-        let mut chunk_nrows = Vec::with_capacity(ft_nchunks);
+        // the footer must agree with the header and be large enough to hold what it claims
+        // (a column entry is at least 21 bytes): never loop or allocate on an unchecked count
+        if ft_nchunks != nchunks || ft_ncols != ncols || ncols != columns.len() {
+            return Err("Corrupt KORE footer (chunk/column counts disagree with header)".to_string());
+        }
+        let min_footer = 6usize
+            .saturating_add(ft_nchunks.saturating_mul(4))
+            .saturating_add(ft_nchunks.saturating_mul(ft_ncols).saturating_mul(21));
+        if min_footer > footer_raw.len() {
+            return Err("Corrupt KORE footer (smaller than its chunk table)".to_string());
+        }
+        let mut chunk_nrows = Vec::with_capacity(cap_hint(ft_nchunks));
+        let mut total_rows = 0usize;
         for _ in 0..ft_nchunks {
             let nr = u32::from_le_bytes(
                 footer_raw.get(fp..fp+4).unwrap_or(&[0; 4]).try_into().unwrap_or([0; 4])
             ) as usize;
             fp += 4;
+            if nr > MAX_CHUNK_ROWS {
+                return Err("Corrupt KORE footer (chunk row count too large)".to_string());
+            }
+            total_rows = total_rows.saturating_add(nr);
             chunk_nrows.push(nr);
         }
+        if total_rows > (1usize << 32) {
+            return Err("Corrupt KORE footer (total row count too large)".to_string());
+        }
 
-        let mut col_meta: Vec<Vec<FooterColMeta>> = Vec::with_capacity(ft_nchunks);
+        let mut col_meta: Vec<Vec<FooterColMeta>> = Vec::with_capacity(cap_hint(ft_nchunks));
         for _chunk_idx in 0..ft_nchunks {
-            let mut chunk_cols = Vec::with_capacity(ft_ncols);
+            let mut chunk_cols = Vec::with_capacity(cap_hint(ft_ncols));
             for _ci in 0..ft_ncols {
                 let file_offset = u64::from_le_bytes(
                     footer_raw.get(fp..fp+8).unwrap_or(&[0; 8]).try_into().unwrap_or([0; 8])
@@ -2867,19 +2894,19 @@ impl KoreReader {
                 let (max_i64, np) = read_zvar(&footer_raw, fp); fp = np;
                 let (min_slen, np) = read_varint(&footer_raw, fp); fp = np;
                 let min_str = String::from_utf8_lossy(
-                    &footer_raw[fp..(fp + min_slen as usize).min(footer_raw.len())]
+                    sub(&footer_raw, fp, fp.saturating_add(min_slen as usize))
                 ).into_owned();
-                fp += min_slen as usize;
+                fp = fp.saturating_add(min_slen as usize);
                 let (max_slen, np) = read_varint(&footer_raw, fp); fp = np;
                 let max_str = String::from_utf8_lossy(
-                    &footer_raw[fp..(fp + max_slen as usize).min(footer_raw.len())]
+                    sub(&footer_raw, fp, fp.saturating_add(max_slen as usize))
                 ).into_owned();
-                fp += max_slen as usize;
+                fp = fp.saturating_add(max_slen as usize);
 
                 // Bloom filter (512 bytes)
-                let bloom_end = (fp + 512).min(footer_raw.len());
-                let bloom = Bloom::from_bytes(&footer_raw[fp..bloom_end]);
-                fp = bloom_end;
+                let bloom_end = fp.saturating_add(512).min(footer_raw.len());
+                let bloom = Bloom::from_bytes(sub(&footer_raw, fp, bloom_end));
+                fp = bloom_end.max(fp.min(footer_raw.len()));
 
                 chunk_cols.push(FooterColMeta {
                     file_offset, comp_len, codec,
@@ -2912,7 +2939,7 @@ impl KoreReader {
     /// Automatically filters out deleted rows if a delete bitmap is present.
     pub fn read_column(&self, col_name: &str) -> Option<Vec<KVal>> {
         let ci = self.columns.iter().position(|c| c.name == col_name)?;
-        let mut out = Vec::with_capacity(self.nrows);
+        let mut out = Vec::with_capacity(cap_hint(self.nrows));
         let mut global_row = 0usize;
         for chunk_idx in 0..self.nchunks {
             let meta = &self.col_meta[chunk_idx][ci];
@@ -2957,7 +2984,7 @@ impl KoreReader {
     /// Streams chunk-by-chunk with parallel per-column decode to reduce peak memory.
     /// Automatically filters out deleted rows if a delete bitmap is present.
     pub fn read_all(&self) -> Vec<Vec<KVal>> {
-        let mut rows = Vec::with_capacity(self.nrows);
+        let mut rows = Vec::with_capacity(cap_hint(self.nrows));
         let mut global_row = 0usize;
         for chunk_idx in 0..self.nchunks {
             let chunk_nrows = self.chunk_nrows[chunk_idx];
@@ -3137,10 +3164,10 @@ impl KoreReader {
 
     fn decode_col_block(&self, ci: usize, meta: &FooterColMeta, nrows: usize, chunk_idx: usize) -> Vec<KVal> {
         let col = &self.columns[ci];
-        let offset = meta.file_offset as usize;
+        let offset = usize::try_from(meta.file_offset).unwrap_or(usize::MAX);
 
         // Read: [crc32(4)] [comp_len(4)] [compressed_data]
-        if offset + 8 > self.data.len() { return vec![KVal::Null; nrows]; }
+        if offset.checked_add(8).map_or(true, |e| e > self.data.len()) { return vec![KVal::Null; nrows]; }
         let stored_crc = u32::from_le_bytes(
             self.data[offset..offset+4].try_into().unwrap_or([0; 4])
         );
@@ -3148,7 +3175,7 @@ impl KoreReader {
             self.data[offset+4..offset+8].try_into().unwrap_or([0; 4])
         ) as usize;
         let data_start = offset + 8;
-        let data_end = (data_start + comp_len).min(self.data.len());
+        let data_end = data_start.saturating_add(comp_len).min(self.data.len());
 
         // CRC32 integrity check
         let actual_crc = crc32(&self.data[data_start..data_end]);
@@ -3182,7 +3209,8 @@ impl KoreReader {
         decode_derived(data, nrows, &|src_ci: usize| -> Vec<f64> {
             if src_ci >= self.ncols { return vec![0.0; nrows]; }
             let src_meta = &self.col_meta[chunk_idx][src_ci];
-            // Recursively decode source column (must not itself be Derived to avoid loops)
+            // a derived column may not depend on another derived column (also stops cycles)
+            if src_meta.codec == Codec::Derived { return vec![0.0; nrows]; }
             let src_vals = self.decode_col_block(src_ci, src_meta, nrows, chunk_idx);
             src_vals.iter().map(|v| v.as_f64()).collect()
         })
@@ -3489,7 +3517,7 @@ fn decode_derived(
     let formula_type = data[0];
     let num_sources = data[1] as usize;
     let mut p = 2usize;
-    let mut src_indices = Vec::with_capacity(num_sources);
+    let mut src_indices = Vec::with_capacity(cap_hint(num_sources));
     for _ in 0..num_sources {
         if p + 2 > data.len() { return vec![KVal::Null; nrows]; }
         src_indices.push(u16::from_le_bytes([data[p], data[p+1]]) as usize);
@@ -3516,25 +3544,27 @@ fn decode_derived(
         .collect();
 
     // Reconstruct
-    let mut out = Vec::with_capacity(nrows);
+    let mut out = Vec::with_capacity(cap_hint(nrows));
+    // a source column may decode shorter than `nrows` in a corrupt file
+    let at = |k: usize, ri: usize| -> f64 { src_vals[k].get(ri).copied().unwrap_or(0.0) };
     for ri in 0..nrows {
         let predicted = match formula_type {
             0 => {
                 // A * B * (1 - C)
                 if src_vals.len() >= 3 {
-                    src_vals[0][ri] * src_vals[1][ri] * (1.0 - src_vals[2][ri])
+                    at(0, ri) * at(1, ri) * (1.0 - at(2, ri))
                 } else { 0.0 }
             }
             1 => {
                 // A * B
                 if src_vals.len() >= 2 {
-                    src_vals[0][ri] * src_vals[1][ri]
+                    at(0, ri) * at(1, ri)
                 } else { 0.0 }
             }
             _ => 0.0,
         };
         let pred_scaled = (predicted * scale).round() as i64;
-        let tgt_scaled = pred_scaled + if ri < residuals.len() { residuals[ri] } else { 0 };
+        let tgt_scaled = pred_scaled.wrapping_add(if ri < residuals.len() { residuals[ri] } else { 0 });
         out.push(KVal::Float(tgt_scaled as f64 / scale));
     }
     out
