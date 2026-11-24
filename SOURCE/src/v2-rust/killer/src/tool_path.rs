@@ -15,6 +15,8 @@ struct Snapshot {
     path: Option<OsString>,
     openssl: Option<String>,
     curl: Option<String>,
+    /// Every `KILLER_*` variable at snapshot time (polyglot runtime overrides and settings).
+    killer_vars: Vec<(String, String)>,
 }
 
 static SNAP: OnceLock<Snapshot> = OnceLock::new();
@@ -25,6 +27,10 @@ fn snap() -> &'static Snapshot {
         path: std::env::var_os("PATH"),
         openssl: std::env::var("KILLER_OPENSSL").ok(),
         curl: std::env::var("KILLER_CURL").ok(),
+        killer_vars: std::env::vars_os()
+            .filter_map(|(k, v)| Some((k.into_string().ok()?, v.into_string().ok()?)))
+            .filter(|(k, _)| k.to_ascii_uppercase().starts_with("KILLER_"))
+            .collect(),
     })
 }
 
@@ -126,4 +132,90 @@ pub fn powershell() -> Result<PathBuf, String> {
         }
     }
     resolve_cached("powershell", "KILLER_POWERSHELL", &None)
+}
+
+/// A `KILLER_*` variable as it was when the environment snapshot was taken (a script's `env_set`
+/// cannot change it afterwards).
+pub fn var(name: &str) -> Option<String> {
+    snap().killer_vars.iter().find(|(k, _)| if cfg!(windows) { k.eq_ignore_ascii_case(name) } else { k == name }).map(|(_, v)| v.clone())
+}
+
+/// A file, or (Windows) an app execution alias, which `metadata` cannot follow but which can run.
+fn is_runnable_file(p: &Path) -> bool {
+    match std::fs::metadata(p) {
+        Ok(m) => m.is_file(),
+        Err(_) => std::fs::symlink_metadata(p).map(|m| !m.is_dir()).unwrap_or(false),
+    }
+}
+
+/// Validate an override variable: an absolute path to an existing file.
+pub fn check_override(env_name: &str, value: &str) -> Result<PathBuf, String> {
+    let p = Path::new(value);
+    if !p.is_absolute() {
+        return Err(format!("{} must be an absolute path, got '{}'", env_name, value));
+    }
+    if !is_runnable_file(p) {
+        return Err(format!("{} points at '{}', which is not a file", env_name, value));
+    }
+    Ok(p.to_path_buf())
+}
+
+/// Pure lookup step of [`find_on_path`] (testable): the first `tool` (Windows: `.exe`, `.cmd`,
+/// `.bat`) in an absolute PATH directory that is not the current directory.
+pub fn find_in(tool: &str, path_var: Option<&std::ffi::OsStr>, cwd: Option<&Path>) -> Option<PathBuf> {
+    let names: Vec<String> = if cfg!(windows) {
+        if Path::new(tool).extension().is_some() {
+            vec![tool.to_string()]
+        } else {
+            ["exe", "cmd", "bat"].iter().map(|e| format!("{}.{}", tool, e)).collect()
+        }
+    } else {
+        vec![tool.to_string()]
+    };
+    for dir in std::env::split_paths(path_var?) {
+        if dir.as_os_str().is_empty() || !dir.is_absolute() {
+            continue;
+        }
+        if let Some(c) = cwd {
+            if same_dir(&dir, c) {
+                continue;
+            }
+        }
+        for n in &names {
+            let full = dir.join(n);
+            if is_runnable_file(&full) {
+                return Some(full);
+            }
+        }
+    }
+    None
+}
+
+/// Absolute path of a polyglot runtime program found through the PATH snapshot (never the current
+/// directory, never a relative PATH entry).
+pub fn find_on_path(tool: &str) -> Option<PathBuf> {
+    let cwd = std::env::current_dir().ok();
+    find_in(tool, snap().path.as_deref(), cwd.as_deref())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn relative_and_current_directory_entries_are_skipped() {
+        let base = std::env::temp_dir().join(format!("killer_tp_{}_{}", std::process::id(), line!()));
+        let planted = base.join("cwd");
+        let real = base.join("real");
+        std::fs::create_dir_all(&planted).unwrap();
+        std::fs::create_dir_all(&real).unwrap();
+        let name = if cfg!(windows) { "fakeexe_zz.exe" } else { "fakeexe_zz" };
+        std::fs::write(planted.join(name), b"x").unwrap();
+        std::fs::write(real.join(name), b"x").unwrap();
+        let pv = std::env::join_paths([std::path::PathBuf::from("."), planted.clone(), real.clone()]).unwrap();
+        let got = find_in("fakeexe_zz", Some(&pv), Some(&planted)).unwrap();
+        assert_eq!(got, real.join(name));
+        assert!(check_override("X", "relative/python").unwrap_err().contains("absolute"));
+        let _ = std::fs::remove_dir_all(&base);
+    }
 }

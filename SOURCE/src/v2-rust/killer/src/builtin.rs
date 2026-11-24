@@ -716,6 +716,8 @@ impl BuiltinFunctions {
             "polyglot_exec"      => crate::polyglot::builtin_polyglot_exec(args),
             "polyglot_list"      => crate::polyglot::builtin_polyglot_list(args),
             "polyglot_check"     => crate::polyglot::builtin_polyglot_check(args),
+            "polyglot_run"       => crate::polyglot::builtin_polyglot_run(args),
+            "polyglot_exec_args" => crate::polyglot::builtin_polyglot_exec_args(args),
             // -- AI Assassin Assist Layer --------------------------------------
             "nova_assist_log"        => crate::assassin_assist::builtin_assist_log(args),
             "nova_assist_status"     => crate::assassin_assist::builtin_assist_status(args),

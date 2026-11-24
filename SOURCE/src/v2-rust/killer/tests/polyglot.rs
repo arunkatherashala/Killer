@@ -255,9 +255,7 @@ fn output_cap_stops_a_flood() {
 #[test]
 fn stream_with_lots_of_stderr_does_not_deadlock() {
     need!("python");
-    let src = "s = polyglot_stream(\"python\", \"import sys\nsys.stderr.write('e' * 1000000)\nprint('done')\")
-println(\"got \" + s)
-";
+    let src = "s = polyglot_stream(\"python\", \"import sys; sys.stderr.write(chr(101) * 1000000); print(chr(100) + chr(111) + chr(110) + chr(101))\")\nprintln(\"got \" + s)\n";
     let (o, _) = run_watch(src, &[], None, WATCH);
     assert!(o.stdout.ends_with("got done"), "{}", &o.all()[..o.all().len().min(400)]);
 }
@@ -295,8 +293,8 @@ fn temp_files_are_removed_after_success_failure_and_timeout() {
     need!("python");
     let tmp = fresh_dir("tmp");
     let t = tmp.to_string_lossy().to_string();
-    let env = [("TEMP", t.as_str()), ("TMP", t.as_str()), ("TMPDIR", t.as_str()), ("KILLER_POLYGLOT_TIMEOUT", "2")];
-    let src = "a = @python { print(1) }\ntry {\n    b = @python { raise SystemExit(4) }\n} catch e {\n    println(\"x\")\n}\ntry {\n    c = @python {\n        import time\n        time.sleep(30)\n    }\n} catch e {\n    println(\"y\")\n}\nprintln(a)\n";
+    let env = [("TEMP", t.as_str()), ("TMP", t.as_str()), ("TMPDIR", t.as_str()), ("KILLER_POLYGLOT_TIMEOUT", "20")];
+    let src = "a = @python { print(1) }\ntry {\n    b = @python { raise SystemExit(4) }\n} catch e {\n    println(\"x\")\n}\ntry {\n    c = @python {\n        import time\n        time.sleep(300)\n    }\n} catch e {\n    println(\"y\")\n}\nprintln(a)\n";
     let (o, _) = run_watch(src, &env, None, WATCH);
     assert_eq!(o.stdout, "x\ny\n1", "{}", o.all());
     let left: Vec<_> = std::fs::read_dir(&tmp).unwrap().flatten().map(|e| e.file_name()).filter(|n| n.to_string_lossy().starts_with("killer_")).collect();
@@ -397,3 +395,4 @@ fn stderr_snippet_in_errors_is_capped() {
     let n: usize = o.stdout.trim().parse().unwrap_or(usize::MAX);
     assert!(n < 4096, "{}", &o.all()[..o.all().len().min(300)]);
 }
+

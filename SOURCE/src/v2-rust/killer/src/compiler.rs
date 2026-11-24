@@ -7327,6 +7327,8 @@ const BUILTINS: &[&str] = &[
     "polyglot_exec",     // polyglot_exec(lang, code)        → String
     "polyglot_list",     // polyglot_list()                  → String (detected runtimes)
     "polyglot_check",    // polyglot_check(lang)             → Bool
+    "polyglot_run",      // polyglot_run(lang, code)         → {stdout, stderr, code}
+    "polyglot_exec_args", // polyglot_exec_args(lang, code, "a,b", a, b) → String (@lang(a, b) { })
     // AI Assassin Assist Layer
     "nova_assist_log",        "nova_assist_status",     "nova_assist_debug",
     "nova_assist_optimize",   "nova_assist_enable",     "nova_assist_disable",
