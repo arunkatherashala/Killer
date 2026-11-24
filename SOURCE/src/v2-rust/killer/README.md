@@ -236,7 +236,7 @@ The constants `T_POS`, `T_ZERO` and `T_NEG` are plain names. Use `x == T_ZERO` t
   (fix in progress); assign it before the block.
 - Whole-number `+ - * **` results beyond 2^53 become exact big integers automatically; integer literals above 2^53 need an `n` suffix.
 - The JIT is x86-64 only and covers pure numeric code; everything else is interpreted.
-- The HTTP server serves one request at a time; HTTPS in the server runs through the system `openssl` command and the HTTP client needs `curl` (there is no TLS stack inside Killer). See [`docs/OPERATIONS.md`](docs/OPERATIONS.md) for what is missing in production use.
+- The HTTP server runs handlers on a fixed worker pool (each worker has its own copy of the globals); HTTPS in the server runs through the system `openssl` command and the HTTP client needs `curl` (there is no TLS stack inside Killer). See [`docs/OPERATIONS.md`](docs/OPERATIONS.md) for what is missing in production use.
 - `len(s)` and `s[i]` are O(n) on very long strings; `count_tokens` is an approximation.
 - The debugger shows one stack frame.
 - Dicts and objects are shared references (like Python or JavaScript): `b = a` aliases, and a dict or

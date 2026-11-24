@@ -48,7 +48,7 @@ different string representation (a repo-wide change); it has not been done.
 ## Not measured
 
 Memory use, start-up time as a metric (about 0.03 s CPU is included in the numbers above), server throughput
-(`serve` handles one request at a time), LLM and inference speed, I/O, multi-threaded scaling, Linux/macOS performance.
+(only a rough debug-build number in the CHANGELOG for the `serve` worker pool), LLM and inference speed, I/O, multi-threaded scaling, Linux/macOS performance.
 
 ## Reproduce
 

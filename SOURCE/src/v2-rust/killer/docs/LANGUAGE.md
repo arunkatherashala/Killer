@@ -1519,7 +1519,7 @@ clients, not thousands); no client certificates, ALPN or session resumption; `so
 
 **HTTPS.** `serve(port, handler, {"tls": {"cert": "cert.pem", "key": "key.pem"}})` serves HTTPS. A TLS front on
 `host:port` forwards the decrypted requests to a private plain listener on 127.0.0.1 that the usual accept loop
-serves; requests are handled one at a time as before, but TLS handshakes of waiting clients run in parallel. Handlers
+serves; requests run on the worker pool as for plain HTTP, and TLS handshakes of waiting clients run in parallel. Handlers
 see the same request dict (the client address is not available), and `max_requests`, `idle_timeout` and
 `server_stop()` work unchanged. The internal loopback port accepts plain HTTP from other local processes.
 
@@ -1783,16 +1783,17 @@ println(len(items))
 ## HTTP servers and clients
 
 **Server.** `serve(port, handler[, opts])` binds a TCP port and runs the accept loop on the calling
-thread, one request at a time. The handler receives a dict `{method, path, query, headers, body,
+thread and the handlers on a pool of worker threads (see [HTTP server: worker pool](#http-server-worker-pool);
+each worker has its own copy of the globals). The handler receives a dict `{method, path, query, headers, body,
 params}` (header names are lower case) and returns a string (200 `text/plain`), a dict with `status`
 (and optional `headers` and `body`), or any other dict or list (sent as JSON). A handler that throws
 produces a `500` and the server keeps going. `route(method, path, fn)` registers handlers instead of one
 catch-all: `:name` segments land in `req["params"]`, a trailing `*` matches the rest, and `serve(port,
 null)` dispatches to the routes (unmatched requests get `404`). Options: `host` (default `127.0.0.1`;
-`"0.0.0.0"` exposes the server), `max_requests`, `idle_timeout` (seconds). `serve_once(port, handler)`
-serves one request, `server_stop()` called from a handler stops after the current response,
+`"0.0.0.0"` exposes the server), `workers`, `queue`, `max_requests`, `idle_timeout` (seconds). `serve_once(port, handler)`
+serves one request, `server_stop()` called from a handler stops accepting and lets running requests finish,
 `routes_clear()` forgets the routes and `free_port()` returns an unused local port. `serve` returns the
-number of requests served. For HTTPS pass `tls: {cert, key}` (see the TLS section).
+number of requests answered. For HTTPS pass `tls: {cert, key}` (see the TLS section).
 
 **Client.** `http_get(url[, headers, timeout])` returns the body text. `http_post`, `http_put`,
 `http_delete`, `http_patch`, `http_head`, `http_get_json` and `http_download` are the other verbs.
@@ -2110,23 +2111,57 @@ println(trit_and(T_POS, T_ZERO))
 # expect: T_ZERO
 ```
 
-## HTTP server: one request at a time
+## HTTP server: worker pool
 
-`serve(port, handler[, opts])` runs the accept loop and every handler on the VM thread, so
-**requests are handled strictly one after another**; a slow handler delays the requests queued
-behind it (there is no `workers` option). Guards that keep one bad client or handler from wedging
-the process:
+`serve(port, handler[, opts])` runs the accept loop on the calling thread and hands every connection
+to a **bounded queue** served by a **fixed pool of worker threads**, so a slow handler or a long
+Server-Sent Events stream occupies one worker and the other requests keep being answered.
 
+- `workers` (default min(number of CPUs, 8), at most 256): how many requests run at the same time.
+  `workers: 1` gives the old one-request-at-a-time behaviour. `serve_once` always uses one worker.
+- `queue` (default 64, `0` = no queue): connections accepted but not yet picked up by a worker. When
+  the queue is full the client gets `503 Service Unavailable` with `Retry-After: 1` at once instead
+  of waiting.
 - `read_timeout` (seconds, default 10): the total time a client has to send its request. An idle
-  or dribbling connection gets `408 Request Timeout` and the next client is served.
+  or dribbling connection gets `408 Request Timeout`; it only holds its own worker meanwhile.
 - `request_timeout` (seconds, default 60, `0` turns it off): wall-clock deadline for one handler
   call, checked on loop back-edges. A handler stuck in `while true` is aborted and the client gets
   `503`; the server keeps running. A single blocking builtin (`sleep_ms(1e6)`) cannot be interrupted.
+- `max_requests`: requests that reach routing are counted across all workers; exactly that many are
+  admitted, a later request that was already accepted gets `503`, and `serve` returns once the
+  admitted ones have been answered (each is still bounded by its own `request_timeout` /
+  `stream_timeout`). Connections that never send a complete request (`408`, `400`) do not count.
 - `server_stop()` is process-wide: call it from a handler or from a task on another thread (for
-  example a watchdog started with `async_spawn`). It interrupts reads and streams within about
-  200 ms; a handler that is mid-call finishes (or hits its deadline) first.
+  example a watchdog started with `async_spawn`). The server stops accepting at once, reads and
+  streams in progress are interrupted within about 200 ms, queued connections get `503`, and `serve`
+  waits up to `drain_timeout` (seconds, default 30) for handlers that are still running (a handler
+  that runs longer is abandoned: `serve` returns and its reply may never be sent).
 - `stream_timeout` (seconds, default 300) bounds a Server-Sent Events reply.
-- Other options: `host`, `max_requests`, `idle_timeout`.
+- Other options: `host`, `idle_timeout` (stops after that long with no connection and nothing in flight).
+- `serve` returns the number of requests answered.
+
+**Handlers do not share global state (behaviour change).** Each worker runs its own VM on a private
+copy of the program's data, taken when `serve` starts: top-level variables, the handler and the
+routes (and whatever their closures captured) are deep-copied once per worker. Inside one worker
+the copy persists between requests, and closures that captured the same object still share it; but
+a change made by a handler is not seen by the other workers, nor by the script after `serve`
+returns. To share state between requests use:
+
+- `mutex_new` / `mutex_get` / `mutex_set` / `mutex_add` cells (and `atomic_*`): one cell, visible to
+  every worker and to the main script;
+- channels (`chan_new`, `chan_send`, `chan_recv`) to hand work or results to one owner task;
+- a database or a file (for data that must survive a restart anyway);
+- or `workers: 1`, which keeps the old single-copy behaviour for an in-memory store.
+
+```killer skip
+hits = mutex_new(0)
+fn handler(req) {
+  mutex_add(hits, 1)
+  return "hello"
+}
+n = serve(8080, handler, {"workers": 4, "max_requests": 100})
+println(n, mutex_get(hits))
+```
 
 ## Streaming model output
 
@@ -2220,7 +2255,7 @@ Observed, not hypothetical:
 - `//` is a comment, so there is no integer-division operator (use `floor(a / b)` or `idiv`).
 - `len(s)` and `s[i]` on very long strings are O(n) per call.
 - `count_tokens` is an approximation, not a model tokenizer.
-- The HTTP server serves one request at a time (HTTPS needs `openssl` and costs one child process per connection); the HTTP client needs `curl` for HTTPS.
+- The HTTP server runs handlers on a fixed worker pool, each worker on its own copy of the globals (HTTPS needs `openssl` and costs one child process per connection); the HTTP client needs `curl` for HTTPS.
 - The debugger shows one stack frame.
 - The x86-64 JIT only handles pure numeric functions; on other CPU architectures everything runs in the
   interpreter (same results, slower).

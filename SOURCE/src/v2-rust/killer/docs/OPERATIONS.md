@@ -15,8 +15,9 @@ important, what is **not** there. Threats and residual risks: `SOURCE/docs/proje
   Windows service wrapper, `restart: always`) because Killer does not restart itself.
 * Platforms actually run in CI: x86-64 Windows, x86-64 Linux, Apple Silicon macOS ([PLATFORMS.md](PLATFORMS.md)). The
   JIT is x86-64 only; elsewhere the interpreter is used.
-* Running a server: `serve(port, handler, {host: "0.0.0.0"})` (default host `127.0.0.1`). It handles **one request at
-  a time**; put a reverse proxy in front for concurrency, TLS termination, auth and rate limiting. TLS is available
+* Running a server: `serve(port, handler, {host: "0.0.0.0"})` (default host `127.0.0.1`). Handlers run on a pool of
+  `workers` threads (default min(CPUs, 8)) behind a bounded `queue` (default 64, `503` when full); each worker
+  has its own copy of the globals. Put a reverse proxy in front for TLS termination, auth and rate limiting. TLS is available
   through `serve(..., {tls: {cert, key}})` but costs one `openssl s_server` child per connection.
 
 ## Environment variables
@@ -87,7 +88,7 @@ TLS helper child). Do not set them.
 
 * `eval`/`exec`: 50M steps, 30 s, 8 nested levels, memory cap above (`tests/eval_safety.rs`, `tests/eval_memory*.rs`).
 * Recursion depth, allocation size and nesting limits give catchable errors (`tests/robustness.rs`).
-* `serve`: 64 KB headers, 16 MB body, `read_timeout` 10 s, `request_timeout` 60 s, `stream_timeout` 300 s; TLS front 128 connections.
+* `serve`: 64 KB headers, 16 MB body, `read_timeout` 10 s, `request_timeout` 60 s, `stream_timeout` 300 s, `workers` min(CPUs, 8) (at most 256), `queue` 64, `drain_timeout` 30 s; TLS front 128 connections.
 * `killer-mcp`: 8 MiB message, 64 nesting levels. Package registry client 64 MB / 120 s.
 * **No** process-wide memory, CPU or file-descriptor limit: use the operating system (cgroups, ulimit, job objects).
 

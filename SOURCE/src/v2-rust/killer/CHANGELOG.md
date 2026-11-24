@@ -20,6 +20,24 @@ All notable changes to `killer-native` are documented here.
   API keys no longer on command lines.
 
 ### Changed
+- **Behaviour change: `serve` runs handlers on a bounded worker pool, and handlers no longer share global state.**
+  The accept loop hands each connection to a bounded queue (`queue`, default 64) served by `workers` threads (default
+  min(CPUs, 8), at most 256); a full queue answers `503` with `Retry-After: 1` at once, so one slow client or SSE stream
+  no longer blocks everyone. Each worker runs its own VM on a private deep copy of the program data taken when `serve`
+  starts (globals, the handler, the routes and what their closures captured, copied in one walk, so closures sharing a
+  store still share it inside a worker). A handler's change to a global is therefore not seen by the other workers nor by
+  the script after `serve` returns: share state with `mutex_*` / `atomic_*` cells, channels or a database, or pass
+  `workers: 1` (one request at a time on a single copy; `examples/apps/todo` does this for its in-memory store).
+  `max_requests` counts requests admitted to routing across all workers (exactly that many reach a handler; a later one
+  that was already accepted gets `503`; `serve` returns once they are answered). `server_stop()` stops accepting at
+  once, answers queued connections `503` and waits up to the new `drain_timeout` (default 30 s) for running handlers.
+  `serve` returns the number of requests answered. `request_timeout`, `read_timeout`, `stream_timeout`, `idle_timeout`
+  and `tls` keep their meaning. Bad `workers` / `queue` values are errors. Handlers on workers run in the interpreter
+  (the JIT is not used on worker threads, as for `async_spawn` tasks). Tests: `tests/http_pool.rs`, new HTTPS pool test
+  in `tests/tls_server.rs`. Load (debug build, Windows, 200 concurrent `GET`s of a trivial handler, noisy shared machine):
+  trivial handler: before median about 180 req/s (range 73-465 over 10 runs), after about 110 req/s
+  (18-388), i.e. no gain and within noise for work this small; handler with `sleep_ms(50)`: before about 21 req/s and
+  31-33 of the 200 connections failed, after 69-108 req/s with all 200 answered.
 - The eval memory cap's counting allocator is now declared by the Killer CLI binaries (`killer`, `killer_super`,
   `killer-native`, `killer-repl`) instead of the library, so the library no longer conflicts with an embedder's own
   `#[global_allocator]`; `unsafe` is allowed only in `memcap.rs` for it. Without the allocator (embedder, no
