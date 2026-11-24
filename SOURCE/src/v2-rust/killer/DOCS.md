@@ -9,6 +9,9 @@ a register-and-stack virtual machine written in Rust.
 > [docs/LANGUAGE.md](docs/LANGUAGE.md) and [docs/TUTORIAL.md](docs/TUTORIAL.md); the builtin list is
 > [docs/STDLIB_INDEX.md](docs/STDLIB_INDEX.md). Where this file disagrees with them, they win. Newer
 > features are summarised in Appendix E at the end.
+>
+> Policy and status pages: [docs/STABILITY.md](docs/STABILITY.md), [docs/FEATURES.md](docs/FEATURES.md) (with proof column),
+> [docs/OPERATIONS.md](docs/OPERATIONS.md), [docs/PERFORMANCE.md](docs/PERFORMANCE.md).
 
 ---
 

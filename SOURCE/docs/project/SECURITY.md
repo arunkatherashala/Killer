@@ -308,3 +308,5 @@ transparency log.
   are reached through `curl` and the system certificate store. Git dependencies are pinned by commit in `killer.lock`.
 * Not provided: package signatures, a signed index, key rotation, revocation. The registry server is trusted for
   availability and for the first download of anything that is not pinned.
+
+See also: [THREAT_MODEL.md](THREAT_MODEL.md) (threats, mitigations, the test that proves each, residual risk).
