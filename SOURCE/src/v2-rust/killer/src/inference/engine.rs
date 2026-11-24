@@ -222,30 +222,45 @@ impl QuantTensor {
 
         let n_threads = std::thread::available_parallelism()
             .map(|n| n.get()).unwrap_or(4).min(16);
-        let chunk = (out_dim + n_threads - 1) / n_threads;
 
         let mut y = vec![0.0f32; out_dim];
-        std::thread::scope(|scope| {
-            let chunks: Vec<&mut [f32]> = y.chunks_mut(chunk).collect();
-            let mut handles = Vec::with_capacity(chunks.len());
-            for (t, slice) in chunks.into_iter().enumerate() {
-                let row_start = t * chunk;
-                handles.push(scope.spawn(move || {
-                    // Temporary row dequant buffer (stack-allocated per thread,
-                    // only used for the fallback path of rare quant types)
-                    for (i, cell) in slice.iter_mut().enumerate() {
-                        let r     = row_start + i;
-                        let start = r * bytes_per_row;
-                        let end   = (start + bytes_per_row).min(data.len());
-                        if start >= data.len() { break; }
-                        *cell = dot_inline(&data[start..end], dtype, x_safe, in_dim);
-                    }
-                }));
-            }
-            for h in handles { h.join().unwrap_or_default(); }
+        let res = par_rows(&mut y, n_threads, |r, cell| {
+            let start = r * bytes_per_row;
+            if start >= data.len() { return; }
+            let end = (start + bytes_per_row).min(data.len());
+            *cell = dot_inline(&data[start..end], dtype, x_safe, in_dim);
         });
+        // A worker panic means `y` is incomplete: never return it as if it were valid.
+        if let Err(e) = res { panic!("matvec failed: {}", e); }
         y
     }
+}
+
+/// Run `f(row, cell)` for every element of `y`, split across `n_threads` scoped threads.
+/// A panicking worker is reported as `Err` (never swallowed).
+fn par_rows<F>(y: &mut [f32], n_threads: usize, f: F) -> Result<(), String>
+where F: Fn(usize, &mut f32) + Sync {
+    if y.is_empty() { return Ok(()); }
+    let chunk = ((y.len() + n_threads.max(1) - 1) / n_threads.max(1)).max(1);
+    let f = &f;
+    std::thread::scope(|scope| {
+        let handles: Vec<_> = y.chunks_mut(chunk).enumerate().map(|(t, slice)| {
+            let row_start = t * chunk;
+            scope.spawn(move || {
+                for (i, cell) in slice.iter_mut().enumerate() { f(row_start + i, cell); }
+            })
+        }).collect();
+        let mut err = None;
+        for h in handles {
+            if let Err(p) = h.join() {
+                let msg = p.downcast_ref::<&str>().map(|s| s.to_string())
+                    .or_else(|| p.downcast_ref::<String>().cloned())
+                    .unwrap_or_else(|| "unknown panic".to_string());
+                err.get_or_insert(format!("worker thread panicked: {}", msg));
+            }
+        }
+        match err { Some(e) => Err(e), None => Ok(()) }
+    })
 }
 
 /// Zero-allocation inline dot product: dispatches to the matching per-format function.
@@ -1240,5 +1255,14 @@ mod tests {
         assert!(validate_model_shapes(&cfg0, &t, 4).is_err());
         let cfg1 = ModelConfig { n_heads: 4, n_kv_heads: 3, ..cfg };
         assert!(validate_model_shapes(&cfg1, &t, 4).unwrap_err().contains("multiple"));
+    }
+
+    #[test]
+    fn par_rows_propagates_worker_panic() {
+        let mut y = vec![0.0f32; 64];
+        let ok = par_rows(&mut y, 4, |r, c| *c = r as f32);
+        assert!(ok.is_ok() && y[63] == 63.0);
+        let err = par_rows(&mut y, 4, |r, c| { if r == 40 { panic!("boom"); } *c = 1.0; }).unwrap_err();
+        assert!(err.contains("boom"), "{}", err);
     }
 }
