@@ -535,6 +535,20 @@ fn write_varint(buf: &mut Vec<u8>, mut v: u64) {
 }
 fn write_zvar(buf: &mut Vec<u8>, n: i64) { write_varint(buf, zigzag_enc(n)); }
 
+/// Largest row count a single chunk may claim (hostile-input bound).
+const MAX_CHUNK_ROWS: usize = 1 << 24;
+
+/// Pre-allocation hint for header-derived sizes: never trust a count read from the input.
+#[inline]
+fn cap_hint(n: usize) -> usize { n.min(1 << 16) }
+
+/// Bounds-safe sub-slice (empty if `start` is past the end).
+#[inline]
+fn sub(data: &[u8], start: usize, end: usize) -> &[u8] {
+    let e = end.min(data.len());
+    if start >= e { &[] } else { &data[start..e] }
+}
+
 fn read_varint(data: &[u8], pos: usize) -> (u64, usize) {
     let mut r = 0u64; let mut s = 0u32; let mut i = pos;
     while i < data.len() {
@@ -1318,12 +1332,15 @@ fn encode_rle_int(nums: &[i64]) -> Vec<u8> {
 
 fn decode_rle_int(data: &[u8], pos: usize, nrows: usize) -> (Vec<i64>, usize) {
     let (nruns, mut p) = read_varint(data, pos);
-    let mut out = Vec::with_capacity(nrows);
-    for _ in 0..nruns {
+    let mut out = Vec::with_capacity(cap_hint(nrows));
+    // every run consumes input bytes: never loop more often than there are bytes, and
+    // never expand beyond the row count the chunk claims
+    for _ in 0..nruns.min(data.len() as u64) {
         let (cnt, p2) = read_varint(data, p);
         let (val, p3) = read_zvar(data, p2);
         p = p3;
-        for _ in 0..cnt { out.push(val); }
+        let take = (cnt.min(usize::MAX as u64) as usize).min(nrows.saturating_sub(out.len()));
+        out.resize(out.len() + take, val);
     }
     (out, p)
 }
@@ -1333,7 +1350,7 @@ fn encode_delta_int(nums: &[i64]) -> Vec<u8> {
     if nums.is_empty() { return Vec::new(); }
     let mut buf = Vec::new();
     write_zvar(&mut buf, nums[0]);
-    for i in 1..nums.len() { write_zvar(&mut buf, nums[i] - nums[i-1]); }
+    for i in 1..nums.len() { write_zvar(&mut buf, nums[i].wrapping_sub(nums[i-1])); }
     buf
 }
 
@@ -1341,27 +1358,27 @@ fn decode_delta_int(data: &[u8], pos: usize, nrows: usize) -> (Vec<i64>, usize) 
     if nrows == 0 { return (Vec::new(), pos); }
     // Phase 1: read raw deltas (base + nrows-1 deltas)
     let (base, mut p) = read_zvar(data, pos);
-    let mut deltas = Vec::with_capacity(nrows - 1);
+    let mut deltas = Vec::with_capacity(cap_hint(nrows - 1));
     for _ in 1..nrows {
         let (d, p2) = read_zvar(data, p);
         deltas.push(d);
         p = p2;
     }
     // Phase 2: prefix-sum with SIMD-friendly 4-wide unrolled loop
-    let mut out = Vec::with_capacity(nrows);
+    let mut out = Vec::with_capacity(cap_hint(nrows));
     out.push(base);
     let n = deltas.len();
     let mut acc = base;
     let chunks = n / 4;
     for c in 0..chunks {
         let i = c * 4;
-        acc += deltas[i];   out.push(acc);
-        acc += deltas[i+1]; out.push(acc);
-        acc += deltas[i+2]; out.push(acc);
-        acc += deltas[i+3]; out.push(acc);
+        acc = acc.wrapping_add(deltas[i]);   out.push(acc);
+        acc = acc.wrapping_add(deltas[i+1]); out.push(acc);
+        acc = acc.wrapping_add(deltas[i+2]); out.push(acc);
+        acc = acc.wrapping_add(deltas[i+3]); out.push(acc);
     }
     for i in (chunks * 4)..n {
-        acc += deltas[i];
+        acc = acc.wrapping_add(deltas[i]);
         out.push(acc);
     }
     (out, p)
@@ -1396,7 +1413,7 @@ fn encode_bitpack(bits: &[bool]) -> Vec<u8> {
 
 fn decode_bitpack(data: &[u8], pos: usize, nrows: usize) -> (Vec<bool>, usize) {
     let nbytes = (nrows + 7) / 8;
-    let mut out = Vec::with_capacity(nrows);
+    let mut out = Vec::with_capacity(cap_hint(nrows));
     for i in 0..nrows {
         let byte_idx = pos + i / 8;
         let b = data.get(byte_idx).copied().unwrap_or(0);
@@ -1459,17 +1476,19 @@ fn encode_bdict(vals: &[&str]) -> Vec<u8> {
 fn decode_bdict(data: &[u8], pos: usize, nrows: usize) -> (Vec<String>, usize) {
     let mut p = pos;
     let (n_unique, np) = read_varint(data, p); p = np;
-    let mut dict: Vec<String> = Vec::with_capacity(n_unique as usize);
+    let n_unique = n_unique.min(data.len() as u64);
+    let mut dict: Vec<String> = Vec::with_capacity(cap_hint(n_unique as usize));
     for _ in 0..n_unique {
         let (slen, np) = read_varint(data, p); p = np;
-        let end = p + slen as usize;
-        dict.push(String::from_utf8_lossy(&data[p..end.min(data.len())]).into_owned());
+        let end = p.saturating_add(slen as usize);
+        dict.push(String::from_utf8_lossy(sub(data, p, end)).into_owned());
         p = end;
     }
-    let bits_per = data.get(p).copied().unwrap_or(1) as usize; p += 1;
+    let bits_per = data.get(p).copied().unwrap_or(1) as usize; p = p.saturating_add(1);
+    if bits_per > 32 { return (Vec::new(), p); }
     let mask = (1u64 << bits_per) - 1;
 
-    let mut out = Vec::with_capacity(nrows);
+    let mut out = Vec::with_capacity(cap_hint(nrows));
     let mut bitbuf: u64 = 0;
     let mut bits_avail: u32 = 0;
     for _ in 0..nrows {
@@ -1480,7 +1499,7 @@ fn decode_bdict(data: &[u8], pos: usize, nrows: usize) -> (Vec<String>, usize) {
         }
         let idx = (bitbuf & mask) as usize;
         bitbuf >>= bits_per;
-        bits_avail -= bits_per as u32;
+        bits_avail = bits_avail.saturating_sub(bits_per as u32);
         out.push(dict.get(idx).cloned().unwrap_or_default());
     }
     (out, p)
@@ -1533,16 +1552,17 @@ fn encode_huffdict(vals: &[&str]) -> Vec<u8> {
 fn decode_huffdict(data: &[u8], pos: usize, nrows: usize) -> (Vec<String>, usize) {
     let mut p = pos;
     let (n_unique, np) = read_varint(data, p); p = np;
-    let mut dict: Vec<String> = Vec::with_capacity(n_unique as usize);
+    let n_unique = n_unique.min(data.len() as u64);
+    let mut dict: Vec<String> = Vec::with_capacity(cap_hint(n_unique as usize));
     for _ in 0..n_unique {
         let (slen, np) = read_varint(data, p); p = np;
-        let end = p + slen as usize;
-        dict.push(String::from_utf8_lossy(&data[p..end.min(data.len())]).into_owned());
+        let end = p.saturating_add(slen as usize);
+        dict.push(String::from_utf8_lossy(sub(data, p, end)).into_owned());
         p = end;
     }
 
     // Remaining data from pos p onwards is Huffman-compressed index stream
-    let indices = huffman_decompress(&data[p..]);
+    let indices = huffman_decompress(sub(data, p, data.len()));
 
     let out: Vec<String> = indices.iter()
         .take(nrows)
@@ -1559,7 +1579,7 @@ fn encode_cdelta(nums: &[i64]) -> Vec<u8> {
     let mut buf = Vec::new();
     if nums.is_empty() { write_zvar(&mut buf, 0); write_zvar(&mut buf, 0); return buf; }
     let base = nums[0];
-    let step = if nums.len() > 1 { nums[1] - nums[0] } else { 0 };
+    let step = if nums.len() > 1 { nums[1].wrapping_sub(nums[0]) } else { 0 };
     write_zvar(&mut buf, base);
     write_zvar(&mut buf, step);
     buf
@@ -1568,15 +1588,15 @@ fn encode_cdelta(nums: &[i64]) -> Vec<u8> {
 fn decode_cdelta(data: &[u8], pos: usize, nrows: usize) -> (Vec<i64>, usize) {
     let (base, p1) = read_zvar(data, pos);
     let (step, p2) = read_zvar(data, p1);
-    let out: Vec<i64> = (0..nrows as i64).map(|i| base + step * i).collect();
+    let out: Vec<i64> = (0..nrows as i64).map(|i| base.wrapping_add(step.wrapping_mul(i))).collect();
     (out, p2)
 }
 
 /// Check if a column is constant-delta (sequential with fixed step).
 fn is_cdelta(nums: &[i64]) -> bool {
     if nums.len() <= 2 { return true; }
-    let step = nums[1] - nums[0];
-    nums.windows(2).all(|w| w[1] - w[0] == step)
+    let step = nums[1].wrapping_sub(nums[0]);
+    nums.windows(2).all(|w| w[1].wrapping_sub(w[0]) == step)
 }
 
 // ── Codec 7: FOR (frame-of-reference: min + bit-packed residuals) ───────────
@@ -1586,7 +1606,7 @@ fn encode_for(nums: &[i64]) -> Vec<u8> {
     if nums.is_empty() { return Vec::new(); }
     let min_val = *nums.iter().min().unwrap();
     let max_val = *nums.iter().max().unwrap();
-    let range = (max_val - min_val) as u64;
+    let range = max_val.wrapping_sub(min_val) as u64;
     let bits_per = if range == 0 { 0 } else { 64 - range.leading_zeros() } as usize;
 
     let mut buf = Vec::new();
@@ -1599,7 +1619,7 @@ fn encode_for(nums: &[i64]) -> Vec<u8> {
     let mut bitbuf: u64 = 0;
     let mut bitpos: u32 = 0;
     for &n in nums {
-        let residual = (n - min_val) as u64 & mask;
+        let residual = n.wrapping_sub(min_val) as u64 & mask;
         bitbuf |= residual << bitpos;
         bitpos += bits_per as u32;
         while bitpos >= 8 {
@@ -1614,17 +1634,18 @@ fn encode_for(nums: &[i64]) -> Vec<u8> {
 
 fn decode_for(data: &[u8], pos: usize, nrows: usize) -> (Vec<i64>, usize) {
     let (min_val, mut p) = read_zvar(data, pos);
-    let bits_per = data.get(p).copied().unwrap_or(0) as usize; p += 1;
+    let bits_per = data.get(p).copied().unwrap_or(0) as usize; p = p.saturating_add(1);
 
     if bits_per == 0 {
         return (vec![min_val; nrows], p);
     }
+    if bits_per > 56 { return (Vec::new(), p); }
 
     let mask = (1u64 << bits_per) - 1;
     let total_bytes = (bits_per * nrows + 7) / 8;
     let avail = data.len().saturating_sub(p);
-    let packed = &data[p..p + total_bytes.min(avail)];
-    let mut out = Vec::with_capacity(nrows);
+    let packed = sub(data, p, p.saturating_add(total_bytes.min(avail)));
+    let mut out = Vec::with_capacity(cap_hint(nrows));
     let mut bitpos: usize = 0;
 
     // Bulk loop: no bounds check needed when byte_start + 8 <= packed.len()
@@ -1639,7 +1660,7 @@ fn decode_for(data: &[u8], pos: usize, nrows: usize) -> (Vec<i64>, usize) {
             packed[byte_start], packed[byte_start+1], packed[byte_start+2], packed[byte_start+3],
             packed[byte_start+4], packed[byte_start+5], packed[byte_start+6], packed[byte_start+7],
         ]);
-        out.push(min_val + ((word >> bit_offset) & mask) as i64);
+        out.push(min_val.wrapping_add(((word >> bit_offset) & mask) as i64));
         bitpos += bits_per;
     }
 
@@ -1651,7 +1672,7 @@ fn decode_for(data: &[u8], pos: usize, nrows: usize) -> (Vec<i64>, usize) {
         let tail = packed.len().saturating_sub(byte_start).min(8);
         tmp[..tail].copy_from_slice(&packed[byte_start..byte_start + tail]);
         let word = u64::from_le_bytes(tmp);
-        out.push(min_val + ((word >> bit_offset) & mask) as i64);
+        out.push(min_val.wrapping_add(((word >> bit_offset) & mask) as i64));
         bitpos += bits_per;
     }
     (out, p + (bitpos + 7) / 8)
@@ -1679,12 +1700,12 @@ fn encode_rle_str(vals: &[&str]) -> Vec<u8> {
 
 fn decode_rle_str(data: &[u8], pos: usize, nrows: usize) -> (Vec<String>, usize) {
     let (nruns, mut p) = read_varint(data, pos);
-    let mut out = Vec::with_capacity(nrows);
-    for _ in 0..nruns {
+    let mut out = Vec::with_capacity(cap_hint(nrows));
+    for _ in 0..nruns.min(data.len() as u64) {
         if p >= data.len() { break; }
         let (cnt, p2) = read_varint(data, p);
         let (slen, p3) = read_varint(data, p2);
-        let end = p3 + slen as usize;
+        let end = p3.saturating_add(slen as usize);
         let safe_end = end.min(data.len());
         let s = if p3 <= safe_end {
             String::from_utf8_lossy(&data[p3..safe_end]).into_owned()
@@ -1692,7 +1713,8 @@ fn decode_rle_str(data: &[u8], pos: usize, nrows: usize) -> (Vec<String>, usize)
             String::new()
         };
         p = end;
-        for _ in 0..cnt { out.push(s.clone()); }
+        let take = (cnt.min(usize::MAX as u64) as usize).min(nrows.saturating_sub(out.len()));
+        for _ in 0..take { out.push(s.clone()); }
     }
     (out, p)
 }
@@ -1709,12 +1731,12 @@ fn encode_raw_str(vals: &[&str]) -> Vec<u8> {
 }
 
 fn decode_raw_str(data: &[u8], pos: usize, nrows: usize) -> (Vec<String>, usize) {
-    let mut out = Vec::with_capacity(nrows);
+    let mut out = Vec::with_capacity(cap_hint(nrows));
     let mut p = pos;
     for _ in 0..nrows {
         let (slen, np) = read_varint(data, p);
-        let end = np + slen as usize;
-        out.push(String::from_utf8_lossy(&data[np..end.min(data.len())]).into_owned());
+        let end = np.saturating_add(slen as usize);
+        out.push(String::from_utf8_lossy(sub(data, np, end)).into_owned());
         p = end;
     }
     (out, p)
@@ -1733,7 +1755,7 @@ fn select_int_codec(nums: &[i64]) -> Codec {
     // Check if FOR is efficient (small range of values)
     let min = *nums.iter().min().unwrap();
     let max = *nums.iter().max().unwrap();
-    let range = (max - min) as u64;
+    let range = max.wrapping_sub(min) as u64;
     let bits_for = if range == 0 { 0 } else { 64 - range.leading_zeros() } as usize;
 
     // Try all and pick smallest
@@ -2142,7 +2164,7 @@ fn decode_column_data(
                 }
                 Codec::Raw => {
                     // Raw bytes: 1 byte per bool (0x00=false, else=true)
-                    data[..nrows].iter().map(|&b| KVal::Bool(b != 0)).collect()
+                    data[..nrows.min(data.len())].iter().map(|&b| KVal::Bool(b != 0)).collect()
                 }
                 _ => {
                     let (bits, _) = decode_bitpack(data, 0, nrows);
@@ -2189,23 +2211,23 @@ fn decode_column_data(
             strs.into_iter().map(KVal::Str).collect()
         }
         KType::Bytes => {
-            let mut out = Vec::with_capacity(nrows);
+            let mut out = Vec::with_capacity(cap_hint(nrows));
             let mut p = 0;
             for _ in 0..nrows {
                 let (len, np) = read_varint(data, p);
-                let end = np + len as usize;
-                out.push(KVal::Bytes(data[np..end.min(data.len())].to_vec()));
+                let end = np.saturating_add(len as usize);
+                out.push(KVal::Bytes(sub(data, np, end).to_vec()));
                 p = end;
             }
             out
         }
         KType::Struct | KType::List | KType::Map => {
-            let mut out = Vec::with_capacity(nrows);
+            let mut out = Vec::with_capacity(cap_hint(nrows));
             let mut p = 0;
             for _ in 0..nrows {
                 let (blen, p2) = read_varint(data, p); p = p2;
                 let (val, _) = decode_nested_val(data, p);
-                p += blen as usize;
+                p = p.saturating_add(blen as usize);
                 out.push(val);
             }
             out
