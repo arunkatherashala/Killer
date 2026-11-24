@@ -126,8 +126,6 @@ fn malformed_json_and_bad_headers_get_errors_and_the_server_keeps_running() {
     let mut m = spawn(&[]);
     m.send("{not json");
     assert!(m.recv(20).contains("-32700"));
-    m.send_raw(b"Content-Length: abc\r\n\r\n");
-    assert!(m.recv(20).contains("-32700"));
     // invalid UTF-8 inside a body is replaced, not fatal
     let mut body = br#"{"jsonrpc":"2.0","id":5,"method":"ping","x":""#.to_vec();
     body.extend_from_slice(&[0xff, 0xfe]);
@@ -136,6 +134,9 @@ fn malformed_json_and_bad_headers_get_errors_and_the_server_keeps_running() {
     m.send_raw(&body);
     assert!(m.recv(20).contains("\"id\":5"));
     m.ping_ok(6);
+    // a Content-Length that is not a number cannot be framed: error, then the session is closed (see the next test)
+    m.send_raw(b"Content-Length: abc\r\n\r\n");
+    assert!(m.recv(20).contains("-32700"));
 }
 
 #[test]
@@ -184,4 +185,74 @@ fn killer_run_is_killed_when_it_exceeds_its_budget() {
     assert!(r.contains("budget") && r.contains("\"isError\":true"), "{r}");
     assert!(start.elapsed() < Duration::from_secs(40));
     m.ping_ok(3);
+}
+
+fn ping_frame(id: u32) -> String {
+    format!(r#"{{"jsonrpc":"2.0","id":{id},"method":"ping"}}"#)
+}
+
+#[test]
+fn framing_is_case_insensitive_order_independent_and_ignores_unknown_headers() {
+    let mut m = spawn(&[]);
+    let (b1, b2, b3) = (ping_frame(1), ping_frame(2), ping_frame(3));
+    m.send_raw(format!("content-length: {}\r\n\r\n{}", b1.len(), b1).as_bytes());
+    let r = m.recv(20);
+    assert!(r.contains("\"result\"") && r.contains("\"id\":1"), "{r}");
+    m.send_raw(format!("Content-Length: {}\r\nContent-Type: application/vscode-jsonrpc; charset=utf-8\r\n\r\n{}", b2.len(), b2).as_bytes());
+    let r = m.recv(20);
+    assert!(r.contains("\"result\"") && r.contains("\"id\":2"), "{r}");
+    m.send_raw(format!("X-Other: 1\r\nCONTENT-LENGTH:{}\r\n\r\n{}", b3.len(), b3).as_bytes());
+    let r = m.recv(20);
+    assert!(r.contains("\"result\"") && r.contains("\"id\":3"), "{r}");
+    m.ping_ok(4);
+}
+
+fn assert_session_closed_after_one_error(mut m: Mcp, what: &str) {
+    let r = m.recv(20);
+    assert!(r.contains("-32700"), "{what}: {r}");
+    // the body that followed the unusable header must not be taken for a request: no second reply, server exits
+    assert!(m.rx.recv_timeout(Duration::from_secs(3)).is_err(), "{what}: unexpected second reply");
+    let start = std::time::Instant::now();
+    while m.child.try_wait().unwrap().is_none() {
+        assert!(start.elapsed() < Duration::from_secs(30), "{what}: server did not close");
+        std::thread::sleep(Duration::from_millis(50));
+    }
+}
+
+#[test]
+fn a_bad_or_missing_content_length_closes_the_session_instead_of_desyncing() {
+    let body = ping_frame(9);
+    let mut m = spawn(&[]);
+    m.send_raw(format!("Content-Length: abc\r\n\r\n{body}\n").as_bytes());
+    assert_session_closed_after_one_error(m, "non-numeric length");
+    let mut m = spawn(&[]);
+    m.send_raw(format!("Content-Type: application/json\r\n\r\n{body}\n").as_bytes());
+    assert_session_closed_after_one_error(m, "no Content-Length");
+}
+
+#[test]
+fn surrogate_pair_escapes_parse_and_lone_surrogates_are_errors() {
+    let mut m = spawn(&[]);
+    m.send(r#"{"jsonrpc":"2.0","id":7,"method":"ping","x":"\ud83d\ude00"}"#);
+    let r = m.recv(20);
+    assert!(r.contains("\"result\"") && r.contains("\"id\":7"), "{r}");
+    for bad in [r#"\ud83d"#, r#"\ud83dx"#, r#"\ude00"#, r#"\ud83d\u0041"#] {
+        m.send(&format!(r#"{{"jsonrpc":"2.0","id":8,"method":"ping","x":"{bad}"}}"#));
+        assert!(m.recv(20).contains("-32700"), "{bad}");
+    }
+    m.ping_ok(9);
+}
+
+#[test]
+fn absurd_run_timeouts_do_not_crash_the_tool_and_leave_no_temp_file() {
+    let native = env!("CARGO_BIN_EXE_killer");
+    for v in ["1e300", "inf", "NaN", "-5", "0", "abc"] {
+        let mut m = spawn(&[("KILLER_NATIVE", native), ("KILLER_MCP_RUN_TIMEOUT_S", v)]);
+        let tmp = std::env::temp_dir().join(format!("killer_mcp_{}.killer", m.child.id()));
+        m.send(r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"killer_run","arguments":{"source":"println(6 * 7)"}}}"#);
+        let r = m.recv(90);
+        assert!(r.contains("42") && !r.contains("isError\":true"), "{v}: {r}");
+        assert!(!tmp.exists(), "{v}: temp script leaked: {}", tmp.display());
+        m.ping_ok(2);
+    }
 }
