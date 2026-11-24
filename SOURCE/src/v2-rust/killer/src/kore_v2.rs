@@ -429,9 +429,21 @@ impl DeleteBitmap {
         let data = std::fs::read(&del_path)
             .map_err(|e| format!("Cannot read {}: {}", del_path, e))?;
         if data.len() < 16 { return Err("Delete bitmap too short".to_string()); }
-        let total_rows = u64::from_le_bytes(data[0..8].try_into().unwrap()) as usize;
-        let deleted_count = u64::from_le_bytes(data[8..16].try_into().unwrap()) as usize;
-        let nwords = (total_rows + 63) / 64;
+        let total_rows64 = u64::from_le_bytes(data[0..8].try_into().unwrap_or([0; 8]));
+        let deleted_count64 = u64::from_le_bytes(data[8..16].try_into().unwrap_or([0; 8]));
+        // the header must be consistent with the bytes actually present: never allocate
+        // more than the sidecar file can back
+        let max_words = ((data.len() - 16) / 8) as u64;
+        let nwords64 = total_rows64.div_ceil(64);
+        if nwords64 > max_words {
+            return Err("Delete bitmap header claims more rows than the file holds".to_string());
+        }
+        if deleted_count64 > total_rows64 {
+            return Err("Delete bitmap header is inconsistent (deleted > total)".to_string());
+        }
+        let total_rows = total_rows64 as usize;
+        let deleted_count = deleted_count64 as usize;
+        let nwords = nwords64 as usize;
         let mut bits = vec![0u64; nwords];
         for i in 0..nwords {
             let off = 16 + i * 8;
