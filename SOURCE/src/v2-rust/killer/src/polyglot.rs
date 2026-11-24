@@ -847,19 +847,26 @@ pub fn polyglot_exec_assisted(lang: &str, code: &str) -> Result<String, String> 
     assisted(lang, code, None, false)
 }
 
+/// May a failed block (its code and stderr) be sent to the AI assist layer? Only with
+/// `KILLER_POLYGLOT_AI=1` and the LLM and network capabilities, and only for a non-zero exit of
+/// the block itself (never for a missing runtime, a timeout, a policy denial or an output flood).
+pub fn ai_assist_allowed(opt_in: bool, err: &PolyglotError) -> bool {
+    opt_in
+        && matches!(err, PolyglotError::NonZeroExit { .. })
+        && crate::security::require_llm().is_ok()
+        && crate::security::require_network().is_ok()
+}
+
 fn assisted(lang: &str, code: &str, args: Option<&BlockArgs>, echo: bool) -> Result<String, String> {
     let code = crate::polyglot_front::decode(code);
     let start = Instant::now();
-    let result = polyglot_exec_typed(lang, &code, args, echo).map_err(|e| e.to_string());
+    let typed = polyglot_exec_typed(lang, &code, args, echo);
+    let allow_ai = matches!(&typed, Err(e) if ai_assist_allowed(settings().ai, e));
+    let result = typed.map_err(|e| e.to_string());
     let duration_ms = start.elapsed().as_millis();
-    let (stdout, ai_suggestion) = crate::assassin_assist::layer().lock().unwrap_or_else(|e| e.into_inner()).process_execution(lang, &code, &result, duration_ms);
-    match result {
-        Ok(_) => Ok(stdout),
-        Err(original_err) => match ai_suggestion {
-            Some(s) => Err(format!("{}\n\nAI Assassin Assist (@{}):\n{}", original_err, lang, s)),
-            None => Err(original_err),
-        },
-    }
+    // a suggestion (if any) goes to the assist log (`nova_assist_log()`), not into the error text
+    let (stdout, _suggestion) = crate::assassin_assist::layer().lock().unwrap_or_else(|e| e.into_inner()).process_execution(lang, &code, &result, duration_ms, allow_ai);
+    result.map(|_| stdout)
 }
 
 /// Text for `polyglot_list()`: one line per installed language with its absolute path and version.
@@ -1031,6 +1038,31 @@ mod tests {
         let _ = resolve_runtime(rt);
         let _ = resolve_runtime(rt);
         assert_eq!(probe_count(), n);
+    }
+
+    #[test]
+    fn ai_assist_needs_opt_in_capabilities_and_a_block_failure() {
+        use crate::security::{CapabilityScopeGuard, CapabilitySet};
+        let fail = PolyglotError::NonZeroExit { lang: "python".into(), stage: "", code: Some(1), stderr: "x".into(), stdout: String::new() };
+        let _t = CapabilityScopeGuard::install(CapabilitySet::trusted_local());
+        assert!(ai_assist_allowed(true, &fail));
+        assert!(!ai_assist_allowed(false, &fail));
+        assert!(!ai_assist_allowed(true, &PolyglotError::Timeout { lang: "python".into(), secs: 1.0 }));
+        assert!(!ai_assist_allowed(true, &PolyglotError::RuntimeMissing { lang: "python".into(), detail: String::new() }));
+        {
+            let _g = CapabilityScopeGuard::install(CapabilitySet { allow_process_spawn: true, allow_llm: false, ..CapabilitySet::trusted_local() });
+            assert!(!ai_assist_allowed(true, &fail));
+        }
+        let _n = CapabilityScopeGuard::install(CapabilitySet { allow_network: false, ..CapabilitySet::trusted_local() });
+        assert!(!ai_assist_allowed(true, &fail));
+    }
+
+    #[test]
+    fn assist_layer_does_not_ask_a_model_unless_allowed() {
+        let before = crate::assassin_assist::ai_call_count();
+        let err: Result<String, String> = Err("POLYGLOT_E_EXIT: @python failed with exit code 1".into());
+        let _ = crate::assassin_assist::layer().lock().unwrap().process_execution("python", "raise SystemExit(1)", &err, 1, false);
+        assert_eq!(crate::assassin_assist::ai_call_count(), before);
     }
 
     #[test]

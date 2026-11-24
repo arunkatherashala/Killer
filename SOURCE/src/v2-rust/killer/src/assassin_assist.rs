@@ -278,6 +278,7 @@ impl AssassinAssistLayer {
         exit_code: i32,
     ) -> (String, String, u64) {
         if self.ai_tier == AiTier::Off { return (String::new(), "off".into(), 0); }
+        AI_CALLS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
 
         let key = Self::code_hash(lang, &format!("{}:{}:{}", lang, code, stderr));
         if let Some(cached) = self.suggestion_cache.get(&key) {
@@ -357,6 +358,7 @@ impl AssassinAssistLayer {
         code: &str,
         result: &Result<String, String>,
         duration_ms: u128,
+        allow_ai: bool,
     ) -> (String, Option<String>) {
         let (stdout, stderr, exit_code, severity) = match result {
             Ok(out) => (out.clone(), String::new(), 0i32, Severity::Info),
@@ -380,7 +382,8 @@ impl AssassinAssistLayer {
         let mut cost_usd      = 0.0f64;
 
         // Auto-debug on error (if AI enabled and budget available)
-        if exit_code != 0 && self.enabled && self.ai_tier != AiTier::Off {
+        // only when the caller allows it (KILLER_POLYGLOT_AI=1 plus the LLM and network capabilities)
+        if exit_code != 0 && allow_ai && self.enabled && self.ai_tier != AiTier::Off {
             let (sug, backend, tok) = self.ai_debug_error(lang, code, &stderr, exit_code);
             if !sug.is_empty() && sug != "off" {
                 let backend_key = if backend.to_lowercase().contains("openai") { "openai" }
@@ -400,7 +403,7 @@ impl AssassinAssistLayer {
             id,
             timestamp:    Self::now_secs(),
             lang:         lang.to_string(),
-            code_preview: truncate(code, 120).to_string(),
+            code_preview: code_fingerprint(code),
             stdout:       stdout.clone(),
             stderr:       stderr.clone(),
             exit_code,
@@ -427,6 +430,13 @@ fn truncate(s: &str, max: usize) -> &str {
 }
 
 fn extract_exit_code(err: &str) -> Option<i32> {
+    // POLYGLOT_E_EXIT messages say "exit code N"
+    if let Some(i) = err.find("exit code ") {
+        let digits: String = err[i + 10..].chars().take_while(|c| c.is_ascii_digit() || *c == '-').collect();
+        if let Ok(n) = digits.parse::<i32>() {
+            return Some(n);
+        }
+    }
     // Look for "status: exit code N" or "exit code N" in error string
     for part in err.split_whitespace() {
         if let Ok(n) = part.trim_end_matches(|c: char| !c.is_numeric()).parse::<i32>() {
@@ -434,6 +444,26 @@ fn extract_exit_code(err: &str) -> Option<i32> {
         }
     }
     None
+}
+
+/// How often the assist layer asked a model to debug a failed block (test hook).
+static AI_CALLS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+#[doc(hidden)]
+pub fn ai_call_count() -> usize {
+    AI_CALLS.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+/// What the log keeps of a block: its SHA-256 and length, or (with KILLER_AUDIT_CODE=1) the
+/// first 120 characters.
+fn code_fingerprint(code: &str) -> String {
+    if crate::polyglot::settings().audit_code {
+        return truncate(code, 120).to_string();
+    }
+    use sha2::Digest;
+    let d = sha2::Sha256::digest(code.as_bytes());
+    let hex: String = d.iter().map(|b| format!("{:02x}", b)).collect();
+    format!("sha256:{} len={}", hex, code.len())
 }
 
 // --- Public Builtin API (called from builtin.rs) ------------------------------
@@ -570,6 +600,7 @@ pub fn builtin_assist_set_budget(args: &[crate::value::Value]) -> Result<crate::
 
 /// `nova_assist_set_log(path)` → enable disk logging to a file.
 pub fn builtin_assist_set_log(args: &[crate::value::Value]) -> Result<crate::value::Value, crate::error::VmError> {
+    crate::security::require_file_write()?;
     match args.first() {
         Some(crate::value::Value::Str(path)) => {
             let p = path.clone();
