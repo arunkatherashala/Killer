@@ -196,6 +196,42 @@ fn at_sign_inside_killer_strings_and_comments_is_not_a_block() {
     assert_eq!(o.stdout, "mail@python { not code }\n2", "{}", o.all());
 }
 
+// a `"` inside a foreign single-quoted string or comment must not hide the closing brace
+#[test]
+fn python_double_quote_inside_single_quotes_and_comments() {
+    need!("python");
+    // each block holds an odd number of `"`
+    let src = "x = @python {\n    print('a \"quote')\n}\nprintln(x)\nc = @python {\n    # the \"x\n    print('ok')  # don't\n}\nprintln(c)\nprintln(\"after\")\n";
+    let o = run(src);
+    assert_eq!(o.stdout, "a \"quote\nok\nafter", "{}", o.all());
+}
+
+#[test]
+fn bash_double_quote_inside_single_quotes_and_comments() {
+    need!("bash");
+    let src = "y = @bash {\n    echo 'say \"hi'\n}\nprintln(y)\nw = @bash {\n    # don't \"panic\n    echo \"it's\"\n}\nprintln(w)\n";
+    let o = run(src);
+    assert_eq!(o.stdout, "say \"hi\nit's", "{}", o.all());
+}
+
+#[test]
+fn python_mixed_and_triple_quotes() {
+    need!("python");
+    let src = "z = @python {\n    s = '''a \"b\n    } c'''\n    print(s.replace(chr(10), '|'), \"it's\", 'q\"}')\n}\nprintln(z)\n";
+    let o = run(src);
+    assert_eq!(o.stdout, "a \"b|} c it's q\"}", "{}", o.all());
+}
+
+#[test]
+fn unclosed_block_is_a_compile_error_naming_the_line() {
+    let src = "println(\"start\")\nx = @python {\n    print('never \"closed')\nprintln(x)\n";
+    let o = run(src);
+    assert_ne!(o.code, 0, "{}", o.all());
+    assert!(!o.stdout.contains("start"), "the script must not run: {}", o.all());
+    let low = o.all().to_lowercase();
+    assert!(low.contains("never closed") && low.contains("line 2"), "{}", o.all());
+}
+
 // --- Item 2: timeouts, output cap, process-tree kill ---------------------------------------------
 
 const WATCH: std::time::Duration = std::time::Duration::from_secs(120);
