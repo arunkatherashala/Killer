@@ -329,6 +329,12 @@ pub fn find_runtime(lang: &str) -> Option<&'static LangRuntime> {
     RUNTIMES.iter().find(|r| r.name == lang_lower)
 }
 
+/// Is `lang` a language name a block can use (`@python`, `@java`, ...)?
+pub fn is_known_lang(lang: &str) -> bool {
+    let l = lang.to_lowercase();
+    find_runtime(&l).is_some() || matches!(l.as_str(), "java" | "rust" | "c" | "cpp")
+}
+
 /// Find which executable actually exists for a given runtime.
 fn resolve_executable(runtime: &LangRuntime) -> Option<&'static str> {
     for &exe in runtime.executables {
@@ -702,6 +708,7 @@ fn exec_rust_in(code: &str, tmp_dir: &std::path::Path) -> Result<String, String>
 /// - `Ok(stdout)` - captured output from the language runtime
 /// - `Err(message)` - runtime not found or execution failed (with helpful hint)
 pub fn polyglot_exec(lang: &str, code: &str) -> Result<String, String> {
+    let code = &*crate::polyglot_front::decode(code);
     let lang_lower = lang.to_lowercase();
 
     // -- Special cases: languages requiring compile+run ---------------------
@@ -847,7 +854,7 @@ pub fn builtin_polyglot_exec(args: &[Value]) -> Result<Value, VmError> {
         _ => return Err(VmError::runtime_error("polyglot_exec: lang must be a string".to_string())),
     };
     let code = match &args[1] {
-        Value::Str(s) => s.clone(),
+        Value::Str(s) => crate::polyglot_front::decode(s).into_owned(),
         _ => return Err(VmError::runtime_error("polyglot_exec: code must be a string".to_string())),
     };
 
@@ -921,6 +928,7 @@ pub fn builtin_polyglot_stream(args: &[Value]) -> Result<Value, VmError> {
         _ => return Err(VmError::runtime_error("polyglot_stream: code must be a string".to_string())),
     };
 
+    let code = crate::polyglot_front::decode(&code).into_owned();
     let lang_lower = lang.to_lowercase();
 
     // Compile-then-run languages fall back to regular polyglot_exec

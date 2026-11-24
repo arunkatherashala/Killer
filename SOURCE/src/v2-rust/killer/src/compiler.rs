@@ -523,6 +523,9 @@ pub fn compile_killer_subset(source: &str) -> Result<Program, VmError> {
     if imported.len() != source.len() {
         crate::limits::check_source(&imported)?;
     }
+    // `@lang { ... }` bodies are taken verbatim from the untouched text before any other pass can
+    // strip `//` / `--`, re-indent or rewrite quotes in them (same line count, so `map` is unchanged)
+    let imported = crate::polyglot_front::extract(&imported);
     // `x // 2` would silently become `x` (`//` starts a comment): make that mistake an error
     if let Some(line) = crate::hints::silent_floor_division(&imported) {
         return Err(remap_error(
@@ -898,6 +901,7 @@ pub fn compile_killer_ast(statements: &[crate::ast::Stmt]) -> Result<Program, Vm
 /// Indent + polyglot preprocessing (same order as [`compile_killer_subset`]). Exposed for
 /// [`crate::stmt_parser::parse_killer_program`].
 pub fn preprocess_killer_source(source: &str) -> String {
+    let source = &crate::polyglot_front::extract(source);
     let sugared = crate::sugar::preprocess(source, &|l| parse_polyglot_header(l).is_some());
     let indented = preprocess_indentation(&sugared);
     let preprocessed = preprocess_polyglot(&indented);

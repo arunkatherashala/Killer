@@ -121,6 +121,7 @@ pub mod concurrency;
 
 // Nova Galaxy Engine v1 — Polyglot @lang{} runtime bridge
 pub mod polyglot;
+pub mod polyglot_front;         // @lang { } bodies taken verbatim from the source before any other pass
 
 // Nova Galaxy Engine v1 — AI Assassin Assist Layer (logging, auto-debug, token budget, cost control)
 pub mod assassin_assist;
