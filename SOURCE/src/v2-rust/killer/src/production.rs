@@ -554,7 +554,7 @@ pub fn builtin_db_open(args: &[Value]) -> Result<Value, VmError> {
     if args.is_empty() { return Err(VmError::runtime_error("db_open(path) requires 1 arg")); }
     let path = val_str(&args[0]);
     if path.contains("..") { return Err(VmError::runtime_error("db_open: path cannot contain '..'")); }
-    let mut dbs = db_global().lock().unwrap();
+    let mut dbs = db_global().lock().unwrap_or_else(|e| e.into_inner());
     if !dbs.contains_key(&path) {
         dbs.insert(path.clone(), FileDb::open(&path));
     }
@@ -566,7 +566,7 @@ pub fn builtin_db_get(args: &[Value]) -> Result<Value, VmError> {
     if args.len() < 2 { return Err(VmError::runtime_error("db_get(db, key) requires 2 args")); }
     let db_name = val_str(&args[0]);
     let key = val_str(&args[1]);
-    let dbs = db_global().lock().unwrap();
+    let dbs = db_global().lock().unwrap_or_else(|e| e.into_inner());
     match dbs.get(&db_name) {
         Some(db) => Ok(db.data.get(&key).map(|j| json_to_val(j)).unwrap_or(Value::Null)),
         None => Err(VmError::runtime_error(format!("db not open: {}", db_name))),
@@ -580,7 +580,7 @@ pub fn builtin_db_set(args: &[Value]) -> Result<Value, VmError> {
     let db_name = val_str(&args[0]);
     let key = val_str(&args[1]);
     let json = val_to_json(&args[2]);
-    let mut dbs = db_global().lock().unwrap();
+    let mut dbs = db_global().lock().unwrap_or_else(|e| e.into_inner());
     match dbs.get_mut(&db_name) {
         Some(db) => { db.data.insert(key, json); db.flush(); Ok(Value::Null) }
         None => Err(VmError::runtime_error(format!("db not open: {}", db_name))),
@@ -593,7 +593,7 @@ pub fn builtin_db_delete(args: &[Value]) -> Result<Value, VmError> {
     if args.len() < 2 { return Err(VmError::runtime_error("db_delete(db, key) requires 2 args")); }
     let db_name = val_str(&args[0]);
     let key = val_str(&args[1]);
-    let mut dbs = db_global().lock().unwrap();
+    let mut dbs = db_global().lock().unwrap_or_else(|e| e.into_inner());
     match dbs.get_mut(&db_name) {
         Some(db) => {
             let existed = db.data.remove(&key).is_some();
@@ -608,7 +608,7 @@ pub fn builtin_db_keys(args: &[Value]) -> Result<Value, VmError> {
     crate::security::require_file_read()?;
     if args.is_empty() { return Err(VmError::runtime_error("db_keys(db) requires 1 arg")); }
     let db_name = val_str(&args[0]);
-    let dbs = db_global().lock().unwrap();
+    let dbs = db_global().lock().unwrap_or_else(|e| e.into_inner());
     match dbs.get(&db_name) {
         Some(db) => {
             let keys: Vec<Value> = db.data.keys().map(|k| Value::Str(k.clone())).collect();
@@ -623,7 +623,7 @@ pub fn builtin_db_keys_prefix(args: &[Value]) -> Result<Value, VmError> {
     if args.len() < 2 { return Err(VmError::runtime_error("db_keys_prefix(db, prefix) requires 2 args")); }
     let db_name = val_str(&args[0]);
     let prefix = val_str(&args[1]);
-    let dbs = db_global().lock().unwrap();
+    let dbs = db_global().lock().unwrap_or_else(|e| e.into_inner());
     match dbs.get(&db_name) {
         Some(db) => {
             let keys: Vec<Value> = db.data.keys()
@@ -640,7 +640,7 @@ pub fn builtin_db_count(args: &[Value]) -> Result<Value, VmError> {
     crate::security::require_file_read()?;
     if args.is_empty() { return Err(VmError::runtime_error("db_count(db) requires 1 arg")); }
     let db_name = val_str(&args[0]);
-    let dbs = db_global().lock().unwrap();
+    let dbs = db_global().lock().unwrap_or_else(|e| e.into_inner());
     match dbs.get(&db_name) {
         Some(db) => Ok(Value::Number(db.data.len() as f64)),
         None => Err(VmError::runtime_error(format!("db not open: {}", db_name))),
@@ -652,7 +652,7 @@ pub fn builtin_db_close(args: &[Value]) -> Result<Value, VmError> {
     crate::security::require_file_write()?;
     if args.is_empty() { return Err(VmError::runtime_error("db_close(db) requires 1 arg")); }
     let db_name = val_str(&args[0]);
-    let mut dbs = db_global().lock().unwrap();
+    let mut dbs = db_global().lock().unwrap_or_else(|e| e.into_inner());
     if let Some(db) = dbs.remove(&db_name) { db.flush(); }
     Ok(Value::Null)
 }
@@ -663,7 +663,7 @@ pub fn builtin_db_drop(args: &[Value]) -> Result<Value, VmError> {
     if args.is_empty() { return Err(VmError::runtime_error("db_drop(path) requires 1 arg")); }
     let path = val_str(&args[0]);
     if path.contains("..") { return Err(VmError::runtime_error("db_drop: path cannot contain '..'")); }
-    let mut dbs = db_global().lock().unwrap();
+    let mut dbs = db_global().lock().unwrap_or_else(|e| e.into_inner());
     dbs.remove(&path);
     Ok(Value::Bool(std::fs::remove_file(&path).is_ok()))
 }

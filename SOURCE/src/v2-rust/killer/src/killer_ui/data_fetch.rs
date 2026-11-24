@@ -332,19 +332,19 @@ impl QueryClient {
 
     /// Get cached data for a key, or None if missing/expired.
     pub fn get_cached(&self, key: &str) -> Option<String> {
-        let cache = self.cache.lock().unwrap();
+        let cache = self.cache.lock().unwrap_or_else(|e| e.into_inner());
         cache.get(key).map(|entry| entry.data.clone())
     }
 
     /// Check if cached data is stale.
     pub fn is_stale(&self, key: &str) -> bool {
-        let cache = self.cache.lock().unwrap();
+        let cache = self.cache.lock().unwrap_or_else(|e| e.into_inner());
         cache.get(key).map(|e| e.is_stale()).unwrap_or(true)
     }
 
     /// Store data in cache.
     pub fn set(&self, key: &str, data: String) {
-        let mut cache = self.cache.lock().unwrap();
+        let mut cache = self.cache.lock().unwrap_or_else(|e| e.into_inner());
         cache.insert(key.to_string(), CacheEntry {
             data,
             fetched_at: Instant::now(),
@@ -354,33 +354,33 @@ impl QueryClient {
 
     /// Invalidate (remove) a key.
     pub fn invalidate(&self, key: &str) {
-        self.cache.lock().unwrap().remove(key);
+        self.cache.lock().unwrap_or_else(|e| e.into_inner()).remove(key);
     }
 
     /// Invalidate all keys matching a prefix.
     pub fn invalidate_prefix(&self, prefix: &str) {
-        let mut cache = self.cache.lock().unwrap();
+        let mut cache = self.cache.lock().unwrap_or_else(|e| e.into_inner());
         cache.retain(|k, _| !k.starts_with(prefix));
     }
 
     /// Clear entire cache.
     pub fn clear(&self) {
-        self.cache.lock().unwrap().clear();
+        self.cache.lock().unwrap_or_else(|e| e.into_inner()).clear();
     }
 
     /// Check if a fetch is in progress for a key (dedup).
     pub fn is_fetching(&self, key: &str) -> bool {
-        self.in_flight.lock().unwrap().get(key).copied().unwrap_or(false)
+        self.in_flight.lock().unwrap_or_else(|e| e.into_inner()).get(key).copied().unwrap_or(false)
     }
 
     pub fn mark_fetching(&self, key: &str, active: bool) {
-        let mut inf = self.in_flight.lock().unwrap();
+        let mut inf = self.in_flight.lock().unwrap_or_else(|e| e.into_inner());
         if active { inf.insert(key.to_string(), true); }
         else { inf.remove(key); }
     }
 
     pub fn cache_size(&self) -> usize {
-        self.cache.lock().unwrap().len()
+        self.cache.lock().unwrap_or_else(|e| e.into_inner()).len()
     }
 }
 

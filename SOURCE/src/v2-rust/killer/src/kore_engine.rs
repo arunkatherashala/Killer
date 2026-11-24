@@ -88,7 +88,7 @@ pub fn session_new() -> i64 {
         let ptr = unsafe { ffi::kore_session_new() };
         if ptr.is_null() { return -1; }
         let id = SESSION_COUNTER.fetch_add(1, Ordering::Relaxed);
-        sessions().lock().unwrap().insert(id, ptr as usize);
+        sessions().lock().unwrap_or_else(|e| e.into_inner()).insert(id, ptr as usize);
         id
     }
     #[cfg(not(feature = "kore-engine"))]
@@ -99,7 +99,7 @@ pub fn session_new() -> i64 {
 pub fn session_load_csv(id: i64, table: &str, path: &str) -> Result<(), String> {
     #[cfg(feature = "kore-engine")]
     {
-        let ptr = *sessions().lock().unwrap().get(&id)
+        let ptr = *sessions().lock().unwrap_or_else(|e| e.into_inner()).get(&id)
             .ok_or_else(|| format!("kore_session: unknown id {id}"))? as *mut ffi::KoreSession;
         let t = std::ffi::CString::new(table).map_err(|e| e.to_string())?;
         let p = std::ffi::CString::new(path).map_err(|e| e.to_string())?;
@@ -114,7 +114,7 @@ pub fn session_load_csv(id: i64, table: &str, path: &str) -> Result<(), String> 
 pub fn session_query(id: i64, sql: &str) -> Result<String, String> {
     #[cfg(feature = "kore-engine")]
     {
-        let ptr = *sessions().lock().unwrap().get(&id)
+        let ptr = *sessions().lock().unwrap_or_else(|e| e.into_inner()).get(&id)
             .ok_or_else(|| format!("kore_session: unknown id {id}"))? as *mut ffi::KoreSession;
         let s = std::ffi::CString::new(sql).map_err(|e| e.to_string())?;
         let raw = unsafe { ffi::kore_session_query(ptr, s.as_ptr()) };
@@ -133,7 +133,7 @@ pub fn session_query(id: i64, sql: &str) -> Result<String, String> {
 pub fn session_row_count(id: i64, table: &str) -> i64 {
     #[cfg(feature = "kore-engine")]
     {
-        let guard = sessions().lock().unwrap();
+        let guard = sessions().lock().unwrap_or_else(|e| e.into_inner());
         let ptr = match guard.get(&id) {
             Some(&p) => p as *const ffi::KoreSession,
             None     => return -1,
@@ -149,7 +149,7 @@ pub fn session_row_count(id: i64, table: &str) -> i64 {
 pub fn session_free(id: i64) {
     #[cfg(feature = "kore-engine")]
     {
-        if let Some(ptr) = sessions().lock().unwrap().remove(&id) {
+        if let Some(ptr) = sessions().lock().unwrap_or_else(|e| e.into_inner()).remove(&id) {
             unsafe { ffi::kore_session_free(ptr as *mut ffi::KoreSession); }
         }
     }
@@ -169,7 +169,7 @@ pub fn model_new(model_type: i32, param1: i32, param2: i32) -> i64 {
         };
         if ptr.is_null() { return -1; }
         let id = MODEL_COUNTER.fetch_add(1, Ordering::Relaxed);
-        models().lock().unwrap().insert(id, ptr as usize);
+        models().lock().unwrap_or_else(|e| e.into_inner()).insert(id, ptr as usize);
         id
     }
     #[cfg(not(feature = "kore-engine"))]
@@ -180,7 +180,7 @@ pub fn model_new(model_type: i32, param1: i32, param2: i32) -> i64 {
 pub fn model_fit(id: i64, x: &[Vec<f64>], y: &[f64]) -> Result<(), String> {
     #[cfg(feature = "kore-engine")]
     {
-        let ptr = *models().lock().unwrap().get(&id)
+        let ptr = *models().lock().unwrap_or_else(|e| e.into_inner()).get(&id)
             .ok_or_else(|| format!("kore_model: unknown id {id}"))? as *mut ffi::KoreModel;
         if x.is_empty() || y.is_empty() { return Err("empty training data".into()); }
         let n_rows = x.len() as u64;
@@ -199,7 +199,7 @@ pub fn model_fit(id: i64, x: &[Vec<f64>], y: &[f64]) -> Result<(), String> {
 pub fn model_predict(id: i64, x: &[Vec<f64>]) -> Result<Vec<f64>, String> {
     #[cfg(feature = "kore-engine")]
     {
-        let ptr = *models().lock().unwrap().get(&id)
+        let ptr = *models().lock().unwrap_or_else(|e| e.into_inner()).get(&id)
             .ok_or_else(|| format!("kore_model: unknown id {id}"))? as *const ffi::KoreModel;
         if x.is_empty() { return Ok(vec![]); }
         let n_rows = x.len() as u64;
@@ -219,7 +219,7 @@ pub fn model_predict(id: i64, x: &[Vec<f64>]) -> Result<Vec<f64>, String> {
 pub fn model_free(id: i64) {
     #[cfg(feature = "kore-engine")]
     {
-        if let Some(ptr) = models().lock().unwrap().remove(&id) {
+        if let Some(ptr) = models().lock().unwrap_or_else(|e| e.into_inner()).remove(&id) {
             unsafe { ffi::kore_model_free(ptr as *mut ffi::KoreModel); }
         }
     }
