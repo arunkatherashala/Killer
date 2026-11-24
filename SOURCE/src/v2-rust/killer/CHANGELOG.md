@@ -4,6 +4,10 @@ All notable changes to `killer-native` are documented here.
 
 ## [Unreleased]
 
+### Documentation
+- New: `docs/STABILITY.md` (stability and deprecation policy, past behaviour changes), `docs/OPERATIONS.md` (every `KILLER_*` variable, limits, what is missing), `docs/PERFORMANCE.md` (honest index of `bench/RESULTS.md`), `SOURCE/docs/project/THREAT_MODEL.md` (threat, mitigation, proof test, residual risk).
+- `docs/FEATURES.md` now has a Proof column naming a test file per row; unproven rows were downgraded (`untested`/`partial`) and the Not built list was extended. README claims aligned (HTTP server TLS, release signing, test count).
+
 ### Added
 - Tooling: `killer new|init|add|remove|install|update|list|publish|check` in the `killer` driver (same code as `killer_pkg`); tests for `killer lsp` (hover, completion, definition of classes and variables), the VS Code extension files (`tests/vscode_extension.rs`), lockfile checksum verification when a registry and its checksum are both rewritten, `fmt` convergence over `examples/` with comments kept, and every lint suppression form.
 
