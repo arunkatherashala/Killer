@@ -416,3 +416,44 @@ fn missing_runtime_error_is_short() {
     let (o, _) = run_watch(src, &[("KILLER_POLYGLOT_NODE", m.as_str())], None, WATCH);
     assert!(o.stdout.starts_with("POLYGLOT_E_RUNTIME_MISSING") && !o.stdout.contains("AI Assassin"), "{}", o.all());
 }
+
+// --- Item 7: language policy -------------------------------------------------------------------
+
+#[test]
+fn allow_list_admits_only_the_listed_languages() {
+    need!("python");
+    let src = "println(@python { print(1) })\ntry {\n    x = @bash { echo 2 }\n    println(x)\n} catch e {\n    println(str(e))\n}\n";
+    let (o, _) = run_watch(src, &[("KILLER_POLYGLOT_ALLOW", "python")], None, WATCH);
+    let lines: Vec<&str> = o.stdout.lines().collect();
+    assert_eq!(lines.first().copied(), Some("1"), "{}", o.all());
+    assert!(lines.get(1).map_or(false, |l| l.starts_with("POLYGLOT_E_POLICY_DENIED")), "{}", o.all());
+    assert!(!o.stderr.contains("warning"), "an explicit allow list silences the warning: {}", o.all());
+}
+
+#[test]
+fn allow_none_and_strict_profile_deny() {
+    let src = "try {\n    x = @python { print(1) }\n    println(x)\n} catch e {\n    println(str(e))\n}\n";
+    for env in [&[("KILLER_POLYGLOT_ALLOW", "none")][..], &[("KILLER_PROFILE", "strict")][..], &[("KILLER_PROFILE", "prod")][..]] {
+        let (o, _) = run_watch(src, env, None, WATCH);
+        assert!(o.stdout.starts_with("POLYGLOT_E_POLICY_DENIED"), "{:?}: {}", env, o.all());
+    }
+}
+
+#[test]
+fn strict_profile_with_an_allow_list_runs_and_aliases_match() {
+    need!("python");
+    let src = "println(@python3 { print(1) })\nprintln(@python { print(2) })\n";
+    let (o, _) = run_watch(src, &[("KILLER_PROFILE", "strict"), ("KILLER_POLYGLOT_ALLOW", "python3")], None, WATCH);
+    assert_eq!(o.stdout, "1\n2", "{}", o.all());
+    // `js` in the list admits `@node` (the runtime may be missing here: only the policy is checked)
+    let (o, _) = run_watch("try {\n    x = @node { console.log(1) }\n} catch e {\n    println(str(e))\n}\n", &[("KILLER_PROFILE", "strict"), ("KILLER_POLYGLOT_ALLOW", "js")], None, WATCH);
+    assert!(!o.all().contains("POLYGLOT_E_POLICY_DENIED"), "{}", o.all());
+}
+
+#[test]
+fn default_policy_warns_once_per_process() {
+    need!("python");
+    let (o, _) = run_watch("a = @python { print(1) }\nb = @python { print(2) }\nprintln(a + b)\n", &[], None, WATCH);
+    assert_eq!(o.stdout, "12", "{}", o.all());
+    assert_eq!(o.stderr.matches("warning").count(), 1, "{}", o.all());
+}
