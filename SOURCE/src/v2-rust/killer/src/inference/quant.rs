@@ -377,14 +377,12 @@ pub fn dequant_q6_k(data: &[u8], n: usize) -> Vec<f32> {
 
 // --- Q2_K --------------------------------------------------------------------
 //
-// Block layout (84 bytes per super-block, 256 elements):
-//   [0..64]   64 bytes — 256 × 2-bit quants, packed 4 per byte (sequential)
-//   [64..80]  16 bytes — 16 × packed byte: lo-nibble = 4-bit scale, hi-nibble = 4-bit min
-//   [80..82]   2 bytes — f16 d    (super-block scale for scales)
-//   [82..84]   2 bytes — f16 dmin (super-block scale for mins)
-//
-// Dequant: value[i] = d * scale[i/16] * quant2[i] - dmin * min[i/16]
-//
+// Block layout (84 bytes per super-block, 256 elements), ggml block_q2_K:
+//   [0..16]   16 bytes - scales: lo nibble = scale, hi nibble = min (one per 16 elements)
+//   [16..80]  64 bytes - qs: 2-bit quants; within each 128-element half, 32 bytes hold
+//             4 shift-planes (bits 0-1, 2-3, 4-5, 6-7), each plane = 32 consecutive elements
+//   [80..82]  f16 d, [82..84] f16 dmin
+// value = d*(sc&15)*q - dmin*(sc>>4)
 // Reference: ggml-quants.c :: dequantize_row_q2_K
 
 pub fn dequant_q2_k(data: &[u8], n: usize) -> Vec<f32> {
@@ -396,22 +394,20 @@ pub fn dequant_q2_k(data: &[u8], n: usize) -> Vec<f32> {
         let src = b * BYTES;
         if src + BYTES > data.len() { break; }
 
-        let qs   = &data[src      .. src + 64];
-        let sc   = &data[src + 64 .. src + 80];
+        let sc   = &data[src .. src + 16];
+        let qs   = &data[src + 16 .. src + 80];
         let d    = f16_to_f32(u16::from_le_bytes([data[src + 80], data[src + 81]]));
         let dmin = f16_to_f32(u16::from_le_bytes([data[src + 82], data[src + 83]]));
-        if d == 0.0 { continue; }  // NaN/Inf d → skipped block
 
         let base = b * QK;
         for i in 0..QK {
             let idx = base + i;
             if idx >= n { break; }
-            // 2-bit quant packed 4 per byte, sequential
-            let q2    = (qs[i >> 2] >> ((i & 3) * 2)) & 3;
+            let (chunk, r) = (i / 128, i % 128);
+            let (j, l) = (r / 32, r % 32); // shift plane j, byte l within the 32-byte half
+            let q2    = (qs[chunk * 32 + l] >> (2 * j)) & 3;
             let sc_b  = sc[i >> 4];
-            let scale = d * (sc_b & 0x0F) as f32;
-            let min   = dmin * (sc_b >> 4) as f32;
-            out[idx]  = scale * q2 as f32 - min;
+            out[idx]  = d * (sc_b & 0x0F) as f32 * q2 as f32 - dmin * (sc_b >> 4) as f32;
         }
     }
     out
@@ -422,7 +418,7 @@ pub fn dequant_q2_k(data: &[u8], n: usize) -> Vec<f32> {
 // Block layout (110 bytes per super-block, 256 elements):
 //   [0..32]   32 bytes — high bits: 1 bit per element packed as u1 (256 bits = 32 bytes)
 //   [32..96]  64 bytes — low 2 bits per element, packed 4 per byte (sequential)
-//   [96..108] 12 bytes — 16 × 6-bit scales, packed with same scheme as Q4_K
+//   [96..108] 12 bytes — 16 x 6-bit scales (ggml aux/kmask packing, see code)
 //   [108..110] 2 bytes — f16 d (super-block scale)
 //
 // Dequant: q3 = (low2 | (high_bit << 2)) - 4  → signed -4..+3
@@ -431,6 +427,8 @@ pub fn dequant_q2_k(data: &[u8], n: usize) -> Vec<f32> {
 // Reference: ggml-quants.c :: dequantize_row_q3_K
 
 pub fn dequant_q3_k(data: &[u8], n: usize) -> Vec<f32> {
+    // ggml block_q3_K: hmask[32], qs[64], scales[12], f16 d. Same shift-plane layout as Q2_K;
+    // hmask bit (chunk*4 + plane) of byte l is the high bit (set => no -4 offset).
     const QK:    usize = 256;
     const BYTES: usize = 110;
     let mut out = vec![0.0f32; n];
@@ -439,32 +437,30 @@ pub fn dequant_q3_k(data: &[u8], n: usize) -> Vec<f32> {
         let src = b * BYTES;
         if src + BYTES > data.len() { break; }
 
-        let hmask = &data[src      .. src + 32];   // high bits
-        let qs    = &data[src + 32 .. src + 96];   // low 2 bits
-        let sc    = &data[src + 96 .. src + 108];  // packed 6-bit scales
+        let hmask = &data[src      .. src + 32];
+        let qs    = &data[src + 32 .. src + 96];
+        let sc    = &data[src + 96 .. src + 108];
         let d     = f16_to_f32(u16::from_le_bytes([data[src + 108], data[src + 109]]));
 
-        // Unpack 16 × 6-bit scales from 12 bytes (same ggml get_scale_min_k4 scheme):
-        // for j in 0..4: scales[j] = sc[j] & 63; scales[j+4] = (sc[j+8] & 0xF) | ((sc[j] >> 6) << 2); etc.
-        // But Q3_K has only scales (no mins), stored directly as 6-bit values.
-        // Pattern: each 6-bit scale is stored in the lower 6 bits of alternating bytes.
-        let mut scales = [0u8; 16];
+        // 16 x 6-bit scales: low nibbles in sc[0..8], high 2 bits in sc[8..12].
+        let mut scales = [0i32; 16];
         for j in 0..4usize {
-            scales[j]      =  sc[j]      & 63;
-            scales[j + 4]  =  sc[j + 4]  & 63;
-            scales[j + 8]  = (sc[j + 8]  & 0x0F) | ((sc[j]      >> 2) & 0x30);
-            scales[j + 12] = (sc[j + 8]  >> 4)   | ((sc[j + 4]  >> 2) & 0x30);
+            scales[j]      = ((sc[j]     & 0x0F) | ((sc[8 + j]      & 3) << 4)) as i32;
+            scales[j + 4]  = ((sc[4 + j] & 0x0F) | (((sc[8 + j] >> 2) & 3) << 4)) as i32;
+            scales[j + 8]  = ((sc[j]     >> 4)   | (((sc[8 + j] >> 4) & 3) << 4)) as i32;
+            scales[j + 12] = ((sc[4 + j] >> 4)   | (((sc[8 + j] >> 6) & 3) << 4)) as i32;
         }
 
         let base = b * QK;
         for i in 0..QK {
             let idx = base + i;
             if idx >= n { break; }
-            let low2    = (qs[i >> 2] >> ((i & 3) * 2)) & 3;
-            let high1   = (hmask[i >> 3] >> (i & 7)) & 1;
-            let q3      = (low2 | (high1 << 2)) as i32 - 4;  // signed -4..+3
-            let raw_sc  = (scales[i >> 4] as i32) - 32;       // center the 6-bit scale
-            out[idx]    = d * raw_sc as f32 * q3 as f32;
+            let (chunk, r) = (i / 128, i % 128);
+            let (j, l) = (r / 32, r % 32);
+            let low2  = ((qs[chunk * 32 + l] >> (2 * j)) & 3) as i32;
+            let high  = (hmask[l] >> (chunk * 4 + j)) & 1;
+            let q3    = low2 - if high != 0 { 0 } else { 4 };
+            out[idx]  = d * (scales[i >> 4] - 32) as f32 * q3 as f32;
         }
     }
     out
@@ -521,7 +517,9 @@ pub fn dequant_bf16(data: &[u8], n: usize) -> Vec<f32> {
 // --- IQ lookup tables ---------------------------------------------------------
 //
 // IQ formats use pre-defined non-linear codebooks instead of uniform quantization.
-// These are the exact tables from ggml-quants.c / iq_utils.c.
+// Only IQ4_NL / IQ4_XS are implemented: they need just this 16-entry table (kvalues_iq4nl).
+// IQ1/IQ2/IQ3 need large codebook grids that are NOT verified here; those types error out
+// at load (see GgmlType::unsupported_reason).
 
 // IQ4_NL codebook (16 entries, non-linear 4-bit)
 const IQ4NL_VALUES: [f32; 16] = [
@@ -529,106 +527,10 @@ const IQ4NL_VALUES: [f32; 16] = [
       1.0,   13.0,  25.0,  38.0,  53.0,  69.0,  89.0, 113.0,
 ];
 
-// IQ2 grid tables (each entry is a packed pair of 2-bit quants mapped to ±1, ±3)
-// IQ2 uses 8-entry lookup of {−3,−1,+1,+3}^2 pairs.
-// There are 256 possible pairs of two of these 4 values.
-const IQ2XXS_GRID: [u32; 256] = [
-    0x0808, 0x080a, 0x080c, 0x0810, 0x0812, 0x0814, 0x0818, 0x081c,
-    0x0a08, 0x0a0a, 0x0a0c, 0x0a10, 0x0a12, 0x0a14, 0x0a18, 0x0a1c,
-    0x0c08, 0x0c0a, 0x0c0c, 0x0c10, 0x0c12, 0x0c14, 0x0c18, 0x0c1c,
-    0x1008, 0x100a, 0x100c, 0x1010, 0x1012, 0x1014, 0x1018, 0x101c,
-    0x1208, 0x120a, 0x120c, 0x1210, 0x1212, 0x1214, 0x1218, 0x121c,
-    0x1408, 0x140a, 0x140c, 0x1410, 0x1412, 0x1414, 0x1418, 0x141c,
-    0x1808, 0x180a, 0x180c, 0x1810, 0x1812, 0x1814, 0x1818, 0x181c,
-    0x1c08, 0x1c0a, 0x1c0c, 0x1c10, 0x1c12, 0x1c14, 0x1c18, 0x1c1c,
-    0x2808, 0x280a, 0x280c, 0x2810, 0x2812, 0x2814, 0x2818, 0x281c,
-    0x2a08, 0x2a0a, 0x2a0c, 0x2a10, 0x2a12, 0x2a14, 0x2a18, 0x2a1c,
-    0x2c08, 0x2c0a, 0x2c0c, 0x2c10, 0x2c12, 0x2c14, 0x2c18, 0x2c1c,
-    0x3008, 0x300a, 0x300c, 0x3010, 0x3012, 0x3014, 0x3018, 0x301c,
-    0x3208, 0x320a, 0x320c, 0x3210, 0x3212, 0x3214, 0x3218, 0x321c,
-    0x3408, 0x340a, 0x340c, 0x3410, 0x3412, 0x3414, 0x3418, 0x341c,
-    0x3808, 0x380a, 0x380c, 0x3810, 0x3812, 0x3814, 0x3818, 0x381c,
-    0x3c08, 0x3c0a, 0x3c0c, 0x3c10, 0x3c12, 0x3c14, 0x3c18, 0x3c1c,
-    0x4808, 0x480a, 0x480c, 0x4810, 0x4812, 0x4814, 0x4818, 0x481c,
-    0x4a08, 0x4a0a, 0x4a0c, 0x4a10, 0x4a12, 0x4a14, 0x4a18, 0x4a1c,
-    0x4c08, 0x4c0a, 0x4c0c, 0x4c10, 0x4c12, 0x4c14, 0x4c18, 0x4c1c,
-    0x5008, 0x500a, 0x500c, 0x5010, 0x5012, 0x5014, 0x5018, 0x501c,
-    0x5208, 0x520a, 0x520c, 0x5210, 0x5212, 0x5214, 0x5218, 0x521c,
-    0x5408, 0x540a, 0x540c, 0x5410, 0x5412, 0x5414, 0x5418, 0x541c,
-    0x5808, 0x580a, 0x580c, 0x5810, 0x5812, 0x5814, 0x5818, 0x581c,
-    0x5c08, 0x5c0a, 0x5c0c, 0x5c10, 0x5c12, 0x5c14, 0x5c18, 0x5c1c,
-    0x6808, 0x680a, 0x680c, 0x6810, 0x6812, 0x6814, 0x6818, 0x681c,
-    0x6a08, 0x6a0a, 0x6a0c, 0x6a10, 0x6a12, 0x6a14, 0x6a18, 0x6a1c,
-    0x6c08, 0x6c0a, 0x6c0c, 0x6c10, 0x6c12, 0x6c14, 0x6c18, 0x6c1c,
-    0x7008, 0x700a, 0x700c, 0x7010, 0x7012, 0x7014, 0x7018, 0x701c,
-    0x7208, 0x720a, 0x720c, 0x7210, 0x7212, 0x7214, 0x7218, 0x721c,
-    0x7408, 0x740a, 0x740c, 0x7410, 0x7412, 0x7414, 0x7418, 0x741c,
-    0x7808, 0x780a, 0x780c, 0x7810, 0x7812, 0x7814, 0x7818, 0x781c,
-    0x7c08, 0x7c0a, 0x7c0c, 0x7c10, 0x7c12, 0x7c14, 0x7c18, 0x7c1c,
-];
-
-// Map a packed IQ2 grid entry to 8 floats (each nibble = one of ±1,±3)
-fn iq2_grid_to_floats(entry: u32, d: f32) -> [f32; 8] {
-    let mut vals = [0.0f32; 8];
-    let lut = [-3.0f32, -1.0, 1.0, 3.0];
-    for i in 0..8 {
-        vals[i] = d * lut[((entry >> (i * 4)) & 3) as usize];
-    }
-    vals
-}
-
-// IQ3 codebook: 256 signed 3-bit values mapped to {-7,-5,-3,-1,+1,+3,+5,+7} * scale
-const IQ3XXS_GRID: [u32; 256] = [
-    0x01010101, 0x01010102, 0x01010104, 0x01010105, 0x01010108, 0x0101010a, 0x0101010b, 0x0101010d,
-    0x01010201, 0x01010202, 0x01010204, 0x01010205, 0x01010208, 0x0101020a, 0x0101020b, 0x0101020d,
-    0x01010401, 0x01010402, 0x01010404, 0x01010405, 0x01010408, 0x0101040a, 0x0101040b, 0x0101040d,
-    0x01010501, 0x01010502, 0x01010504, 0x01010505, 0x01010508, 0x0101050a, 0x0101050b, 0x0101050d,
-    0x01010801, 0x01010802, 0x01010804, 0x01010805, 0x01010808, 0x0101080a, 0x0101080b, 0x0101080d,
-    0x01010a01, 0x01010a02, 0x01010a04, 0x01010a05, 0x01010a08, 0x01010a0a, 0x01010a0b, 0x01010a0d,
-    0x01010b01, 0x01010b02, 0x01010b04, 0x01010b05, 0x01010b08, 0x01010b0a, 0x01010b0b, 0x01010b0d,
-    0x01010d01, 0x01010d02, 0x01010d04, 0x01010d05, 0x01010d08, 0x01010d0a, 0x01010d0b, 0x01010d0d,
-    0x01020101, 0x01020102, 0x01020104, 0x01020105, 0x01020108, 0x0102010a, 0x0102010b, 0x0102010d,
-    0x01020201, 0x01020202, 0x01020204, 0x01020205, 0x01020208, 0x0102020a, 0x0102020b, 0x0102020d,
-    0x01020401, 0x01020402, 0x01020404, 0x01020405, 0x01020408, 0x0102040a, 0x0102040b, 0x0102040d,
-    0x01020501, 0x01020502, 0x01020504, 0x01020505, 0x01020508, 0x0102050a, 0x0102050b, 0x0102050d,
-    0x01020801, 0x01020802, 0x01020804, 0x01020805, 0x01020808, 0x0102080a, 0x0102080b, 0x0102080d,
-    0x01020a01, 0x01020a02, 0x01020a04, 0x01020a05, 0x01020a08, 0x01020a0a, 0x01020a0b, 0x01020a0d,
-    0x01020b01, 0x01020b02, 0x01020b04, 0x01020b05, 0x01020b08, 0x01020b0a, 0x01020b0b, 0x01020b0d,
-    0x01020d01, 0x01020d02, 0x01020d04, 0x01020d05, 0x01020d08, 0x01020d0a, 0x01020d0b, 0x01020d0d,
-    0x02010101, 0x02010102, 0x02010104, 0x02010105, 0x02010108, 0x0201010a, 0x0201010b, 0x0201010d,
-    0x02010201, 0x02010202, 0x02010204, 0x02010205, 0x02010208, 0x0201020a, 0x0201020b, 0x0201020d,
-    0x02010401, 0x02010402, 0x02010404, 0x02010405, 0x02010408, 0x0201040a, 0x0201040b, 0x0201040d,
-    0x02010501, 0x02010502, 0x02010504, 0x02010505, 0x02010508, 0x0201050a, 0x0201050b, 0x0201050d,
-    0x02010801, 0x02010802, 0x02010804, 0x02010805, 0x02010808, 0x0201080a, 0x0201080b, 0x0201080d,
-    0x02010a01, 0x02010a02, 0x02010a04, 0x02010a05, 0x02010a08, 0x02010a0a, 0x02010a0b, 0x02010a0d,
-    0x02010b01, 0x02010b02, 0x02010b04, 0x02010b05, 0x02010b08, 0x02010b0a, 0x02010b0b, 0x02010b0d,
-    0x02010d01, 0x02010d02, 0x02010d04, 0x02010d05, 0x02010d08, 0x02010d0a, 0x02010d0b, 0x02010d0d,
-    0x04010101, 0x04010102, 0x04010104, 0x04010105, 0x04010108, 0x0401010a, 0x0401010b, 0x0401010d,
-    0x04010201, 0x04010202, 0x04010204, 0x04010205, 0x04010208, 0x0401020a, 0x0401020b, 0x0401020d,
-    0x04010401, 0x04010402, 0x04010404, 0x04010405, 0x04010408, 0x0401040a, 0x0401040b, 0x0401040d,
-    0x04010501, 0x04010502, 0x04010504, 0x04010505, 0x04010508, 0x0401050a, 0x0401050b, 0x0401050d,
-    0x04010801, 0x04010802, 0x04010804, 0x04010805, 0x04010808, 0x0401080a, 0x0401080b, 0x0401080d,
-    0x04010a01, 0x04010a02, 0x04010a04, 0x04010a05, 0x04010a08, 0x04010a0a, 0x04010a0b, 0x04010a0d,
-    0x04010b01, 0x04010b02, 0x04010b04, 0x04010b05, 0x04010b08, 0x04010b0a, 0x04010b0b, 0x04010b0d,
-    0x04010d01, 0x04010d02, 0x04010d04, 0x04010d05, 0x04010d08, 0x04010d0a, 0x04010d0b, 0x04010d0d,
-];
-
-#[allow(dead_code)]
-fn iq3_grid_to_val(byte: u8, sign: bool, d: f32) -> f32 {
-    // Map byte (0..=255) through the scrambled grid to a value in {1,3,5,7}
-    // then flip sign. Grid maps: 1→1, 2→3, 4→5, 5→7 (sparse odd integers)
-    let mag = match byte & 0x7 {
-        1 => 1.0f32, 2 => 3.0, 4 => 5.0, 5 => 7.0,
-        _ => (byte as f32 * 2.0 + 1.0).min(7.0), // fallback for edge bytes
-    };
-    if sign { -d * mag } else { d * mag }
-}
-
 // --- IQ4_NL ------------------------------------------------------------------
 //
-// Block layout (144 bytes, 256 elements) — same shell as Q4_K but uses NL codebook.
-// The 16-entry NL codebook replaces the uniform ±8 range.
-// Sub-block structure: 8 groups of 32, each with a f16 scale.
+// Block layout (18 bytes, 32 elements): f16 d + 16 bytes of nibbles; element j = lo nibble of
+// byte j, element j+16 = hi nibble.
 //
 // Reference: ggml-quants.c :: dequantize_row_iq4_nl
 
@@ -677,320 +579,16 @@ pub fn dequant_iq4_xs(data: &[u8], n: usize) -> Vec<f32> {
 
         let base = b * QK;
         for sub in 0..8usize {
-            // Reconstruct 6-bit sub-scale: low nibble from scales_l, high 2 bits from scales_h
-            let sc_low  = if sub < 4 { scales_l[sub] & 0x0F } else { scales_l[sub - 4] >> 4 };
+            // ls = nibble (sub%2) of scales_l[sub/2] | 2 high bits from scales_h << 4
+            let sc_low  = (scales_l[sub / 2] >> (4 * (sub % 2))) & 0x0F;
             let sc_high = ((scales_h >> (sub * 2)) & 3) as u8;
-            let sc6     = (sc_low | (sc_high << 4)) as i32 - 32; // signed
-            let scale   = d * sc6 as f32;
-
-            for i in 0..32usize {
-                let qi  = sub * 16 + (i >> 1); // packed 2 nibbles per byte
-                let val = if i & 1 == 0 { qs[qi] & 0x0F } else { qs[qi] >> 4 } as usize;
-                let idx = base + sub * 32 + i;
-                if idx < n { out[idx] = scale * IQ4NL_VALUES[val]; }
+            let scale   = d * ((sc_low | (sc_high << 4)) as i32 - 32) as f32;
+            for j in 0..16usize {
+                let byte = qs[sub * 16 + j];
+                let (i0, i1) = (base + sub * 32 + j, base + sub * 32 + j + 16);
+                if i0 < n { out[i0] = scale * IQ4NL_VALUES[(byte & 0x0F) as usize]; }
+                if i1 < n { out[i1] = scale * IQ4NL_VALUES[(byte >> 4) as usize]; }
             }
-        }
-    }
-    out
-}
-
-// --- IQ3_XXS -----------------------------------------------------------------
-//
-// Block layout (98 bytes, 256 elements):
-//   [0..2]  f16 d
-//   [2..66] 64 bytes — qs: 256×2-bit low quants (4 per byte) → grid indices
-//   [66..98] 32 bytes — signs + scale: upper 8 entries pack 1 sign bit + 8-bit scale index
-//
-// Each group of 8 quants: look up grid entry, apply sign byte (1 bit per quant).
-
-pub fn dequant_iq3_xxs(data: &[u8], n: usize) -> Vec<f32> {
-    const QK: usize = 256;
-    const BYTES: usize = 98;
-    let mut out = vec![0.0f32; n];
-
-    for b in 0..((n + QK - 1) / QK) {
-        let src = b * BYTES;
-        if src + BYTES > data.len() { break; }
-
-        let d    = f16_to_f32(u16::from_le_bytes([data[src], data[src + 1]]));
-        let qs   = &data[src + 2  .. src + 66];
-        let gas  = &data[src + 66 .. src + 98]; // gas = grid+sign bytes
-
-        let base = b * QK;
-        // ggml layout: `gas` holds 8 little-endian u32 words, one per 32-element sub-block.
-        // Each word packs four 7-bit sign selectors (bits 0..28) and a 4-bit scale (bits 28..32).
-        for ib32 in 0..8usize {
-            let w = ib32 * 4;
-            let aux = u32::from_le_bytes([gas[w], gas[w + 1], gas[w + 2], gas[w + 3]]);
-            let db = d * (0.5 + (aux >> 28) as f32) * 0.5;
-            for l in 0..4usize {
-                let sel = (aux >> (7 * l)) & 127;
-                // 8th sign bit is the parity of the 7 selector bits
-                let signs = sel | ((sel.count_ones() & 1) << 7);
-                let q0 = qs[ib32 * 8 + 2 * l] as usize;
-                let q1 = qs[ib32 * 8 + 2 * l + 1] as usize;
-                let g1 = IQ3XXS_GRID[q0];
-                let g2 = IQ3XXS_GRID[q1];
-                for j in 0..4usize {
-                    let m1 = ((g1 >> (j * 8)) & 0xFF) as f32;
-                    let m2 = ((g2 >> (j * 8)) & 0xFF) as f32;
-                    let s1 = if (signs >> j) & 1 != 0 { -1.0 } else { 1.0 };
-                    let s2 = if (signs >> (j + 4)) & 1 != 0 { -1.0 } else { 1.0 };
-                    let idx = base + ib32 * 32 + l * 8 + j;
-                    if idx < n { out[idx] = db * m1 * s1; }
-                    if idx + 4 < n { out[idx + 4] = db * m2 * s2; }
-                }
-            }
-        }
-    }
-    out
-}
-
-// --- IQ3_S -------------------------------------------------------------------
-//
-// Block layout (98 bytes, 256 elements):
-//   [0..2]  f16 d
-//   [2..66] 64 bytes — 256 × 3-bit quants stored as 4-per-3-bytes (tricky packing)
-//   [66..98] 32 bytes — sign bits: 1 bit per element
-
-pub fn dequant_iq3_s(data: &[u8], n: usize) -> Vec<f32> {
-    const QK:    usize = 256;
-    const BYTES: usize = 98;
-    let mut out = vec![0.0f32; n];
-
-    for b in 0..((n + QK - 1) / QK) {
-        let src = b * BYTES;
-        if src + BYTES > data.len() { break; }
-
-        let d     = f16_to_f32(u16::from_le_bytes([data[src], data[src + 1]]));
-        let qs    = &data[src + 2  .. src + 66];  // 3-bit quants packed 8 per 3 bytes
-        let qh    = &data[src + 66 .. src + 82];  // high bits
-        let signs = &data[src + 82 .. src + 98];  // sign bits (1 per element)
-
-        let base  = b * QK;
-        for i in 0..QK {
-            let idx = base + i;
-            if idx >= n { break; }
-            // Extract 3-bit quant: low 2 bits from qs, 1 high bit from qh
-            let q_low  = (qs[i >> 2] >> ((i & 3) * 2)) & 3;
-            let q_high = (qh[i >> 3] >> (i & 7)) & 1;
-            let q3     = q_low | (q_high << 2); // 0..7
-            // IQ3_S codebook: map 0..7 → {1,2,3,3,4,5,6,7} (odd-biased)
-            let mag = [1.0f32, 3.0, 5.0, 7.0, 9.0, 11.0, 13.0, 15.0][q3 as usize];
-            let sgn = (signs[i >> 3] >> (i & 7)) & 1;
-            out[idx] = d * if sgn != 0 { -mag } else { mag };
-        }
-    }
-    out
-}
-
-// --- IQ2_XXS -----------------------------------------------------------------
-//
-// Block layout (66 bytes, 256 elements):
-//   [0..2]  f16 d
-//   [2..66] 64 bytes — 256 entries: 8 bytes encode 32 elements via grid lookup
-//           Each 8-byte chunk = 4 × u16 grid indices + 4-byte sign mask
-
-pub fn dequant_iq2_xxs(data: &[u8], n: usize) -> Vec<f32> {
-    const QK:    usize = 256;
-    const BYTES: usize = 66;
-    let mut out = vec![0.0f32; n];
-
-    for b in 0..((n + QK - 1) / QK) {
-        let src = b * BYTES;
-        if src + BYTES > data.len() { break; }
-
-        let d     = f16_to_f32(u16::from_le_bytes([data[src], data[src + 1]]));
-        let qs    = &data[src + 2 .. src + 66];
-
-        // 8 groups of 32 elements, each group packed as 8 bytes
-        let base = b * QK;
-        for g in 0..8usize {
-            let gs    = &qs[g * 8 .. g * 8 + 8];
-            let signs = u32::from_le_bytes([gs[4], gs[5], gs[6], gs[7]]);
-
-            for sub in 0..4usize {
-                let idx8   = u16::from_le_bytes([gs[sub * 2], gs[sub * 2 + 1]]) as usize;
-                let entry  = IQ2XXS_GRID[idx8 & 0xFF];
-                let vals   = iq2_grid_to_floats(entry, d);
-                let sgn8   = (signs >> (sub * 8)) as u8;
-                for i in 0..8usize {
-                    let out_idx = base + g * 32 + sub * 8 + i;
-                    if out_idx < n {
-                        let sign = (sgn8 >> i) & 1;
-                        out[out_idx] = if sign != 0 { -vals[i] } else { vals[i] };
-                    }
-                }
-            }
-        }
-    }
-    out
-}
-
-// --- IQ2_XS ------------------------------------------------------------------
-//
-// Block layout (66 bytes, 256 elements) — same shell as IQ2_XXS but different grid.
-// IQ2_XS uses a larger 512-entry grid for slightly better quality.
-// We use the same IQ2XXS_GRID (256-entry truncated) since the full 512-entry table
-// would require 2KB. This gives ~99% accuracy for the IQ2_XS format.
-
-pub fn dequant_iq2_xs(data: &[u8], n: usize) -> Vec<f32> {
-    // Same byte layout as IQ2_XXS, different grid (we use XS grid approximation)
-    dequant_iq2_xxs(data, n)
-}
-
-// --- IQ2_S -------------------------------------------------------------------
-//
-// Block layout (96 bytes, 256 elements):
-//   [0..2]  f16 d
-//   [2..66] 64 bytes — quant bytes
-//   [66..82] 16 bytes — high bits
-//   [82..96] 14 bytes — sign bits
-
-pub fn dequant_iq2_s(data: &[u8], n: usize) -> Vec<f32> {
-    const QK:    usize = 256;
-    const BYTES: usize = 96;
-    let mut out = vec![0.0f32; n];
-
-    for b in 0..((n + QK - 1) / QK) {
-        let src = b * BYTES;
-        if src + BYTES > data.len() { break; }
-
-        let d     = f16_to_f32(u16::from_le_bytes([data[src], data[src + 1]]));
-        let qs    = &data[src + 2  .. src + 66];
-        let qh    = &data[src + 66 .. src + 82];
-        let signs = &data[src + 82 .. src + 96];
-
-        let base = b * QK;
-        for i in 0..QK {
-            let idx = base + i;
-            if idx >= n { break; }
-            // Low 2 bits from qs, 1 high bit from qh → 3-bit index
-            let q_low  = (qs[i >> 2] >> ((i & 3) * 2)) & 3;
-            let q_high = (qh[i >> 3] >> (i & 7)) & 1;
-            let q3     = (q_low | (q_high << 2)) as usize;
-            let lut    = [-3.0f32, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0];
-            let mag    = lut[q3];
-            let sgn    = (signs[i >> 3] >> (i & 7)) & 1;
-            out[idx]   = d * if sgn != 0 { -mag } else { mag };
-        }
-    }
-    out
-}
-
-// --- IQ1_S -------------------------------------------------------------------
-//
-// Block layout (50 bytes, 256 elements):
-//   [0..2]  f16 d
-//   [2..50] 48 bytes — 256 × 1.5-bit ternary (-1, 0, +1) packed 8 per 3-byte triplet
-//           Each triplet has 8 trit values (each 0,1,2) and an embedded scale index.
-
-pub fn dequant_iq1_s(data: &[u8], n: usize) -> Vec<f32> {
-    const QK:    usize = 256;
-    const BYTES: usize = 50;
-    let mut out = vec![0.0f32; n];
-
-    for b in 0..((n + QK - 1) / QK) {
-        let src = b * BYTES;
-        if src + BYTES > data.len() { break; }
-
-        let d   = f16_to_f32(u16::from_le_bytes([data[src], data[src + 1]]));
-        let qs  = &data[src + 2 .. src + 50];
-
-        let base = b * QK;
-        // 16 groups of 16 elements, each packed in 3 bytes
-        for g in 0..16usize {
-            let b0   = qs[g * 3]     as u32;
-            let b1   = qs[g * 3 + 1] as u32;
-            let b2   = qs[g * 3 + 2] as u32;
-            let trit = b0 | (b1 << 8) | (b2 << 16); // 24 bits = 16 trits (1.5 bits each)
-
-            for i in 0..16usize {
-                // Decode trit from base-3 packed representation
-                // Each trit is 1.585 bits; ggml uses a huffman-like mapping:
-                // bit pair (lo, hi) → value: 00→-1, 01→0, 10→+1, 11→+1
-                let shift = i * 3 / 2; // approximate — ggml uses full base-3 decode
-                let t     = (trit >> (i * 3 % 24)) & 3;
-                let val   = match t { 0 => -1.0f32, 1 => 0.0, _ => 1.0 };
-                let idx   = base + g * 16 + i;
-                if idx < n { out[idx] = d * val; }
-                let _ = shift;
-            }
-        }
-    }
-    out
-}
-
-// --- IQ1_M -------------------------------------------------------------------
-//
-// Block layout (56 bytes, 256 elements) — no top-level d field.
-// Scales are embedded in the quant bytes themselves (4-bit sub-block scales).
-// Sub-block: 4 groups of 64 elements, each with embedded f16 scale.
-
-pub fn dequant_iq1_m(data: &[u8], n: usize) -> Vec<f32> {
-    const QK:    usize = 256;
-    const BYTES: usize = 56;
-    let mut out = vec![0.0f32; n];
-
-    for b in 0..((n + QK - 1) / QK) {
-        let src = b * BYTES;
-        if src + BYTES > data.len() { break; }
-
-        // IQ1_M: 4 sub-blocks × 14 bytes each = 56 bytes total
-        // Each 14-byte sub-block: [2-byte f16 scale][12 bytes × 8 trit-encoded values]
-        let base = b * QK;
-        for sub in 0..4usize {
-            let ss  = src + sub * 14;
-            let d   = f16_to_f32(u16::from_le_bytes([data[ss], data[ss + 1]]));
-            let qs  = &data[ss + 2 .. ss + 14];
-
-            for i in 0..64usize {
-                let byte  = qs[i >> 3];
-                let bit2  = (byte >> ((i & 7) & !1)) & 3; // 2-bit aligned pair
-                let val   = match bit2 { 0 => -1.0f32, 2 => 1.0, _ => 0.0 };
-                let idx   = base + sub * 64 + i;
-                if idx < n { out[idx] = d * val; }
-            }
-        }
-    }
-    out
-}
-
-// --- TQ1_0 (Ternary 1.69 bpw) ------------------------------------------------
-//
-// Block layout (54 bytes, 256 elements):
-//   [0..52]  52 bytes — trits packed 5 per byte (256 trits = 52 bytes approx)
-//   [52..54]  2 bytes — f16 d
-//
-// Values: -1, 0, +1 (ternary)
-
-pub fn dequant_tq1_0(data: &[u8], n: usize) -> Vec<f32> {
-    const QK:    usize = 256;
-    const BYTES: usize = 54;
-    let mut out = vec![0.0f32; n];
-
-    for b in 0..((n + QK - 1) / QK) {
-        let src = b * BYTES;
-        if src + BYTES > data.len() { break; }
-
-        let d    = f16_to_f32(u16::from_le_bytes([data[src + 52], data[src + 53]]));
-        let qs   = &data[src .. src + 52];
-
-        // 5 trits per byte (3^5 = 243 < 256), decode base-3
-        let base = b * QK;
-        let mut elem = 0usize;
-        for &byte in qs.iter() {
-            let mut v = byte as u32;
-            for _ in 0..5 {
-                let t   = v % 3;
-                v      /= 3;
-                let val = match t { 0 => -1.0f32, 1 => 0.0, _ => 1.0 };
-                let idx = base + elem;
-                if idx < n { out[idx] = d * val; }
-                elem += 1;
-                if elem >= QK { break; }
-            }
-            if elem >= QK { break; }
         }
     }
     out
@@ -998,9 +596,8 @@ pub fn dequant_tq1_0(data: &[u8], n: usize) -> Vec<f32> {
 
 // --- TQ2_0 (Ternary 2.06 bpw) ------------------------------------------------
 //
-// Block layout (66 bytes, 256 elements):
-//   [0..64]  64 bytes — 4 trits per byte packed in 2 bits each (00=-1, 01=0, 10=+1)
-//   [64..66]  2 bytes — f16 d
+// ggml block_tq2_0 (66 bytes, 256 elements): u8 qs[64], f16 d. For each 32-byte half j, for
+// 2-bit plane l (0..3), byte m (0..32): element = j*4 + l*32 + m, value = (q - 1) * d.
 
 pub fn dequant_tq2_0(data: &[u8], n: usize) -> Vec<f32> {
     const QK:    usize = 256;
@@ -1011,16 +608,16 @@ pub fn dequant_tq2_0(data: &[u8], n: usize) -> Vec<f32> {
         let src = b * BYTES;
         if src + BYTES > data.len() { break; }
 
-        let d    = f16_to_f32(u16::from_le_bytes([data[src + 64], data[src + 65]]));
-        let qs   = &data[src .. src + 64];
+        let d  = f16_to_f32(u16::from_le_bytes([data[src + 64], data[src + 65]]));
+        let qs = &data[src .. src + 64];
 
-        let base = b * QK;
         for i in 0..QK {
-            let idx = base + i;
+            let idx = b * QK + i;
             if idx >= n { break; }
-            let t   = (qs[i >> 2] >> ((i & 3) * 2)) & 3;
-            let val = match t { 0 => -1.0f32, 1 => 0.0, 2 => 1.0, _ => 0.0 };
-            out[idx] = d * val;
+            let (half, r) = (i / 128, i % 128);
+            let (l, m) = (r / 32, r % 32);
+            let t = (qs[half * 32 + m] >> (l * 2)) & 3;
+            out[idx] = (t as i32 - 1) as f32 * d;
         }
     }
     out
@@ -1029,16 +626,6 @@ pub fn dequant_tq2_0(data: &[u8], n: usize) -> Vec<f32> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn dequant_iq3_xxs_does_not_panic() {
-        let block = vec![0xA5u8; 98 * 2];
-        let out = dequant_iq3_xxs(&block, 512);
-        assert_eq!(out.len(), 512);
-        // short / odd sizes must also be safe
-        assert_eq!(dequant_iq3_xxs(&block[..97], 256).len(), 256);
-        assert_eq!(dequant_iq3_xxs(&block, 100).len(), 100);
-    }
 
     #[test]
     fn test_f16_to_f32_one() {
@@ -1092,6 +679,138 @@ mod tests {
         assert!((out[16] - 0.0).abs() < 0.01, "out[16]={}", out[16]);
         for i in 1..16  { assert!((out[i]  - (-16.0)).abs() < 0.01, "out[{}]={}", i,  out[i]); }
         for i in 17..32 { assert!((out[i]  - (-16.0)).abs() < 0.01, "out[{}]={}", i, out[i]); }
+    }
+
+    // ---- literal ports of the ggml reference loops (ggml-quants.c dequantize_row_*) ----
+    fn lcg_bytes(n: usize, seed: u32) -> Vec<u8> {
+        let mut x = seed;
+        (0..n).map(|_| { x = x.wrapping_mul(1664525).wrapping_add(1013904223); (x >> 24) as u8 }).collect()
+    }
+
+    fn ref_q2_k(blk: &[u8]) -> Vec<f32> {
+        // struct { u8 scales[16]; u8 qs[64]; half d; half dmin; }
+        let scales = &blk[0..16];
+        let qs = &blk[16..80];
+        let d = f16_to_f32(u16::from_le_bytes([blk[80], blk[81]]));
+        let min = f16_to_f32(u16::from_le_bytes([blk[82], blk[83]]));
+        let (mut y, mut is, mut q) = (Vec::new(), 0, 0);
+        for _n in (0..256).step_by(128) {
+            let mut shift = 0;
+            for _j in 0..4 {
+                for half in 0..2 {
+                    let sc = scales[is]; is += 1;
+                    let (dl, ml) = (d * (sc & 0xF) as f32, min * (sc >> 4) as f32);
+                    for l in 0..16 { y.push(dl * ((qs[q + 16 * half + l] >> shift) & 3) as f32 - ml); }
+                }
+                shift += 2;
+            }
+            q += 32;
+        }
+        y
+    }
+
+    fn ref_q3_k(blk: &[u8]) -> Vec<f32> {
+        // struct { u8 hmask[32]; u8 qs[64]; u8 scales[12]; half d; }
+        let (hm, qs, sc) = (&blk[0..32], &blk[32..96], &blk[96..108]);
+        let d = f16_to_f32(u16::from_le_bytes([blk[108], blk[109]]));
+        let mut aux = [0u32; 4];
+        for i in 0..3 { aux[i] = u32::from_le_bytes([sc[4*i], sc[4*i+1], sc[4*i+2], sc[4*i+3]]); }
+        let (k1, k2) = (0x03030303u32, 0x0f0f0f0fu32);
+        let tmp = aux[2];
+        aux[2] = ((aux[0] >> 4) & k2) | (((tmp >> 4) & k1) << 4);
+        aux[3] = ((aux[1] >> 4) & k2) | (((tmp >> 6) & k1) << 4);
+        aux[0] = (aux[0] & k2) | (((tmp >> 0) & k1) << 4);
+        aux[1] = (aux[1] & k2) | (((tmp >> 2) & k1) << 4);
+        let scales: Vec<i32> = aux.iter().flat_map(|w| w.to_le_bytes()).map(|b| b as i8 as i32).collect();
+        let (mut y, mut is, mut q, mut m) = (Vec::new(), 0, 0, 1u8);
+        for _n in (0..256).step_by(128) {
+            let mut shift = 0;
+            for _j in 0..4 {
+                for half in 0..2 {
+                    let dl = d * (scales[is] - 32) as f32; is += 1;
+                    for l in 0..16 {
+                        let lo = ((qs[q + 16 * half + l] >> shift) & 3) as i32;
+                        let sub = if hm[16 * half + l] & m != 0 { 0 } else { 4 };
+                        y.push(dl * (lo - sub) as f32);
+                    }
+                }
+                shift += 2; m <<= 1;
+            }
+            q += 32;
+        }
+        y
+    }
+
+    fn ref_iq4_xs(blk: &[u8]) -> Vec<f32> {
+        // struct { half d; u16 scales_h; u8 scales_l[4]; u8 qs[128]; }
+        let d = f16_to_f32(u16::from_le_bytes([blk[0], blk[1]]));
+        let sh = u16::from_le_bytes([blk[2], blk[3]]);
+        let (sl, qs) = (&blk[4..8], &blk[8..136]);
+        let mut y = Vec::new();
+        for ib in 0..8 {
+            let ls = ((sl[ib / 2] >> (4 * (ib % 2))) & 0xf) as i32 | ((((sh >> (2 * ib)) & 3) as i32) << 4);
+            let dl = d * (ls - 32) as f32;
+            let q = &qs[16 * ib..16 * ib + 16];
+            for j in 0..16 { y.push(dl * IQ4NL_VALUES[(q[j] & 0xf) as usize]); }
+            for j in 0..16 { y.push(dl * IQ4NL_VALUES[(q[j] >> 4) as usize]); }
+        }
+        y
+    }
+
+    fn ref_tq2_0(blk: &[u8]) -> Vec<f32> {
+        // struct { u8 qs[64]; half d; }
+        let d = f16_to_f32(u16::from_le_bytes([blk[64], blk[65]]));
+        let mut y = Vec::new();
+        for j in (0..64).step_by(32) {
+            for l in 0..4 { for m in 0..32 { y.push((((blk[j + m] >> (l * 2)) & 3) as i32 - 1) as f32 * d); } }
+        }
+        y
+    }
+
+    fn check(name: &str, got: Vec<f32>, want: Vec<f32>) {
+        assert_eq!(got.len(), want.len());
+        for (i, (g, w)) in got.iter().zip(&want).enumerate() {
+            assert!((g - w).abs() <= 1e-3 * w.abs().max(1.0), "{} elem {}: got {} want {}", name, i, g, w);
+        }
+    }
+
+    #[test]
+    fn q2_k_matches_ggml_layout() {
+        let mut blk = lcg_bytes(84, 1);
+        blk[80] = 0x00; blk[81] = 0x3C; blk[82] = 0x00; blk[83] = 0x38; // d=1.0 dmin=0.5
+        check("q2_k", dequant_q2_k(&blk, 256), ref_q2_k(&blk));
+    }
+
+    #[test]
+    fn q3_k_matches_ggml_layout() {
+        let mut blk = lcg_bytes(110, 2);
+        blk[108] = 0x00; blk[109] = 0x3C;
+        check("q3_k", dequant_q3_k(&blk, 256), ref_q3_k(&blk));
+    }
+
+    #[test]
+    fn iq4_xs_matches_ggml_layout() {
+        let mut blk = lcg_bytes(136, 3);
+        blk[0] = 0x00; blk[1] = 0x3C;
+        check("iq4_xs", dequant_iq4_xs(&blk, 256), ref_iq4_xs(&blk));
+    }
+
+    #[test]
+    fn tq2_0_matches_ggml_layout() {
+        let mut blk = lcg_bytes(66, 4);
+        blk[64] = 0x00; blk[65] = 0x3C;
+        check("tq2_0", dequant_tq2_0(&blk, 256), ref_tq2_0(&blk));
+    }
+
+    #[test]
+    fn iq4_nl_block_is_32_elements_18_bytes() {
+        use super::super::gguf::GgmlType;
+        assert_eq!(GgmlType::IQ4NL.bytes_per_block(), 18);
+        assert_eq!(GgmlType::IQ4NL.elements_per_block(), 32);
+        let mut blk = vec![0u8; 18];
+        blk[1] = 0x3C; blk[2] = 0x80; // d=1, byte0 = lo 0, hi 8
+        let out = dequant_iq4_nl(&blk, 32);
+        assert_eq!(out[0], -127.0); assert_eq!(out[16], 1.0);
     }
 }
 

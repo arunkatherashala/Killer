@@ -382,18 +382,8 @@ fn dequant_dispatch(data: &[u8], dtype: GgmlType, n_elem: usize) -> Vec<f32> {
                                     => quant::dequant_q5_k(data, n_elem),
         GgmlType::Q6K               => quant::dequant_q6_k(data, n_elem),
         GgmlType::Q8K               => quant::dequant_q8_k(data, n_elem),
-        GgmlType::IQ4NL | GgmlType::IQ4_NL_4_4 | GgmlType::IQ4_NL_4_8
-        | GgmlType::Q4_0_4x4 | GgmlType::Q4_0_4x8 | GgmlType::Q4_0_8x8
-                                    => quant::dequant_iq4_nl(data, n_elem),
+        GgmlType::IQ4NL             => quant::dequant_iq4_nl(data, n_elem),
         GgmlType::IQ4XS             => quant::dequant_iq4_xs(data, n_elem),
-        GgmlType::IQ3XXS            => quant::dequant_iq3_xxs(data, n_elem),
-        GgmlType::IQ3S              => quant::dequant_iq3_s(data, n_elem),
-        GgmlType::IQ2XXS            => quant::dequant_iq2_xxs(data, n_elem),
-        GgmlType::IQ2XS             => quant::dequant_iq2_xs(data, n_elem),
-        GgmlType::IQ2S              => quant::dequant_iq2_s(data, n_elem),
-        GgmlType::IQ1S              => quant::dequant_iq1_s(data, n_elem),
-        GgmlType::IQ1M              => quant::dequant_iq1_m(data, n_elem),
-        GgmlType::TQ1_0             => quant::dequant_tq1_0(data, n_elem),
         GgmlType::TQ2_0             => quant::dequant_tq2_0(data, n_elem),
         _                           => vec![0.0; n_elem],
     }
