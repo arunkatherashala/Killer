@@ -540,3 +540,55 @@ fn polyglot_list_shows_denied_languages() {
     let bash = o.stdout.lines().find(|l| l.split_whitespace().next() == Some("bash")).unwrap_or("").to_string();
     assert!(bash.contains("denied"), "{}", o.all());
 }
+
+// --- Item 10: passing Killer values into a block ----------------------------------------------
+
+#[test]
+fn python_block_receives_variables() {
+    need!("python");
+    let src = "name = \"World\"\nn = 21\nxs = [1, 2, 3]\nr = @python(name, n, xs) { print('Hello ' + name, n * 2, sum(xs)) }\nprintln(r)\n";
+    let (o, _) = run_watch(src, &[], None, WATCH);
+    assert_eq!(o.stdout, "Hello World 42 6", "{}", o.all());
+}
+
+#[test]
+fn quotes_backslashes_and_newlines_arrive_intact() {
+    need!("python");
+    let src = "s = \"a\\\"b\\\\c\\nd'e\"\nr = @python(s) {\n    import json\n    print(json.dumps(s))\n}\nprintln(r == json_stringify(s))\n";
+    let (o, _) = run_watch(src, &[], None, WATCH);
+    assert_eq!(o.stdout, "true", "{}", o.all());
+}
+
+#[test]
+fn bash_block_receives_variables_and_the_json() {
+    need!("bash");
+    let src = "x = \"it's $HOME `id`\"\nr = @bash(x) {\n    echo \"$x\"\n    echo \"$KILLER_ARGS\"\n}\nprintln(r)\n";
+    let (o, _) = run_watch(src, &[], None, WATCH);
+    let lines: Vec<&str> = o.stdout.lines().collect();
+    assert_eq!(lines.first().copied(), Some("it's $HOME `id`"), "{}", o.all());
+    assert!(lines.get(1).map_or(false, |l| l.starts_with("{\"x\":")), "{}", o.all());
+}
+
+#[test]
+fn large_payload_goes_through_a_file() {
+    need!("python");
+    let src = "big = \"\"\nfor i in range(3000) {\n    big = big + \"0123456789\"\n}\nr = @python(big) {\n    import os\n    print(len(big), 'KILLER_ARGS_FILE' in os.environ)\n}\nprintln(r)\n";
+    let (o, _) = run_watch(src, &[], None, WATCH);
+    assert_eq!(o.stdout, "30000 True", "{}", o.all());
+}
+
+#[test]
+fn without_a_header_killer_variables_stay_invisible() {
+    need!("python");
+    let src = "secret_zz = 1\ntry {\n    r = @python { print(secret_zz) }\n} catch e {\n    println(str(e))\n}\n";
+    let (o, _) = run_watch(src, &[], None, WATCH);
+    assert!(o.stdout.contains("NameError"), "{}", o.all());
+}
+
+#[test]
+fn structured_output_through_json() {
+    need!("python");
+    let src = "d = json_parse(@python { import json; print(json.dumps({'a': 1, 'b': [2, 3]})) })\nprintln(d[\"a\"] + d[\"b\"][1])\n";
+    let (o, _) = run_watch(src, &[], None, WATCH);
+    assert_eq!(o.stdout, "4", "{}", o.all());
+}
