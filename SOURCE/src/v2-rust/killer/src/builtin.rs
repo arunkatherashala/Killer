@@ -1990,6 +1990,9 @@ impl BuiltinFunctions {
         }
         match (&args[0], &args[1]) {
             (Value::Array(arr1), Value::Array(arr2)) => {
+                if arr1.len().saturating_add(arr2.len()) > (1usize << 26) {
+                    return Err(VmError::runtime_error("concat(): result would exceed 67108864 elements".to_string()));
+                }
                 let mut v = arr1.to_vec();
                 v.extend(arr2.to_vec());
                 Ok(Value::from(v))
