@@ -261,3 +261,68 @@ println(\"got \" + s)
     let (o, _) = run_watch(src, &[], None, WATCH);
     assert!(o.stdout.ends_with("got done"), "{}", &o.all()[..o.all().len().min(400)]);
 }
+
+// --- Item 3: environment scrub, private working directory, temp cleanup -------------------------
+
+#[test]
+fn env_is_scrubbed_and_pass_through_is_explicit() {
+    need!("bash");
+    let src = "e = @bash { env }\nprintln(e)\n";
+    let env = [("SECRET_TEST_PG", "leak1"), ("KILLER_KHLM_LLM_API_KEY", "leak2")];
+    let (o, _) = run_watch(src, &env, None, WATCH);
+    assert!(!o.stdout.contains("leak1") && !o.stdout.contains("leak2"), "{}", o.all());
+    assert!(o.stdout.contains("PATH="), "{}", o.all());
+    let env = [("SECRET_TEST_PG", "leak1"), ("KILLER_POLYGLOT_ENV_PASS", "SECRET_TEST_PG")];
+    let (o, _) = run_watch(src, &env, None, WATCH);
+    assert!(o.stdout.contains("SECRET_TEST_PG=leak1"), "{}", o.all());
+}
+
+#[test]
+fn python_unicode_round_trips() {
+    need!("python");
+    let (o, _) = run_watch("u = @python { print('h\u{e9}llo \u{65e5}\u{672c} \u{2713}') }\nprintln(u)\n", &[], None, WATCH);
+    assert_eq!(o.stdout, "h\u{e9}llo \u{65e5}\u{672c} \u{2713}", "{}", o.all());
+}
+
+fn fresh_dir(tag: &str) -> std::path::PathBuf {
+    let d = unique(tag);
+    std::fs::create_dir_all(&d).unwrap();
+    d
+}
+
+#[test]
+fn temp_files_are_removed_after_success_failure_and_timeout() {
+    need!("python");
+    let tmp = fresh_dir("tmp");
+    let t = tmp.to_string_lossy().to_string();
+    let env = [("TEMP", t.as_str()), ("TMP", t.as_str()), ("TMPDIR", t.as_str()), ("KILLER_POLYGLOT_TIMEOUT", "2")];
+    let src = "a = @python { print(1) }\ntry {\n    b = @python { raise SystemExit(4) }\n} catch e {\n    println(\"x\")\n}\ntry {\n    c = @python {\n        import time\n        time.sleep(30)\n    }\n} catch e {\n    println(\"y\")\n}\nprintln(a)\n";
+    let (o, _) = run_watch(src, &env, None, WATCH);
+    assert_eq!(o.stdout, "x\ny\n1", "{}", o.all());
+    let left: Vec<_> = std::fs::read_dir(&tmp).unwrap().flatten().map(|e| e.file_name()).filter(|n| n.to_string_lossy().starts_with("killer_")).collect();
+    let _ = std::fs::remove_dir_all(&tmp);
+    assert!(left.is_empty(), "left behind: {:?}", left);
+}
+
+#[test]
+fn block_runs_in_a_private_working_directory() {
+    need!("python");
+    let cwd = fresh_dir("cwd");
+    let src = "d = @python {\n    import os\n    print(os.getcwd())\n    print(os.environ.get('KILLER_CWD', ''))\n}\nprintln(d)\n";
+    let (o, _) = run_watch(src, &[], Some(&cwd), WATCH);
+    let lines: Vec<&str> = o.stdout.lines().collect();
+    assert_eq!(lines.len(), 2, "{}", o.all());
+    let canon = |p: &str| std::fs::canonicalize(p).map(|x| x.to_string_lossy().to_lowercase()).unwrap_or_default();
+    assert_ne!(canon(lines[0]), canon(&cwd.to_string_lossy()), "{}", o.all());
+    assert_eq!(canon(lines[1]), canon(&cwd.to_string_lossy()), "{}", o.all());
+    let _ = std::fs::remove_dir_all(&cwd);
+}
+
+#[cfg(unix)]
+#[test]
+fn script_file_is_owner_only() {
+    need!("bash");
+    let (o, _) = run_watch("m = @bash { ls -l \"$0\" }\nprintln(m)\n", &[], None, WATCH);
+    assert!(o.stdout.starts_with("-rw-------"), "{}", o.all());
+}
+
