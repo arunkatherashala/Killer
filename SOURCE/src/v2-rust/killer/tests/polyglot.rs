@@ -365,3 +365,35 @@ fn planted_runtime_in_a_relative_path_entry_is_not_run() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+
+// --- Item 5: error taxonomy with exit codes ------------------------------------------------------
+
+#[test]
+fn nonzero_exit_names_the_exit_code() {
+    need!("bash");
+    let (o, _) = run_watch("try {\n    x = @bash { exit 3 }\n} catch e {\n    println(str(e))\n}\n", &[], None, WATCH);
+    assert!(o.stdout.contains("POLYGLOT_E_EXIT") && o.stdout.contains("exit code 3"), "{}", o.all());
+}
+
+#[test]
+fn unknown_language_has_a_stable_code() {
+    let (o, _) = run_watch("try {\n    polyglot_exec(\"cobol\", \"x\")\n} catch e {\n    println(str(e))\n}\n", &[], None, WATCH);
+    assert!(o.stdout.contains("POLYGLOT_E_UNKNOWN_LANG") && o.stdout.contains("Unknown language"), "{}", o.all());
+}
+
+#[test]
+fn polyglot_run_returns_stdout_stderr_and_code() {
+    need!("python");
+    let src = "r = polyglot_run(\"python\", \"import sys\\nsys.stderr.write('warn1\\\\n')\\nprint(7)\")\nprintln(r[\"stdout\"])\nprintln(r[\"stderr\"])\nprintln(r[\"code\"])\nq = polyglot_run(\"python\", \"raise SystemExit(5)\")\nprintln(q[\"code\"])\n";
+    let (o, _) = run_watch(src, &[], None, WATCH);
+    assert_eq!(o.stdout, "7\nwarn1\n0\n5", "{}", o.all());
+}
+
+#[test]
+fn stderr_snippet_in_errors_is_capped() {
+    need!("python");
+    let src = "try {\n    x = @python {\n        import sys\n        sys.stderr.write('E' * 20000)\n        sys.exit(2)\n    }\n} catch e {\n    println(len(str(e)))\n}\n";
+    let (o, _) = run_watch(src, &[], None, WATCH);
+    let n: usize = o.stdout.trim().parse().unwrap_or(usize::MAX);
+    assert!(n < 4096, "{}", &o.all()[..o.all().len().min(300)]);
+}
