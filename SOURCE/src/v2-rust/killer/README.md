@@ -11,7 +11,7 @@ numbers, and offline building blocks for AI programs.
 ## Status
 
 **Beta / pre-release.** The version is the one in `Cargo.toml` (1.0.0). The language is exercised by 166
-parity probes (all pass), 18 real-world programs and about 3,250 Rust tests; the honest list of what
+parity probes (all pass), 18 real-world programs and thousands of Rust tests (the count was last recorded in [`docs/STATUS.md`](docs/STATUS.md), not re-measured); the honest list of what
 does not work yet is in [`parity/PARITY_REPORT.md`](parity/PARITY_REPORT.md) and the *Known limitations*
 below. Performance numbers are only quoted from [`bench/RESULTS.md`](bench/RESULTS.md); anything else is
 "not measured". Many older documents under the repository's `DOCS/` folder are historical session
@@ -51,7 +51,7 @@ sh install.sh            # Linux / macOS (see --help, --dry-run)
 ./install.ps1            # Windows PowerShell
 ```
 
-The scripts are in the repository root; they download from the project's GitHub releases.
+The scripts are in the repository root; they download from the project's GitHub releases. Releases have no signatures; the release workflow has not yet run on a real tag and `install.ps1` is untested (see [`docs/FEATURES.md`](docs/FEATURES.md), [`SECURITY.md`](../../../docs/project/SECURITY.md)).
 
 **From source** (Rust stable, no other dependencies; `curl` is needed at run time for HTTPS):
 
@@ -96,6 +96,8 @@ route("GET", "/hello/:name", fn(req) {
 })
 serve(port, null, {"max_requests": 1})   # then: curl http://127.0.0.1:<port>/hello/ada
 ```
+
+Policies and status: [stability and deprecation](docs/STABILITY.md), [feature table with proof](docs/FEATURES.md), [operations](docs/OPERATIONS.md), [performance summary](docs/PERFORMANCE.md), [threat model](../../../docs/project/THREAT_MODEL.md).
 
 Next: the [tutorial](docs/TUTORIAL.md) (14 lessons), the [language reference](docs/LANGUAGE.md), the
 [standard library index](docs/STDLIB_INDEX.md), the [architecture guide for contributors](docs/ARCHITECTURE.md)
@@ -234,7 +236,7 @@ The constants `T_POS`, `T_ZERO` and `T_NEG` are plain names. Use `x == T_ZERO` t
   (fix in progress); assign it before the block.
 - Whole-number `+ - * **` results beyond 2^53 become exact big integers automatically; integer literals above 2^53 need an `n` suffix.
 - The JIT is x86-64 only and covers pure numeric code; everything else is interpreted.
-- The HTTP server has no TLS and serves one request at a time; the HTTP client needs `curl` (HTTPS).
+- The HTTP server serves one request at a time; HTTPS in the server runs through the system `openssl` command and the HTTP client needs `curl` (there is no TLS stack inside Killer). See [`docs/OPERATIONS.md`](docs/OPERATIONS.md) for what is missing in production use.
 - `len(s)` and `s[i]` are O(n) on very long strings; `count_tokens` is an approximation.
 - The debugger shows one stack frame.
 - Dicts and objects are shared references (like Python or JavaScript): `b = a` aliases, and a dict or

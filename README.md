@@ -27,7 +27,7 @@ anything else is "not measured". What does not work yet is listed in the
 
 ## Install
 
-Prebuilt release binaries (Linux x64, Windows x64, macOS x64 and arm64), checksum-verified, installed to
+Prebuilt release binaries (Linux x64, Windows x64, macOS x64 and arm64; checksum-verified but not signed; the release workflow has not run on a real tag yet), installed to
 `~/.killer/bin`:
 
 ```bash
@@ -77,6 +77,8 @@ python docs/check_links.py                                                 # rel
 - Benchmarks (Killer vs CPython): [`bench/RESULTS.md`](SOURCE/src/v2-rust/killer/bench/RESULTS.md), run with `python bench/run.py`
 - VS Code extension: [`editors/vscode`](SOURCE/src/v2-rust/killer/editors/vscode/README.md)
 - Changes: [`CHANGELOG.md`](CHANGELOG.md)
+- Stability and deprecation policy: [`docs/STABILITY.md`](SOURCE/src/v2-rust/killer/docs/STABILITY.md); feature table with proof: [`docs/FEATURES.md`](SOURCE/src/v2-rust/killer/docs/FEATURES.md)
+- Operations, performance, threat model: [`OPERATIONS.md`](SOURCE/src/v2-rust/killer/docs/OPERATIONS.md), [`PERFORMANCE.md`](SOURCE/src/v2-rust/killer/docs/PERFORMANCE.md), [`THREAT_MODEL.md`](SOURCE/docs/project/THREAT_MODEL.md)
 - Older design and status documents: [`DOCS/`](DOCS)
 
 License: see [`LICENSE`](LICENSE).
