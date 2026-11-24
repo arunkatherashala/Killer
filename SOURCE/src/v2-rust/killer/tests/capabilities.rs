@@ -240,6 +240,7 @@ fn network_builtins_require_network_capability() {
 fn process_and_native_builtins_require_their_capabilities() {
     assert_denied("polyglot_exec", vec![s("python"), s("print(1)")]);
     assert_denied("polyglot_run", vec![s("python"), s("print(1)")]);
+    assert_denied("nova_assist_set_log", vec![s("assist_log_should_not_exist.txt")]);
     assert_denied("env_get", vec![s("PATH")]);
     assert_denied("env_set", vec![s("KILLER_X"), s("1")]);
     assert_denied("env", vec![s("PATH")]);

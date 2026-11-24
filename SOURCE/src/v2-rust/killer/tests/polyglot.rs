@@ -396,3 +396,23 @@ fn stderr_snippet_in_errors_is_capped() {
     assert!(n < 4096, "{}", &o.all()[..o.all().len().min(300)]);
 }
 
+// --- Item 6: the AI assist layer is opt-in ------------------------------------------------------
+
+#[test]
+fn errors_carry_no_ai_boilerplate() {
+    need!("bash");
+    let src = "try {\n    x = @bash { exit 3 }\n} catch e {\n    println(str(e))\n}\n";
+    for env in [&[][..], &[("KILLER_POLYGLOT_AI", "1")][..]] {
+        let (o, _) = run_watch(src, env, None, WATCH);
+        assert!(o.stdout.contains("exit code 3") && !o.stdout.contains("AI Assassin Assist"), "{}", o.all());
+    }
+}
+
+#[test]
+fn missing_runtime_error_is_short() {
+    let missing = std::env::temp_dir().join("killer_pgt_no_such_node_zz.exe");
+    let m = missing.to_string_lossy().to_string();
+    let src = "try {\n    x = @node { console.log(1) }\n} catch e {\n    println(str(e))\n}\n";
+    let (o, _) = run_watch(src, &[("KILLER_POLYGLOT_NODE", m.as_str())], None, WATCH);
+    assert!(o.stdout.starts_with("POLYGLOT_E_RUNTIME_MISSING") && !o.stdout.contains("AI Assassin"), "{}", o.all());
+}
