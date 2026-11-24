@@ -53,6 +53,20 @@ fn setup(ws: &Tmp) -> String {
     reg
 }
 
+/// Replace the published pack and the registry's own checksum for it, consistently, as a compromised registry
+/// would (the checksum is the content hash of the files, not of the pack bytes).
+fn tamper_registry(ws: &Tmp) -> String {
+    let pack = ws.p("registry/greet/1.0.0/package.pack");
+    let mut files = killer_native::pkg_files::unpack(&std::fs::read(&pack).unwrap()).unwrap();
+    for (_, data) in files.iter_mut() {
+        *data = String::from_utf8_lossy(data).replace("hello ", "pwned ").into_bytes();
+    }
+    std::fs::write(&pack, killer_native::pkg_files::pack(&files)).unwrap();
+    let new_sha = killer_native::pkg_files::content_hash(&files);
+    std::fs::write(ws.p("registry/greet/1.0.0/sha256"), format!("{new_sha}\n")).unwrap();
+    new_sha
+}
+
 #[test]
 fn driver_new_add_install_then_import_by_name_and_missing_import_is_an_error() {
     let ws = Tmp::new();
@@ -78,17 +92,81 @@ fn install_verifies_against_the_lockfile_even_if_registry_and_its_checksum_are_b
     let reg = setup(&ws);
     ok(&ws.p("app"), &["install", "--registry", &reg]);
 
-    // an attacker (or a broken mirror) replaces the pack and also its own sha256 file
-    let pack = ws.p("registry/greet/1.0.0/package.pack");
-    let text = String::from_utf8_lossy(&std::fs::read(&pack).unwrap()).replace("hello ", "pwned ");
-    std::fs::write(&pack, text.as_bytes()).unwrap();
-    let new_sha = killer_native::pkg_files::sha256_hex(text.as_bytes());
-    std::fs::write(ws.p("registry/greet/1.0.0/sha256"), format!("{new_sha}\n")).unwrap();
+    // an attacker (or a broken mirror) replaces the pack and also its own sha256 file, consistently
+    tamper_registry(&ws);
 
     // a fresh checkout: lockfile present, no installed packages
     std::fs::remove_dir_all(ws.p("app/.killer")).unwrap();
     let (good, out) = killer(&ws.p("app"), &["install", "--registry", &reg]);
     assert!(!good, "install must refuse a release that differs from the lockfile: {out}");
-    assert!(out.contains("checksum mismatch"), "{out}");
+    assert!(out.contains("checksum mismatch") && out.contains("killer.lock records"), "it must be the lockfile that catches it: {out}");
     assert!(!ws.p("app/.killer/packages/greet").exists());
+}
+
+#[test]
+fn pinned_checksums_in_the_manifest_protect_a_first_install_that_has_no_lockfile() {
+    let ws = Tmp::new();
+    let reg = setup(&ws);
+    ok(&ws.p("app"), &["install", "--registry", &reg]);
+    let good = std::fs::read_to_string(ws.p("registry/greet/1.0.0/sha256")).unwrap();
+    let out = ok(&ws.p("app"), &["pin"]);
+    assert!(out.contains("Pinned 1"), "{out}");
+    let manifest = std::fs::read_to_string(ws.p("app/killer.toml")).unwrap();
+    assert!(manifest.contains("[checksums]") && manifest.contains(&format!("\"greet@1.0.0\" = \"{}\"", good.trim())), "{manifest}");
+    // pinning is idempotent and the manifest still parses
+    ok(&ws.p("app"), &["pin"]);
+    ok(&ws.p("app"), &["check"]);
+
+    // the registry is compromised AFTER the pin, and this is a fresh clone: no lockfile, no installed packages.
+    // Without the pin nothing local could notice: the registry's own checksum is rewritten to match.
+    tamper_registry(&ws);
+    std::fs::remove_file(ws.p("app/killer.lock")).unwrap();
+    std::fs::remove_dir_all(ws.p("app/.killer")).unwrap();
+    let (good_exit, out) = killer(&ws.p("app"), &["install", "--registry", &reg]);
+    assert!(!good_exit, "a release that differs from the pin must be refused: {out}");
+    assert!(out.contains("checksum mismatch") && out.contains("[checksums]"), "{out}");
+    assert!(!ws.p("app/.killer/packages/greet").exists(), "nothing may be installed from a mismatching release");
+    assert!(!ws.p("app/killer.lock").exists());
+}
+
+#[test]
+fn without_a_pin_or_lockfile_a_rewritten_registry_is_accepted_which_is_the_documented_limit() {
+    let ws = Tmp::new();
+    let reg = setup(&ws);
+    tamper_registry(&ws);
+    // trust on first use: the only checksum available came from the same server
+    ok(&ws.p("app"), &["install", "--registry", &reg]);
+}
+
+#[test]
+fn require_pins_refuses_unpinned_registry_releases() {
+    let ws = Tmp::new();
+    let reg = setup(&ws);
+    let (good, out) = killer(&ws.p("app"), &["install", "--registry", &reg, "--require-pins"]);
+    assert!(!good, "{out}");
+    assert!(out.contains("no pin") && out.contains("greet"), "{out}");
+    assert!(!ws.p("app/.killer/packages/greet").exists());
+    // after a normal install and a pin, the same flag passes
+    ok(&ws.p("app"), &["install", "--registry", &reg]);
+    ok(&ws.p("app"), &["pin"]);
+    std::fs::remove_dir_all(ws.p("app/.killer")).unwrap();
+    ok(&ws.p("app"), &["install", "--registry", &reg, "--require-pins"]);
+}
+
+#[test]
+fn check_reports_a_lockfile_that_disagrees_with_the_pin_and_bad_pins_are_rejected() {
+    let ws = Tmp::new();
+    let reg = setup(&ws);
+    ok(&ws.p("app"), &["install", "--registry", &reg]);
+    ok(&ws.p("app"), &["pin"]);
+    let lock = std::fs::read_to_string(ws.p("app/killer.lock")).unwrap();
+    let sha = std::fs::read_to_string(ws.p("registry/greet/1.0.0/sha256")).unwrap();
+    std::fs::write(ws.p("app/killer.lock"), lock.replace(sha.trim(), &"0".repeat(64))).unwrap();
+    let (good, out) = killer(&ws.p("app"), &["check"]);
+    assert!(!good && out.contains("pins"), "{out}");
+    // a malformed pin is a manifest error, not silently ignored
+    let m = std::fs::read_to_string(ws.p("app/killer.toml")).unwrap();
+    std::fs::write(ws.p("app/killer.toml"), m.replace(sha.trim(), "abc")).unwrap();
+    let (good, out) = killer(&ws.p("app"), &["check"]);
+    assert!(!good && out.contains("[checksums]") && out.contains("64 hex"), "{out}");
 }

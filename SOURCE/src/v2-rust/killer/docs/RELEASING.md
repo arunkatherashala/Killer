@@ -26,7 +26,15 @@ publishes a GitHub release with all archives plus a combined `SHA256SUMS`.
        git tag v1.0.0
        git push origin v1.0.0
 
-5. Watch the run. Then test the installers against the real release:
+5. Watch the run. Then pin the checksums in the repository (owner step; this is the independent source the
+   installers compare against, see `SOURCE/docs/project/SECURITY.md`): download `SHA256SUMS` from the release, compare
+   it with the hashes in the workflow log, then
+
+       scripts/pin_release_checksums.sh v1.0.0 SHA256SUMS
+
+   commit `checksums/v1.0.0.sha256` to `main` and paste the printed block into the release notes. Until this is done
+   the installers print a warning and fall back to the `.sha256` that lives next to the archive.
+6. Test the installers against the real release:
 
        curl -fsSL https://raw.githubusercontent.com/arunkatherashala/Killer/main/install.sh | sh -s -- --version v1.0.0
        irm https://raw.githubusercontent.com/arunkatherashala/Killer/main/install.ps1 | iex

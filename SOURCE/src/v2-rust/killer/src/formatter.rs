@@ -394,45 +394,7 @@ impl Default for Formatter {
 /// be counted safely. Comment starters follow the compiler: `#` after whitespace (or at the start
 /// of the line), `//` and `--` outside strings.
 pub fn mask_code(line: &str) -> String {
-    let chars: Vec<char> = line.chars().collect();
-    let mut out = String::with_capacity(line.len());
-    let mut i = 0;
-    while i < chars.len() {
-        let c = chars[i];
-        let comment = (c == '#' && (i == 0 || chars[i - 1].is_whitespace()))
-            || (c == '/' && chars.get(i + 1) == Some(&'/'))
-            || (c == '-' && chars.get(i + 1) == Some(&'-'));
-        if comment {
-            out.extend(std::iter::repeat(' ').take(chars.len() - i));
-            break;
-        }
-        if c == '"' || c == '\'' {
-            // `'` only opens a string when it is not an apostrophe inside a word
-            if c == '\'' && i > 0 && chars[i - 1].is_alphanumeric() {
-                out.push(c);
-                i += 1;
-                continue;
-            }
-            let quote = c;
-            out.push(' ');
-            i += 1;
-            while i < chars.len() {
-                let d = chars[i];
-                out.push(' ');
-                i += 1;
-                if d == '\\' && i < chars.len() {
-                    out.push(' ');
-                    i += 1;
-                } else if d == quote {
-                    break;
-                }
-            }
-            continue;
-        }
-        out.push(c);
-        i += 1;
-    }
-    out
+    crate::linemask::mask_code(line)
 }
 
 /// Position of a line relative to multi-line triple-quoted strings (see `sugar.rs`).

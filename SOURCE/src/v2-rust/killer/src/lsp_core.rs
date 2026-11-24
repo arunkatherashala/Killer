@@ -172,39 +172,7 @@ fn is_ident_char(c: char) -> bool {
 /// Strip strings and `#` / `//` / `--` comments from a line (replacing them by spaces so that
 /// columns are preserved). Good enough for brace counting and symbol scanning.
 fn mask_line(line: &str) -> String {
-    let chars: Vec<char> = line.chars().collect();
-    let mut out = String::with_capacity(line.len());
-    let mut i = 0;
-    while i < chars.len() {
-        let c = chars[i];
-        if c == '#' || (c == '/' && chars.get(i + 1) == Some(&'/')) || (c == '-' && chars.get(i + 1) == Some(&'-')) {
-            while i < chars.len() {
-                out.push(' ');
-                i += 1;
-            }
-            break;
-        }
-        if c == '"' || c == '\'' {
-            let q = c;
-            out.push(' ');
-            i += 1;
-            while i < chars.len() {
-                let d = chars[i];
-                out.push(' ');
-                i += 1;
-                if d == '\\' && i < chars.len() {
-                    out.push(' ');
-                    i += 1;
-                } else if d == q {
-                    break;
-                }
-            }
-            continue;
-        }
-        out.push(c);
-        i += 1;
-    }
-    out
+    crate::linemask::mask_code(line)
 }
 
 /// Find the symbols defined in `text`.

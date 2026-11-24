@@ -262,3 +262,51 @@ than 32 MiB is refused with an error (and discarded without being allocated), he
 that are not UTF-8 are replaced instead of ending the session. LSP positions use UTF-16 code units as the protocol
 requires. The debug adapter reports `exited` and `terminated` also when the debuggee dies before it connects, and
 `setBreakpoints` only applies to the launched program (other files are answered with unverified breakpoints).
+
+  checked against a SHA256 file from the same location, and, independently, against a pinned checksum (see below).
+  There are no signatures.
+
+## Download and package integrity (trust model)
+
+What is checked, and against what. Nothing here is a signature: there is no signing key, no certificate pinning and no
+transparency log.
+
+### Installers (`install.sh`, `install.ps1`)
+
+| Check | Source of the expected hash | Protects against | Does not protect against |
+|---|---|---|---|
+| release `.sha256` next to the archive | same release assets as the archive | corrupted or truncated downloads | anyone who can replace release assets (they replace the `.sha256` too) |
+| `--sha256 HEX` / `-Sha256` / `KILLER_SHA256` | the user, copied from the release notes body or from `checksums/<tag>.sha256` | a replaced archive, even with a matching `.sha256` | a compromised release notes page or repository at the moment you copy the hash |
+| pinned file `checksums/<tag>.sha256` in the repository (fetched from `raw.githubusercontent.com/<repo>/main/`, or `KILLER_CHECKSUMS_URL`) | a git commit on `main`, a different write path than release assets | replaced release assets | anyone who can push to `main`; the repository owner publishing a bad build |
+
+* By default the installer fetches the pinned file for the tag. If it is missing it prints a warning and continues with
+  the release `.sha256` only (so a release made before this feature still installs); `--require-pinned` /
+  `KILLER_REQUIRE_PINNED=1` makes that an error. An explicitly given `--sha256` or `KILLER_CHECKSUMS_URL` is never
+  skipped: a mismatch, a missing entry or an unreachable file fails the install and nothing is installed.
+* With `KILLER_BASE_URL` (a mirror) there is no default pinned file, because the mirror says nothing about where the
+  repository's hashes live; pass `--sha256` or `KILLER_CHECKSUMS_URL`.
+* Transport: `install.sh` downloads with `curl -fsSL` (or `wget`), `install.ps1` with `Invoke-WebRequest`, both over
+  HTTPS with the operating system's certificate store. Killer does not pin certificates. Piping `curl ... | sh` runs the
+  installer itself without any check: download `install.sh`, read it, and run it with `--sha256` if the hash matters.
+* Publishing: after the release workflow finishes and its `SHA256SUMS` has been compared with the workflow log, run
+  `scripts/pin_release_checksums.sh <tag> SHA256SUMS`, commit `checksums/<tag>.sha256` to `main` and paste the block it
+  prints into the release notes (see `docs/RELEASING.md`). The workflow does not do this itself.
+* `install.ps1` was edited with the same logic but has not been executed in this environment.
+
+### Packages (`killer install`)
+
+* The registry sends a checksum of each release with the archive. It comes from the same server, so on its own it only
+  detects corruption. Each registry release is also checked in two places that do not depend on that server:
+  1. `killer.lock` (committed with the project) records the content hash of every package. `install` and `check`
+     refuse a release that differs from the lockfile, even if the registry and its own checksum were both rewritten
+     (`tests/pkg_driver.rs`).
+  2. `[checksums]` in `killer.toml` pins releases before any lockfile exists (a fresh clone, `update`, a new
+     dependency): `"name@1.2.3" = "<sha256>"`. `killer pin` writes the entries from the current `killer.lock`;
+     `killer install --require-pins` (or `KILLER_REQUIRE_PINS=1`) refuses a registry release that has no pin.
+     `killer check` reports a lockfile that disagrees with a pin.
+* A pin is only as trustworthy as the install it was made from: review a release before pinning it. The first install of
+  an unpinned dependency without a lockfile is trust on first use.
+* Plain `http://` registries are refused (unless `KILLER_ALLOW_INSECURE_REGISTRY=1`), except loopback; HTTPS registries
+  are reached through `curl` and the system certificate store. Git dependencies are pinned by commit in `killer.lock`.
+* Not provided: package signatures, a signed index, key rotation, revocation. The registry server is trusted for
+  availability and for the first download of anything that is not pinned.

@@ -60,27 +60,7 @@ pub(crate) fn nested_fns(body: &[(usize, String)]) -> Vec<Nested> {
 
 /// A line with the contents of string literals blanked out.
 fn masked(line: &str) -> String {
-    let mut out = String::with_capacity(line.len());
-    let mut quote: Option<char> = None;
-    for c in line.chars() {
-        match quote {
-            Some(q) => {
-                if c == q {
-                    quote = None;
-                    out.push(c);
-                } else {
-                    out.push('_');
-                }
-            }
-            None => {
-                if c == '"' || c == '\'' {
-                    quote = Some(c);
-                }
-                out.push(c);
-            }
-        }
-    }
-    out
+    crate::linemask::mask(line, crate::linemask::Opts { fill: '_', keep_quotes: true, blank_comments: true, per_byte: false })
 }
 
 /// Names a single statement line assigns (`x = ..`, `x += ..`, `x++`, `for x in ..`). With

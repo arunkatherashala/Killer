@@ -42,18 +42,26 @@ calls were all distinct); keys that are not exactly 32 bytes are refused.
 
 ## `secure_encrypt(text, password)` and `secure_decrypt(data, password)`
 
-`secure_encrypt` derives a 256-bit key with PBKDF2-HMAC-SHA256 (100,000 iterations, random 16-byte salt) and seals the
+`secure_encrypt` derives a 256-bit key with PBKDF2-HMAC-SHA256 (600,000 iterations, random 16-byte salt) and seals the
 text with ChaCha20-Poly1305 under a fresh random 96-bit nonce. The result is base64 of
-`"KSE2" | salt(16) | nonce(12) | ciphertext | tag(16)`; the `KSE2` header is also authenticated as associated data.
+`"KSE3" | iterations(u32, big endian) | salt(16) | nonce(12) | ciphertext | tag(16)`; the whole 24-byte header (magic,
+iteration count, salt) is authenticated as associated data, so editing any of it makes decryption fail. The iteration
+count lives in the header so it can be raised later without another format change. On decrypt the stored count is
+untrusted: values outside 100,000..=10,000,000 are rejected before any key derivation (a crafted header cannot make
+`secure_decrypt` run for hours).
 `secure_decrypt` verifies the tag before it produces any plain text and fails with one message for a wrong password or
 changed data. The Python reference decrypts Killer output and Killer decrypts Python output (checked in the tests).
 
 Limits:
 
-* 100,000 iterations is below the 600,000 that OWASP currently suggests for PBKDF2-HMAC-SHA256; the cost is kept low
-  because hashing is slow in unoptimised builds. Use a long random password.
-* `secure_decrypt` still reads data written by the older scheme (no `KSE2` header: a SHA-256 keystream with a SHA-256
-  tag, never reviewed). It is read-only; nothing writes that format any more.
+* Format history: `KSE3` (current, 600,000 rounds, whole header authenticated); `KSE2` (100,000 rounds, only the magic
+  authenticated); and the original scheme (no header: a SHA-256 keystream with a SHA-256 tag, never reviewed).
+  `secure_decrypt` reads all three; nothing writes the older two. Migration is explicit: the Rust function
+  `android_security::rewrap(ciphertext, password)` decrypts and re-seals old data as `KSE3` (`None` when it is already
+  current), so a store can upgrade each record the next time the password is available.
+* A hash at 600,000 rounds takes about 7 seconds in an unoptimised (debug) build and a small fraction of that in a
+  release build (`cargo test --lib encryption::tests::new_hashes -- --nocapture` prints the time on your machine).
+  Use a long random password.
 * `secure_random_bytes(n)` silently caps `n` at 1024 and returns base64.
 * `secure_pin_set` stores a salted PBKDF2 hash (10,000 iterations) of the PIN in process memory only; the lockout
   after 3 wrong attempts is what protects a 4-digit PIN, not the hash.
@@ -75,6 +83,25 @@ These return an error rather than something that looks like the real thing:
 * AES-256-GCM and AES-256-CBC (`encryption::EncryptionAlgorithm`, `cryptography_solver::aes_*`). Use ChaCha20-Poly1305.
 * SHA-3, Argon2id, scrypt, HKDF (`encryption::HashingAlgorithm::SHA3_*`, `KeyDerivationFunction`).
 * MD5, RSA, elliptic curves, digital signatures, Diffie-Hellman. TLS and HTTPS use the system `openssl`, not this code.
+
+## `encryption.rs` formats and key management
+
+* Password hashes: version 2 (written now) is `$pbkdf2-sha256$v=2$i=600000$<salt hex>$<hash hex>`; version 1 (earlier
+  releases, `$pbkdf2$100000$<salt>$<hash>`) still verifies. `PasswordHash::parse` reads both,
+  `PasswordHash::needs_rehash` flags version 1, and `PasswordHasher::verify_and_upgrade` returns a fresh version 2 hash
+  after a successful check so the caller can store it. A stored hash is untrusted input: `verify_password` rejects
+  iteration counts above 10,000,000, version 2 hashes below 600,000 (downgrade), version 1 hashes below 1,000, unknown
+  versions, and absurd salt or hash lengths, before it derives anything.
+* `EncryptedData` carries a `version`. Version 2 (written now) authenticates the header (version, algorithm, key
+  version, iteration count, salt) as associated data; version 1 (no associated data) still decrypts. Changing the
+  version field of a version 2 value to 1 does not bypass the check: the tag no longer matches.
+* `KeyManager::rotate_key` starts a new key version and keeps the old ones, so earlier data still decrypts:
+  `KeyManager::encrypt` records the key version in the (authenticated) header and `KeyManager::decrypt` picks the matching
+  key. A key marked compromised still decrypts old data (so it can be migrated) but is refused for new data.
+* Key material is wiped (best effort) with volatile writes and a compiler fence (`encryption::wipe`): derived keys and
+  the 32-byte copies used for sealing, and every stored key when a `KeyManager` is dropped. This is best effort, not a
+  guarantee: copies handed out by `get_key` belong to the caller, the OS may page memory out, and the interpreter copies
+  strings freely. No dependency on `zeroize` was added.
 
 `random()` is not a cryptographic generator (use `secure_random_bytes` or `uuid`). Equality of secrets in your own
 scripts with `==` is not constant time.

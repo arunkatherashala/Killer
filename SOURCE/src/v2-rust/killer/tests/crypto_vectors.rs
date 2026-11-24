@@ -645,7 +645,7 @@ for i in range(0, 6) {{
   e = secure_encrypt(msg, pw)
   push(cts, e)
   raw = base64_decode(e)
-  push(heads, base64_encode(bytes_slice(raw, 4, 32)))
+  push(heads, base64_encode(bytes_slice(raw, 8, 36)))
 }}
 println(len(set(cts)))
 println(len(set(heads)))
@@ -656,10 +656,10 @@ println(bytes_len(raw))
     ));
     assert_eq!(&out[..4], ["true", "true", "true", "true"]);
     assert_eq!(out[4], "6", "six encryptions of the same text under the same password must all differ");
-    assert_eq!(out[5], "6", "salt and nonce (bytes 4..32) must be fresh every time");
-    assert_eq!(out[6], "S1NFMg==", "format 2 prefix KSE2");
-    // 4 magic + 16 salt + 12 nonce + ciphertext + 16 tag
-    assert_eq!(out[7], (4 + 16 + 12 + msg.len() + 16).to_string());
+    assert_eq!(out[5], "6", "salt and nonce (bytes 8..36) must be fresh every time");
+    assert_eq!(out[6], "S1NFMw==", "format 3 prefix KSE3");
+    // 4 magic + 4 iterations + 16 salt + 12 nonce + ciphertext + 16 tag
+    assert_eq!(out[7], (4 + 4 + 16 + 12 + msg.len() + 16).to_string());
 }
 
 #[test]
@@ -682,7 +682,7 @@ fn attempt(data, p) {
 println(attempt(c, pw))
 println(attempt(c, "wrong"))
 println(attempt(c, ""))
-for i in [0, 4, 19, 20, 31, 32, n - 17, n - 16, n - 1] {
+for i in [0, 4, 7, 8, 23, 24, 35, 36, n - 17, n - 16, n - 1] {
   bad = bytes_set(raw, i, (bytes_get(raw, i) + 1) % 256)
   println(attempt(base64_encode(bad), pw))
 }
@@ -697,11 +697,11 @@ println(attempt(base64_encode(bytes_slice(raw, 0, 20)), pw))
     assert_eq!(out[0], "decrypted");
     assert_eq!(out[1], "rejected", "wrong password");
     assert_eq!(out[2], "rejected", "empty password is not a wildcard");
-    for (i, o) in out[3..12].iter().enumerate() {
+    for (i, o) in out[3..14].iter().enumerate() {
         assert_eq!(o, "rejected", "tamper case {}", i);
     }
-    assert_eq!(out.len(), 18);
-    for (i, o) in out[12..].iter().enumerate() {
+    assert_eq!(out.len(), 20);
+    for (i, o) in out[14..].iter().enumerate() {
         assert_eq!(o, "rejected", "truncated/extended/garbage case {}", i);
     }
 }
@@ -800,11 +800,15 @@ fn python_and_killer_decrypt_each_others_secure_encrypt_output() {
     let out = killer_ok(&format!("println(secure_decrypt(\"{}\", \"pässword\"))\nprintln(secure_encrypt(\"héllo wörld 123\", \"pässword\"))\n", from_python.trim()));
     assert_eq!(out[0], "héllo wörld 123");
     // Killer encrypts (random salt and nonce), Python decrypts
-    let plain = reference(&["kse2-decrypt", out[1].trim(), "pässword"]).unwrap();
+    let plain = reference(&["kse3-decrypt", out[1].trim(), "pässword"]).unwrap();
     assert_eq!(plain, "héllo wörld 123");
+    // Python also writes the new format (600,000 rounds) and Killer reads it; the old format stays readable
+    let from_python3 = reference(&["kse3-encrypt", "pässword", "héllo wörld 123"]).unwrap();
+    let out3 = killer_ok(&format!("println(secure_decrypt(\"{}\", \"pässword\"))", from_python3.trim()));
+    assert_eq!(out3[0], "héllo wörld 123");
     // and a wrong password makes the Python reference fail too (so the check above is not vacuous)
     let py = python().unwrap();
     let script = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/crypto_reference.py");
-    let bad = Command::new(py).arg(script).args(["kse2-decrypt", out[1].trim(), "wrong"]).output().unwrap();
+    let bad = Command::new(py).arg(script).args(["kse3-decrypt", out[1].trim(), "wrong"]).output().unwrap();
     assert!(!bad.status.success());
 }

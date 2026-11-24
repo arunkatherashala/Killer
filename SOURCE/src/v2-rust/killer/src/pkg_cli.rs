@@ -25,10 +25,12 @@ COMMANDS:
   add <name>[@req]          add a dependency: --path DIR | --git URL [--rev R] | --dep-registry URL | --dev
   remove <name>             remove a dependency (also from dev-dependencies)
   install                   resolve, download, verify sha256, write killer.lock, fill .killer/packages
+                            (--require-pins: refuse registry releases that have no [checksums] pin)
   update [name]             re-resolve to the newest allowed versions (all packages, or one)
   list                      show direct and locked dependencies
   publish                   publish this package: --registry URL --token T [--dry-run]
-  check                     verify killer.lock against the installed package contents
+  check                     verify killer.lock (and [checksums] pins) against the installed package contents
+  pin                       record the sha256 of every locked registry release in killer.toml [checksums]
   help                      show this text
 
 GLOBAL OPTIONS:
@@ -118,6 +120,7 @@ fn run_inner(args: &[String]) -> Result<(), String> {
         "list" | "ls" => cmd_list(&dir),
         "publish" => cmd_publish(&a, &dir),
         "check" => cmd_check(&dir),
+        "pin" => cmd_pin(&dir),
         other => Err(format!("unknown command '{}'; run `killer_pkg help`", other)),
     }
 }
@@ -389,6 +392,7 @@ pub fn packages_dir(project: &Path) -> PathBuf {
 
 fn cmd_install(a: &Args, dir: &Path, update: bool, only: Option<&str>) -> Result<Lockfile, String> {
     let manifest = Manifest::load(dir)?;
+    let require_pins = a.has("--require-pins") || std::env::var("KILLER_REQUIRE_PINS").map_or(false, |v| v == "1");
     let old = Lockfile::load(dir)?;
     let mut prefer: HashMap<String, Version> = HashMap::new();
     let mut locked_git = HashMap::new();
@@ -436,6 +440,17 @@ fn cmd_install(a: &Args, dir: &Path, update: bool, only: Option<&str>) -> Result
                     if p.sha256 != actual {
                         return Err(format!("checksum mismatch for {} {}: killer.lock records {} but the registry now serves {} (was the release tampered with?)", r.name, r.version, p.sha256, actual));
                     }
+                }
+                // the pin lives in the repository (killer.toml), so unlike the registry's own checksum it is an
+                // independent source: it also protects the first install and `update`, when no lockfile entry exists
+                match manifest.pinned(&r.name, &r.version.to_string()) {
+                    Some(pin) if pin != actual => {
+                        return Err(format!("checksum mismatch for {} {}: killer.toml [checksums] pins {} but the registry served {} (was the release tampered with?)", r.name, r.version, pin, actual));
+                    }
+                    None if require_pins => {
+                        return Err(format!("{} {} has no pin in killer.toml [checksums] and --require-pins is set; run `killer pin` after reviewing the release", r.name, r.version));
+                    }
+                    _ => {}
                 }
                 let dest = pkgs_dir.join(&r.name);
                 if pkg_files::hash_dir(&dest).ok().as_deref() != Some(actual.as_str()) {
@@ -537,6 +552,22 @@ fn cmd_publish(a: &Args, dir: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// Write `[checksums]` pins into killer.toml for every registry release in killer.lock. The pins are only as good
+/// as the install that produced the lockfile: review that release first.
+fn cmd_pin(dir: &Path) -> Result<(), String> {
+    let lock = Lockfile::load(dir)?.ok_or_else(|| format!("no {} found; run `killer install` first", LOCKFILE))?;
+    let mut text = std::fs::read_to_string(dir.join(MANIFEST)).map_err(|e| format!("cannot read {}: {}", dir.join(MANIFEST).display(), e))?;
+    let mut n = 0;
+    for p in lock.packages.iter().filter(|p| p.source.starts_with("registry+")) {
+        text = pkg_toml::set_in_section(&text, "checksums", &format!("{}@{}", p.name, p.version), &pkg_toml::quote(&p.sha256));
+        n += 1;
+    }
+    Manifest::parse(&text).map_err(|e| format!("refusing to write an invalid manifest: {}", e))?;
+    std::fs::write(dir.join(MANIFEST), text).map_err(|e| e.to_string())?;
+    println!("Pinned {} registry release(s) in {} [checksums]. Commit the file; `killer install --require-pins` now refuses unpinned releases.", n, MANIFEST);
+    Ok(())
+}
+
 fn cmd_check(dir: &Path) -> Result<(), String> {
     let m = Manifest::load(dir)?;
     let lock = Lockfile::load(dir)?.ok_or_else(|| format!("no {} found; run `killer_pkg install` first", LOCKFILE))?;
@@ -554,6 +585,11 @@ fn cmd_check(dir: &Path) -> Result<(), String> {
         }
     }
     for p in &lock.packages {
+        if let Some(pin) = m.pinned(&p.name, &p.version) {
+            if pin != p.sha256 {
+                problems.push(format!("{} {}: killer.toml [checksums] pins {} but killer.lock has {}", p.name, p.version, pin, p.sha256));
+            }
+        }
         let loc = pkg_resolve::source_from_lock(&p.source, dir);
         let target = match &loc {
             Some(Source::Path(path)) => path.clone(),
