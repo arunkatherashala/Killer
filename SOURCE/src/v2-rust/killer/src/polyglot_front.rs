@@ -107,7 +107,7 @@ fn dedent(raw: &str) -> String {
 /// Collect a block body starting at `lines[line][col..]` (just after the opening `{`). Braces are
 /// counted outside `"` strings. Returns `(raw body, index of the closing line, byte column after
 /// the closing brace)`, or `None` when the block never closes.
-fn collect_body(lines: &[&str], line: usize, col: usize) -> Option<(String, usize, usize)> {
+fn collect_body(lines: &View, line: usize, col: usize) -> Option<(String, usize, usize)> {
     let mut depth = 1usize;
     let mut in_str = false;
     let mut escaped = false;
@@ -115,7 +115,7 @@ fn collect_body(lines: &[&str], line: usize, col: usize) -> Option<(String, usiz
     let mut li = line;
     let mut start = col;
     while li < lines.len() {
-        let text = lines[li];
+        let text = lines.get(li);
         for (off, ch) in text[start..].char_indices() {
             if in_str {
                 if escaped {
@@ -159,7 +159,7 @@ struct Hit {
 
 /// Parse the header that starts at `seg[at] == '@'`: `@lang`, optional `(a, b)`, then `{` on the
 /// same line or alone on the next line. Returns `(lang, args, body start line offset, body col)`.
-fn parse_header(seg: &str, at: usize, lines: &[&str], line: usize, allow_next_line_brace: bool) -> Option<(String, Vec<String>, usize, usize, usize)> {
+fn parse_header(seg: &str, at: usize, lines: &View, line: usize, allow_next_line_brace: bool) -> Option<(String, Vec<String>, usize, usize, usize)> {
     let rest = &seg[at + 1..];
     let mut chars = rest.char_indices().peekable();
     match chars.peek() {
@@ -199,8 +199,8 @@ fn parse_header(seg: &str, at: usize, lines: &[&str], line: usize, allow_next_li
         let col = seg.len() - t.len() + 1;
         return Some((lang, args, 0, col, 0));
     }
-    if t.is_empty() && allow_next_line_brace && line + 1 < lines.len() && lines[line + 1].trim() == "{" {
-        let next = lines[line + 1];
+    if t.is_empty() && allow_next_line_brace && line + 1 < lines.len() && lines.get(line + 1).trim() == "{" {
+        let next = lines.get(line + 1);
         let col = next.find('{').unwrap() + 1;
         return Some((lang, args, 1, col, 0));
     }
@@ -208,7 +208,7 @@ fn parse_header(seg: &str, at: usize, lines: &[&str], line: usize, allow_next_li
 }
 
 /// Find the first block header in `seg` (Killer text, lexed with `carry`) and build its replacement.
-fn find_block(seg: &str, prefix_out: &str, line_start: bool, carry: &mut Carry, lines: &[&str], line: usize) -> Option<Hit> {
+fn find_block(seg: &str, prefix_out: &str, line_start: bool, carry: &mut Carry, lines: &View, line: usize) -> Option<Hit> {
     let b: Vec<(usize, char)> = seg.char_indices().collect();
     let mut k = 0;
     while k < b.len() {
@@ -270,7 +270,7 @@ fn find_block(seg: &str, prefix_out: &str, line_start: bool, carry: &mut Carry, 
                             at: i,
                             replacement,
                             consumed: close_line - line,
-                            remainder: lines[close_line][close_col..].to_string(),
+                            remainder: lines.get(close_line)[close_col..].to_string(),
                         });
                     }
                 }
@@ -284,7 +284,7 @@ fn find_block(seg: &str, prefix_out: &str, line_start: bool, carry: &mut Carry, 
 /// Replace every `@lang { ... }` block in `source` (see the module docs). The output has exactly as
 /// many lines as the input.
 pub fn extract(source: &str) -> String {
-    if !source.contains('@') {
+    if !has_header_candidate(source) {
         return source.to_string();
     }
     let lines: Vec<&str> = source.split('\n').collect();
@@ -299,7 +299,7 @@ pub fn extract(source: &str) -> String {
         loop {
             let base = li + extra;
             let hit = if carry == Carry::Normal || seg.contains("'''") || seg.contains("\"\"\"") {
-                find_block(&seg, &cur, line_start, &mut carry, &lines_with(&lines, base, &seg), base)
+                find_block(&seg, &cur, line_start, &mut carry, &View { lines: &lines, at: base, seg: &seg }, base)
             } else {
                 None
             };
@@ -326,11 +326,33 @@ pub fn extract(source: &str) -> String {
     out.join("\n")
 }
 
-/// `lines` with line `at` replaced by `seg` (the not yet scanned rest of that line).
-fn lines_with<'a>(lines: &[&'a str], at: usize, seg: &'a str) -> Vec<&'a str> {
-    let mut v: Vec<&str> = lines.to_vec();
-    v[at] = seg;
-    v
+/// The source lines with line `at` read as `seg` (the not yet scanned rest of that line), without
+/// copying the line vector (one copy per scanned line made the pass quadratic).
+struct View<'a> {
+    lines: &'a [&'a str],
+    at: usize,
+    seg: &'a str,
+}
+
+impl<'a> View<'a> {
+    fn get(&self, i: usize) -> &'a str {
+        if i == self.at { self.seg } else { self.lines[i] }
+    }
+
+    fn len(&self) -> usize {
+        self.lines.len()
+    }
+}
+
+/// Can `source` hold a block header at all: an `@` not preceded by an identifier character (so an
+/// e-mail address does not count) and followed by one?
+fn has_header_candidate(source: &str) -> bool {
+    let b = source.as_bytes();
+    b.iter().enumerate().any(|(i, &c)| {
+        c == b'@'
+            && (i == 0 || !(b[i - 1].is_ascii_alphanumeric() || b[i - 1] == b'_' || b[i - 1] == b'@'))
+            && b.get(i + 1).map_or(false, |&n| n.is_ascii_alphabetic() || n == b'_' || n >= 0x80)
+    })
 }
 
 #[cfg(test)]
