@@ -492,3 +492,44 @@ println("served", n)
     }
     assert_eq!(srv.finish(60), "served 6");
 }
+
+#[test]
+fn a_burst_of_200_concurrent_requests_is_served_not_refused_with_default_options() {
+    // the old one-at-a-time server let the OS backlog hold a burst; the pool's default queue must too
+    // (503 is for real overload, not for 200 clients arriving at once on a trivial handler)
+    let port = free_port();
+    let srv = start(&format!(
+        r#"fn h(req) {{
+  return "ok"
+}}
+n = serve({port}, h, {{"max_requests": 201}})
+println("served", n)
+"#
+    ));
+    wait_ready(port);
+    let go = std::sync::Arc::new(std::sync::Barrier::new(200));
+    let clients: Vec<_> = (0..200)
+        .map(|_| {
+            let go = go.clone();
+            std::thread::spawn(move || {
+                // connect first (the whole burst is then waiting at once), send together
+                let mut s = TcpStream::connect(("127.0.0.1", port)).unwrap();
+                s.set_read_timeout(Some(Duration::from_secs(120))).unwrap();
+                go.wait();
+                let nl = crlf();
+                if s.write_all(format!("GET /x HTTP/1.1{nl}Host: x{nl}Connection: close{nl}{nl}").as_bytes()).is_err() {
+                    return (0, String::new());
+                }
+                let mut buf = Vec::new();
+                let _ = s.read_to_end(&mut buf);
+                let text = String::from_utf8_lossy(&buf).to_string();
+                let status = text.split_whitespace().nth(1).and_then(|c| c.parse().ok()).unwrap_or(0);
+                (status, text.lines().last().unwrap_or("").to_string())
+            })
+        })
+        .collect();
+    let results: Vec<(u16, String)> = clients.into_iter().map(|c| c.join().unwrap()).collect();
+    let refused = results.iter().filter(|r| r.0 != 200).count();
+    assert_eq!(refused, 0, "{} of 200 burst requests were not answered 200: {:?}", refused, results.iter().filter(|r| r.0 != 200).take(3).collect::<Vec<_>>());
+    assert_eq!(srv.finish(60), "served 201");
+}
