@@ -223,8 +223,13 @@ impl QuantTensor {
         let n_threads = std::thread::available_parallelism()
             .map(|n| n.get()).unwrap_or(4).min(16);
 
+        #[cfg(test)]
+        let inject_panic = tests::MATVEC_WORKER_PANIC.with(|c| c.get());
+
         let mut y = vec![0.0f32; out_dim];
         let res = par_rows(&mut y, n_threads, |r, cell| {
+            #[cfg(test)]
+            if inject_panic && r == 0 { panic!("injected matvec worker panic"); }
             let start = r * bytes_per_row;
             if start >= data.len() { return; }
             let end = (start + bytes_per_row).min(data.len());
@@ -1264,5 +1269,40 @@ mod tests {
         assert!(ok.is_ok() && y[63] == 63.0);
         let err = par_rows(&mut y, 4, |r, c| { if r == 40 { panic!("boom"); } *c = 1.0; }).unwrap_err();
         assert!(err.contains("boom"), "{}", err);
+    }
+
+    thread_local! {
+        /// Test seam: when set on the calling thread, the next `matvec` worker panics.
+        pub(super) static MATVEC_WORKER_PANIC: std::cell::Cell<bool> = std::cell::Cell::new(false);
+    }
+
+    /// Tiny F32 model whose lm_head and ffn_down go through the quantized `matvec` path.
+    fn tiny_engine_with_matvec(tag: &str) -> KillerInference {
+        let dir = std::env::temp_dir().join(format!("killer_mv_{}_{}", tag, std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let p = dir.join("m.gguf");
+        tiny_gguf(&p, 8);
+        let mut eng = KillerInference::load(p.to_str().unwrap()).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        let vocab = eng.config.vocab_size;
+        eng.weights_q.insert("output.weight".into(),
+            QuantTensor::from_raw(vec![0u8; vocab * 8 * 4], GgmlType::F32, &[8, vocab as u64]));
+        let down = eng.weights.remove("blk.0.ffn_down.weight").unwrap();
+        let bytes: Vec<u8> = down.iter().flat_map(|v| v.to_le_bytes()).collect();
+        eng.weights_q.insert("blk.0.ffn_down.weight".into(), QuantTensor::from_raw(bytes, GgmlType::F32, &[16, 8]));
+        eng
+    }
+
+    #[test]
+    fn matvec_worker_panic_is_an_error_not_a_process_panic() {
+        let mut eng = tiny_engine_with_matvec("panic");
+        MATVEC_WORKER_PANIC.with(|c| c.set(true));
+        let gen = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            eng.generate("a", &GenerateConfig::greedy(2))
+        }));
+        let emb = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| eng.embed_text("a")));
+        MATVEC_WORKER_PANIC.with(|c| c.set(false));
+        assert!(gen.is_ok(), "generate() panicked instead of returning Err");
+        assert!(emb.is_ok(), "embed_text() panicked instead of returning Err");
     }
 }
