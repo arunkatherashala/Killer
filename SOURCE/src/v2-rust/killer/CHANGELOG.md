@@ -27,7 +27,9 @@ All notable changes to `killer-native` are documented here.
   starts (globals, the handler, the routes and what their closures captured, copied in one walk, so closures sharing a
   store still share it inside a worker). A handler's change to a global is therefore not seen by the other workers nor by
   the script after `serve` returns: share state with `mutex_*` / `atomic_*` cells, channels or a database, or pass
-  `workers: 1` (one request at a time on a single copy; `examples/apps/todo` does this for its in-memory store).
+  `workers: 1`, which runs the handler on the script's own VM and data as before (one request at a time, no copy:
+  the script sees the handler's changes after `serve` returns; `serve_once` too; `examples/apps/todo` does this for its
+  in-memory store).
   `max_requests` counts requests admitted to routing across all workers (exactly that many reach a handler; a later one
   that was already accepted gets `503`; `serve` returns once they are answered). `server_stop()` stops accepting at
   once, answers queued connections `503` and waits up to the new `drain_timeout` (default 30 s) for running handlers.

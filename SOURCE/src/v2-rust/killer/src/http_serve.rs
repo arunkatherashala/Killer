@@ -23,7 +23,9 @@
 //! private detached copy of the program state taken when `serve` starts ([`WorkerSeed`]): handler
 //! values, routes and top-level variables are deep-copied per worker, so no `Rc` crosses a thread
 //! and a handler's changes to globals stay inside its worker (share state with `mutex_*`, channels or
-//! a database). `read_timeout` (seconds, default 10) is the *total* time a client gets to send its
+//! a database). With `workers: 1` (and in `serve_once`) there is no copy: the accept loop moves to a
+//! helper thread and the handler runs on the calling VM, on the script's own data, as before the pool
+//! (`drain_timeout` cannot abandon a handler running there). `read_timeout` (seconds, default 10) is the *total* time a client gets to send its
 //! request (`408` after it); `request_timeout` (seconds, default 60, 0 = off) is a wall-clock deadline
 //! for one handler call, checked on loop back-edges (`503`; a single blocking builtin such as
 //! `sleep_ms(1e6)` cannot be interrupted). `max_requests` counts requests that reached routing,
@@ -712,13 +714,6 @@ fn serve_loop(vm: &mut VirtualMachine, args: &[Value], program: &Program, once: 
     let _close = CloseOnDrop(Arc::clone(&pool));
     let (tx, rx): (SyncSender<TcpStream>, Receiver<TcpStream>) = sync_channel(queue);
     let rx = Arc::new(Mutex::new(rx));
-    for i in 0..workers {
-        // every worker gets its own detached copy of the globals, the routes and the handler
-        let (seed, handler, routes) = seed_worker(vm, program, &handler);
-        let (rx, pool) = (Arc::clone(&rx), Arc::clone(&pool));
-        seed.spawn(format!("killer-http-{}", i), move |wvm, prog| worker_loop(wvm, prog, &routes, &handler, lim, &pool, &rx))
-            .map_err(|e| VmError::runtime_error(format!("{}: cannot start worker thread: {}", who, e)))?;
-    }
     // queue full: a single rejecter thread answers 503 so the accept loop never waits on a client
     let (reject_tx, reject_rx) = sync_channel::<TcpStream>(REJECT_BACKLOG);
     let _ = std::thread::Builder::new().name("killer-http-reject".to_string()).spawn(move || {
@@ -728,10 +723,63 @@ fn serve_loop(vm: &mut VirtualMachine, args: &[Value], program: &Program, once: 
         }
     });
 
-    let mut last_accept = Instant::now();
-    loop {
-        if stop_requested() || pool.closing.load(Ordering::SeqCst) {
+    if workers == 1 {
+        // One worker: the handler runs on this VM, on the script's own data, as before the pool (a
+        // change a handler makes to a global is seen by the script after `serve` returns; the JIT is
+        // used as usual). Only the accept loop moves to a helper thread, so the queue and its `503`
+        // still work. The helper ends (and drops the queue's sender) when the server closes; this
+        // loop then answers what is left in the queue and returns.
+        let acc_pool = Arc::clone(&pool);
+        let acceptor = std::thread::Builder::new()
+            .name("killer-http-accept".to_string())
+            .spawn(move || accept_loop(listener, tx, reject_tx, &acc_pool, idle))
+            .map_err(|e| VmError::runtime_error(format!("{}: cannot start the accept thread: {}", who, e)))?;
+        let routes: Vec<Route> =
+            ROUTES.with(|r| r.borrow().iter().map(|route| Route { method: route.method.clone(), segments: route.segments.clone(), handler: route.handler.clone() }).collect());
+        worker_loop(vm, program, &routes, &handler, lim, &pool, &rx);
+        pool.closing.store(true, Ordering::SeqCst);
+        match acceptor.join() {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => return err(format!("{}: {}", who, e)),
+            Err(_) => return err(format!("{}: the accept thread panicked", who)),
+        }
+        return Ok(Value::Number(pool.completed.load(Ordering::SeqCst) as f64));
+    }
+
+    for i in 0..workers {
+        // every worker gets its own detached copy of the globals, the routes and the handler
+        let (seed, handler, routes) = seed_worker(vm, program, &handler);
+        let (rx, pool) = (Arc::clone(&rx), Arc::clone(&pool));
+        seed.spawn(format!("killer-http-{}", i), move |wvm, prog| worker_loop(wvm, prog, &routes, &handler, lim, &pool, &rx))
+            .map_err(|e| VmError::runtime_error(format!("{}: cannot start worker thread: {}", who, e)))?;
+    }
+    if let Err(e) = accept_loop(listener, tx, reject_tx, &pool, idle) {
+        return err(format!("{}: {}", who, e));
+    }
+    // Drain. After max_requests the admitted requests are always answered (each is bounded by its own
+    // request/stream timeout); after server_stop() handlers still running get `drain_timeout`.
+    let mut deadline = if stop_requested() { Some(Instant::now() + drain) } else { None };
+    while pool.pending.load(Ordering::SeqCst) > 0 {
+        if deadline.is_none() && stop_requested() {
+            deadline = Some(Instant::now() + drain);
+        }
+        if deadline.map_or(false, |d| Instant::now() >= d) {
             break;
+        }
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    Ok(Value::Number(pool.completed.load(Ordering::SeqCst) as f64))
+}
+
+/// The accept loop: hand each connection to the workers' queue (or to the rejecter when the queue is
+/// full) until the server stops, closes (`max_requests` reached) or has been idle for `idle`. On the
+/// way out the pool is closed and the listener and both senders are dropped: new connections are
+/// refused by the OS and queued ones get `503` from the workers.
+fn accept_loop(listener: TcpListener, tx: SyncSender<TcpStream>, reject_tx: SyncSender<TcpStream>, pool: &Pool, idle: Option<Duration>) -> Result<(), String> {
+    let mut last_accept = Instant::now();
+    let result = loop {
+        if stop_requested() || pool.closing.load(Ordering::SeqCst) {
+            break Ok(());
         }
         match listener.accept() {
             Ok((stream, _)) => {
@@ -751,32 +799,19 @@ fn serve_loop(vm: &mut VirtualMachine, args: &[Value], program: &Program, once: 
                 if let Some(d) = idle {
                     let last_done = pool.born + Duration::from_millis(pool.last_done_ms.load(Ordering::SeqCst));
                     if pool.pending.load(Ordering::SeqCst) == 0 && last_accept.max(last_done).elapsed() >= d {
-                        break;
+                        break Ok(());
                     }
                 }
                 std::thread::sleep(Duration::from_millis(2));
             }
-            Err(e) => return err(format!("{}: accept failed: {}", who, e)),
+            Err(e) => break Err(format!("accept failed: {}", e)),
         }
-    }
-    // stop accepting: new connections are refused by the OS, queued ones get 503 from the workers
+    };
     pool.closing.store(true, Ordering::SeqCst);
     drop(listener);
     drop(tx);
     drop(reject_tx);
-    // Drain. After max_requests the admitted requests are always answered (each is bounded by its own
-    // request/stream timeout); after server_stop() handlers still running get `drain_timeout`.
-    let mut deadline = if stop_requested() { Some(Instant::now() + drain) } else { None };
-    while pool.pending.load(Ordering::SeqCst) > 0 {
-        if deadline.is_none() && stop_requested() {
-            deadline = Some(Instant::now() + drain);
-        }
-        if deadline.map_or(false, |d| Instant::now() >= d) {
-            break;
-        }
-        std::thread::sleep(Duration::from_millis(5));
-    }
-    Ok(Value::Number(pool.completed.load(Ordering::SeqCst) as f64))
+    result
 }
 
 /// VM-level entry: handles `serve` and `serve_once` (they need to call back into bytecode).

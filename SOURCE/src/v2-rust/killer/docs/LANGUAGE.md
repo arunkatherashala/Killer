@@ -2118,7 +2118,8 @@ to a **bounded queue** served by a **fixed pool of worker threads**, so a slow h
 Server-Sent Events stream occupies one worker and the other requests keep being answered.
 
 - `workers` (default min(number of CPUs, 8), at most 256): how many requests run at the same time.
-  `workers: 1` gives the old one-request-at-a-time behaviour. `serve_once` always uses one worker.
+  `workers: 1` gives the old behaviour: one request at a time, with the handler running on the
+  script's own thread and data (see below). `serve_once` always uses one worker.
 - `queue` (default 64, `0` = no queue): connections accepted but not yet picked up by a worker. When
   the queue is full the client gets `503 Service Unavailable` with `Retry-After: 1` at once instead
   of waiting.
@@ -2135,12 +2136,14 @@ Server-Sent Events stream occupies one worker and the other requests keep being 
   example a watchdog started with `async_spawn`). The server stops accepting at once, reads and
   streams in progress are interrupted within about 200 ms, queued connections get `503`, and `serve`
   waits up to `drain_timeout` (seconds, default 30) for handlers that are still running (a handler
-  that runs longer is abandoned: `serve` returns and its reply may never be sent).
+  that runs longer is abandoned: `serve` returns and its reply may never be sent). With `workers: 1`
+  the handler runs on the script's thread, so `serve` returns only once it has finished.
 - `stream_timeout` (seconds, default 300) bounds a Server-Sent Events reply.
 - Other options: `host`, `idle_timeout` (stops after that long with no connection and nothing in flight).
 - `serve` returns the number of requests answered.
 
-**Handlers do not share global state (behaviour change).** Each worker runs its own VM on a private
+**Handlers do not share global state (behaviour change).** With two or more workers (the default),
+each worker runs its own VM on a private
 copy of the program's data, taken when `serve` starts: top-level variables, the handler and the
 routes (and whatever their closures captured) are deep-copied once per worker. Inside one worker
 the copy persists between requests, and closures that captured the same object still share it; but
@@ -2151,7 +2154,9 @@ returns. To share state between requests use:
   every worker and to the main script;
 - channels (`chan_new`, `chan_send`, `chan_recv`) to hand work or results to one owner task;
 - a database or a file (for data that must survive a restart anyway);
-- or `workers: 1`, which keeps the old single-copy behaviour for an in-memory store.
+- or `workers: 1`: then there is no copy at all. The handler runs on the script's own VM, one
+  request at a time, exactly as before the pool: what it changes in a global (an in-memory store) is
+  seen by the next request and by the script after `serve` returns. `serve_once` works the same way.
 
 ```killer skip
 hits = mutex_new(0)
