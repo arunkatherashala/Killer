@@ -3866,7 +3866,7 @@ impl VirtualMachine {
                             }
                             match (&args[0], &args[1], &args[2]) {
                                 (Value::Str(s), Value::Str(old), Value::Str(new)) => {
-                                    Value::Str(s.replace(old.as_str(), new.as_str()))
+                                    Value::Str(crate::size_caps::replace("replace()", s, old, new)?)
                                 }
                                 _ => return Err(VmError::runtime_error(
                                     "replace() expects strings".to_string(),
@@ -3935,7 +3935,7 @@ impl VirtualMachine {
                             }
                             match (&args[0], &args[1]) {
                                 (Value::Array(arr), Value::Str(sep)) => {
-                                    Value::Str(arr.join_strings(sep.as_str()))
+                                    Value::Str(arr.join_strings(sep.as_str())?)
                                 }
                                 _ => return Err(VmError::runtime_error(
                                     "join() expects array and separator".to_string(),
@@ -5572,7 +5572,7 @@ impl VirtualMachine {
                                             ))
                                         }
                                     };
-                                    Value::Str(s.replace(old.as_str(), new.as_str()))
+                                    Value::Str(crate::size_caps::replace("replace()", s, old, new)?)
                                 }
                                 "split" if args.len() == 1 => {
                                     let sep = match &args[0] {
@@ -5583,11 +5583,7 @@ impl VirtualMachine {
                                             ))
                                         }
                                     };
-                                    Value::from(
-                                        s.split(sep.as_str())
-                                            .map(|part| Value::Str(part.to_string()))
-                                            .collect::<Vec<_>>(),
-                                    )
+                                    Value::from(crate::size_caps::collect_strings("split()", s.split(sep.as_str()))?)
                                 }
                                 // -- KORE dot-notation converters -------------
                                 // "file.kore".to_csv("out.csv")
@@ -5818,7 +5814,7 @@ impl VirtualMachine {
                                         ))
                                     }
                                 };
-                                self.stack.push(Value::Str(arr.join_strings(sep.as_str())));
+                                self.stack.push(Value::Str(arr.join_strings(sep.as_str())?));
                             } else if method_name == "includes" {
                                 if args.len() != 1 {
                                     return Err(VmError::runtime_error("includes() expects 1 argument".to_string()));

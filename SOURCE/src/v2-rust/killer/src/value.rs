@@ -158,13 +158,10 @@ impl SharedArray {
         self.0.borrow().iter().any(|e| e.loose_eq(x))
     }
 
-    pub fn join_strings(&self, sep: &str) -> String {
-        self.0
-            .borrow()
-            .iter()
-            .map(|v| v.to_string())
-            .collect::<Vec<_>>()
-            .join(sep)
+    /// The printed form of every element joined with `sep`; refused (before it is built) when the result would go
+    /// over the string limit or the memory cap (see [`crate::size_caps::join`]).
+    pub fn join_strings(&self, sep: &str) -> Result<String, crate::error::VmError> {
+        crate::size_caps::join("join()", &self.0.borrow(), sep)
     }
 
     pub fn iter_cloned(&self) -> std::vec::IntoIter<Value> {

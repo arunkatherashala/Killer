@@ -779,7 +779,9 @@ pub fn call(name: &str, args: &[Value]) -> Option<Result<Value, VmError>> {
         })(),
         "base64_encode" => (|| {
             let a = arity("base64_encode", args, 1, 1)?;
-            Ok(Value::Str(base64_encode(&bytes_of(&a[0], "base64_encode")?)))
+            let data = bytes_of(&a[0], "base64_encode")?;
+            crate::size_caps::check_string("base64_encode()", data.len().div_ceil(3).saturating_mul(4))?;
+            Ok(Value::Str(base64_encode(&data)))
         })(),
         "base64_decode" => (|| {
             let a = arity("base64_decode", args, 1, 1)?;

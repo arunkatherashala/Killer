@@ -33,10 +33,15 @@ fn whole(v: &Value, who: &str, what: &str) -> Result<usize, VmError> {
 /// Sliding window of `size` characters with `overlap` characters shared between neighbours.
 /// A window that would end mid-word is pulled back to the last whitespace in its final fifth
 /// (when that does not shrink it below half of `size`). Always makes progress.
-pub fn chunk_text(text: &str, size: usize, overlap: usize) -> Vec<String> {
+///
+/// With a large overlap the output is about `size / (size - overlap)` times the input, so the number of
+/// chunks and their total size are checked as they are made (string and list limits, memory cap).
+pub fn chunk_text(text: &str, size: usize, overlap: usize) -> Result<Vec<String>, VmError> {
+    crate::memcap::reserve(text.len().saturating_mul(std::mem::size_of::<char>()))?;
     let chars: Vec<char> = text.chars().collect();
     let total = chars.len();
     let mut out = Vec::new();
+    let mut out_bytes = 0usize;
     let mut start = 0usize;
     while start < total {
         let mut end = (start + size).min(total);
@@ -49,6 +54,15 @@ pub fn chunk_text(text: &str, size: usize, overlap: usize) -> Vec<String> {
         let piece: String = chars[start..end].iter().collect();
         let piece = piece.trim();
         if !piece.is_empty() {
+            out_bytes = out_bytes.saturating_add(piece.len());
+            if out.len() >= crate::size_caps::MAX_LIST_LEN || out_bytes > crate::vm::MAX_STRING_BYTES {
+                return Err(VmError::runtime_error(
+                    "chunk_text(): the chunks are too large in total (limit 256 MB); use a smaller overlap".to_string(),
+                ));
+            }
+            if out.len() % 1024 == 0 {
+                crate::memcap::check()?;
+            }
             out.push(piece.to_string());
         }
         if end >= total {
@@ -63,7 +77,7 @@ pub fn chunk_text(text: &str, size: usize, overlap: usize) -> Vec<String> {
             }
         }
     }
-    out
+    Ok(out)
 }
 
 /// Split into sentences at `.`, `!` or `?` (plus any closing quotes/brackets) followed by
@@ -104,7 +118,7 @@ pub fn sentences(text: &str) -> Vec<String> {
 
 /// Pack whole sentences into chunks of at most `max_chars` characters. A single sentence longer
 /// than `max_chars` is split with `chunk_text` (no overlap).
-pub fn chunk_by_sentence(text: &str, max_chars: usize) -> Vec<String> {
+pub fn chunk_by_sentence(text: &str, max_chars: usize) -> Result<Vec<String>, VmError> {
     let mut out: Vec<String> = Vec::new();
     let mut cur = String::new();
     let mut cur_len = 0usize;
@@ -118,7 +132,7 @@ pub fn chunk_by_sentence(text: &str, max_chars: usize) -> Vec<String> {
         let len = s.chars().count();
         if len > max_chars {
             flush(&mut cur, &mut cur_len, &mut out);
-            out.extend(chunk_text(&s, max_chars, 0));
+            out.extend(chunk_text(&s, max_chars, 0)?);
             continue;
         }
         if cur_len > 0 && cur_len + 1 + len > max_chars {
@@ -132,7 +146,7 @@ pub fn chunk_by_sentence(text: &str, max_chars: usize) -> Vec<String> {
         cur_len += len;
     }
     flush(&mut cur, &mut cur_len, &mut out);
-    out
+    Ok(out)
 }
 
 /// Approximate token count (see the module docs).
@@ -216,14 +230,14 @@ pub fn call(name: &str, args: &[Value]) -> Option<Result<Value, VmError>> {
                 if overlap >= size {
                     return err("chunk_text(): overlap must be smaller than size");
                 }
-                Ok(strings(chunk_text(t, size, overlap)))
+                Ok(strings(chunk_text(t, size, overlap)?))
             }
             [Value::Str(t), size] => {
                 let size = whole(size, "chunk_text", "size")?;
                 if size == 0 {
                     return err("chunk_text(): size must be at least 1");
                 }
-                Ok(strings(chunk_text(t, size, 0)))
+                Ok(strings(chunk_text(t, size, 0)?))
             }
             _ => err("chunk_text(text, size, overlap) expects a string and numbers"),
         })(),
@@ -233,7 +247,7 @@ pub fn call(name: &str, args: &[Value]) -> Option<Result<Value, VmError>> {
                 if max == 0 {
                     return err("chunk_by_sentence(): max_chars must be at least 1");
                 }
-                Ok(strings(chunk_by_sentence(t, max)))
+                Ok(strings(chunk_by_sentence(t, max)?))
             }
             _ => err("chunk_by_sentence(text, max_chars) expects a string and a number"),
         })(),
@@ -267,23 +281,23 @@ mod tests {
     #[test]
     fn chunk_text_windows_and_overlap() {
         let t = "abcdefghijklmnopqrstuvwxyz";
-        let c = chunk_text(t, 10, 3);
+        let c = chunk_text(t, 10, 3).unwrap();
         assert_eq!(c[0], "abcdefghij");
         assert_eq!(c[1], "hijklmnopq");
         assert!(c.last().unwrap().ends_with('z'));
-        assert_eq!(chunk_text(t, 100, 0), vec![t.to_string()]);
-        assert!(chunk_text("", 10, 2).is_empty());
+        assert_eq!(chunk_text(t, 100, 0).unwrap(), vec![t.to_string()]);
+        assert!(chunk_text("", 10, 2).unwrap().is_empty());
     }
 
     #[test]
     fn chunk_text_prefers_word_boundaries_and_always_progresses() {
-        let c = chunk_text("the quick brown fox jumps over the lazy dog", 16, 0);
+        let c = chunk_text("the quick brown fox jumps over the lazy dog", 16, 0).unwrap();
         assert_eq!(c, vec!["the quick brown", "fox jumps over", "the lazy dog"]);
         // worst case: overlap = size - 1 still terminates
-        let c = chunk_text(&"x".repeat(50), 5, 4);
+        let c = chunk_text(&"x".repeat(50), 5, 4).unwrap();
         assert!(c.len() >= 10 && c.len() <= 50);
         // unicode safe
-        let c = chunk_text("héllo wörld ünïcode tëxt", 8, 2);
+        let c = chunk_text("héllo wörld ünïcode tëxt", 8, 2).unwrap();
         assert!(c.iter().all(|s| !s.is_empty()));
     }
 
@@ -291,13 +305,13 @@ mod tests {
     fn sentence_chunking() {
         let t = "First one. Second one! Is this third? Yes it is. Done";
         assert_eq!(sentences(t), vec!["First one.", "Second one!", "Is this third?", "Yes it is.", "Done"]);
-        let c = chunk_by_sentence(t, 25);
+        let c = chunk_by_sentence(t, 25).unwrap();
         assert_eq!(c, vec!["First one. Second one!", "Is this third? Yes it is.", "Done"]);
         // an over-long sentence is hard split
         let long = "word ".repeat(30);
-        let c = chunk_by_sentence(&long, 40);
+        let c = chunk_by_sentence(&long, 40).unwrap();
         assert!(c.len() >= 3 && c.iter().all(|s| s.chars().count() <= 40));
-        assert!(chunk_by_sentence("", 10).is_empty());
+        assert!(chunk_by_sentence("", 10).unwrap().is_empty());
     }
 
     #[test]

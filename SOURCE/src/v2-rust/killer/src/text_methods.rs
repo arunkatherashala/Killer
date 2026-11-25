@@ -146,7 +146,7 @@ pub fn call(name: &str, args: &[Value]) -> Option<Result<Value, VmError>> {
         "splitlines" => (|| {
             let a = arity(name, args, 1, 1)?;
             let s = string(&a[0], name)?;
-            Ok(Value::from(s.lines().map(|l| Value::Str(l.to_string())).collect::<Vec<_>>()))
+            Ok(Value::from(crate::size_caps::collect_strings("splitlines()", s.lines())?))
         })(),
         "find" | "rfind" => (|| {
             let a = arity(name, args, 2, 2)?;

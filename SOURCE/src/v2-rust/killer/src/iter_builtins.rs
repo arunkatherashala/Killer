@@ -26,7 +26,7 @@ pub fn call(name: &str, args: &[Value]) -> Option<Result<Value, VmError>> {
     }
     Some(match args {
         [Value::Array(a)] => Ok(Value::from(a.to_vec())),
-        [Value::Str(s)] => Ok(Value::from(s.chars().map(|c| Value::Str(c.to_string())).collect::<Vec<_>>())),
+        [Value::Str(s)] => crate::size_caps::chars_list("list()", s).map(Value::from),
         [Value::Dict(d)] => Ok(Value::from(d.iter().map(|(k, _)| Value::Str(k)).collect::<Vec<_>>())),
         [set @ Value::Set(_)] => crate::builtin::BuiltinFunctions::call("set_to_array", std::slice::from_ref(set)),
         [Value::Generator(_)] => Err(VmError::runtime_error("list(): generator was not materialised".to_string())),

@@ -1669,9 +1669,7 @@ impl BuiltinFunctions {
     fn split(args: &[Value]) -> Result<Value, VmError> {
         // `split(s)` splits on runs of whitespace (Python's `str.split()`)
         if let [Value::Str(s)] = args {
-            return Ok(Value::from(
-                s.split_whitespace().map(|w| Value::Str(w.to_string())).collect::<Vec<_>>(),
-            ));
+            return Ok(Value::from(crate::size_caps::collect_strings("split()", s.split_whitespace())?));
         }
         if args.len() != 2 {
             return Err(VmError::runtime_error(
@@ -1680,14 +1678,9 @@ impl BuiltinFunctions {
         }
         match (&args[0], &args[1]) {
             // an empty separator splits into characters
-            (Value::Str(s), Value::Str(sep)) if sep.is_empty() => {
-                Ok(Value::from(s.chars().map(|c| Value::Str(c.to_string())).collect::<Vec<_>>()))
-            }
+            (Value::Str(s), Value::Str(sep)) if sep.is_empty() => Ok(Value::from(crate::size_caps::chars_list("split()", s)?)),
             (Value::Str(s), Value::Str(sep)) => {
-                let parts: Vec<Value> = s.split(sep.as_str())
-                    .map(|part| Value::Str(part.to_string()))
-                    .collect();
-                Ok(Value::from(parts))
+                Ok(Value::from(crate::size_caps::collect_strings("split()", s.split(sep.as_str()))?))
             }
             _ => Err(VmError::runtime_error(
                 "split() expects string and separator".to_string(),
@@ -1761,7 +1754,7 @@ impl BuiltinFunctions {
         }
         match (&args[0], &args[1], &args[2]) {
             (Value::Str(s), Value::Str(old), Value::Str(new)) => {
-                Ok(Value::Str(s.replace(old.as_str(), new.as_str())))
+                Ok(Value::Str(crate::size_caps::replace("replace()", s, old, new)?))
             }
             _ => Err(VmError::runtime_error(
                 "replace() expects strings".to_string(),
@@ -1950,7 +1943,7 @@ impl BuiltinFunctions {
         }
         match (&args[0], &args[1]) {
             (Value::Array(arr), Value::Str(sep)) => {
-                Ok(Value::Str(arr.join_strings(sep.as_str())))
+                Ok(Value::Str(arr.join_strings(sep.as_str())?))
             }
             _ => Err(VmError::runtime_error(
                 "join() expects array and separator".to_string(),
@@ -6102,7 +6095,10 @@ impl BuiltinFunctions {
     /// `b64_encode(text)` → String
     fn builtin_b64_encode(args: &[Value]) -> Result<Value, VmError> {
         match args.first() {
-            Some(Value::Str(s)) => Ok(Value::Str(Self::standalone_b64_encode(s))),
+            Some(Value::Str(s)) => {
+                crate::size_caps::check_string("b64_encode()", s.len().div_ceil(3).saturating_mul(4))?;
+                Ok(Value::Str(Self::standalone_b64_encode(s)))
+            }
             _ => Err(VmError::runtime_error("b64_encode(text): expects a String argument")),
         }
     }
@@ -6120,7 +6116,10 @@ impl BuiltinFunctions {
     /// `hex_encode(text)` → String
     fn builtin_hex_encode(args: &[Value]) -> Result<Value, VmError> {
         match args.first() {
-            Some(Value::Str(s)) => Ok(Value::Str(Self::standalone_hex_encode(s))),
+            Some(Value::Str(s)) => {
+                crate::size_caps::check_string("hex_encode()", s.len().saturating_mul(2))?;
+                Ok(Value::Str(Self::standalone_hex_encode(s)))
+            }
             _ => Err(VmError::runtime_error("hex_encode(text): expects a String argument")),
         }
     }
@@ -11223,7 +11222,9 @@ The fact that you shared this means something. What's underneath it  what are 
         if args.len() != 2 { return Err(VmError::runtime_error("bytes_concat expects 2 arguments".to_string())); }
         let a = match &args[0] { Value::Bytes(b) => b, _ => return Err(VmError::runtime_error("bytes_concat: first arg must be bytes".to_string())) };
         let b = match &args[1] { Value::Bytes(b) => b, _ => return Err(VmError::runtime_error("bytes_concat: second arg must be bytes".to_string())) };
-        let mut result = a.clone();
+        crate::size_caps::check_bytes("bytes_concat", a.len().saturating_add(b.len()))?;
+        let mut result = Vec::with_capacity(a.len() + b.len());
+        result.extend_from_slice(a);
         result.extend_from_slice(b);
         Ok(Value::Bytes(result))
     }

@@ -216,25 +216,28 @@ pub fn builtin_regex_find(args: &[Value]) -> Result<Value, VmError> {
     }
 }
 
+/// The characters of `text` for the matcher (4 bytes each), checked against the memory cap first.
+fn regex_chars(text: &str) -> Result<Vec<char>, VmError> {
+    crate::memcap::reserve(text.len().saturating_mul(std::mem::size_of::<char>()))?;
+    Ok(text.chars().collect())
+}
+
 pub fn builtin_regex_find_all(args: &[Value]) -> Result<Value, VmError> {
     if args.len() < 2 { return Err(VmError::runtime_error("regex_find_all(text, pattern) requires 2 args")); }
     let text = val_str(&args[0]);
     let pat = val_str(&args[1]);
     let re = compile_regex(&pat);
-    let chars: Vec<char> = text.chars().collect();
-    let mut results: Vec<Value> = Vec::new();
+    let chars = regex_chars(&text)?;
     let mut pos = 0;
-    while pos <= chars.len() {
-        match find_at(&re, &chars, pos) {
-            Some((s, e)) => {
-                let matched: String = chars[s..e].iter().collect();
-                results.push(Value::Str(matched));
-                pos = if e > s { e } else { s + 1 };
-            }
-            None => break,
+    let matches = std::iter::from_fn(|| {
+        if pos > chars.len() {
+            return None;
         }
-    }
-    Ok(Value::from(results))
+        let (s, e) = find_at(&re, &chars, pos)?;
+        pos = if e > s { e } else { s + 1 };
+        Some(Value::Str(chars[s..e].iter().collect()))
+    });
+    Ok(Value::from(crate::size_caps::collect_list("regex_find_all()", matches)?))
 }
 
 pub fn builtin_regex_replace(args: &[Value]) -> Result<Value, VmError> {
@@ -243,23 +246,23 @@ pub fn builtin_regex_replace(args: &[Value]) -> Result<Value, VmError> {
     let pat = val_str(&args[1]);
     let repl = val_str(&args[2]);
     let re = compile_regex(&pat);
-    let chars: Vec<char> = text.chars().collect();
-    let mut result = String::new();
+    let chars = regex_chars(&text)?;
+    let mut result = crate::size_caps::StringBuilder::new("regex_replace()");
     let mut pos = 0;
     while pos <= chars.len() {
         match find_at(&re, &chars, pos) {
             Some((s, e)) => {
-                for &c in &chars[pos..s] { result.push(c); }
-                result.push_str(&repl);
+                for &c in &chars[pos..s] { result.push(c)?; }
+                result.push_str(&repl)?;
                 pos = if e > s { e } else { s + 1 };
             }
             None => {
-                for &c in &chars[pos..] { result.push(c); }
+                for &c in &chars[pos..] { result.push(c)?; }
                 break;
             }
         }
     }
-    Ok(Value::Str(result))
+    Ok(Value::Str(result.finish()))
 }
 
 pub fn builtin_regex_split(args: &[Value]) -> Result<Value, VmError> {
@@ -267,24 +270,26 @@ pub fn builtin_regex_split(args: &[Value]) -> Result<Value, VmError> {
     let text = val_str(&args[0]);
     let pat = val_str(&args[1]);
     let re = compile_regex(&pat);
-    let chars: Vec<char> = text.chars().collect();
-    let mut parts: Vec<Value> = Vec::new();
+    let chars = regex_chars(&text)?;
     let mut pos = 0;
-    while pos <= chars.len() {
+    let mut done = false;
+    let parts = std::iter::from_fn(|| {
+        if done || pos > chars.len() {
+            return None;
+        }
         match find_at(&re, &chars, pos) {
             Some((s, e)) => {
                 let part: String = chars[pos..s].iter().collect();
-                parts.push(Value::Str(part));
                 pos = if e > s { e } else { s + 1 };
+                Some(Value::Str(part))
             }
             None => {
-                let part: String = chars[pos..].iter().collect();
-                parts.push(Value::Str(part));
-                break;
+                done = true;
+                Some(Value::Str(chars[pos..].iter().collect()))
             }
         }
-    }
-    Ok(Value::from(parts))
+    });
+    Ok(Value::from(crate::size_caps::collect_list("regex_split()", parts)?))
 }
 
 pub fn builtin_regex_test(args: &[Value]) -> Result<Value, VmError> {

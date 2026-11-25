@@ -2219,6 +2219,34 @@ fn eval_simple_math(expr: &str) -> Result<f64, String> {
     parse_add_sub(&flat, &mut 0)
 }
 
+/// Deepest nesting of parentheses, unary signs and `^` chains the arithmetic parser accepts (each level is a few
+/// recursive calls; without a limit `"(" * 1000000` overflowed the stack and aborted the process).
+const MAX_MATH_DEPTH: usize = 256;
+
+thread_local! {
+    static MATH_DEPTH: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// One level of parser recursion; released when dropped.
+struct MathDepth;
+
+impl MathDepth {
+    fn enter() -> Result<MathDepth, String> {
+        let d = MATH_DEPTH.with(|c| c.get());
+        if d >= MAX_MATH_DEPTH {
+            return Err(format!("expression is nested too deeply (limit {} levels)", MAX_MATH_DEPTH));
+        }
+        MATH_DEPTH.with(|c| c.set(d + 1));
+        Ok(MathDepth)
+    }
+}
+
+impl Drop for MathDepth {
+    fn drop(&mut self) {
+        MATH_DEPTH.with(|c| c.set(c.get().saturating_sub(1)));
+    }
+}
+
 fn parse_add_sub(s: &str, pos: &mut usize) -> Result<f64, String> {
     let mut left = parse_mul_div(s, pos)?;
     while *pos < s.len() {
@@ -2251,6 +2279,7 @@ fn parse_mul_div(s: &str, pos: &mut usize) -> Result<f64, String> {
 
 /// Right-associative exponentiation: `2^3^2` → 2^(3^2) = 512.
 fn parse_pow(s: &str, pos: &mut usize) -> Result<f64, String> {
+    let _depth = MathDepth::enter()?;
     let base = parse_unary(s, pos)?;
     if s.as_bytes().get(*pos) == Some(&b'^') {
         *pos += 1;
@@ -2266,6 +2295,7 @@ fn parse_pow(s: &str, pos: &mut usize) -> Result<f64, String> {
 }
 
 fn parse_unary(s: &str, pos: &mut usize) -> Result<f64, String> {
+    let _depth = MathDepth::enter()?;
     if s.as_bytes().get(*pos) == Some(&b'(') {
         *pos += 1;
         let v = parse_add_sub(s, pos)?;

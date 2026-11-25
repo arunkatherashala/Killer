@@ -234,7 +234,7 @@ impl ObjectManager {
                         ))
                     }
                 };
-                Ok(Value::Str(s.replace(old.as_str(), new.as_str())))
+                Ok(Value::Str(crate::size_caps::replace("replace()", s, old, new)?))
             }
             "split" => {
                 if args.len() != 1 {
@@ -248,11 +248,7 @@ impl ObjectManager {
                         ))
                     }
                 };
-                Ok(Value::from(
-                    s.split(sep.as_str())
-                        .map(|part| Value::Str(part.to_string()))
-                        .collect::<Vec<_>>(),
-                ))
+                Ok(Value::from(crate::size_caps::collect_strings("split()", s.split(sep.as_str()))?))
             }
             _ => Err(VmError::runtime_error(format!(
                 "Cannot call method {} on string",
@@ -301,8 +297,7 @@ impl ObjectManager {
                         return Err(VmError::runtime_error("join() separator must be string".to_string()))
                     }
                 };
-                let parts: Vec<String> = arr.iter().map(|v| v.to_string()).collect();
-                Ok(Value::Str(parts.join(sep.as_str())))
+                Ok(Value::Str(crate::size_caps::join("join()", arr, sep)?))
             }
             "includes" => {
                 if args.len() != 1 {
