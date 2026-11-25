@@ -210,7 +210,7 @@ impl QuantTensor {
 
     /// Matrix-vector product: y[r] = dot(row_r, x) for r in 0..out_dim.
     /// Zero-allocation per-row dot product + std::thread::scope parallelism.
-    fn matvec(&self, x: &[f32], out_dim: usize, in_dim: usize) -> Vec<f32> {
+    fn matvec(&self, x: &[f32], out_dim: usize, in_dim: usize) -> Result<Vec<f32>, String> {
         let epb = self.dtype.elements_per_block();
         let bpb = self.dtype.bytes_per_block();
         let n_blocks      = (in_dim + epb - 1) / epb;
@@ -236,8 +236,8 @@ impl QuantTensor {
             *cell = dot_inline(&data[start..end], dtype, x_safe, in_dim);
         });
         // A worker panic means `y` is incomplete: never return it as if it were valid.
-        if let Err(e) = res { panic!("matvec failed: {}", e); }
-        y
+        res.map_err(|e| format!("matvec failed: {}", e))?;
+        Ok(y)
     }
 }
 
@@ -648,12 +648,14 @@ impl KillerInference {
     // -- Public API ------------------------------------------------------------
 
     /// Ask a question, get an answer back.
-    pub fn ask(&mut self, question: &str, max_tokens: usize) -> String {
+    /// Errors if the forward pass fails (e.g. a matvec worker thread panicked).
+    pub fn ask(&mut self, question: &str, max_tokens: usize) -> Result<String, String> {
         self.generate(question, &GenerateConfig::greedy(max_tokens))
     }
 
     /// Full-control generation with a `GenerateConfig`.
-    pub fn generate(&mut self, prompt: &str, cfg: &GenerateConfig) -> String {
+    /// Errors if the forward pass fails (e.g. a matvec worker thread panicked).
+    pub fn generate(&mut self, prompt: &str, cfg: &GenerateConfig) -> Result<String, String> {
         let tokens = self.tokenizer.encode(prompt, true);
         let base_seed = cfg.seed.unwrap_or_else(time_seed);
         eprintln!("[Killer] Prompt: {} tokens", tokens.len());
@@ -695,7 +697,7 @@ impl KillerInference {
 
         // Feed the prompt tokens (build KV cache, discard interior logits)
         for &token in tokens.iter().take(tokens.len().saturating_sub(1)) {
-            self.forward(token, pos, &mut kv);
+            self.forward(token, pos, &mut kv)?;
             pos += 1;
         }
 
@@ -707,7 +709,7 @@ impl KillerInference {
         let mut _first_step_done = false;
 
         for step in 0..cfg.max_new_tokens {
-            let logits = self.forward(last_token, pos, &mut kv);
+            let logits = self.forward(last_token, pos, &mut kv)?;
 
             // Debug: first step — show top-5 logits and their range
             if step == 0 {
@@ -742,7 +744,7 @@ impl KillerInference {
         }
         eprintln!();
 
-        self.tokenizer.decode(&generated)
+        Ok(self.tokenizer.decode(&generated))
     }
 
     // -- Text embedding (for RAG / semantic search) ----------------------------
@@ -753,9 +755,10 @@ impl KillerInference {
     /// for best quality, but any LLaMA-family model produces useful vectors.
     /// Output length == `config.n_embd`.  Vectors are L2-normalized, so
     /// cosine similarity = plain dot product.
-    pub fn embed_text(&mut self, text: &str) -> Vec<f32> {
+    /// Errors if the forward pass fails (e.g. a matvec worker thread panicked).
+    pub fn embed_text(&mut self, text: &str) -> Result<Vec<f32>, String> {
         let tokens = self.tokenizer.encode(text, true);
-        if tokens.is_empty() { return vec![0.0; self.config.n_embd]; }
+        if tokens.is_empty() { return Ok(vec![0.0; self.config.n_embd]); }
 
         let ctx_limit = self.config.ctx_len.min(512);
         // Embeddings need full-precision KV for stable pooled vectors.
@@ -767,7 +770,7 @@ impl KillerInference {
         let n = tokens.len().min(ctx_limit);
 
         for (pos, &tok) in tokens.iter().take(n).enumerate() {
-            let h = self.forward_hidden(tok, pos, &mut kv);
+            let h = self.forward_hidden(tok, pos, &mut kv)?;
             for (pi, &hi) in pooled.iter_mut().zip(h.iter()) { *pi += hi; }
         }
 
@@ -777,29 +780,29 @@ impl KillerInference {
         // L2 normalize so cosine similarity = dot product
         let norm: f32 = pooled.iter().map(|&v| v * v).sum::<f32>().sqrt();
         if norm > 1e-8 { for v in &mut pooled { *v /= norm; } }
-        pooled
+        Ok(pooled)
     }
 
     /// Forward pass returning last-layer hidden state (before lm_head).
     /// Used by `embed_text()` to extract semantic representations.
-    fn forward_hidden(&self, token: u32, pos: usize, kv: &mut Vec<KVLayer>) -> Vec<f32> {
+    fn forward_hidden(&self, token: u32, pos: usize, kv: &mut Vec<KVLayer>) -> Result<Vec<f32>, String> {
         let mut x = self.embed(token);
         for layer in 0..self.config.n_layers {
-            x = self.layer(&x, pos, layer, kv);
+            x = self.layer(&x, pos, layer, kv)?;
         }
         let norm_w = self.weights.get("output_norm.weight").map(|v| v.as_slice());
-        rms_norm(&x, norm_w, self.config.norm_eps)
+        Ok(rms_norm(&x, norm_w, self.config.norm_eps))
     }
 
     // -- Transformer forward pass ----------------------------------------------
 
-    fn forward(&self, token: u32, pos: usize, kv: &mut Vec<KVLayer>) -> Vec<f32> {
+    fn forward(&self, token: u32, pos: usize, kv: &mut Vec<KVLayer>) -> Result<Vec<f32>, String> {
         // 1. Embedding lookup
         let mut x = self.embed(token);
 
         // 2. N transformer layers
         for layer in 0..self.config.n_layers {
-            x = self.layer(&x, pos, layer, kv);
+            x = self.layer(&x, pos, layer, kv)?;
         }
 
         // 3. Final RMS norm
@@ -824,38 +827,38 @@ impl KillerInference {
         vec![0.0; d]
     }
 
-    fn lm_head(&self, x: &[f32]) -> Vec<f32> {
+    fn lm_head(&self, x: &[f32]) -> Result<Vec<f32>, String> {
         let vocab = self.config.vocab_size;
         let embd  = self.config.n_embd;
         if let Some(q) = self.weights_q.get("output.weight") {
             return q.matvec(x, vocab, embd);
         }
         if let Some(w) = self.weights.get("output.weight") {
-            return matmul(x, w, vocab, embd);
+            return Ok(matmul(x, w, vocab, embd));
         }
         // Weight tying: use embedding table as lm_head
         if let Some(q) = self.weights_q.get("token_embd.weight") {
             return q.matvec(x, vocab, embd);
         }
         if let Some(w) = self.weights.get("token_embd.weight") {
-            return matmul(x, w, vocab, embd);
+            return Ok(matmul(x, w, vocab, embd));
         }
-        vec![0.0; vocab]
+        Ok(vec![0.0; vocab])
     }
 
     // -- Single transformer layer ----------------------------------------------
 
-    fn layer(&self, x: &[f32], pos: usize, layer: usize, kv: &mut Vec<KVLayer>) -> Vec<f32> {
+    fn layer(&self, x: &[f32], pos: usize, layer: usize, kv: &mut Vec<KVLayer>) -> Result<Vec<f32>, String> {
         // Attention sublayer
         let attn_norm_w = self.weights.get(&format!("blk.{}.attn_norm.weight", layer));
         let x_normed    = rms_norm(x, attn_norm_w.map(|v| v.as_slice()), self.config.norm_eps);
-        let attn_out    = self.attention(&x_normed, pos, layer, kv);
+        let attn_out    = self.attention(&x_normed, pos, layer, kv)?;
         let x           = add(x, &attn_out);
 
         // FFN sublayer
         let ffn_norm_w = self.weights.get(&format!("blk.{}.ffn_norm.weight", layer));
         let x_normed2  = rms_norm(&x, ffn_norm_w.map(|v| v.as_slice()), self.config.norm_eps);
-        let ffn_out    = self.ffn(&x_normed2, layer);
+        let ffn_out    = self.ffn(&x_normed2, layer)?;
 
         // Surgical FFN explosion guard — clamp only ffn_out (before residual add).
         //
@@ -877,12 +880,12 @@ impl KillerInference {
             ffn_out
         };
 
-        add(&x, &ffn_out)
+        Ok(add(&x, &ffn_out))
     }
 
     // -- Self-attention with RoPE + GQA + KV cache + optional QKV bias ---------
 
-    fn attention(&self, x: &[f32], pos: usize, layer: usize, kv: &mut Vec<KVLayer>) -> Vec<f32> {
+    fn attention(&self, x: &[f32], pos: usize, layer: usize, kv: &mut Vec<KVLayer>) -> Result<Vec<f32>, String> {
         let cfg      = &self.config;
         let hd       = cfg.head_dim;
         let q_dim    = cfg.n_heads    * hd;
@@ -893,13 +896,13 @@ impl KillerInference {
         // Q K V projections (+ bias when Qwen2 / Phi)
         let q = self.proj_maybe_bias(x, &format!("blk.{}.attn_q.weight",      layer),
                                          if use_bias { Some(format!("blk.{}.attn_q.bias", layer)) } else { None },
-                                         q_dim,  cfg.n_embd);
+                                         q_dim,  cfg.n_embd)?;
         let k = self.proj_maybe_bias(x, &format!("blk.{}.attn_k.weight",      layer),
                                          if use_bias { Some(format!("blk.{}.attn_k.bias", layer)) } else { None },
-                                         kv_dim, cfg.n_embd);
+                                         kv_dim, cfg.n_embd)?;
         let v = self.proj_maybe_bias(x, &format!("blk.{}.attn_v.weight",      layer),
                                          if use_bias { Some(format!("blk.{}.attn_v.bias", layer)) } else { None },
-                                         kv_dim, cfg.n_embd);
+                                         kv_dim, cfg.n_embd)?;
 
         // Apply RoPE positional encoding to Q and K
         let q = rope(&q, pos, cfg.n_heads,    hd, cfg.rope_theta, cfg.arch.rope_neox());
@@ -984,12 +987,12 @@ impl KillerInference {
 
     // -- SwiGLU Feed-Forward Network -------------------------------------------
 
-    fn ffn(&self, x: &[f32], layer: usize) -> Vec<f32> {
+    fn ffn(&self, x: &[f32], layer: usize) -> Result<Vec<f32>, String> {
         let cfg = &self.config;
 
         // Gate and up projections (checked in weights_q first via self.proj)
-        let gate = self.proj(x, &format!("blk.{}.ffn_gate.weight", layer), cfg.n_ff, cfg.n_embd);
-        let up   = self.proj(x, &format!("blk.{}.ffn_up.weight",   layer), cfg.n_ff, cfg.n_embd);
+        let gate = self.proj(x, &format!("blk.{}.ffn_gate.weight", layer), cfg.n_ff, cfg.n_embd)?;
+        let up   = self.proj(x, &format!("blk.{}.ffn_up.weight",   layer), cfg.n_ff, cfg.n_embd)?;
 
         // SwiGLU activation: silu(gate) ⊙ up
         let hidden: Vec<f32> = gate.iter().zip(up.iter())
@@ -1005,26 +1008,26 @@ impl KillerInference {
 
     // -- Weight projection helper ----------------------------------------------
 
-    fn proj(&self, x: &[f32], name: &str, out_dim: usize, in_dim: usize) -> Vec<f32> {
+    fn proj(&self, x: &[f32], name: &str, out_dim: usize, in_dim: usize) -> Result<Vec<f32>, String> {
         if let Some(q) = self.weights_q.get(name) {
             return q.matvec(x, out_dim, in_dim);
         }
-        match self.weights.get(name) {
+        Ok(match self.weights.get(name) {
             Some(w) => matmul(x, w, out_dim, in_dim),
             None    => vec![0.0; out_dim],
-        }
+        })
     }
 
     /// Projection with an optional bias vector (used by Qwen2 / Phi for QKV).
     fn proj_maybe_bias(&self, x: &[f32], weight: &str, bias: Option<String>,
-                       out_dim: usize, in_dim: usize) -> Vec<f32> {
-        let mut y = self.proj(x, weight, out_dim, in_dim);
+                       out_dim: usize, in_dim: usize) -> Result<Vec<f32>, String> {
+        let mut y = self.proj(x, weight, out_dim, in_dim)?;
         if let Some(bname) = bias {
             if let Some(bv) = self.weights.get(&bname) {
                 for (yi, &bi) in y.iter_mut().zip(bv.iter()) { *yi += bi; }
             }
         }
-        y
+        Ok(y)
     }
 }
 
@@ -1302,7 +1305,12 @@ mod tests {
         }));
         let emb = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| eng.embed_text("a")));
         MATVEC_WORKER_PANIC.with(|c| c.set(false));
-        assert!(gen.is_ok(), "generate() panicked instead of returning Err");
-        assert!(emb.is_ok(), "embed_text() panicked instead of returning Err");
+        let gen = gen.expect("generate() panicked instead of returning Err");
+        let emb = emb.expect("embed_text() panicked instead of returning Err");
+        assert!(gen.unwrap_err().contains("worker thread panicked"));
+        assert!(emb.unwrap_err().contains("worker thread panicked"));
+        // Without the injected fault the same engine still works.
+        assert!(eng.generate("a", &GenerateConfig::greedy(2)).is_ok());
+        assert_eq!(eng.embed_text("a").unwrap().len(), eng.config.n_embd);
     }
 }

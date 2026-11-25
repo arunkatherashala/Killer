@@ -53,20 +53,20 @@ impl KillerEmbedder {
     /// Convert a text string to a dense L2-normalized float vector.
     ///
     /// Length of the returned `Vec<f32>` equals `self.dims`.
-    pub fn embed(&mut self, text: &str) -> Vec<f32> {
+    pub fn embed(&mut self, text: &str) -> Result<Vec<f32>, String> {
         self.engine.embed_text(text)
     }
 
     /// Embed multiple texts.  Returns one vector per input.
-    pub fn embed_batch(&mut self, texts: &[&str]) -> Vec<Vec<f32>> {
+    pub fn embed_batch(&mut self, texts: &[&str]) -> Result<Vec<Vec<f32>>, String> {
         texts.iter().map(|t| self.engine.embed_text(t)).collect()
     }
 
     /// Compute cosine similarity between two texts (embeds both, then dots).
-    pub fn similarity(&mut self, a: &str, b: &str) -> f32 {
-        let va = self.embed(a);
-        let vb = self.embed(b);
-        cosine_similarity(&va, &vb)
+    pub fn similarity(&mut self, a: &str, b: &str) -> Result<f32, String> {
+        let va = self.embed(a)?;
+        let vb = self.embed(b)?;
+        Ok(cosine_similarity(&va, &vb))
     }
 
     /// Embed and add a single document string to a `VectorStore`.
@@ -76,17 +76,18 @@ impl KillerEmbedder {
                            text: &str,
                            chunk_size: usize,
                            overlap: usize,
-                           source: Option<String>) {
+                           source: Option<String>) -> Result<(), String> {
         let chunks = chunk_text(text, chunk_size, overlap);
         let source_ref = source.as_deref();
 
         for chunk in &chunks {
-            let emb = self.embed(chunk);
+            let emb = self.embed(chunk)?;
             store.add(chunk, emb, source_ref.map(|s| s.to_string()));
         }
 
         eprintln!("[KillerEmbed] Indexed {} chunks from {:?}",
                   chunks.len(), source.unwrap_or_else(|| "(no source)".into()));
+        Ok(())
     }
 
     /// Index multiple documents at once.
@@ -94,19 +95,20 @@ impl KillerEmbedder {
                             store: &mut VectorStore,
                             docs: &[(&str, Option<&str>)],
                             chunk_size: usize,
-                            overlap: usize) {
+                            overlap: usize) -> Result<(), String> {
         for (text, source) in docs {
             self.index_document(store, text, chunk_size, overlap,
-                                source.map(|s| s.to_string()));
+                                source.map(|s| s.to_string()))?;
         }
+        Ok(())
     }
 
     /// Find the `top_k` chunks from `store` most similar to `question`.
     pub fn retrieve<'a>(&mut self, store: &'a VectorStore, question: &str, top_k: usize)
-        -> Vec<&'a str>
+        -> Result<Vec<&'a str>, String>
     {
-        let q_emb = self.embed(question);
-        store.query(&q_emb, top_k)
+        let q_emb = self.embed(question)?;
+        Ok(store.query(&q_emb, top_k))
     }
 }
 
@@ -169,12 +171,12 @@ pub fn killer_rag(embed_model: &str,
     // Step 1: Load embed model and index all documents
     let mut embedder = KillerEmbedder::load(embed_model)?;
     let mut store    = VectorStore::new();
-    embedder.index_documents(&mut store, docs, 512, 64);
+    embedder.index_documents(&mut store, docs, 512, 64)?;
 
     eprintln!("[KillerRAG] Indexed {} chunks total.", store.len());
 
     // Step 2: Embed the question and retrieve top-K relevant chunks
-    let relevant = embedder.retrieve(&store, question, top_k);
+    let relevant = embedder.retrieve(&store, question, top_k)?;
 
     if relevant.is_empty() {
         eprintln!("[KillerRAG] No relevant chunks found — falling back to direct question.");
@@ -189,9 +191,7 @@ pub fn killer_rag(embed_model: &str,
     // Step 4: Generate answer with the LLM
     let mut llm = KillerInference::load(llm_model)?;
     use super::sampler::GenerateConfig;
-    let answer = llm.generate(&prompt, &GenerateConfig::new(max_tokens));
-
-    Ok(answer)
+    llm.generate(&prompt, &GenerateConfig::new(max_tokens))
 }
 
 /// RAG with a single model doing both embedding and generation.

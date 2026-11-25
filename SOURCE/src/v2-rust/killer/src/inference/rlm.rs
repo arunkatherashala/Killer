@@ -212,7 +212,7 @@ pub fn killer_think(model_path: &str, question: &str, max_tokens: usize)
     // after closing </think> (it tries to start a new conversation turn).
     let cfg = GenerateConfig::new(max_tokens)
         .with_stop_tokens(vec![QWEN2_IM_END, QWEN2_IM_START]);
-    let raw = engine.generate(&prompt, &cfg);
+    let raw = engine.generate(&prompt, &cfg)?;
     Ok(split_thinking(&raw))
 }
 
@@ -225,7 +225,7 @@ pub fn killer_think_with_system(model_path: &str, question: &str,
     let mut engine = KillerInference::load(model_path)?;
     let cfg = GenerateConfig::new(max_tokens)
         .with_stop_tokens(vec![QWEN2_IM_END, QWEN2_IM_START]);
-    let raw = engine.generate(&prompt, &cfg);
+    let raw = engine.generate(&prompt, &cfg)?;
     Ok(split_thinking(&raw))
 }
 
