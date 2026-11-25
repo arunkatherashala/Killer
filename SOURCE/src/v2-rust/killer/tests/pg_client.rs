@@ -676,7 +676,7 @@ fn malformed_or_oversized_server_messages_are_errors_not_panics() {
             while fk.read().is_some() {}
         });
         let c = connect(&url);
-        let r = std::panic::catch_unwind(|| call("pg_query", &[c.clone(), s("SELECT a")]));
+        let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| call("pg_query", &[c.clone(), s("SELECT a")])));
         let r = r.unwrap_or_else(|_| panic!("{name}: pg_query panicked"));
         let e = r.expect_err(name);
         assert!(e.contains("pg_query"), "{name}: {e}");
@@ -740,7 +740,7 @@ fn malformed_handshakes_are_errors_not_panics() {
             let _ = fk.s.shutdown(std::net::Shutdown::Write);
             while fk.read().is_some() {}
         });
-        let r = std::panic::catch_unwind(|| call("pg_connect", &[s(&url)]));
+        let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| call("pg_connect", &[s(&url)])));
         let r = r.unwrap_or_else(|_| panic!("{name}: pg_connect panicked"));
         let e = r.expect_err(name);
         assert!(e.contains("pg_connect"), "{name}: {e}");
