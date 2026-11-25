@@ -18,16 +18,38 @@ use super::quant;
 #[derive(Debug, Clone, PartialEq)]
 pub enum ArchType { LLaMA, Qwen2, Phi, Gemma, Mistral, Unknown }
 
+/// Architectures whose block structure this engine does not implement. Running them with
+/// LLaMA settings would produce garbage, so loading fails with this reason instead.
+const UNSUPPORTED_ARCHS: &[(&str, &str)] = &[
+    ("falcon", "fused QKV, parallel attention + MLP, LayerNorm with bias and GELU MLP are not implemented"),
+    ("gptneox", "fused QKV, parallel residual (attention + MLP), LayerNorm with bias, partial-dimension NEOX RoPE and GELU MLP are not implemented"),
+    ("gptj", "parallel attention + MLP, LayerNorm with bias, partial-dimension RoPE and GELU MLP are not implemented"),
+    ("gpt2", "learned position embeddings, fused QKV, LayerNorm with bias and GELU MLP are not implemented"),
+    ("bloom", "ALiBi positions, fused QKV, LayerNorm with bias and GELU MLP are not implemented"),
+    ("mpt", "ALiBi positions, fused QKV, LayerNorm and GELU MLP are not implemented"),
+    ("starcoder", "learned position embeddings, multi-query fused QKV, LayerNorm with bias and GELU MLP are not implemented"),
+];
+
 impl ArchType {
-    fn from_str(s: &str) -> Self {
-        match s {
+    /// Map `general.architecture`. Known-incompatible families are an error; other unknown
+    /// names fall back to LLaMA settings with a warning (the tensor checks at load still apply).
+    fn from_str(s: &str) -> Result<Self, String> {
+        Ok(match s {
             "llama"   | "llama2"  | "llama3"           => ArchType::LLaMA,
             "qwen2"   | "qwen"    | "qwen2_5"           => ArchType::Qwen2,
             "phi"     | "phi2"    | "phi3"               => ArchType::Phi,
             "gemma"   | "gemma2"                         => ArchType::Gemma,
             "mistral" | "mixtral"                        => ArchType::Mistral,
-            _                     => ArchType::LLaMA,  // sensible default
-        }
+            _ => {
+                if let Some((name, why)) = UNSUPPORTED_ARCHS.iter().find(|(n, _)| *n == s) {
+                    return Err(format!(
+                        "unsupported architecture {}: {} (the engine runs LLaMA-family decoders only)",
+                        name, why));
+                }
+                eprintln!("[Killer] warning: architecture '{}' is not recognised; using LLaMA settings", s);
+                ArchType::LLaMA
+            }
+        })
     }
 
     /// RoPE pairing: true = NEOX style (rotate element i with i + head_dim/2: Qwen2, Phi,
@@ -64,7 +86,7 @@ pub struct ModelConfig {
 impl ModelConfig {
     fn from_gguf(gguf: &GgufFile) -> Result<Self, String> {
         let arch_str = gguf.meta_str("general.architecture").unwrap_or_else(|| "llama".to_string());
-        let arch     = ArchType::from_str(&arch_str);
+        let arch     = ArchType::from_str(&arch_str)?;
         let p        = &arch_str; // metadata key prefix matches arch string
 
         let n_layers   = gguf.meta_u64(&format!("{}.block_count",             p)).ok_or("missing block_count")? as usize;
