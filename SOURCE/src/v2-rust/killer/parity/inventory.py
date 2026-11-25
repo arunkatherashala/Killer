@@ -6,7 +6,7 @@ For every .rs file under src/ it records:
   lines       - physical lines
   status      - COMPILED  (reachable through `mod` declarations from lib.rs or a bin entry point)
                 DEAD      (never declared as a module anywhere: the compiler never sees it)
-                BIN       (src/bin/*.rs, each is its own binary)
+                BIN       (src/bin/*.rs and src/main.rs, each is its own binary)
   tests       - number of #[test] functions inside the file
   stub_marks  - occurrences of simulation/placeholder markers (simulated, placeholder, TODO,
                 unimplemented!, todo!, "not yet implemented", stub, mock). A high count relative to
@@ -81,7 +81,8 @@ def main():
             p = os.path.normpath(os.path.join(root, f))
             text = read(p)
             rel = os.path.relpath(p, CRATE).replace(os.sep, "/")
-            in_bin = rel.startswith("src/bin/")
+            # src/main.rs is Cargo's auto-discovered default binary (`killer-native`)
+            in_bin = rel.startswith("src/bin/") or rel == "src/main.rs"
             status = "BIN" if in_bin else ("COMPILED" if p in compiled else "DEAD")
             rows.append({
                 "path": rel,

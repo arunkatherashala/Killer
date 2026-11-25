@@ -108,7 +108,9 @@ first-class values (variables, arguments, return values, callbacks, lambdas, clo
 
 ## 4. File parity: what is actually compiled
 
-592 Rust files, 291,400 lines (`FILE_INVENTORY.csv`, regenerated with `python parity/inventory.py`):
+At the time of the audit: 592 Rust files, 291,400 lines (`FILE_INVENTORY.csv`, regenerated with
+`python parity/inventory.py`). After the archiving passes the current inventory (2026-11-25) is 391
+files: 336 compiled, 50 binaries, 5 never compiled (1,805 lines). The audit-time table:
 
 | Status | Files | Lines | Inline tests |
 |--------|------:|------:|-------------:|
@@ -162,14 +164,16 @@ manager, the tooling suite, HTTP server, vector store and RAG helpers, resource 
 1. **Block scoping.** A variable first assigned inside an `if`/loop body is not visible after the block
    (`Undefined variable`); another change is fixing this (in progress, not yet merged here).
 2. `len(s)` and `s[i]` are O(n) on very long strings (ASCII scan per call; non-ASCII uses `chars().nth`).
-3. The Killer HTTP server has no TLS and serves one request at a time.
+3. The Killer HTTP server serves one request at a time. (TLS serving was added later through the
+   system `openssl`: `serve(..., {tls: {cert, key}})`, `tests/tls_server.rs`.)
 4. The debugger (`killer_dap`) shows one stack frame (innermost scope plus globals).
 5. Closures created before the enclosing function first assigns a captured variable keep the old
    copy semantics (the sharing decision is textual, see `closure_scan.rs`).
 6. `bool(0n)` is `true` although `if 0n` is falsy; floats of 2^63 or more print saturated.
 7. `count_tokens` is an approximation (about 10-20 percent off GPT-style tokenizers); the real tokenizer
    needs a GGUF model.
-8. 192 source files (88,289 lines) are never compiled: wire in, archive, or delete.
+8. 192 source files (88,289 lines) were never compiled. Since archived with `git mv` (see
+   `docs/STATUS.md`); 5 dead files remain in `src/` (current `FILE_INVENTORY.csv`).
 9. HTTPS needs `curl` on the machine (the client shells out to it); there is no built-in TLS.
 10. A real end-to-end test for GGUF inference, and a real Parquet comparison for Kore.
 11. Builtins owned by the net/AI modules (`vec_*`, `serve`, `llm_embed_batch`, ...) can be called but not
