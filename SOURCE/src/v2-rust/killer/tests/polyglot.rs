@@ -275,6 +275,27 @@ fn bash_sleep_timeout_kills_the_process_tree() {
 }
 
 #[test]
+fn timeout_kills_a_grandchild_after_its_parent_exited() {
+    need!("python");
+    // the block starts a child that keeps the output pipes and exits at once: on timeout only
+    // the grandchild is left, and it must die before it writes the marker
+    let marker = unique("grandchild_marker");
+    let m = marker.to_string_lossy().replace('\\', "/");
+    let src = format!(
+        "try {{\n    x = @python {{\n        import subprocess, sys\n        subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(8); open(\"{m}\", \"w\").write(\"late\")'], stdout=sys.stdout, stderr=sys.stderr)\n    }}\n    println(\"no timeout\")\n}} catch e {{\n    println(\"caught: \" + str(e))\n}}\n"
+    );
+    let start = std::time::Instant::now();
+    let (o, _) = run_watch(&src, &[("KILLER_POLYGLOT_TIMEOUT", "3")], None, WATCH);
+    while start.elapsed() < std::time::Duration::from_secs(15) {
+        std::thread::sleep(std::time::Duration::from_millis(200));
+    }
+    let leaked = marker.exists();
+    let _ = std::fs::remove_file(&marker);
+    assert!(o.stdout.contains("timed out"), "{}", o.all());
+    assert!(!leaked, "the grandchild survived the timeout and wrote its marker: {}", o.all());
+}
+
+#[test]
 fn output_cap_stops_a_flood() {
     need!("python");
     let src = "try {
