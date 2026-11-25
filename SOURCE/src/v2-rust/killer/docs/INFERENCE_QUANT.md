@@ -31,8 +31,25 @@ against the file length with overflow-safe arithmetic when the file is opened. F
 
 ## Tokenizer and RoPE
 
-- GPT-2 style BPE (Qwen2, LLaMA 3) applies `tokenizer.ggml.merges` ranks. The GPT-2/Qwen pre-tokenizer regex is
-  **not** implemented, so segments are merged as one run of bytes; token ids can differ from the reference
-  tokenizer on mixed text.
-- RoPE pairs (i, i+d/2) for Qwen2, Phi and Gemma and (i, i+1) for LLaMA/Mistral. Falcon/GPT-NeoX architectures are
-  not recognised by the engine.
+- GPT-2 style BPE (Qwen2, LLaMA 3) applies `tokenizer.ggml.merges` ranks inside pre-tokens. The pre-tokenizer is
+  chosen by `tokenizer.ggml.pre` and implemented as a hand-written scanner (`src/inference/pretokenizer.rs`, no
+  regex crate) equivalent to the reference regex:
+  - `gpt-2`, `gpt2`, `phi-2`, `mpt`, `olmo`, `roberta-bpe`: GPT-2 regex (contractions, ` ?` letters / numbers /
+    symbols, whitespace runs that leave the last space to the next word).
+  - `llama3`, `llama-v3`, `llama-bpe`, `falcon3`, `dbrx`, `smaug-bpe`: LLaMA 3 regex (case-insensitive contractions,
+    one non-letter prefix before letters, numbers in groups of up to 3, newline handling).
+  - `qwen2`, `deepseek-r1-qwen`, `stablelm2`: as LLaMA 3 but every digit is its own pre-token.
+  - `starcoder`, `refact`, `command-r`, `smollm`: every digit split off, then GPT-2.
+  - Missing or any other name: GPT-2 splitting with a warning on stderr (`KillerTokenizer::pre_warning`); ids can
+    differ from the reference tokenizer.
+
+  Character classes: `\s` and `\p{N}` use Rust's `is_whitespace` / `is_numeric` (same sets as the reference);
+  `\p{L}` is `is_alphabetic && !is_numeric`, which also counts Other_Alphabetic combining marks (for example
+  Devanagari vowel signs) as letters, so text with such marks can split differently. The splits were checked against
+  Python `re` with ASCII class approximations on 12000 random ASCII strings (the `regex` module was not available);
+  non-ASCII cases are unit tested by hand-derived expectations only. Not compared with a real tokenizer.json.
+- RoPE pairs (i, i+d/2) for Qwen2, Phi and Gemma and (i, i+1) for LLaMA/Mistral.
+- Architectures: `falcon`, `gptneox`, `gptj`, `gpt2`, `bloom`, `mpt` and `starcoder` are rejected at load with
+  `unsupported architecture <name>: ...` (they need fused QKV, parallel residual, LayerNorm with bias, GELU MLP or
+  ALiBi / learned positions, none of which the engine implements). Other unrecognised `general.architecture` values
+  still run with LLaMA settings and print a warning; the tensor name and shape checks still apply.

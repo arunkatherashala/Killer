@@ -4,6 +4,15 @@ All notable changes to `killer-native` are documented here.
 
 ## [Unreleased]
 
+### Inference
+- Byte-level BPE models now split text into pre-tokens before merges, like the reference tokenizers: GPT-2,
+  LLaMA 3 (`llama-bpe`), Qwen2 (one digit per pre-token) and StarCoder families, selected by
+  `tokenizer.ggml.pre`. Token ids for such models change (they were merged across word boundaries before). A
+  missing or unsupported pre name falls back to GPT-2 splitting and prints a warning.
+- `falcon`, `gptneox`, `gptj`, `gpt2`, `bloom`, `mpt` and `starcoder` GGUF models are rejected at load with
+  `unsupported architecture <name>: ...` instead of running with LLaMA settings. Other unrecognised architectures
+  still fall back to LLaMA, now with a warning.
+
 ### Documentation
 - New: `docs/STABILITY.md` (stability and deprecation policy, past behaviour changes), `docs/OPERATIONS.md` (every `KILLER_*` variable, limits, what is missing), `docs/PERFORMANCE.md` (honest index of `bench/RESULTS.md`), `SOURCE/docs/project/THREAT_MODEL.md` (threat, mitigation, proof test, residual risk).
 - `docs/FEATURES.md` now has a Proof column naming a test file per row; unproven rows were downgraded (`untested`/`partial`) and the Not built list was extended. README claims aligned (HTTP server TLS, release signing, test count).
