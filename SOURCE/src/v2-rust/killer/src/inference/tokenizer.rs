@@ -527,6 +527,31 @@ mod tests {
         assert_eq!(tok.encode("abc", false), vec![3, 7]);
     }
 
+    // Merges must not cross pre-token boundaries. GPT-2 pre-tokenizer splits "a b" into
+    // ["a", " b"] (` ?\p{L}+`), so the rank-0 merge "a Ġ" (a + space) can never apply.
+    // Python reference (GPT-2 regex, ASCII text so `re` with [A-Za-z] is exact here):
+    //   re.findall(r"'s|'t|'re|'ve|'m|'ll|'d| ?[A-Za-z]+| ?[0-9]+| ?[^\sA-Za-z0-9]+|\s+(?!\S)|\s+", "a b")
+    //   -> ['a', ' b']
+    #[test]
+    fn bpe_merges_do_not_cross_pre_token_boundaries() {
+        let vocab: Vec<String> = ["<unk>", "<s>", "</s>", "a", "b", "\u{120}", "a\u{120}", "\u{120}b"]
+            .iter().map(|s| s.to_string()).collect();
+        let vocab_size = vocab.len();
+        let mut token_to_id = HashMap::new();
+        for (i, v) in vocab.iter().enumerate() { token_to_id.insert(v.clone(), i as u32); }
+        let mut merge_ranks = HashMap::new();
+        merge_ranks.insert(("a".to_string(), "\u{120}".to_string()), 0);
+        merge_ranks.insert(("\u{120}".to_string(), "b".to_string()), 1);
+        let tok = KillerTokenizer {
+            token_scores: vec![0.0; vocab_size],
+            token_types: vec![1u32; vocab_size],
+            vocab_size, bos_id: 1, eos_id: 2, pad_id: 0, unk_id: 0,
+            vocab, token_to_id, merge_ranks, is_spm: false,
+        };
+        // a=3, Ġb=7 (without pre-tokenization the result is [aĠ=6, b=4])
+        assert_eq!(tok.encode("a b", false), vec![3, 7]);
+    }
+
     #[test]
     fn test_is_eos() {
         let tok = make_tokenizer();
