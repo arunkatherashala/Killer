@@ -455,10 +455,13 @@ pub const ENV_ALLOW_OS: &[&str] = &[
 #[cfg(not(windows))]
 pub const ENV_ALLOW_OS: &[&str] = &["USER", "LOGNAME"];
 
+/// Clear the child environment, then copy the allowlisted variables (and `KILLER_POLYGLOT_ENV_PASS`)
+/// from the startup snapshot (`tool_path`), so a script's `env_set` cannot change what a block
+/// gets, such as its PATH.
 fn scrub_env(cmd: &mut Command, s: &Settings) {
     cmd.env_clear();
     for name in ENV_ALLOW.iter().chain(ENV_ALLOW_OS.iter()).map(|n| n.to_string()).chain(s.env_pass.iter().cloned()) {
-        if let Some(v) = std::env::var_os(&name) {
+        if let Some(v) = crate::tool_path::var_os(&name) {
             cmd.env(&name, v);
         }
     }

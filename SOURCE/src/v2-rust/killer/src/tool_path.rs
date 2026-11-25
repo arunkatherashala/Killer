@@ -17,6 +17,8 @@ struct Snapshot {
     curl: Option<String>,
     /// Every `KILLER_*` variable at snapshot time (polyglot runtime overrides and settings).
     killer_vars: Vec<(String, String)>,
+    /// The whole environment at snapshot time (the allowlisted variables a polyglot child gets).
+    env: Vec<(OsString, OsString)>,
 }
 
 static SNAP: OnceLock<Snapshot> = OnceLock::new();
@@ -31,6 +33,7 @@ fn snap() -> &'static Snapshot {
             .filter_map(|(k, v)| Some((k.into_string().ok()?, v.into_string().ok()?)))
             .filter(|(k, _)| k.to_ascii_uppercase().starts_with("KILLER_"))
             .collect(),
+        env: std::env::vars_os().collect(),
     })
 }
 
@@ -138,6 +141,16 @@ pub fn powershell() -> Result<PathBuf, String> {
 /// cannot change it afterwards).
 pub fn var(name: &str) -> Option<String> {
     snap().killer_vars.iter().find(|(k, _)| if cfg!(windows) { k.eq_ignore_ascii_case(name) } else { k == name }).map(|(_, v)| v.clone())
+}
+
+/// Any environment variable as it was when the snapshot was taken (`env_set` cannot change it
+/// afterwards). Names are case-insensitive on Windows.
+pub fn var_os(name: &str) -> Option<OsString> {
+    snap()
+        .env
+        .iter()
+        .find(|(k, _)| if cfg!(windows) { k.to_string_lossy().eq_ignore_ascii_case(name) } else { k.as_os_str() == std::ffi::OsStr::new(name) })
+        .map(|(_, v)| v.clone())
 }
 
 /// A file, or (Windows) an app execution alias, which `metadata` cannot follow but which can run.

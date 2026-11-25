@@ -208,6 +208,7 @@ pub fn call(name: &str, args: &[Value]) -> Option<Result<Value, VmError>> {
                 crate::security::require_process_spawn()?;
                 let text = std::fs::read_to_string(path).map_err(|e| VmError::runtime_error(format!("load_env: cannot read {}: {}", path, e)))?;
                 let mut set = Vec::new();
+                crate::tool_path::freeze_environment(); // helpers and polyglot blocks keep the startup values
                 for (k, v) in parse_env(&text) {
                     if std::env::var_os(&k).is_none() && !v.contains('\0') {
                         std::env::set_var(&k, &v);
