@@ -68,13 +68,13 @@ pub use model_registry::{
 /// ```
 pub fn killer_ask(model_path: &str, prompt: &str, max_tokens: usize) -> Result<String, String> {
     let mut engine = KillerInference::load(model_path)?;
-    Ok(engine.ask(prompt, max_tokens))
+    engine.ask(prompt, max_tokens)
 }
 
 /// Full-control generation with a custom [`GenerateConfig`].
 pub fn killer_generate(model_path: &str, prompt: &str, cfg: &GenerateConfig) -> Result<String, String> {
     let mut engine = KillerInference::load(model_path)?;
-    Ok(engine.generate(prompt, cfg))
+    engine.generate(prompt, cfg)
 }
 
 /// Inspect basic model information from a GGUF file without loading weights.
@@ -236,7 +236,7 @@ pub fn killer_llm_as_rlm(model_path: &str, question: &str, max_tokens: usize)
 /// ```
 pub fn killer_embed(model_path: &str, text: &str) -> Result<Vec<f32>, String> {
     let mut engine = KillerInference::load(model_path)?;
-    Ok(engine.embed_text(text))
+    engine.embed_text(text)
 }
 
 /// Full RAG pipeline: index docs → embed question → retrieve → generate answer.
