@@ -1266,6 +1266,9 @@ impl BuiltinFunctions {
                 if let Some(result) = crate::sql_engine::call(name, args) {
                     return result;
                 }
+                if let Some(result) = crate::jwt::call(name, args) {
+                    return result;
+                }
                 if let Some(result) = crate::eval_builtins::call(name, args) {
                     return result;
                 }
