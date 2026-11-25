@@ -52,6 +52,7 @@ The row-by-row history is in the root `tracker.csv`; the Python comparison is in
 | TLS client sockets | yes | `tcp_connect_tls`, `wss://`; verified through the system `openssl` command | tests/sockets.rs, tests/tool_resolution.rs; needs system `openssl` |
 | TLS servers (HTTPS, `wss://`) | yes | `tls_listen` / `tls_accept`, `serve(..., {tls: {cert, key}})`, `ws_accept` on a TLS listener; one `openssl s_server` child per connection; needs `openssl` on the PATH | tests/tls_server.rs; needs system `openssl` |
 | SQL database | yes | `sql_open` / `sql_exec` / `sql_query`: SQL with joins (INNER, LEFT, CROSS), aliases, subqueries, GROUP BY / HAVING, DISTINCT; file or memory | tests/sql_joins.rs, tests/language_additions.rs |
+| PostgreSQL client | partial | `pg_connect` / `pg_query` / `pg_exec` / `pg_close`: protocol v3, SCRAM-SHA-256 (MD5/cleartext only by opt-in), simple and parameterized (`$1`) queries, SQLSTATE errors; plaintext only (no TLS), text values only, no COPY. Tested against an in-test fake server only; the live test runs only when `KILLER_PG_URL` is set | tests/pg_client.rs (`scram_login_simple_query_rows_and_close`, `extended_query_binds_parameters_as_text`, `malformed_or_oversized_server_messages_are_errors_not_panics`, `live_server_when_killer_pg_url_is_set`), src/pg_client.rs (`scram_rfc7677_test_vector`) |
 | Process control, environment | partial | | tests/capabilities.rs (gating only); behaviour not separately tested by name |
 | Graphical windows (GUI) | yes | native widgets with `window(...)` (label, button, input, checkbox, list, combo, `message_box`): real Win32 controls on Windows, a headless model elsewhere or with `KILLER_GUI_HEADLESS=1`; the browser window `gui_show` / `gui_open` works everywhere. Real windows were created and driven in tests but never looked at on a screen | tests/gui_native.rs (programmatic only) |
 | WebAssembly output | partial | `killer wasm`: numbers, ASCII strings (concat, compare, index, iterate) and lists of numbers (index, assign, push, iterate) with a bump allocator and host helpers; no dicts, objects, `str()`, lists of strings, or non-ASCII text | tests/wasm.rs |
@@ -87,7 +88,7 @@ The row-by-row history is in the root `tracker.csv`; the Python comparison is in
 2. Native GUI widgets beyond the vertical stack; SQL RIGHT/FULL joins, UNION and window functions.
 3. Live LLM provider tests (need an API key) and a run of the release workflow (needs a tag).
 4. A TLS stack inside Killer (rustls or similar): TLS needs the system `openssl` and HTTPS needs `curl`.
-5. Database drivers for PostgreSQL, MongoDB and others; Kafka, Spark; a message queue (archived 7-21 line stubs, see STATUS.md).
+5. Database drivers for MongoDB, MySQL and others (PostgreSQL has a minimal plaintext client, see above), TLS to PostgreSQL; Kafka, Spark; a message queue (archived 7-21 line stubs, see STATUS.md).
 6. Observability: Prometheus, OpenTelemetry, distributed tracing exporters; no metrics endpoint.
 7. Authentication standards: JWT, OAuth2, OIDC, RBAC/ABAC (archived stubs only).
 8. AES, SHA-3, Argon2, public-key crypto, code or release signing.

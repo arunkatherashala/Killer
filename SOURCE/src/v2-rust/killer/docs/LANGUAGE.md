@@ -1442,6 +1442,46 @@ println(sql_query(db, "SELECT COUNT(*) AS n, AVG(age) AS mean FROM users")[0]["m
 # expect: 30.333333333333332
 ```
 
+## PostgreSQL client
+
+`pg_connect(url_or_dict[, opts])` connects to a PostgreSQL server (frontend/backend protocol 3) and returns a handle.
+The URL form is `postgres://user:password@host:port/database` (or `postgresql://`; user, password and database are
+percent-decoded; URL parameters `sslmode`, `application_name`, `connect_timeout` in seconds). The dict form has
+`host` (default `localhost`), `port` (5432), `user` (required), `password`, `database` (default: the user name).
+Options, in the dict or in `opts`: `allow_md5`, `allow_cleartext` (both false), `connect_timeout_ms` (10000),
+`timeout_ms` (30000 per read, 0 waits forever), `application_name`, `sslmode`.
+
+`pg_query(conn, sql[, params])` returns `{"columns": [...], "rows": [...], "command": "SELECT 2", "row_count": 2}`.
+Each row is a dict from column name to the value **as text** (`null` for SQL NULL; convert with `int()` / `float()`);
+two columns with the same name keep the last value in the row dict (the `columns` list keeps both; use `AS`).
+Without `params` the simple query protocol runs the text (several `;`-separated statements are allowed and the
+result of the last one is returned). With `params` (a list of strings, numbers, booleans or null) the extended
+protocol binds `$1`, `$2`, ... as text, so a value is never parsed as SQL. `pg_exec(conn, sql[, params])` returns the
+affected row count from the command tag (`UPDATE 3` gives 3; `BEGIN`, `COMMIT` and DDL give 0). Transactions are
+plain statements: `pg_exec(c, "BEGIN")` ... `pg_exec(c, "COMMIT")`. `pg_close(conn)` sends Terminate and closes.
+
+```text
+c = pg_connect("postgres://app:secret@127.0.0.1:5432/shop")
+pg_exec(c, "BEGIN")
+n = pg_exec(c, "UPDATE items SET stock = stock - 1 WHERE id = $1", [42])
+r = pg_query(c, "SELECT id, name FROM items WHERE name LIKE $1", ["pen%"])
+pg_exec(c, "COMMIT")
+for row in r["rows"] { println(row["id"], row["name"]) }
+try { pg_query(c, "SELECT * FROM nope") } catch e { println(e) }   # ...ERROR: relation "nope" does not exist (SQLSTATE 42P01)
+pg_close(c)
+```
+
+Authentication is SCRAM-SHA-256 with the server's signature checked (a server that skips its proof is refused).
+MD5 (weak) and cleartext passwords are refused unless `allow_md5` / `allow_cleartext` is set; `trust` needs no
+password. The password is used as its UTF-8 bytes without SASLprep normalization (ASCII passwords are unaffected).
+A server error is a catchable error containing the severity, message, SQLSTATE, detail and hint; the connection stays
+usable. A protocol problem (malformed or oversized message, the server hanging up, a timeout) breaks the connection:
+later calls on it fail until `pg_close`. One server message may be at most 64 MiB, one result at most 256 MiB.
+**There is no TLS**: `sslmode=require`, `verify-ca` and `verify-full` are an error; use a local TLS proxy (stunnel,
+pgbouncer, an SSH tunnel) for a server across a network, and plaintext only on trusted networks. Not supported:
+COPY, LISTEN/NOTIFY delivery, binary results, cancel requests, prepared statement reuse. Every call needs the network
+capability; handles belong to the thread that opened them.
+
 ## Windows (GUI) and the step debugger
 
 **Browser windows.** The browser is the window. `gui_show(title, body_html, handlers, opts)` serves the page on a free local

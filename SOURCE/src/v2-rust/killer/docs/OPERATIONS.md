@@ -83,6 +83,25 @@ Read in the source (`grep 'env::var("KILLER_'`) or by the installers. Booleans: 
 `KILLER_EMBED_TEST_KEY`, `KILLER_EMBED_UNSET_VAR`, `KILLER_TEST*`, `KILLER_X`, `KILLER_PFX_PW` (internal, set on the
 TLS helper child). Do not set them.
 
+`KILLER_PG_URL` (for example `postgres://user:password@127.0.0.1:5432/postgres`) enables the otherwise skipped live
+test `live_server_when_killer_pg_url_is_set` in `tests/pg_client.rs`; it creates only a TEMP table.
+
+## PostgreSQL client (`pg_*`)
+
+* **Plaintext only.** The client has no TLS; `sslmode=require|verify-ca|verify-full` is refused at connect. Across a
+  network put a TLS proxy next to the script (stunnel, pgbouncer with `server_tls_sslmode`, an SSH tunnel) and connect
+  to it on loopback; use `sslmode=disable` directly only on a trusted network. Query text and results are visible to
+  anyone on the path.
+* **Authentication:** configure the server for `scram-sha-256` (`password_encryption = scram-sha-256`, `pg_hba.conf`
+  method `scram-sha-256`). The client checks the server's SCRAM signature. `md5` and `password` (cleartext) methods
+  are refused unless the script passes `allow_md5: true` / `allow_cleartext: true`; GSSAPI, SSPI, Kerberos and
+  certificate authentication are not supported. `trust` connects without a password.
+* **Limits:** connect timeout 10 s, 30 s per read (`timeout_ms`, 0 = none; set `statement_timeout` on the server for
+  long queries), 64 MiB per server message, 256 MiB of row data per result, SCRAM iteration count at most 10 million.
+  Exceeding a limit, a malformed message or the server hanging up breaks that connection (an error, never a crash).
+* **Not there:** connection pooling, cancel requests, COPY, LISTEN/NOTIFY, binary formats, automatic reconnect. One
+  connection per handle, used by the thread that opened it. Needs the network capability.
+
 ## Resource limits that exist
 
 * `eval`/`exec`: 50M steps, 30 s, 8 nested levels, memory cap above (`tests/eval_safety.rs`, `tests/eval_memory*.rs`).

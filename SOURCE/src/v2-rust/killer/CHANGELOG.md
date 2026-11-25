@@ -9,6 +9,12 @@ All notable changes to `killer-native` are documented here.
 - `docs/FEATURES.md` now has a Proof column naming a test file per row; unproven rows were downgraded (`untested`/`partial`) and the Not built list was extended. README claims aligned (HTTP server TLS, release signing, test count).
 
 ### Added
+- PostgreSQL client: `pg_connect(url_or_dict[, opts])`, `pg_query(conn, sql[, params])` (columns, rows as dicts of
+  text values, command tag, row count), `pg_exec(conn, sql[, params])` (affected rows), `pg_close(conn)`. Protocol v3
+  over plain TCP, SCRAM-SHA-256 with server-signature check, MD5/cleartext only with `allow_md5`/`allow_cleartext`,
+  `$1` parameters bound as text through the extended protocol, errors carry the SQLSTATE, every length field is
+  bounds-checked (64 MiB per message, 256 MiB per result). No TLS (`sslmode=require` is an error; use a local TLS
+  proxy). Tested against an in-test fake server (`tests/pg_client.rs`); a live test runs when `KILLER_PG_URL` is set.
 - Tooling: `killer new|init|add|remove|install|update|list|publish|check` in the `killer` driver (same code as `killer_pkg`); tests for `killer lsp` (hover, completion, definition of classes and variables), the VS Code extension files (`tests/vscode_extension.rs`), lockfile checksum verification when a registry and its checksum are both rewritten, `fmt` convergence over `examples/` with comments kept, and every lint suppression form.
 
 ### Security
