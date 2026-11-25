@@ -147,7 +147,7 @@ fn a_full_queue_answers_503_at_once() {
     let srv = start(&format!(
         r#"fn h(req) {{
   if req["path"] == "/slow" {{
-    sleep_ms(3000)
+    sleep_ms(5000)
     return "slow"
   }}
   return "ok"
@@ -158,10 +158,11 @@ println("served", n)
     ));
     wait_ready(port);
     // A takes the only worker, B waits in the queue (size 1), C finds the queue full
+    // (generous gaps: on a loaded machine a client thread or a reader can stall for a second)
     let a = std::thread::spawn(move || get(port, "/slow", 120));
-    std::thread::sleep(Duration::from_millis(600));
+    std::thread::sleep(Duration::from_millis(1500));
     let b = std::thread::spawn(move || get(port, "/b", 120));
-    std::thread::sleep(Duration::from_millis(600));
+    std::thread::sleep(Duration::from_millis(1500));
     let t = Instant::now();
     let c = get(port, "/c", 60);
     assert_eq!(c.0, 503, "queue full: {:?}", c);
