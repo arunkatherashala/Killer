@@ -525,7 +525,8 @@ pub fn compile_killer_subset(source: &str) -> Result<Program, VmError> {
     }
     // `@lang { ... }` bodies are taken verbatim from the untouched text before any other pass can
     // strip `//` / `--`, re-indent or rewrite quotes in them (same line count, so `map` is unchanged)
-    let imported = crate::polyglot_front::extract(&imported);
+    // A block that never closes is an error here, never a fallback to another parser.
+    let imported = crate::polyglot_front::extract(&imported).map_err(|m| remap_error(VmError::parse_error_simple(m), &map))?;
     // `x // 2` would silently become `x` (`//` starts a comment): make that mistake an error
     if let Some(line) = crate::hints::silent_floor_division(&imported) {
         return Err(remap_error(
@@ -900,12 +901,12 @@ pub fn compile_killer_ast(statements: &[crate::ast::Stmt]) -> Result<Program, Vm
 
 /// Indent + polyglot preprocessing (same order as [`compile_killer_subset`]). Exposed for
 /// [`crate::stmt_parser::parse_killer_program`].
-pub fn preprocess_killer_source(source: &str) -> String {
-    let source = &crate::polyglot_front::extract(source);
+pub fn preprocess_killer_source(source: &str) -> Result<String, VmError> {
+    let source = &crate::polyglot_front::extract(source).map_err(VmError::parse_error_simple)?;
     let sugared = crate::sugar::preprocess(source, &|l| parse_polyglot_header(l).is_some());
     let indented = preprocess_indentation(&sugared);
     let preprocessed = preprocess_polyglot(&indented);
-    preprocess_ui_sugar(&preprocessed)
+    Ok(preprocess_ui_sugar(&preprocessed))
 }
 
 /// If `callee` is the function currently being compiled, emit [`Instruction::TailCall`] instead of `Call`+`Ret`.
@@ -7952,60 +7953,12 @@ fn preprocess_polyglot_mapped(source: &str) -> (String, Vec<usize>) {
             continue;
         }
 
-        // Try to detect `@lang` annotation (with optional `name =` prefix)
-        if let Some((assign_target, lang, rest_after_lang)) = parse_polyglot_header(trimmed) {
-            let rest = rest_after_lang.trim();
-
-            // Locate the opening brace
-            // Case A: `@lang { ...` — `{` is on the same line right after the ident
-            // Case B: `@lang` alone — `{` may be on the very next line (normalize style)
-            // Anything else is not a polyglot block.
-            let (code, extra_lines) = if rest.starts_with('{') {
-                // Opening brace on same line — collect from right after `{`
-                let after_brace = &rest[1..];
-                collect_polyglot_body(after_brace, &src_lines, i + 1)
-            } else if rest.is_empty() {
-                // Check immediately next line for a lone `{`
-                let next_i = i + 1;
-                if next_i < src_lines.len() && src_lines[next_i].trim() == "{" {
-                    let (code, consumed) = collect_polyglot_body("", &src_lines, next_i + 1);
-                    (code, 1 + consumed) // +1 for the lone `{` line
-                } else {
-                    // @lang without a block — not polyglot, copy verbatim
-                    out.push_str(raw);
-                    out.push('\n');
-                    i += 1;
-                    continue;
-                }
-            } else {
-                // `@lang` followed by something that's not `{` — not polyglot
-                out.push_str(raw);
-                out.push('\n');
-                i += 1;
-                continue;
-            };
-
-            // Emit the synthetic single-line replacement
-            let escaped = polyglot_escape(&code);
-            if assign_target.is_empty() {
-                // Statement form — auto-print the captured output via a temp var
-                // (polyglot_exec captures stdout; discarding would silence all output)
-                out.push_str(&format!(
-                    "__nova_out__ = polyglot_exec(\"{}\", \"{}\")\nprint(__nova_out__)\n",
-                    lang, escaped
-                ));
-            } else {
-                out.push_str(&format!(
-                    "{} = polyglot_exec(\"{}\", \"{}\")\n",
-                    assign_target, lang, escaped
-                ));
-            }
-            i += 1 + extra_lines; // current @lang line + consumed body lines
-        } else {
-            out.push_str(raw);
-            out.push('\n');
-            i += 1;
-        }
+        // `@lang { ... }` blocks were already replaced by `polyglot_front::extract`, which rejects a
+        // block it cannot close. A header still here (for example inside a Killer triple-quoted
+        // string) is copied as written: blocks are never re-parsed by a second set of rules.
+        out.push_str(raw);
+        out.push('\n');
+        i += 1;
     }
     let added = out[mapped_to..].matches('\n').count();
     map.extend(std::iter::repeat(item_start).take(added));
@@ -8046,83 +7999,6 @@ fn parse_polyglot_header(line: &str) -> Option<(String, String, String)> {
     };
 
     Some((assign_target, lang, rest))
-}
-
-/// Collect the body of a `@lang { … }` block, preserving the original text.
-///
-/// `first_segment` — text right after the opening `{` on the same line (may be "").
-/// `lines`         — all source lines.
-/// `start`         — index into `lines` to continue from if needed.
-///
-/// Tracks brace depth (outside strings) so nested `{` / `}` in the foreign
-/// language are counted correctly.  Stops when depth returns to 0 (the
-/// matching outer `}`).
-///
-/// Returns `(code_text, extra_lines_consumed)`.
-fn collect_polyglot_body(
-    first_segment: &str,
-    lines: &[&str],
-    start: usize,
-) -> (String, usize) {
-    let mut parts: Vec<String> = Vec::new();
-    let mut depth = 1usize; // already inside the opening `{`
-    let mut in_str = false;
-    let mut prev_bs = false;
-
-    // Process one chunk of text; appends non-outer-close content to `parts`;
-    // returns true when the outer `}` (depth → 0) is found.
-    let mut process = |chunk: &str, parts: &mut Vec<String>| -> bool {
-        let mut piece = String::new();
-        for ch in chunk.chars() {
-            if in_str {
-                piece.push(ch);
-                if ch == '"' && !prev_bs { in_str = false; }
-                prev_bs = ch == '\\' && !prev_bs;
-                continue;
-            }
-            prev_bs = false;
-            match ch {
-                '"' => { in_str = true;  piece.push(ch); }
-                '{' => { depth += 1;     piece.push(ch); }
-                '}' => {
-                    depth -= 1;
-                    if depth == 0 {
-                        // Outer close found — flush and stop
-                        let t = piece.trim().to_string();
-                        if !t.is_empty() { parts.push(t); }
-                        return true;
-                    }
-                    piece.push(ch);
-                }
-                c   => piece.push(c),
-            }
-        }
-        let t = piece.trim().to_string();
-        if !t.is_empty() { parts.push(t); }
-        false
-    };
-
-    // Process the first segment (same line as `{`)
-    if process(first_segment, &mut parts) {
-        return (parts.join("\n"), 0);
-    }
-
-    // Process subsequent lines
-    for (offset, &line) in lines[start..].iter().enumerate() {
-        if process(line.trim(), &mut parts) {
-            return (parts.join("\n"), offset + 1);
-        }
-    }
-
-    (parts.join("\n"), lines.len().saturating_sub(start))
-}
-
-/// Escape a raw code string for embedding inside a Killer string literal.
-fn polyglot_escape(code: &str) -> String {
-    code.replace('\\', "\\\\")
-        .replace('"', "\\\"")
-        .replace('\n', "\\n")
-        .replace('\r', "")
 }
 
 /// Byte index one past a matching `}` for `{` at `open_idx`, same line only (`None` if unclosed).

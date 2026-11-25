@@ -9,7 +9,7 @@ use crate::lexer::{lex_with_newlines, Token, TokenKind};
 
 /// Preprocess, lex (with newlines), and parse a Killer program into AST statements.
 pub fn parse_killer_program(source: &str) -> Result<Vec<Stmt>, VmError> {
-    let pre = crate::compiler::preprocess_killer_source(source);
+    let pre = crate::compiler::preprocess_killer_source(source)?;
     let tokens = lex_with_newlines(&pre).map_err(|m| VmError::parse_error_simple(m))?;
     Parser::new(&tokens).parse_program()
 }
