@@ -2234,7 +2234,14 @@ d = json_parse(@python { import json; print(json.dumps({"a": 1})) })
   the environment at startup: `env_set("PATH", ...)` in a script does not change a block's PATH.
 * **Limits:** 60 s per run step (twice that for compile steps) and 8 MiB of output; then the process tree is killed
   (Unix: the process group; Windows: a Job Object plus the descendants found by parent process id, which also
-  reaches children that outlived their parent). The error says the tree was killed only when it was.
+  reaches children that outlived their parent). The error says the tree was killed only when that is proven;
+  otherwise it says the block's process was killed but child processes may still be running.
+* **Windows Store aliases:** the `python3.exe` / `python.exe` app execution aliases in
+  `%LOCALAPPDATA%\Microsoft\WindowsApps` (and anything else under a `WindowsApps` directory) start their children
+  outside the Job Object, so a timeout cannot contain them. A regular interpreter anywhere on PATH is used before
+  an alias (an alias only when nothing else runs); `killer polyglot list` and `killer doctor` print a warning when
+  an alias is used, and its timeout errors add "Windows Store app alias python cannot be contained: set
+  KILLER_POLYGLOT_PYTHON to a regular python.exe".
 * **Errors** are catchable with `try` / `catch` and start with a stable code: `POLYGLOT_E_UNKNOWN_LANG`,
   `POLYGLOT_E_RUNTIME_MISSING`, `POLYGLOT_E_POLICY_DENIED`, `POLYGLOT_E_TIMEOUT`, `POLYGLOT_E_OUTPUT_LIMIT`,
   `POLYGLOT_E_SPAWN`, `POLYGLOT_E_EXIT` (with `exit code N` and the last 2 KiB of stderr).

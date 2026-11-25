@@ -57,7 +57,14 @@ Read once from the environment at first use; a script's `env_set` cannot change 
 
 `killer polyglot list [--json]` shows every language with its status (`ok`, `missing`, `denied`), absolute path,
 version and override variable; `killer doctor [--require python,bash]` also prints the effective policy and limits
-and exits 1 when a required language is missing or denied. Memory limits are not built: on Unix wrap the process
+and exits 1 when a required language is missing or denied.
+
+Windows Store app aliases: PATH lookup tries every copy of every runtime name and uses one under a `WindowsApps`
+directory (`%LOCALAPPDATA%\Microsoft\WindowsApps\python3.exe`) only when no regular interpreter runs. Such an
+alias starts its children outside the block's Job Object, so a timeout cannot kill them: both commands then print
+`warning: python is a Windows Store app alias (...)` (`"app_alias":true` in `--json`), and `POLYGLOT_E_TIMEOUT` /
+`POLYGLOT_E_OUTPUT_LIMIT` say the block's process was killed but child processes may still be running. Fix: install
+a regular `python.exe` (python.org installer) or set `KILLER_POLYGLOT_PYTHON` to one. Memory limits are not built: on Unix wrap the process
 (`sh -c 'ulimit -v 1048576; exec killer run app.killer'`); on Windows there is no equivalent without a new dependency.
 
 ### Resource limits

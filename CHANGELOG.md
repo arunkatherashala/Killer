@@ -18,8 +18,12 @@ Tests: `tests/polyglot.rs`.
 - **Timeouts and an output cap.** 60 s per run step (120 s for javac / rustc / gcc compile steps,
   `KILLER_POLYGLOT_TIMEOUT`) and 8 MiB of stdout + stderr (`KILLER_POLYGLOT_MAX_OUTPUT`); the process tree is killed
   (Windows: Job Object plus a parent-pid walk, so a grandchild that outlived its parent dies too; the error says the
-  tree was killed only when it was).
+  tree was killed only when that is proven, otherwise that child processes may still be running).
   Before, a block could run and buffer output forever. A long-running block now needs a larger timeout.
+- **Windows Store app aliases are used last.** A regular interpreter anywhere on PATH now wins over the
+  `WindowsApps` `python3.exe` alias, whose children escape the Job Object. When only an alias exists,
+  `killer polyglot list` / `killer doctor` warn (`"app_alias":true` in `--json`) and a timeout error names
+  `KILLER_POLYGLOT_PYTHON` as the fix. On machines with both, `python` blocks now run a different interpreter.
 - **Scrubbed environment.** A block gets only an allowlist of variables (PATH, SYSTEMROOT, TEMP, HOME, ...) plus
   `KILLER_POLYGLOT_ENV_PASS`, with the values from startup (`env_set` cannot change a block's PATH); API keys and
   tokens are no longer inherited. Scripts that relied on `VIRTUAL_ENV`,

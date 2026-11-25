@@ -56,7 +56,7 @@ test file, not re-run for this document. Killer itself has not been independentl
 | WebSocket abuse | 64 MB message cap, control-frame limits, Origin check option | unit tests in `src/` socket code; `tests/sockets.rs` | origin check is opt-in per `ws_accept` |
 | Memory leaks in long runs (cycles, generators) | cycle collection | `tests/memory_soak.rs` | only the cases tested |
 | Data races in tasks | tasks get deep copies; channels and mutex cells | `tests/concurrency_stress.rs`, `tests/thread_safety.rs` | tested by stress, not proven |
-| Polyglot block hangs or floods output | wall-clock timeout (`KILLER_POLYGLOT_TIMEOUT`, 60 s run / 120 s compile) and output cap (`KILLER_POLYGLOT_MAX_OUTPUT`, 8 MiB); the process tree is killed (Unix process group; Windows Job Object plus descendants found by parent pid, `taskkill /T` as fallback) and the error says so only when it was | `tests/polyglot.rs` (`timeout_kills_python_and_is_catchable`, `bash_sleep_timeout_kills_the_process_tree`, `timeout_kills_a_grandchild_after_its_parent_exited`, `output_cap_stops_a_flood`) | a grandchild that leaves its process group (Unix), or whose own parent exited before the walk (Windows, outside the job), survives; no memory or CPU limit (see below) |
+| Polyglot block hangs or floods output | wall-clock timeout (`KILLER_POLYGLOT_TIMEOUT`, 60 s run / 120 s compile) and output cap (`KILLER_POLYGLOT_MAX_OUTPUT`, 8 MiB); the process tree is killed (Unix process group; Windows Job Object plus descendants found by parent pid, `taskkill /T` as fallback) and the error says so only when it was proven (Windows: job terminated, no descendant outside it, runtime not a Store app alias); a regular interpreter on PATH is preferred over a Windows Store app alias | `tests/polyglot.rs` (`timeout_kills_python_and_is_catchable`, `bash_sleep_timeout_kills_the_process_tree`, `timeout_kills_a_grandchild_after_its_parent_exited`, `store_alias_python_timeout_does_not_claim_a_killed_tree`, `polyglot_list_warns_about_a_store_alias_runtime`, `output_cap_stops_a_flood`), unit tests `polyglot::tests::escaped_store_alias_tree_gets_the_truthful_message`, `polyglot::tests::a_regular_interpreter_wins_over_an_earlier_store_alias` | a grandchild that leaves its process group (Unix), or whose own parent exited before the walk (Windows, outside the job), survives; so can the children of a Store app alias runtime when it is the only one installed (the error says they may still run); no memory or CPU limit (see below) |
 | Polyglot block reads secrets from the environment | child environment cleared and rebuilt from an allowlist with startup values (a script's `env_set` cannot change them); `KILLER_POLYGLOT_ENV_PASS` for explicit pass-through | `tests/polyglot.rs` (`env_is_scrubbed_and_pass_through_is_explicit`, `env_set_does_not_change_the_block_environment`) | the child can still read every file the user can (`~/.aws`, `.env`); hygiene, not a boundary |
 | Planted `python3` / `bash` in cwd or a relative PATH entry | runtimes resolved once to absolute paths from the startup PATH snapshot, cwd and relative entries skipped; overrides must be absolute | `tests/polyglot.rs` (`planted_runtime_in_a_relative_path_entry_is_not_run`, Unix), unit test `tool_path::tests::relative_and_current_directory_entries_are_skipped` | a writable directory already on the startup PATH |
 | Polyglot blocks where none are wanted | policy: process capability, `KILLER_POLYGLOT_ALLOW`, `KILLER_PROFILE=strict` (default deny); checked before any runtime is probed | `tests/polyglot.rs` (`allow_list_admits_only_the_listed_languages`, `allow_none_and_strict_profile_deny`), `tests/capabilities.rs` | `killer run` default is allow (with a one-time warning) |
@@ -96,6 +96,13 @@ resolved to an absolute path. Defaults and switches are in [OPERATIONS.md](../..
   only with `KILLER_POLYGLOT_AI=1` and both the LLM and network capabilities.
 * Audit: `KILLER_AUDIT_LOG` records every run (language, absolute runtime path, version, SHA-256 of the code, exit
   code, outcome); the code only with `KILLER_AUDIT_CODE=1`, the output never. The log is not tamper-evident.
+* Windows Store app aliases (`%LOCALAPPDATA%\Microsoft\WindowsApps\python3.exe` and any path under a `WindowsApps`
+  directory) start their children outside the block's Job Object, and once the packaged parent exits the
+  parent-pid walk cannot link them, so a timeout cannot contain them. Runtime resolution therefore skips aliases
+  while any regular interpreter on PATH runs; `killer polyglot list` and `killer doctor` print a warning when an
+  alias is still used (`"app_alias":true` in `--json`), and a timeout or output-limit error then says the block's
+  process was killed but child processes may still be running, with the `KILLER_POLYGLOT_<LANG>` hint. On
+  Windows the error claims a killed tree only when the job was terminated and every descendant found was in it.
 * Minimal deployment for scripts that need polyglot: an image with only `python3` and `bash`, read-only root file
   system, a non-root user, no network (`docker run --read-only --tmpfs /tmp --user 1000 --network none`),
   `KILLER_PROFILE=strict` and `KILLER_POLYGLOT_ALLOW=python,bash`.
@@ -106,5 +113,5 @@ resolved to an absolute path. Defaults and switches are in [OPERATIONS.md](../..
 * No fuzzing in CI beyond the seeded short runs in `tests/robustness.rs`; long runs are `#[ignore]`.
 * Socket builtins (`tcp_connect`, `udp_send`) have no destination filter.
 * Polyglot blocks: no memory / CPU limits, no per-block network or file restriction, daemonized grandchildren can
-  survive the process-tree kill.
+  survive the process-tree kill, and so can the children of a Windows Store alias runtime (the error says so).
 * No dependency-vulnerability scan is run from this document's checks (CI has a `cargo audit` step per the tracker; not verified here).
