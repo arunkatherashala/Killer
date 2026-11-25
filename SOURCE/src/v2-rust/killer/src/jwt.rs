@@ -496,12 +496,14 @@ mod tests {
 
     #[test]
     fn errors_do_not_echo_long_untrusted_text() {
-        let h = b64url_encode(format!(r#"{{"alg":"{}"}}"#, "X".repeat(500)).as_bytes());
-        let t = format!("{}.e30.c2ln", h);
-        let r = verify_builtin(&[Value::Str(t.into()), Value::Str("k".repeat(32).into())]);
-        match r {
-            Err(m) => assert!(m.len() < 200, "{m}"),
-            Ok(v) => panic!("{v:?}"),
+        for prefix in ["X", "RS", "ES"] {
+            let h = b64url_encode(format!(r#"{{"alg":"{}{}"}}"#, prefix, "X".repeat(500)).as_bytes());
+            let t = format!("{}.e30.c2ln", h);
+            let r = verify_builtin(&[Value::Str(t.into()), Value::Str("k".repeat(32).into())]);
+            match r {
+                Err(m) => assert!(m.len() < 200, "{prefix}: {m}"),
+                Ok(v) => panic!("{v:?}"),
+            }
         }
     }
 }
