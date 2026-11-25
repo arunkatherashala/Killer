@@ -7,6 +7,10 @@ All notable changes to `killer-native` are documented here.
 ### Documentation
 - New: `docs/STABILITY.md` (stability and deprecation policy, past behaviour changes), `docs/OPERATIONS.md` (every `KILLER_*` variable, limits, what is missing), `docs/PERFORMANCE.md` (honest index of `bench/RESULTS.md`), `SOURCE/docs/project/THREAT_MODEL.md` (threat, mitigation, proof test, residual risk).
 - `docs/FEATURES.md` now has a Proof column naming a test file per row; unproven rows were downgraded (`untested`/`partial`) and the Not built list was extended. README claims aligned (HTTP server TLS, release signing, test count).
+- The HTTP server examples in `docs/LANGUAGE.md` and `docs/TUTORIAL.md` hung under the SSRF guard (their client calls `127.0.0.1`); they now pass `allow_private: true` and `python docs/check_examples.py` is back to 71 of 71. The guard is documented next to the HTTP client.
+- `docs/STATUS.md` no longer says the HTTP server has no TLS (TLS serving through the system `openssl`, `tests/tls_server.rs`); test count, dead-file count and CI date refreshed. `TUTORIAL.md` and `parity/PARITY_REPORT.md` corrected the same way.
+- Old v3.0 / week-24B documents under `SOURCE/docs/` that mention the removed `websocket_new` / `websocket_server_new` builtins carry a "historical document" banner pointing to the current docs; the four old WebSocket examples in `SOURCE/examples/` carry a HISTORICAL comment.
+- `parity/FILE_INVENTORY.csv` regenerated for the current tree (391 files, 5 never compiled; archived files no longer listed at their old paths); `parity/inventory.py` counts `src/main.rs` as a binary. Root `tracker.csv` entries 194-198 got their missing date column.
 
 ### Added
 - Tooling: `killer new|init|add|remove|install|update|list|publish|check` in the `killer` driver (same code as `killer_pkg`); tests for `killer lsp` (hover, completion, definition of classes and variables), the VS Code extension files (`tests/vscode_extension.rs`), lockfile checksum verification when a registry and its checksum are both rewritten, `fmt` convergence over `examples/` with comments kept, and every lint suppression form.
