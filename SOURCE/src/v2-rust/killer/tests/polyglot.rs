@@ -719,8 +719,13 @@ fn at_signs_in_strings_do_not_make_compiling_quadratic() {
     };
     let (plain, with_at) = (source(false), source(true));
     assert_eq!(plain.lines().count(), 60_000);
-    let base = time(&plain);
-    let at = time(&with_at);
+    // alternate and keep the faster of two runs each, so load from parallel tests evens out
+    let (mut base, mut at) = (std::time::Duration::MAX, std::time::Duration::MAX);
+    for _ in 0..2 {
+        base = base.min(time(&plain));
+        at = at.min(time(&with_at));
+    }
+    eprintln!("60k lines: {:?} with '@', {:?} without", at, base);
     let bound = base.mul_f64(1.5) + std::time::Duration::from_secs(1);
     assert!(at <= bound, "60k lines: {:?} with '@' in strings vs {:?} without (bound {:?})", at, base, bound);
 }
