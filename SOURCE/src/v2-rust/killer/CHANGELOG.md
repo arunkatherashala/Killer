@@ -9,6 +9,7 @@ All notable changes to `killer-native` are documented here.
 - `docs/FEATURES.md` now has a Proof column naming a test file per row; unproven rows were downgraded (`untested`/`partial`) and the Not built list was extended. README claims aligned (HTTP server TLS, release signing, test count).
 
 ### Added
+- `jwt_sign(claims, secret[, opts])` / `jwt_verify(token, secret[, opts])`: JSON Web Tokens with HS256 (default), HS384, HS512 (`src/jwt.rs`, `tests/jwt.rs`, RFC 7515 A.1 vector). `alg: none` is always refused, the alg must be in `opts.algorithms` (default `["HS256"]`), constant-time signature compare, `exp`/`nbf`/`iat` with 60 s leeway and `exp` required by default, `aud`/`iss` checks, strict base64url, 16 KiB token limit, secrets shorter than 32/48/64 bytes refused. RS256/ES256/PS256/EdDSA fail with "unsupported algorithm X: needs a public-key crate (not built)". No capability needed (pure computation). See docs/LANGUAGE.md, "JSON Web Tokens (JWT)".
 - Tooling: `killer new|init|add|remove|install|update|list|publish|check` in the `killer` driver (same code as `killer_pkg`); tests for `killer lsp` (hover, completion, definition of classes and variables), the VS Code extension files (`tests/vscode_extension.rs`), lockfile checksum verification when a registry and its checksum are both rewritten, `fmt` convergence over `examples/` with comments kept, and every lint suppression form.
 
 ### Security

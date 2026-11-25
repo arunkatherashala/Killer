@@ -1837,6 +1837,54 @@ routes_clear()
 # expect: Not Found: GET /nope
 ```
 
+## JSON Web Tokens (JWT)
+
+`jwt_sign(claims, secret[, opts])` returns a compact token `header.payload.signature`; `jwt_verify(token,
+secret[, opts])` returns the claims dict or throws. Only HMAC algorithms are built: HS256 (default), HS384 and
+HS512. The secret is a string or bytes and must be at least as long as the hash: 32 bytes for HS256, 48 for
+HS384, 64 for HS512 (RFC 7518 section 3.2); shorter secrets are an error on both sides. Use a random secret,
+for example `secure_random_bytes(48)` (a base64 string of 48 random bytes, 64 characters).
+
+`jwt_sign` options: `alg` (`"HS256"`, `"HS384"`, `"HS512"`), `kid` (copied into the header), `expires_in`
+(seconds; sets `iat` to now and `exp` to now + `expires_in`).
+
+`jwt_verify` options and rules:
+
+- `algorithms`: allowed algorithms, default `["HS256"]`. The token's `alg` must be in this list; it is checked
+  before the signature, so a token cannot pick a different algorithm than the one you expect. `alg: "none"` (in
+  any letter case) is always refused, even when listed. A header with `crit` is refused.
+- `leeway`: seconds of clock skew allowed for `exp`, `nbf` and `iat` (default 60).
+- `require_exp`: a token without `exp` is refused unless this is `false` (default `true`).
+- `aud`: expected audience (string or list). A token that has `aud` is refused when no `aud` option is given.
+- `iss`: expected issuer (string or list).
+- `now`: unix seconds to use as the current time (default the system clock), for tests and replays.
+- The signature is compared in constant time; base64url is strict (no padding, no `+` `/` or spaces, unused
+  bits must be zero); tokens longer than 16 KiB are refused, and `jwt_sign` refuses to produce one.
+- RS256, ES256, PS256 and EdDSA need public-key crates that are not built in; they fail with
+  `unsupported algorithm RS256: needs a public-key crate (not built)`.
+
+Both functions are pure computation and need no capability, so they work under `--sandbox`.
+
+```killer
+secret = "0123456789abcdef0123456789abcdef"
+t = jwt_sign({"sub": "ada", "aud": "api"}, secret, {"expires_in": 600})
+c = jwt_verify(t, secret, {"aud": "api"})
+println(c["sub"])
+try {
+  jwt_verify(t, secret, {"aud": "other"})
+} catch e {
+  println(e)
+}
+try {
+  jwt_verify(t, secret + "!", {"aud": "api"})
+} catch e {
+  println(e)
+}
+# expect: ada
+# expect: jwt_verify(): wrong audience (aud does not match opts.aud)
+# expect: jwt_verify(): invalid signature
+```
+
 ## Vectors, RAG and embeddings
 
 Offline building blocks for retrieval-augmented generation, with no model required.

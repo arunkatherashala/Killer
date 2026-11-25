@@ -43,6 +43,8 @@ The row-by-row history is in the root `tracker.csv`; the Python comparison is in
 | Strings, formatting (`format`, `%`), regex | yes | | tests/builtin_pythonic.rs, tests/string_index.rs, tests/string_append.rs |
 | Files: `open`, `with`, `for line in f` | yes | text only (`r`, `w`, `a`); no binary mode | tests/capabilities.rs (gating); open/with in tests/python_gap.rs; not every mode tested by name |
 | JSON, CSV, base64, hashing, HMAC | yes | SHA-256, HMAC-SHA256, base64 verified against FIPS 180 / RFC 4231 / RFC 4648 | hashing, HMAC, base64: tests/crypto_vectors.rs; JSON and CSV: tests/realworld.rs and parity realworld programs only |
+| JWT HS256 (also HS384, HS512) | yes | `jwt_sign` / `jwt_verify`: alg allow list (default `["HS256"]`, `none` always refused), constant-time signature check, `exp`/`nbf`/`iat` with 60 s leeway, `exp` required by default, `aud`/`iss`, strict base64url, 16 KiB limit, secret at least 32/48/64 bytes; no capability needed ([LANGUAGE.md](LANGUAGE.md#json-web-tokens-jwt)) | tests/jwt.rs (`rfc7515_appendix_a1_token_verifies_with_the_rfc_key`, tamper, alg none, alg confusion, time claims, audience, size, short secret); src/jwt.rs unit tests (RFC 4231 HMAC-SHA384/512) |
+| JWT RS256, ES256, PS256, EdDSA | no | need public-key crates that are not dependencies; `jwt_sign`/`jwt_verify` fail with "unsupported algorithm RS256: needs a public-key crate (not built)" | tests/jwt.rs (`public_key_algorithms_are_reported_as_not_built`) |
 | Dates and times | partial | | no dedicated test found by name; parity probes only |
 | Encryption | yes | ChaCha20-Poly1305 (RFC 8439), SHA-2, HMAC, PBKDF2-HMAC-SHA256 from the RustCrypto crates (`chacha20poly1305` had an [NCC Group audit](https://github.com/RustCrypto/AEADs/tree/master/chacha20poly1305#readme); `sha2`, `hmac`, `pbkdf2` are widely used and reviewed), OS random; checked against RFC/FIPS vectors, Killer itself not audited; no AES, SHA-3, Argon2 or public-key crypto ([CRYPTO.md](CRYPTO.md)) | tests/crypto_vectors.rs (FIPS 180-4, RFC 4231, RFC 7914, RFC 8439, RFC 4648; tamper tests) |
 | HTTP client and server | yes | | tests/net_ai.rs, tests/ssrf_guard.rs, tests/http_server_tests.rs (request parsing only) |
@@ -89,7 +91,7 @@ The row-by-row history is in the root `tracker.csv`; the Python comparison is in
 4. A TLS stack inside Killer (rustls or similar): TLS needs the system `openssl` and HTTPS needs `curl`.
 5. Database drivers for PostgreSQL, MongoDB and others; Kafka, Spark; a message queue (archived 7-21 line stubs, see STATUS.md).
 6. Observability: Prometheus, OpenTelemetry, distributed tracing exporters; no metrics endpoint.
-7. Authentication standards: JWT, OAuth2, OIDC, RBAC/ABAC (archived stubs only).
+7. Authentication standards: JWT with public keys (RS256, ES256, PS256, EdDSA; HS256/HS384/HS512 are built), JWE, JWKS fetching, OAuth2, OIDC, RBAC/ABAC (archived stubs only).
 8. AES, SHA-3, Argon2, public-key crypto, code or release signing.
 9. A published container image, a signed release, a packaged VS Code extension, a tested `install.ps1`.
 10. Dependent types, effect system, trait system (archived, never compiled).

@@ -12,7 +12,7 @@ id,opened,area,title,detail,where,status,next_step
 14,2026-11-24,enterprise,rustls optional TLS feature,"User-approved new dependency, feature default OFF; curl/openssl stays default until all tests pass with it on","Cargo.toml, http_req.rs, net_sock.rs",open,Phase 6
 15,2026-11-24,enterprise,Container image + health probes,"Dockerfile, /healthz /readyz",new,open,Phase 6
 16,2026-11-24,enterprise,Prometheus /metrics endpoint,,http_serve.rs,open,Phase 6
-17,2026-11-24,enterprise,JWT HS256/RS256 via RustCrypto,RS256 needs an RSA crate: ask before adding,new,open,Phase 6
+17,2026-11-24,enterprise,JWT RS256/ES256 (public-key algorithms),"HS256/HS384/HS512 built (src/jwt.rs, tests/jwt.rs); RS256/ES256/PS256/EdDSA return 'unsupported algorithm X: needs a public-key crate (not built)'; needs rsa/p256/ed25519 crates (new dependencies)",SOURCE/src/v2-rust/killer/src/jwt.rs,blocked-user,user decision: approve a public-key crate
 18,2026-11-24,enterprise,PostgreSQL wire-protocol client (SCRAM-SHA-256),over net_sock,new,open,Phase 6
 19,2026-11-24,security,image_gen download_image_as_data_uri uses curl -L without SSRF check,Fixed host (pollinations) so low risk; route through http_req::exec or --proto-redir =https,src/image_gen.rs,open,small fix
 20,2026-11-24,docs,STATUS.md still says HTTP server has no TLS,Stale; TLS server via openssl exists,SOURCE/src/v2-rust/killer/STATUS.md,open,small fix
