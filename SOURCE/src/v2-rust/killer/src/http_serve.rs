@@ -487,6 +487,8 @@ struct Pool {
     pending: AtomicUsize,
     /// Milliseconds since `born` at which the last request was answered (for `idle_timeout`).
     last_done_ms: AtomicU64,
+    /// Milliseconds since `born` at which the last connection was accepted (for `idle_timeout`).
+    last_accept_ms: AtomicU64,
     born: Instant,
     max_requests: Option<u64>,
 }
@@ -733,6 +735,7 @@ fn serve_loop(vm: &mut VirtualMachine, args: &[Value], program: &Program, once: 
         completed: AtomicU64::new(0),
         pending: AtomicUsize::new(0),
         last_done_ms: AtomicU64::new(0),
+        last_accept_ms: AtomicU64::new(0),
         born: Instant::now(),
         max_requests,
     });
@@ -820,20 +823,59 @@ fn serve_loop(vm: &mut VirtualMachine, args: &[Value], program: &Program, once: 
     Ok(Value::Number(pool.completed.load(Ordering::SeqCst) as f64))
 }
 
+/// How often the accept loop's watchdog checks for `server_stop()`, a closed pool and `idle_timeout`.
+const WATCH_EVERY: Duration = Duration::from_millis(20);
+
 /// The accept loop: hand each connection to the readers (or to the rejecter when `limit`
 /// connections are already pending) until the server stops, closes (`max_requests` reached) or has
 /// been idle for `idle`. On the way out the pool is closed and the listener and both senders are
 /// dropped: new connections are refused by the OS and queued ones get `503`.
-fn accept_loop(listener: TcpListener, tx: std::sync::mpsc::Sender<TcpStream>, reject_tx: SyncSender<TcpStream>, pool: &Pool, idle: Option<Duration>, limit: usize) -> Result<(), String> {
-    let mut last_accept = Instant::now();
+///
+/// `accept` blocks, so a connection is taken the moment it arrives (polling a non-blocking listener
+/// put a sleep, 2-3.5 ms on Windows, on every request of a busy server). A small watchdog thread
+/// wakes the loop when it has to end: it sees `server_stop()`, the pool closing or the idle timeout
+/// within about `WATCH_EVERY` and then connects to the listener itself.
+fn accept_loop(listener: TcpListener, tx: std::sync::mpsc::Sender<TcpStream>, reject_tx: SyncSender<TcpStream>, pool: &Arc<Pool>, idle: Option<Duration>, limit: usize) -> Result<(), String> {
+    let mut wake = listener.local_addr().map_err(|e| format!("accept failed: {}", e))?;
+    if wake.ip().is_unspecified() {
+        wake.set_ip(if wake.is_ipv4() { std::net::Ipv4Addr::LOCALHOST.into() } else { std::net::Ipv6Addr::LOCALHOST.into() });
+    }
+    listener.set_nonblocking(false).map_err(|e| format!("accept failed: {}", e))?;
+    let done = Arc::new(AtomicBool::new(false));
+    {
+        let (pool, done) = (Arc::clone(pool), Arc::clone(&done));
+        std::thread::Builder::new()
+            .name("killer-http-watch".to_string())
+            .spawn(move || {
+                while !done.load(Ordering::SeqCst) {
+                    std::thread::sleep(WATCH_EVERY);
+                    if let Some(d) = idle {
+                        let ms = |a: &AtomicU64| pool.born + Duration::from_millis(a.load(Ordering::SeqCst));
+                        let last = ms(&pool.last_accept_ms).max(ms(&pool.last_done_ms));
+                        if pool.pending.load(Ordering::SeqCst) == 0 && last.elapsed() >= d {
+                            pool.closing.store(true, Ordering::SeqCst);
+                        }
+                    }
+                    if (stop_requested() || pool.closing.load(Ordering::SeqCst)) && !done.load(Ordering::SeqCst) {
+                        // wake the blocked accept (retried on the next round until the loop has ended)
+                        let _ = TcpStream::connect_timeout(&wake, Duration::from_secs(1));
+                    }
+                }
+            })
+            .map_err(|e| format!("cannot start the accept watchdog: {}", e))?;
+    }
     let result = loop {
         if stop_requested() || pool.closing.load(Ordering::SeqCst) {
             break Ok(());
         }
         match listener.accept() {
             Ok((stream, _)) => {
-                last_accept = Instant::now();
-                let _ = stream.set_nonblocking(false);
+                if stop_requested() || pool.closing.load(Ordering::SeqCst) {
+                    // the watchdog's wake-up, or a client that came in as the server closed
+                    let _ = reject_tx.try_send(stream);
+                    break Ok(());
+                }
+                pool.last_accept_ms.store(pool.born.elapsed().as_millis() as u64, Ordering::SeqCst);
                 // only this thread adds to `pending`, so the check and the add cannot race past `limit`
                 if pool.pending.load(Ordering::SeqCst) >= limit {
                     // the rejecter is backed up too: just close the connection
@@ -845,18 +887,11 @@ fn accept_loop(listener: TcpListener, tx: std::sync::mpsc::Sender<TcpStream>, re
                     }
                 }
             }
-            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                if let Some(d) = idle {
-                    let last_done = pool.born + Duration::from_millis(pool.last_done_ms.load(Ordering::SeqCst));
-                    if pool.pending.load(Ordering::SeqCst) == 0 && last_accept.max(last_done).elapsed() >= d {
-                        break Ok(());
-                    }
-                }
-                std::thread::sleep(Duration::from_millis(2));
-            }
+            Err(e) if matches!(e.kind(), std::io::ErrorKind::Interrupted | std::io::ErrorKind::WouldBlock | std::io::ErrorKind::ConnectionAborted | std::io::ErrorKind::ConnectionReset) => {}
             Err(e) => break Err(format!("accept failed: {}", e)),
         }
     };
+    done.store(true, Ordering::SeqCst);
     pool.closing.store(true, Ordering::SeqCst);
     drop(listener);
     drop(tx);
