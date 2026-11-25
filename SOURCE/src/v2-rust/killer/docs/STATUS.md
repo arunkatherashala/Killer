@@ -6,13 +6,13 @@ verified, and what is still open. It is the short version; the evidence is in
 
 ## Does it work?
 
-Yes. The checks below were run locally on Windows x86-64, and the test suite, parity probes and
-documentation examples also pass on GitHub's Linux (x86-64), macOS (Apple Silicon) and Windows runners
-(commit `b3de537`, see [`PLATFORMS.md`](PLATFORMS.md)):
+Yes. The checks below were run locally on Windows x86-64. The test suite, parity probes and
+documentation examples last ran on GitHub's Linux (x86-64), macOS (Apple Silicon) and Windows runners
+at commit `b3de537` (see [`PLATFORMS.md`](PLATFORMS.md)); later changes were checked locally only:
 
 | Check | Result |
 |-------|--------|
-| Automated tests (`cargo test --tests --no-fail-fast`) | 3,457 passed, 0 failed |
+| Automated tests (`cargo test --lib --tests --no-fail-fast`) | 3,904 passed, 0 failed (local run of 2026-11-25, root `tracker.csv` row 209) |
 | Language parity probes (`python parity/run_parity.py`, 166 programs written like a Python/JS/Java programmer would) | 166 of 166 pass (it was 76 of 166, 46%, at the first audit) |
 | Documentation examples (`python docs/check_examples.py`) | 65 of 65 run and print what the docs say |
 | Documentation links (`python docs/check_links.py`) | 67 links, 0 broken |
@@ -30,8 +30,10 @@ documentation examples also pass on GitHub's Linux (x86-64), macOS (Apple Silico
 - **Numbers:** one rule for `%` (floor, like Python) with `rem()` for the C-style remainder.
 - **Standard library:** strings, lists, dicts, sets, JSON, CSV, files, regex, dates, hashing, base64,
   logging, async tasks, channels, mutexes.
-- **AI and network:** a real HTTP server with Killer handlers (including streaming), a hardened HTTP
-  client, streaming LLM calls, embeddings, a vector store, chunking, an offline RAG demo
+- **AI and network:** a real HTTP server with Killer handlers (including streaming), TLS serving
+  (HTTPS and `wss://` through the system `openssl`, `tests/tls_server.rs`), TCP, UDP and WebSocket
+  sockets, a hardened HTTP client with an SSRF guard (loopback and private addresses refused unless
+  `allow_private`), streaming LLM calls, embeddings, a vector store, chunking, an offline RAG demo
   (`examples/rag_demo.killer`).
 - **Tools:** `killer` driver (`run`, `fmt`, `lint`, `test`, `profile`, `repl`, `lsp`), package manager
   (`killer_pkg`, `killer.toml`, lockfile with SHA-256, registry), language server, VS Code extension,
@@ -77,12 +79,15 @@ Dead code was moved out of `src/` with `git mv` (history kept, nothing deleted):
   call, about 1.6 s for the whole loop. Fixing it needs a different string representation.
 - Whole-number `+ - * **` results beyond 2^53 become exact big integers automatically, but an integer
   literal above 2^53 is read as a float: write `123n` for those.
-- The HTTP server handles one request at a time, has no TLS, and HTTPS client calls need `curl`.
+- The HTTP server handles one request at a time. TLS serving (`serve(..., {tls: {cert, key}})`,
+  `tls_listen`) works but needs the system `openssl` on the PATH (one `openssl s_server` child per
+  connection; there is no TLS stack inside Killer), and HTTPS client calls need `curl`.
 - Token counts from `count_tokens` are an approximation (the real tokenizer needs a model file).
 - `__setitem__` applies to non-string keys only (`obj["x"] = v` is a field write).
-- The debugger shows one stack frame; the language server does not follow imports across files.
-- 192 older source files in the repository are not part of the build (never compiled); they are
-  untouched and listed in `parity/FILE_INVENTORY.csv`.
+- The DAP debugger adapter reports one stack frame (`stackTrace`); the language server does not follow imports across files.
+- 5 source files under `src/` are not part of the build (never declared as modules: `python/mod.rs`,
+  `codegen/tests.rs`, `custom_optimization/`); the older dead files were archived (above). The per-file
+  list is `parity/FILE_INVENTORY.csv`, regenerated with `python parity/inventory.py`.
 - Tracked build artifacts (`*.so`, `*.pdb`, `*.dll.exp`) get rewritten by test runs and are left
   uncommitted.
 
@@ -91,7 +96,7 @@ Dead code was moved out of `src/` with `git mv` (history kept, nothing deleted):
 ```
 cd SOURCE/src/v2-rust/killer
 cargo build --bins
-cargo test --tests --no-fail-fast
+cargo test --lib --tests --no-fail-fast
 python parity/run_parity.py          # set KILLER_BIN to the built killer_super
 python docs/check_examples.py
 ```

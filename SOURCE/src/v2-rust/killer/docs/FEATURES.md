@@ -93,4 +93,4 @@ The row-by-row history is in the root `tracker.csv`; the Python comparison is in
 8. AES, SHA-3, Argon2, public-key crypto, code or release signing.
 9. A published container image, a signed release, a packaged VS Code extension, a tested `install.ps1`.
 10. Dependent types, effect system, trait system (archived, never compiled).
-11. Cluster/distributed execution as a supported feature (`cluster_coordinator` is not wired; its test is feature-gated and does not compile).
+11. Cluster/distributed execution (`cluster_coordinator` and its test were archived to `archive/uncompiled/`, see STATUS.md; the `cluster-demo-tests` feature gates nothing).
