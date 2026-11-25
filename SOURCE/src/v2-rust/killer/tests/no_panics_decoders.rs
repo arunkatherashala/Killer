@@ -199,3 +199,100 @@ fn msgpack_and_toml_mutation_fuzz() {
         }
     }
 }
+
+fn sample_pack() -> Vec<u8> {
+    killer_native::pkg_files::pack(&[
+        ("killer.toml".to_string(), b"[package]\nname = \"fz\"\nversion = \"1.0.0\"\n\n[dependencies]\nother = \"^1.2\"\n".to_vec()),
+        ("src/lib.killer".to_string(), b"fn f() {\n  return 1\n}\n".to_vec()),
+        ("README.md".to_string(), b"# fz\n\nline\n".to_vec()),
+        ("data/a/b.txt".to_string(), Vec::new()),
+    ])
+}
+
+/// Everything a registry or `killer_pkg install` does with an archive it was handed: unpack, check the manifest
+/// against it, hash it, store it as a release and write the files out (to a fresh scratch directory).
+fn exercise_pack(data: Vec<u8>, scratch: std::path::PathBuf) {
+    use killer_native::package_manager::Version;
+    use killer_native::{pkg_files, pkg_registry};
+    if let Ok(files) = pkg_files::unpack(&data) {
+        let _ = pkg_files::content_hash(&files);
+        if let Some((_, m)) = files.iter().find(|(p, _)| p == "killer.toml") {
+            let _ = pkg_registry::verify_manifest_matches_archive(&String::from_utf8_lossy(m), &files);
+        }
+        let _ = std::fs::remove_dir_all(&scratch);
+        let _ = pkg_registry::store_release(&scratch.join("reg"), "fz", &Version::parse("1.0.0").unwrap(), &data);
+        let _ = pkg_files::write_files(&scratch.join("out"), &files);
+        let _ = std::fs::remove_dir_all(&scratch);
+    }
+}
+
+#[test]
+fn package_archive_mutation_fuzz() {
+    let good = sample_pack();
+    assert_eq!(killer_native::pkg_files::unpack(&good).map(|f| f.len()), Ok(4));
+    let base = std::env::temp_dir().join(format!("killer_fuzz_pkg_{}", std::process::id()));
+    let mut rng = Rng(0x51ED_2701_C0FF_EE11);
+    let iters: usize = std::env::var("KILLER_FUZZ_ITERS").ok().and_then(|v| v.parse().ok()).unwrap_or(1500);
+    // hand-picked hostile headers first, then random mutations
+    let mut inputs: Vec<Vec<u8>> = [
+        &b"KPK1\n"[..],
+        b"KPK1\n0 a\n\n0 a\n\n",
+        b"KPK1\n1 a\nx\n0 a/b\n\n",
+        b"KPK1\n0 a/b\n\n1 a\nx\n",
+        b"KPK1\n99999999999999999999 a\nx\n",
+        b"KPK1\n-1 a\nx\n",
+        b"KPK1\n+1 a\nx\n",
+        b"KPK1\n1 \nx\n",
+        b"KPK1\n1 a\x00b\nx\n",
+        b"KPK1\n1 CON\nx\n",
+        b"KPK1\n1 a/NUL.txt\nx\n",
+        b"KPK1\n1 a.\nx\n",
+        b"KPK1\n1 a \nx\n",
+        b"KPK1\n1 a*?\nx\n",
+        b"KPK1\n1 killer.toml\n[\n",
+        b"KPK1\n1",
+        b"KPK1\n\xff\xfe a\nx\n",
+    ]
+    .iter()
+    .map(|b| b.to_vec())
+    .collect();
+    for _ in 0..iters {
+        let mut b = good.clone();
+        match rng.below(5) {
+            0 => {
+                for _ in 0..1 + rng.below(4) {
+                    let i = rng.below(b.len());
+                    b[i] = rng.next() as u8;
+                }
+            }
+            1 => b.truncate(rng.below(b.len())),
+            2 => {
+                let i = rng.below(b.len());
+                b.insert(i, [b'\n', b' ', b'/', b'.', b'0', b'9', 0][rng.below(7)]);
+            }
+            3 => {
+                // rewrite one length field with a hostile number
+                let heads: Vec<usize> = (5..b.len()).filter(|&i| b[i - 1] == b'\n' && b[i].is_ascii_digit()).collect();
+                if let Some(&h) = heads.get(rng.below(heads.len())) {
+                    let end = h + b[h..].iter().position(|&c| c == b' ').unwrap_or(0);
+                    let n = ["0", "1", "18446744073709551615", "18446744073709551616", "4294967296", "999999"][rng.below(6)];
+                    b.splice(h..end, n.bytes());
+                }
+            }
+            _ => {
+                // duplicate a slice (repeated entries, paths that are both a file and a directory)
+                let i = rng.below(b.len());
+                let j = (i + rng.below(64)).min(b.len());
+                let piece = b[i..j].to_vec();
+                let at = rng.below(b.len());
+                b.splice(at..at, piece);
+            }
+        }
+        inputs.push(b);
+    }
+    for (it, b) in inputs.into_iter().enumerate() {
+        let scratch = base.join(format!("i{it}"));
+        guarded(&format!("pkg iter {it}"), b, move |d| exercise_pack(d, scratch));
+    }
+    let _ = std::fs::remove_dir_all(&base);
+}
