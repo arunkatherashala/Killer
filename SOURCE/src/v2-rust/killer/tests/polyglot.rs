@@ -274,25 +274,102 @@ fn bash_sleep_timeout_kills_the_process_tree() {
     assert!(took < std::time::Duration::from_secs(25), "took {:?}", took);
 }
 
-#[test]
-fn timeout_kills_a_grandchild_after_its_parent_exited() {
-    need!("python");
-    // the block starts a child that keeps the output pipes and exits at once: on timeout only
-    // the grandchild is left, and it must die before it writes the marker
+/// Run a python block that starts a child holding the output pipes and exits at once, so on
+/// timeout only the grandchild is left. Waits past the grandchild's 8 s sleep and reports whether
+/// it survived (wrote its marker).
+fn run_grandchild(env: &[(&str, &str)]) -> (Out, bool) {
     let marker = unique("grandchild_marker");
     let m = marker.to_string_lossy().replace('\\', "/");
     let src = format!(
         "try {{\n    x = @python {{\n        import subprocess, sys\n        subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(8); open(\"{m}\", \"w\").write(\"late\")'], stdout=sys.stdout, stderr=sys.stderr)\n    }}\n    println(\"no timeout\")\n}} catch e {{\n    println(\"caught: \" + str(e))\n}}\n"
     );
+    let mut all_env = vec![("KILLER_POLYGLOT_TIMEOUT", "3")];
+    all_env.extend_from_slice(env);
     let start = std::time::Instant::now();
-    let (o, _) = run_watch(&src, &[("KILLER_POLYGLOT_TIMEOUT", "3")], None, WATCH);
+    let (o, _) = run_watch(&src, &all_env, None, WATCH);
     while start.elapsed() < std::time::Duration::from_secs(15) {
         std::thread::sleep(std::time::Duration::from_millis(200));
     }
     let leaked = marker.exists();
     let _ = std::fs::remove_file(&marker);
+    (o, leaked)
+}
+
+/// The `polyglot list --json` row of python (empty when absent).
+fn python_row(env: &[(&str, &str)]) -> String {
+    let o = cli(&["polyglot", "list", "--json"], env);
+    o.stdout.split("},").find(|r| r.contains("\"name\":\"python\"")).unwrap_or("").to_string()
+}
+
+/// A Windows Store app alias resolves under a `WindowsApps` directory.
+fn row_is_app_alias(row: &str) -> bool {
+    row.to_lowercase().contains("windowsapps")
+}
+
+#[test]
+fn timeout_kills_a_grandchild_after_its_parent_exited() {
+    need!("python");
+    let alias = row_is_app_alias(&python_row(&[]));
+    let (o, leaked) = run_grandchild(&[]);
     assert!(o.stdout.contains("timed out"), "{}", o.all());
-    assert!(!leaked, "the grandchild survived the timeout and wrote its marker: {}", o.all());
+    if leaked {
+        // whatever the runtime, a surviving grandchild must never be reported as killed
+        assert!(!o.stdout.contains("process tree was killed"), "the grandchild survived but the error says the tree was killed: {}", o.all());
+    }
+    if alias {
+        // only a Store alias python is installed: its children escape the job, so the error must
+        // say they may still run and how to fix it
+        assert!(o.stdout.contains("child processes may still be running") && o.stdout.contains("KILLER_POLYGLOT_PYTHON"), "{}", o.all());
+    } else {
+        assert!(!leaked, "the grandchild survived the timeout and wrote its marker: {}", o.all());
+        assert!(o.stdout.contains("process tree was killed"), "{}", o.all());
+    }
+}
+
+/// The Store alias python, when this machine has one.
+#[cfg(windows)]
+fn store_alias_python() -> Option<String> {
+    let dir = std::path::Path::new(&std::env::var_os("LOCALAPPDATA")?).join("Microsoft").join("WindowsApps");
+    ["python3.exe", "python.exe"].iter().map(|n| dir.join(n)).find(|p| std::fs::symlink_metadata(p).is_ok()).map(|p| p.to_string_lossy().into_owned())
+}
+
+#[cfg(windows)]
+#[test]
+fn store_alias_python_timeout_does_not_claim_a_killed_tree() {
+    let Some(alias) = store_alias_python() else {
+        eprintln!("skip: no Windows Store alias python here");
+        return;
+    };
+    let env = [("KILLER_POLYGLOT_PYTHON", alias.as_str())];
+    if !run_env("println(polyglot_exec(\"python\", \"print('ok')\"))\n", &env).stdout.lines().any(|l| l.trim() == "ok") {
+        eprintln!("skip: the Store alias python {alias} does not run a block here");
+        return;
+    }
+    let (o, _) = run_grandchild(&env);
+    assert!(o.stdout.contains("timed out"), "{}", o.all());
+    assert!(!o.stdout.contains("process tree was killed"), "a Store alias python tree cannot be contained: {}", o.all());
+    assert!(o.stdout.contains("child processes may still be running"), "{}", o.all());
+    assert!(o.stdout.contains("Windows Store app alias python cannot be contained: set KILLER_POLYGLOT_PYTHON to a regular python.exe"), "{}", o.all());
+}
+
+#[cfg(windows)]
+#[test]
+fn polyglot_list_warns_about_a_store_alias_runtime() {
+    let Some(alias) = store_alias_python() else {
+        eprintln!("skip: no Windows Store alias python here");
+        return;
+    };
+    let env = [("KILLER_POLYGLOT_PYTHON", alias.as_str())];
+    let row = python_row(&env);
+    if !row.contains("\"status\":\"ok\"") {
+        eprintln!("skip: the Store alias python {alias} does not run here: {row}");
+        return;
+    }
+    assert!(row.contains("\"app_alias\":true"), "{row}");
+    for args in [&["polyglot", "list"][..], &["doctor"][..]] {
+        let o = cli(args, &env);
+        assert!(o.stdout.contains("warning: python") && o.stdout.contains("Windows Store app alias"), "{:?}: {}", args, o.all());
+    }
 }
 
 #[test]
