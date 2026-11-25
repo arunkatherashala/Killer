@@ -332,6 +332,16 @@ fn env_is_scrubbed_and_pass_through_is_explicit() {
     assert!(o.stdout.contains("SECRET_TEST_PG=leak1"), "{}", o.all());
 }
 
+// the allowlisted values come from the startup snapshot, so `env_set` cannot steer a block
+#[test]
+fn env_set_does_not_change_the_block_environment() {
+    need!("bash");
+    let src = "env_set(\"TZ\", \"Killer/Changed\")\nenv_set(\"PATH\", \"/killer_changed_path\")\ne = @bash { echo \"tz=$TZ path=$PATH\" }\nprintln(e)\n";
+    let (o, _) = run_watch(src, &[("TZ", "UTC")], None, WATCH);
+    assert!(o.stdout.contains("tz=UTC "), "{}", o.all());
+    assert!(!o.stdout.contains("killer_changed_path"), "{}", o.all());
+}
+
 #[test]
 fn python_unicode_round_trips() {
     need!("python");
