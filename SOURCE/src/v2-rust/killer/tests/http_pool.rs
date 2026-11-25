@@ -533,3 +533,48 @@ println("served", n)
     assert_eq!(refused, 0, "{} of 200 burst requests were not answered 200: {:?}", refused, results.iter().filter(|r| r.0 != 200).take(3).collect::<Vec<_>>());
     assert_eq!(srv.finish(60), "served 201");
 }
+
+#[test]
+fn clients_that_send_slowly_do_not_hold_the_workers() {
+    // six clients trickle their request head over about 4 s; with only 2 workers a fast client must
+    // still be answered at once (reading a request must not occupy a worker and its VM)
+    let port = free_port();
+    let srv = start(&format!(
+        r#"fn h(req) {{
+  return "hi " + req["path"]
+}}
+n = serve({port}, h, {{"workers": 2, "max_requests": 8}})
+println("served", n)
+"#
+    ));
+    wait_ready(port);
+    let slow: Vec<_> = (0..6)
+        .map(|i| {
+            std::thread::spawn(move || {
+                let mut s = TcpStream::connect(("127.0.0.1", port)).unwrap();
+                s.set_read_timeout(Some(Duration::from_secs(120))).unwrap();
+                let nl = crlf();
+                let head = format!("GET /slow{i} HTTP/1.1{nl}Host: x{nl}Connection: close{nl}{nl}");
+                let step = Duration::from_millis(4000 / head.len() as u64);
+                for b in head.as_bytes() {
+                    if s.write_all(&[*b]).is_err() {
+                        return String::new();
+                    }
+                    std::thread::sleep(step);
+                }
+                let mut out = String::new();
+                let _ = s.read_to_string(&mut out);
+                out
+            })
+        })
+        .collect();
+    std::thread::sleep(Duration::from_millis(700));
+    let t = Instant::now();
+    assert_eq!(get(port, "/fast", 60), (200, "hi /fast".to_string()));
+    assert!(t.elapsed() < Duration::from_millis(1500), "the fast request waited {:?} behind slow senders", t.elapsed());
+    for (i, h) in slow.into_iter().enumerate() {
+        let out = h.join().unwrap();
+        assert!(out.starts_with("HTTP/1.1 200") && out.ends_with(&format!("hi /slow{}", i)), "slow {}: {}", i, out);
+    }
+    assert_eq!(srv.finish(60), "served 8");
+}
