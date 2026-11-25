@@ -582,9 +582,8 @@ println("served", n)
 
 #[test]
 fn back_to_back_requests_are_not_delayed_by_the_accept_poll() {
-    // one client sending requests one after another: each waited for the accept loop's 2 ms poll
-    // sleep before (median about 2.5 ms per request on a trivial handler); while requests keep
-    // arriving the loop must poll fast
+    // one client sending requests one after another: each connection waited in the backlog for the
+    // accept loop's 2 ms poll sleep (2-3.5 ms on Windows) before it was even read
     let port = free_port();
     let srv = start(&format!(
         r#"fn h(req) {{
@@ -595,15 +594,24 @@ println("served", n)
 "#
     ));
     wait_ready(port);
+    // time from sending the request on an open connection to the full reply (the TCP connect itself
+    // is slow on some Windows machines, about 2.5 ms on loopback, and is not the server's doing)
+    let nl = crlf();
     let mut lat: Vec<Duration> = (0..300)
         .map(|_| {
+            let mut s = TcpStream::connect(("127.0.0.1", port)).unwrap();
+            s.set_read_timeout(Some(Duration::from_secs(60))).unwrap();
             let t = Instant::now();
-            assert_eq!(get(port, "/x", 60).0, 200);
-            t.elapsed()
+            s.write_all(format!("GET /x HTTP/1.1{nl}Host: x{nl}Connection: close{nl}{nl}").as_bytes()).unwrap();
+            let mut out = String::new();
+            let _ = s.read_to_string(&mut out);
+            let took = t.elapsed();
+            assert!(out.starts_with("HTTP/1.1 200"), "{}", out);
+            took
         })
         .collect();
     lat.sort();
     let median = lat[lat.len() / 2];
-    assert!(median < Duration::from_micros(1500), "median latency {:?} (p10 {:?}, p90 {:?})", median, lat[30], lat[270]);
+    assert!(median < Duration::from_micros(1200), "median latency {:?} (p10 {:?}, p90 {:?})", median, lat[30], lat[270]);
     assert_eq!(srv.finish(60), "served 301");
 }
