@@ -2986,12 +2986,16 @@ impl KoreReader {
     pub fn read_all(&self) -> Vec<Vec<KVal>> {
         let mut rows = Vec::with_capacity(cap_hint(self.nrows));
         let mut global_row = 0usize;
+        #[cfg(test)]
+        let inject_panic = tests::KORE_WORKER_PANIC.with(|c| c.get());
         for chunk_idx in 0..self.nchunks {
             let chunk_nrows = self.chunk_nrows[chunk_idx];
             // Decode all columns for this chunk in parallel
             let chunk_cols: Vec<Vec<KVal>> = std::thread::scope(|s| {
                 let handles: Vec<_> = (0..self.ncols).map(|ci| {
                     s.spawn(move || {
+                        #[cfg(test)]
+                        if inject_panic && ci == 0 { panic!("injected kore decode worker panic"); }
                         let meta = &self.col_meta[chunk_idx][ci];
                         self.decode_col_block(ci, meta, chunk_nrows, chunk_idx)
                     })
@@ -3017,11 +3021,15 @@ impl KoreReader {
     /// Automatically filters out deleted rows if a delete bitmap is present.
     pub fn for_each_row<F: FnMut(Vec<KVal>) + Send>(&self, mut f: F) {
         let mut global_row = 0usize;
+        #[cfg(test)]
+        let inject_panic = tests::KORE_WORKER_PANIC.with(|c| c.get());
         for chunk_idx in 0..self.nchunks {
             let chunk_nrows = self.chunk_nrows[chunk_idx];
             let chunk_cols: Vec<Vec<KVal>> = std::thread::scope(|s| {
                 let handles: Vec<_> = (0..self.ncols).map(|ci| {
                     s.spawn(move || {
+                        #[cfg(test)]
+                        if inject_panic && ci == 0 { panic!("injected kore decode worker panic"); }
                         let meta = &self.col_meta[chunk_idx][ci];
                         self.decode_col_block(ci, meta, chunk_nrows, chunk_idx)
                     })
@@ -3772,6 +3780,8 @@ pub fn csv_to_kore(csv_path: &str, kore_path: &str) -> Result<String, String> {
         let ncols = schema.len();
 
         // Phase 1: Encode all columns in parallel (compute-only, no I/O)
+        #[cfg(test)]
+        let inject_panic = tests::KORE_WORKER_PANIC.with(|c| c.get());
         let encoded: Vec<(u8, ColStats, Bloom, Vec<u8>)> = {
             let chunk_ref: &[Vec<KVal>] = chunk_cols;
             std::thread::scope(|s| {
@@ -3781,6 +3791,8 @@ pub fn csv_to_kore(csv_path: &str, kore_path: &str) -> Result<String, String> {
                     let file_fscale = fscales[ci];
                     let d = dict;
                     s.spawn(move || {
+                        #[cfg(test)]
+                        if inject_panic && ci == 0 { panic!("injected kore encode worker panic"); }
                         // Per-chunk adaptive float scale: detect from actual chunk values
                         let fscale = if col.ktype == KType::Float {
                             crate::kore_v2::detect_float_scale_vals(vals).min(file_fscale)
@@ -4243,6 +4255,48 @@ pub fn kore_to_csv(kore_path: &str, csv_path: &str) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    thread_local! {
+        /// Test seam: when set on the calling thread, the first column worker of a read or write panics.
+        pub(super) static KORE_WORKER_PANIC: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    }
+
+    fn tiny_csv(tag: &str) -> (std::path::PathBuf, String, String) {
+        let dir = std::env::temp_dir().join(format!("killer_kore_worker_{}_{}", tag, std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let csv = dir.join("t.csv");
+        std::fs::write(&csv, "id,name,score\n1,a,1.5\n2,b,2.5\n3,c,3.5\n").unwrap();
+        let kore = dir.join("t.kore");
+        (dir, csv.to_string_lossy().to_string(), kore.to_string_lossy().to_string())
+    }
+
+    #[test]
+    fn worker_panic_while_reading_is_an_error_not_a_process_panic() {
+        let (dir, csv, kore) = tiny_csv("read");
+        csv_to_kore(&csv, &kore).unwrap();
+        let reader = KoreReader::open(&kore).unwrap();
+        KORE_WORKER_PANIC.with(|c| c.set(true));
+        let all = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = reader.read_all();
+        }));
+        let each = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = reader.for_each_row(|_| {});
+        }));
+        KORE_WORKER_PANIC.with(|c| c.set(false));
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(all.is_ok(), "read_all() panicked instead of returning Err");
+        assert!(each.is_ok(), "for_each_row() panicked instead of returning Err");
+    }
+
+    #[test]
+    fn worker_panic_while_writing_is_an_error_not_a_process_panic() {
+        let (dir, csv, kore) = tiny_csv("write");
+        KORE_WORKER_PANIC.with(|c| c.set(true));
+        let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| csv_to_kore(&csv, &kore).is_err()));
+        KORE_WORKER_PANIC.with(|c| c.set(false));
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(r.ok(), Some(true), "csv_to_kore() panicked instead of returning Err");
+    }
 
     #[test]
     fn test_varint_roundtrip() {
