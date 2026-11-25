@@ -1,3 +1,5 @@
+// HISTORICAL: this example uses websocket_new / websocket_server_new, which were removed and no longer run.
+// The real WebSocket API is ws_connect / ws_accept (SOURCE/src/v2-rust/killer/docs/LANGUAGE.md).
 // Killer v3.0 Performance Benchmark Suite
 // WebSocket Framework Performance Tests
 // Measures: connection performance, message throughput, multi-client scenarios, broadcast latency

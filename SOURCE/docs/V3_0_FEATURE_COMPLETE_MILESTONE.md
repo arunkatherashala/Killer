@@ -1,3 +1,5 @@
+> **Historical document.** This page records an earlier stage of the project and is kept as it was; it does not describe current Killer. The `websocket_new` / `websocket_server_new` builtins it mentions were removed (the simulated `websocket.rs` is archived in `SOURCE/src/v2-rust/killer/archive/uncompiled/`); the real WebSocket client and server are `ws_connect` / `ws_accept`, see [LANGUAGE.md](../src/v2-rust/killer/docs/LANGUAGE.md). Current status: [FEATURES.md](../src/v2-rust/killer/docs/FEATURES.md) and [STATUS.md](../src/v2-rust/killer/docs/STATUS.md).
+
 # SESSION MILESTONE: v3.0 Feature-Complete at 80% Coverage 🎉
 
 **Final Session Status**: ✅ COMPLETE  

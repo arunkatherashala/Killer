@@ -1,3 +1,5 @@
+// HISTORICAL: this example uses websocket_new / websocket_server_new, which were removed and no longer run.
+// The real WebSocket API is ws_connect / ws_accept (SOURCE/src/v2-rust/killer/docs/LANGUAGE.md).
 // WebSocket Chat Application
 // Week 24B: WebSocket Protocol Support
 // Demonstrates: multi-user chat, message routing, connection management
