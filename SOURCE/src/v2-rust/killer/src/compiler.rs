@@ -7261,6 +7261,7 @@ const BUILTINS: &[&str] = &[
     "ffi_open", "ffi_call", "ffi_close", "ffi_alloc", "ffi_free", "ffi_poke", "ffi_peek",
     "hex", "bin", "oct", "uuid", "dict_merge",
     "eval", "exec", "gui_open", "gui_win_new", "gui_win_add", "gui_win_get", "gui_win_set", "gui_win_items", "gui_win_wait", "gui_win_click", "gui_win_close", "gui_win_mode", "gui_message_box", "sql_open", "sql_exec", "sql_query", "sql_close",
+    "pg_connect", "pg_query", "pg_exec", "pg_close",
     "tls_listen", "tls_accept", "tcp_listen", "tcp_accept", "tcp_connect", "sock_send", "sock_recv", "sock_recv_line", "sock_addr", "sock_peer",
     "sock_close", "tcp_connect_tls", "tls_error", "udp_bind", "udp_send", "udp_recv", "ws_connect", "ws_accept", "ws_send", "ws_recv", "ws_close",
     "ord", "chr", "pad_left", "pad_right", "repeat", "strip", "lstrip", "rstrip", "startsWith", "endsWith",

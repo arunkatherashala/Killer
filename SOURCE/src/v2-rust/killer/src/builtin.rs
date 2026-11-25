@@ -1269,6 +1269,9 @@ impl BuiltinFunctions {
                 if let Some(result) = crate::eval_builtins::call(name, args) {
                     return result;
                 }
+                if let Some(result) = crate::pg_client::call(name, args) {
+                    return result;
+                }
                 if let Some(result) = crate::net_sock::call(name, args) {
                     return result;
                 }

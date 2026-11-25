@@ -159,6 +159,8 @@ NEWDESC = {
     "mock_embed": "mock_embed(text, dim): deterministic offline embedding for tests and demos", "llm_embed_batch": "embed many texts through a provider (OpenAI, Ollama, any compatible server)",
     "log_debug": "log at debug level (message[, fields])", "log_info": "log at info level", "log_warn": "log at warn level", "log_error": "log at error level",
     "log_set_level": "set the minimum log level at run time", "load_env": "load a .env file into the environment without overriding existing variables; returns the names set",
+    "pg_connect": "connect to PostgreSQL (postgres:// URL or dict; SCRAM-SHA-256; plaintext, no TLS)", "pg_query": "run SQL on PostgreSQL; $1.. params bound as text; returns columns, rows, command, row_count",
+    "pg_exec": "run SQL on PostgreSQL and return the affected row count", "pg_close": "close a PostgreSQL connection",
 }
 DESC.update(NEWDESC)
 

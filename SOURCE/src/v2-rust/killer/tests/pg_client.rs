@@ -199,7 +199,8 @@ impl Fake {
         let mut m = vec![t];
         m.extend_from_slice(&((body.len() + 4) as u32).to_be_bytes());
         m.extend_from_slice(body);
-        self.s.write_all(&m).unwrap();
+        // the client may already have hung up on purpose (a refused handshake); the checks are on what it sent
+        let _ = self.s.write_all(&m);
     }
 
     fn raw(&mut self, bytes: &[u8]) {

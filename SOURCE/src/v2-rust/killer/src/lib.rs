@@ -270,6 +270,7 @@ pub mod http_req;              // hardened curl core for the http_* client built
 pub mod gui_native;             // native widgets: window(), message_box() (see std/gui_native.killer)
 pub mod gui_builtins;           // gui_open(): the browser as a window (see std/gui.killer)
 pub mod sql_engine;             // sql_open / sql_exec / sql_query / sql_close
+pub mod pg_client;              // pg_connect / pg_query / pg_exec / pg_close (PostgreSQL wire protocol v3)
 pub mod eval_builtins;         // eval(code, vars) / exec(code, vars)
 pub mod net_sock;              // real TCP / UDP / WebSocket sockets
 pub mod net_tls_server;       // TLS listener side (openssl s_server per connection)
