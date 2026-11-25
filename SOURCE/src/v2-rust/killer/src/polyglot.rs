@@ -141,11 +141,12 @@ pub fn override_vars(key: &str) -> Vec<String> {
 pub enum PolyglotError {
     UnknownLang(String),
     RuntimeMissing { lang: String, detail: String },
-    Timeout { lang: String, secs: f64 },
+    /// `tree_killed`: every process of the block is known to be dead (see `kill_tree`).
+    Timeout { lang: String, secs: f64, tree_killed: bool },
     /// The block (or its compile step, `stage == "compile"`) exited with a non-zero code
     /// (`code == None`: killed by a signal).
     NonZeroExit { lang: String, stage: &'static str, code: Option<i32>, stderr: String, stdout: String },
-    OutputTooLarge { lang: String, limit: usize },
+    OutputTooLarge { lang: String, limit: usize, tree_killed: bool },
     PolicyDenied { lang: String, reason: String },
     Spawn { lang: String, detail: String },
 }
@@ -181,6 +182,15 @@ impl PolyglotError {
     }
 }
 
+/// What happened to the block's processes after a limit was hit.
+fn killed_text(tree_killed: bool) -> &'static str {
+    if tree_killed {
+        "its process tree was killed"
+    } else {
+        "the block was stopped, but its child processes could not all be killed and may still be running"
+    }
+}
+
 impl std::fmt::Display for PolyglotError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let code = self.code();
@@ -191,7 +201,7 @@ impl std::fmt::Display for PolyglotError {
                 "{code}: {lang} runtime not found on this machine: {detail}. Install it, or set {} to its absolute path; check what is installed with `killer polyglot list`",
                 override_vars(lang)[0]
             ),
-            PolyglotError::Timeout { lang, secs } => write!(f, "{code}: @{lang} timed out after {secs} s and its process tree was killed (raise KILLER_POLYGLOT_TIMEOUT)"),
+            PolyglotError::Timeout { lang, secs, tree_killed } => write!(f, "{code}: @{lang} timed out after {secs} s and {} (raise KILLER_POLYGLOT_TIMEOUT)", killed_text(*tree_killed)),
             PolyglotError::NonZeroExit { lang, stage, code: exit, stderr, stdout } => {
                 let what = if stage.is_empty() { format!("@{lang}") } else { format!("@{lang} {stage} step") };
                 match exit {
@@ -206,7 +216,7 @@ impl std::fmt::Display for PolyglotError {
                 }
                 Ok(())
             }
-            PolyglotError::OutputTooLarge { lang, limit } => write!(f, "{code}: @{lang} output limit exceeded ({limit} bytes) and its process tree was killed (raise KILLER_POLYGLOT_MAX_OUTPUT)"),
+            PolyglotError::OutputTooLarge { lang, limit, tree_killed } => write!(f, "{code}: @{lang} output limit exceeded ({limit} bytes) and {} (raise KILLER_POLYGLOT_MAX_OUTPUT)", killed_text(*tree_killed)),
             PolyglotError::PolicyDenied { lang, reason } => write!(f, "{code}: @{lang} is not allowed: {reason}"),
             PolyglotError::Spawn { lang, detail } => write!(f, "{code}: could not start @{lang}: {detail}"),
         }
@@ -523,33 +533,297 @@ struct Captured {
     stderr: Vec<u8>,
 }
 
+/// `bool` in `Timeout` / `Overflow`: the whole process tree was killed (see [`kill_tree`]).
 enum LimitFail {
     Spawn(std::io::Error),
-    Timeout(Duration),
-    Overflow(usize),
+    Timeout(Duration, bool),
+    Overflow(usize, bool),
 }
 
-/// Kill the child and everything it started (Unix: its process group; Windows: `taskkill /T`).
-/// Grandchildren that put themselves in another group / job can survive.
-fn kill_tree(child: &mut Child) {
+/// Windows Job Object holding a block's process tree. Every process the child starts joins the
+/// job too (no breakaway is allowed), so terminating the job kills grandchildren also when the
+/// direct child has already exited, which `taskkill /T` cannot do (it walks the tree from a live
+/// parent). `KILL_ON_JOB_CLOSE` also kills the tree if this process dies while a block runs.
+#[cfg(windows)]
+#[allow(unsafe_code)] // the kernel32 Job Object calls below
+mod job {
+    use std::ffi::c_void;
+    use std::os::windows::io::AsRawHandle;
+
+    type Handle = *mut c_void;
+
+    /// JOBOBJECT_BASIC_LIMIT_INFORMATION
+    #[repr(C)]
+    #[derive(Default)]
+    struct BasicLimit {
+        per_process_user_time_limit: i64,
+        per_job_user_time_limit: i64,
+        limit_flags: u32,
+        minimum_working_set_size: usize,
+        maximum_working_set_size: usize,
+        active_process_limit: u32,
+        affinity: usize,
+        priority_class: u32,
+        scheduling_class: u32,
+    }
+
+    /// JOBOBJECT_EXTENDED_LIMIT_INFORMATION (IO_COUNTERS is six u64)
+    #[repr(C)]
+    #[derive(Default)]
+    struct ExtendedLimit {
+        basic: BasicLimit,
+        io: [u64; 6],
+        process_memory_limit: usize,
+        job_memory_limit: usize,
+        peak_process_memory_used: usize,
+        peak_job_memory_used: usize,
+    }
+
+    const JOB_OBJECT_EXTENDED_LIMIT_INFORMATION: i32 = 9;
+    const JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE: u32 = 0x2000;
+
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn CreateJobObjectW(attributes: *const c_void, name: *const u16) -> Handle;
+        fn SetInformationJobObject(job: Handle, class: i32, info: *const c_void, len: u32) -> i32;
+        fn AssignProcessToJobObject(job: Handle, process: Handle) -> i32;
+        fn TerminateJobObject(job: Handle, exit_code: u32) -> i32;
+        fn CloseHandle(h: Handle) -> i32;
+    }
+
+    pub struct Job(Handle);
+
+    fn set_flags(h: Handle, flags: u32) -> bool {
+        let mut info = ExtendedLimit::default();
+        info.basic.limit_flags = flags;
+        // SAFETY: `h` is a job handle this module owns; `info` is a live, correctly laid out
+        // JOBOBJECT_EXTENDED_LIMIT_INFORMATION and the length passed is its size.
+        unsafe { SetInformationJobObject(h, JOB_OBJECT_EXTENDED_LIMIT_INFORMATION, &info as *const ExtendedLimit as *const c_void, std::mem::size_of::<ExtendedLimit>() as u32) != 0 }
+    }
+
+    impl Job {
+        /// A new job holding `child`, or `None` when Windows refuses (the caller then falls back
+        /// to `taskkill /T`). A process the child starts before it is assigned (a few
+        /// microseconds after spawn) is not in the job.
+        pub fn for_child(child: &std::process::Child) -> Option<Job> {
+            // SAFETY: null attributes and name are allowed; the returned handle is checked.
+            let h = unsafe { CreateJobObjectW(std::ptr::null(), std::ptr::null()) };
+            if h.is_null() {
+                return None;
+            }
+            let job = Job(h);
+            // SAFETY: `child.as_raw_handle()` is the child's process handle, valid while `child`
+            // lives (it is borrowed for this call); `job.0` is the handle created above.
+            if !set_flags(job.0, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE) || unsafe { AssignProcessToJobObject(job.0, child.as_raw_handle() as Handle) } == 0 {
+                return None; // dropping `job` closes the handle; the child is not in it
+            }
+            Some(job)
+        }
+
+        /// Kill every process in the job. `true` when Windows reports success.
+        pub fn terminate(&self) -> bool {
+            // SAFETY: `self.0` is a valid job handle owned by `self`.
+            unsafe { TerminateJobObject(self.0, 1) != 0 }
+        }
+
+        /// Close the job without killing what is still running in it (the normal end of a block:
+        /// background processes it started behave as on Unix, where they also survive).
+        pub fn release(self) {
+            set_flags(self.0, 0);
+            // `drop` closes the handle
+        }
+    }
+
+    impl Drop for Job {
+        fn drop(&mut self) {
+            // SAFETY: `self.0` is a valid handle owned by `self` and closed exactly once, here.
+            unsafe {
+                CloseHandle(self.0);
+            }
+        }
+    }
+
+    // --- Descendant walk: processes that are not in the job ---------------------------------
+    //
+    // A packaged runtime (the Microsoft Store python behind the WindowsApps alias) starts its own
+    // children outside every job of its parent, so the job cannot reach them. They are found by
+    // parent process id in a process snapshot instead. Windows does not re-parent orphans, so a
+    // grandchild still names its exited parent; creation times rule out a reused process id.
+
+    /// PROCESSENTRY32W
+    #[repr(C)]
+    struct ProcessEntry {
+        size: u32,
+        usage: u32,
+        pid: u32,
+        heap_id: usize,
+        module_id: u32,
+        threads: u32,
+        parent_pid: u32,
+        priority: i32,
+        flags: u32,
+        exe: [u16; 260],
+    }
+
+    const TH32CS_SNAPPROCESS: u32 = 2;
+    const PROCESS_TERMINATE: u32 = 0x1;
+    const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
+    const STILL_ACTIVE: u32 = 259;
+    const ERROR_INVALID_PARAMETER: u32 = 87;
+
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn CreateToolhelp32Snapshot(flags: u32, pid: u32) -> Handle;
+        fn Process32FirstW(snap: Handle, entry: *mut ProcessEntry) -> i32;
+        fn Process32NextW(snap: Handle, entry: *mut ProcessEntry) -> i32;
+        fn OpenProcess(access: u32, inherit: i32, pid: u32) -> Handle;
+        fn GetProcessTimes(h: Handle, creation: *mut u64, exit: *mut u64, kernel: *mut u64, user: *mut u64) -> i32;
+        fn TerminateProcess(h: Handle, code: u32) -> i32;
+        fn GetExitCodeProcess(h: Handle, code: *mut u32) -> i32;
+        fn GetLastError() -> u32;
+    }
+
+    /// `(creation, exit)` file times of a process handle (`exit == 0` while it runs).
+    fn times(h: Handle) -> Option<(u64, u64)> {
+        let (mut c, mut e, mut k, mut u) = (0u64, 0u64, 0u64, 0u64);
+        // SAFETY: `h` is a valid process handle; the four pointers are live u64s (a FILETIME is
+        // two u32 words, 8 bytes, and u64 is at least as aligned).
+        (unsafe { GetProcessTimes(h, &mut c, &mut e, &mut k, &mut u) } != 0).then_some((c, e))
+    }
+
+    /// `(pid, parent pid, creation time)` of every process this account can query.
+    fn snapshot() -> Vec<(u32, u32, u64)> {
+        let mut out = Vec::new();
+        // SAFETY: plain call; the handle is checked and closed below.
+        let snap = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) };
+        if snap.is_null() || snap as isize == -1 {
+            return out;
+        }
+        // SAFETY: an all-zero PROCESSENTRY32W is valid plain data; `size` is set as the API requires.
+        let mut e: ProcessEntry = unsafe { std::mem::zeroed() };
+        e.size = std::mem::size_of::<ProcessEntry>() as u32;
+        // SAFETY: `snap` is a valid snapshot handle and `e` a live entry of the declared size.
+        let mut ok = unsafe { Process32FirstW(snap, &mut e) } != 0;
+        while ok {
+            // SAFETY: plain call; a null handle is checked, a valid one is closed after use.
+            let h = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, e.pid) };
+            if !h.is_null() {
+                if let Some((created, _)) = times(h) {
+                    out.push((e.pid, e.parent_pid, created));
+                }
+                // SAFETY: `h` was opened above and is closed once.
+                unsafe { CloseHandle(h) };
+            }
+            // SAFETY: as for Process32FirstW
+            ok = unsafe { Process32NextW(snap, &mut e) } != 0;
+        }
+        // SAFETY: `snap` was opened above and is closed once.
+        unsafe { CloseHandle(snap) };
+        out
+    }
+
+    /// Every live descendant of `root` (it may have exited already) that the snapshot can see.
+    pub fn descendants(root: &std::process::Child) -> Vec<u32> {
+        let Some((root_created, root_exit)) = times(root.as_raw_handle() as Handle) else {
+            return Vec::new();
+        };
+        let procs = snapshot();
+        let me = std::process::id();
+        // (pid, creation time, exit time or MAX): a child must be created while its parent lived
+        let mut found: Vec<(u32, u64, u64)> = vec![(root.id(), root_created, if root_exit == 0 { u64::MAX } else { root_exit })];
+        let mut grew = true;
+        while grew {
+            grew = false;
+            for &(pid, ppid, created) in &procs {
+                if pid == me || found.iter().any(|f| f.0 == pid) {
+                    continue;
+                }
+                if found.iter().any(|&(p, c, e)| p == ppid && created >= c && created <= e) {
+                    found.push((pid, created, u64::MAX));
+                    grew = true;
+                }
+            }
+        }
+        found.into_iter().skip(1).map(|f| f.0).collect()
+    }
+
+    /// Kill `pids`; `true` when each one is dead afterwards (or was already gone).
+    pub fn kill_pids(pids: &[u32]) -> bool {
+        let mut all = true;
+        for &pid in pids {
+            // SAFETY: plain call; a null handle is checked, a valid one is closed below.
+            let h = unsafe { OpenProcess(PROCESS_TERMINATE | PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
+            if h.is_null() {
+                // SAFETY: plain call right after the failing one
+                all &= unsafe { GetLastError() } == ERROR_INVALID_PARAMETER; // no such process
+                continue;
+            }
+            let mut code = 0u32;
+            // SAFETY: `h` is a valid process handle with the rights requested above; `code` is live.
+            let dead = unsafe { TerminateProcess(h, 1) != 0 || (GetExitCodeProcess(h, &mut code) != 0 && code != STILL_ACTIVE) };
+            all &= dead;
+            // SAFETY: `h` was opened above and is closed once.
+            unsafe { CloseHandle(h) };
+        }
+        all
+    }
+}
+
+/// No Job Objects outside Windows: the process group plays that role.
+#[cfg(not(windows))]
+mod job {
+    pub struct Job;
+
+    impl Job {
+        pub fn for_child(_child: &std::process::Child) -> Option<Job> {
+            None
+        }
+
+        pub fn release(self) {}
+    }
+}
+
+/// Kill the child and everything it started (Unix: its process group; Windows: its Job Object, or
+/// `taskkill /T` when no job could be made, plus every descendant found by parent process id, which
+/// also reaches children a packaged runtime started outside the job). Returns `true` only when the
+/// whole tree is known to be killed. A grandchild that moved itself to another process group
+/// (Unix) or whose own parent already exited (Windows walk) can still survive.
+#[cfg_attr(unix, allow(unsafe_code))] // libc::kill
+fn kill_tree(child: &mut Child, job: Option<&job::Job>) -> bool {
+    let tree;
     #[cfg(unix)]
-    unsafe {
-        libc::kill(-(child.id() as libc::pid_t), libc::SIGKILL);
+    {
+        let _ = job;
+        // SAFETY: plain syscall; a negative pid names the child's process group (set at spawn).
+        // ESRCH: no process is left in the group, so nothing of the tree survives.
+        let r = unsafe { libc::kill(-(child.id() as libc::pid_t), libc::SIGKILL) };
+        tree = r == 0 || std::io::Error::last_os_error().raw_os_error() == Some(libc::ESRCH);
     }
     #[cfg(windows)]
     {
-        if let Some(root) = std::env::var_os("SystemRoot").or_else(|| std::env::var_os("windir")) {
-            let tk = Path::new(&root).join("System32").join("taskkill.exe");
-            let _ = Command::new(tk)
-                .args(["/T", "/F", "/PID", &child.id().to_string()])
-                .stdin(Stdio::null())
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .status();
+        // list the tree first: once a parent dies its children can no longer be told from strangers
+        let escaped = job::descendants(child);
+        let mut killed = job.map_or(false, |j| j.terminate());
+        if !killed && !matches!(child.try_wait(), Ok(Some(_))) {
+            if let Some(root) = std::env::var_os("SystemRoot").or_else(|| std::env::var_os("windir")) {
+                let tk = Path::new(&root).join("System32").join("taskkill.exe");
+                // taskkill fails when the child already exited: its children are then not found
+                killed = Command::new(tk)
+                    .args(["/T", "/F", "/PID", &child.id().to_string()])
+                    .stdin(Stdio::null())
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .status()
+                    .map_or(false, |s| s.success());
+            }
         }
+        let root_done = killed || matches!(child.try_wait(), Ok(Some(_)));
+        // processes outside the job (a packaged runtime's children) are killed one by one
+        tree = job::kill_pids(&escaped) && root_done;
     }
     let _ = child.kill();
     let _ = child.wait();
+    tree
 }
 
 fn pump<R: Read + Send + 'static>(mut r: R, total: Arc<AtomicUsize>, cap: usize, over: Arc<AtomicBool>, echo: bool) -> std::thread::JoinHandle<Vec<u8>> {
@@ -602,6 +876,7 @@ fn run_limited(cmd: &mut Command, timeout: Option<Duration>, cap: usize, echo: b
     }
     let start = Instant::now();
     let mut child = cmd.spawn().map_err(LimitFail::Spawn)?;
+    let job = job::Job::for_child(&child);
     let total = Arc::new(AtomicUsize::new(0));
     let over = Arc::new(AtomicBool::new(false));
     let t_out = pump(child.stdout.take().expect("piped"), total.clone(), cap, over.clone(), echo);
@@ -610,8 +885,7 @@ fn run_limited(cmd: &mut Command, timeout: Option<Duration>, cap: usize, echo: b
     let mut nap = Duration::from_millis(1);
     let status = loop {
         if over.load(Ordering::SeqCst) {
-            kill_tree(&mut child);
-            return Err(LimitFail::Overflow(cap));
+            return Err(LimitFail::Overflow(cap, kill_tree(&mut child, job.as_ref())));
         }
         match child.try_wait() {
             Ok(Some(st)) => break Some(st),
@@ -619,8 +893,7 @@ fn run_limited(cmd: &mut Command, timeout: Option<Duration>, cap: usize, echo: b
             Err(_) => break None,
         }
         if expired(&start) {
-            kill_tree(&mut child);
-            return Err(LimitFail::Timeout(timeout.unwrap_or_default()));
+            return Err(LimitFail::Timeout(timeout.unwrap_or_default(), kill_tree(&mut child, job.as_ref())));
         }
         std::thread::sleep(nap);
         nap = (nap * 2).min(Duration::from_millis(20));
@@ -628,19 +901,20 @@ fn run_limited(cmd: &mut Command, timeout: Option<Duration>, cap: usize, echo: b
     // a background grandchild can keep the pipes open after the child exits: stay inside the limits
     while !(t_out.is_finished() && t_err.is_finished()) {
         if over.load(Ordering::SeqCst) {
-            kill_tree(&mut child);
-            return Err(LimitFail::Overflow(cap));
+            return Err(LimitFail::Overflow(cap, kill_tree(&mut child, job.as_ref())));
         }
         if expired(&start) {
-            kill_tree(&mut child);
-            return Err(LimitFail::Timeout(timeout.unwrap_or_default()));
+            return Err(LimitFail::Timeout(timeout.unwrap_or_default(), kill_tree(&mut child, job.as_ref())));
         }
         std::thread::sleep(Duration::from_millis(5));
     }
     let stdout = t_out.join().unwrap_or_default();
     let stderr = t_err.join().unwrap_or_default();
     if over.load(Ordering::SeqCst) {
-        return Err(LimitFail::Overflow(cap));
+        return Err(LimitFail::Overflow(cap, kill_tree(&mut child, job.as_ref())));
+    }
+    if let Some(j) = job {
+        j.release();
     }
     Ok(Captured { code: status.and_then(|s| s.code()), stdout, stderr })
 }
@@ -683,8 +957,8 @@ impl Ctx<'_> {
         match run_limited(&mut cmd, timeout, self.s.max_output, echo) {
             Ok(c) => Ok(c),
             Err(LimitFail::Spawn(e)) => Err(PolyglotError::Spawn { lang, detail: e.to_string() }),
-            Err(LimitFail::Timeout(t)) => Err(PolyglotError::Timeout { lang, secs: t.as_secs_f64() }),
-            Err(LimitFail::Overflow(limit)) => Err(PolyglotError::OutputTooLarge { lang, limit }),
+            Err(LimitFail::Timeout(t, tree_killed)) => Err(PolyglotError::Timeout { lang, secs: t.as_secs_f64(), tree_killed }),
+            Err(LimitFail::Overflow(limit, tree_killed)) => Err(PolyglotError::OutputTooLarge { lang, limit, tree_killed }),
         }
     }
 
@@ -1260,8 +1534,17 @@ mod tests {
         let e = PolyglotError::NonZeroExit { lang: "bash".into(), stage: "", code: Some(3), stderr: "boom".into(), stdout: String::new() };
         assert!(matches!(e, PolyglotError::NonZeroExit { code: Some(3), .. }));
         assert!(e.to_string().starts_with("POLYGLOT_E_EXIT: @bash failed with exit code 3:\nboom"));
-        assert_eq!(PolyglotError::Timeout { lang: "x".into(), secs: 1.0 }.code(), "POLYGLOT_E_TIMEOUT");
+        assert_eq!(PolyglotError::Timeout { lang: "x".into(), secs: 1.0, tree_killed: true }.code(), "POLYGLOT_E_TIMEOUT");
         assert!(PolyglotError::RuntimeMissing { lang: "python".into(), detail: "d".into() }.to_string().contains("runtime not found"));
+    }
+
+    #[test]
+    fn limit_errors_claim_a_killed_tree_only_when_it_was() {
+        let t = |k| PolyglotError::Timeout { lang: "python".into(), secs: 2.0, tree_killed: k }.to_string();
+        assert!(t(true).contains("process tree was killed"), "{}", t(true));
+        assert!(!t(false).contains("tree was killed") && t(false).contains("may still be running"), "{}", t(false));
+        let o = PolyglotError::OutputTooLarge { lang: "python".into(), limit: 9, tree_killed: false }.to_string();
+        assert!(!o.contains("tree was killed") && o.contains("may still be running"), "{o}");
     }
 
     #[test]
@@ -1326,7 +1609,7 @@ mod tests {
         let _t = CapabilityScopeGuard::install(CapabilitySet::trusted_local());
         assert!(ai_assist_allowed(true, &fail));
         assert!(!ai_assist_allowed(false, &fail));
-        assert!(!ai_assist_allowed(true, &PolyglotError::Timeout { lang: "python".into(), secs: 1.0 }));
+        assert!(!ai_assist_allowed(true, &PolyglotError::Timeout { lang: "python".into(), secs: 1.0, tree_killed: true }));
         assert!(!ai_assist_allowed(true, &PolyglotError::RuntimeMissing { lang: "python".into(), detail: String::new() }));
         {
             let _g = CapabilityScopeGuard::install(CapabilitySet { allow_process_spawn: true, allow_llm: false, ..CapabilitySet::trusted_local() });
@@ -1351,8 +1634,8 @@ mod tests {
         let mut c = Command::new(&me);
         c.arg("--list");
         match run_limited(&mut c, Some(Duration::from_secs(60)), 64, false) {
-            Err(LimitFail::Overflow(64)) => {}
-            other => panic!("expected overflow, got {}", match other { Ok(_) => "ok", Err(LimitFail::Timeout(_)) => "timeout", Err(LimitFail::Spawn(_)) => "spawn", _ => "?" }),
+            Err(LimitFail::Overflow(64, _)) => {}
+            other => panic!("expected overflow, got {}", match other { Ok(_) => "ok", Err(LimitFail::Timeout(..)) => "timeout", Err(LimitFail::Spawn(_)) => "spawn", _ => "?" }),
         }
     }
 }
