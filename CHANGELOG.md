@@ -12,12 +12,17 @@ Tests: `tests/polyglot.rs`.
 - **Block bodies are verbatim.** They are taken from the source before any Killer rewriting: Python indentation,
   `//`, `--`, `#` and quotes inside a block now reach the runtime unchanged (before, indentation was stripped and
   `//` / `--` were removed as Killer comments). The common indentation is removed. Blocks work in expression
-  position (`println(@python { ... })`, `return @python { ... }`).
+  position (`println(@python { ... })`, `return @python { ... }`). The closing brace is found outside the block
+  language's own strings and comments, so `print('a "quote')` no longer swallows the rest of the file; a block that
+  never closes is a compile error naming its line (before, it silently fell back to an older, mangling parser).
 - **Timeouts and an output cap.** 60 s per run step (120 s for javac / rustc / gcc compile steps,
-  `KILLER_POLYGLOT_TIMEOUT`) and 8 MiB of stdout + stderr (`KILLER_POLYGLOT_MAX_OUTPUT`); the process tree is killed.
+  `KILLER_POLYGLOT_TIMEOUT`) and 8 MiB of stdout + stderr (`KILLER_POLYGLOT_MAX_OUTPUT`); the process tree is killed
+  (Windows: Job Object plus a parent-pid walk, so a grandchild that outlived its parent dies too; the error says the
+  tree was killed only when it was).
   Before, a block could run and buffer output forever. A long-running block now needs a larger timeout.
 - **Scrubbed environment.** A block gets only an allowlist of variables (PATH, SYSTEMROOT, TEMP, HOME, ...) plus
-  `KILLER_POLYGLOT_ENV_PASS`; API keys and tokens are no longer inherited. Scripts that relied on `VIRTUAL_ENV`,
+  `KILLER_POLYGLOT_ENV_PASS`, with the values from startup (`env_set` cannot change a block's PATH); API keys and
+  tokens are no longer inherited. Scripts that relied on `VIRTUAL_ENV`,
   proxy or custom variables must list them in `KILLER_POLYGLOT_ENV_PASS`. `PYTHONIOENCODING=utf-8` / `PYTHONUTF8=1`
   are set, so non-ASCII output works on Windows.
 - **Private working directory.** A block runs in a fresh temp directory that is always removed (also after errors

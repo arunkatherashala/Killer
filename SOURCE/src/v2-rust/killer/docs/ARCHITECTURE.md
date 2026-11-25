@@ -42,7 +42,7 @@ All of this is in `compile_killer_subset` (`src/compiler.rs`). The order matters
 | 6 | `lambda::lift_mapped` | `lambda.rs` | lifts `fn(x) { }`, `(a, b) => expr` and `x => expr` into named functions defined on the line before the statement that uses them |
 | 7 | `sugar::preprocess_mapped` | `sugar.rs` | surface sugar to core syntax: `'single'`/`"""triple"""` and `f".."` strings, `0xFF`/`0b101`/`1_000` literals, `and`/`or`/`elif`, `+=` and `++`, multiple assignment |
 | 8 | `preprocess_indentation_mapped` | `compiler.rs` | indentation (offside) blocks to braces; strips `--` and `//` comments |
-| 9 | `preprocess_polyglot_mapped` | `compiler.rs` | extracts `@python {}`, `@c {}`... blocks before braces are split |
+| 9 | `preprocess_polyglot_mapped` | `compiler.rs` | line pass-through kept for the line map; `@python {}`, `@c {}`... blocks are already replaced right after step 1 by `polyglot_front::extract` (body verbatim, closing brace found with the block language's strings and comments, an unclosed block is a compile error) |
 | 10 | `preprocess_ui_sugar` | `compiler.rs` | UI sugar, one output line per input line |
 | 11 | `normalize_lines` | `compiler.rs` | splits braces and statements: one statement per `(line number, text)` entry |
 | 12 | `compile_normalized` -> `compile_block` | `compiler.rs` | scans globals and function signatures, emits instructions (closure sharing decided by `closure_scan.rs`), patches calls, appends `Halt`, calls `main()` automatically if defined and not called |

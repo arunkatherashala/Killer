@@ -2216,9 +2216,11 @@ d = json_parse(@python { import json; print(json.dumps({"a": 1})) })
 ```
 
 * **Verbatim body.** The text between the braces reaches the runtime unchanged except that the common indentation
-  is removed: `//`, `--`, `#`, quotes and indentation are not Killer syntax inside a block. Braces are counted
-  outside `"` strings, so a `}` inside a `'...'` string closes the block early. Lines after a block keep their line
-  numbers in error messages.
+  is removed: `//`, `--`, `#`, quotes and indentation are not Killer syntax inside a block. The closing `}` is
+  found by counting braces outside the block language's own strings and comments (single, double and triple
+  quotes, JS template literals, shell heredocs, PowerShell here-strings, Lua long strings, Rust raw strings and
+  char literals), so `print('a "quote')` or `# don't }` cannot end or hide the block. A block that never closes is
+  a compile error naming its line. Lines after a block keep their line numbers in error messages.
 * **Languages:** python (python3), node (js), ts (typescript), ruby, perl, php, lua, r, go, bash, sh, powershell (ps,
   pwsh), swift, kotlin, scala, elixir, haskell, zig, java, rust, c, cpp (c++). Java, Rust, C and C++ are compiled
   first; bare statements are wrapped in `main`. The runtime must be installed: `killer polyglot list` shows what is.
@@ -2228,8 +2230,11 @@ d = json_parse(@python { import json; print(json.dumps({"a": 1})) })
   numbers are one higher); bash and sh get `a='...'` assignments (strings as text, other values as JSON); every other
   language reads `KILLER_ARGS` itself. Return structured data by printing JSON and calling `json_parse`.
 * **Where it runs:** in a fresh private temp directory that is removed afterwards; `KILLER_CWD` holds the directory
-  Killer was started in. The environment is reduced to an allowlist (see OPERATIONS.md, `KILLER_POLYGLOT_ENV_PASS`).
-* **Limits:** 60 s per run step (twice that for compile steps) and 8 MiB of output; then the process tree is killed.
+  Killer was started in. The environment is reduced to an allowlist (see OPERATIONS.md, `KILLER_POLYGLOT_ENV_PASS`) whose values come from
+  the environment at startup: `env_set("PATH", ...)` in a script does not change a block's PATH.
+* **Limits:** 60 s per run step (twice that for compile steps) and 8 MiB of output; then the process tree is killed
+  (Unix: the process group; Windows: a Job Object plus the descendants found by parent process id, which also
+  reaches children that outlived their parent). The error says the tree was killed only when it was.
 * **Errors** are catchable with `try` / `catch` and start with a stable code: `POLYGLOT_E_UNKNOWN_LANG`,
   `POLYGLOT_E_RUNTIME_MISSING`, `POLYGLOT_E_POLICY_DENIED`, `POLYGLOT_E_TIMEOUT`, `POLYGLOT_E_OUTPUT_LIMIT`,
   `POLYGLOT_E_SPAWN`, `POLYGLOT_E_EXIT` (with `exit code N` and the last 2 KiB of stderr).
