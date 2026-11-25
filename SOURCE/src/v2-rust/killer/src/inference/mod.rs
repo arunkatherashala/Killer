@@ -32,6 +32,7 @@
 pub mod gguf;
 pub mod quant;
 pub mod tokenizer;
+pub mod pretokenizer;   // GPT-2 / LLaMA 3 / Qwen2 pre-token splitting before BPE merges
 pub mod sampler;
 pub mod engine;
 pub mod rlm;            // Reasoning Language Model — <think>...</think> support

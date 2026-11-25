@@ -10,6 +10,7 @@
 
 use std::collections::HashMap;
 use super::gguf::GgufFile;
+use super::pretokenizer::PreTokenizer;
 
 /// BPE tokenizer — loaded directly from a GGUF file.
 pub struct KillerTokenizer {
@@ -29,6 +30,10 @@ pub struct KillerTokenizer {
     /// SentencePiece: LLaMA 1/2, TinyLlama, Mistral, Gemma.
     /// BPE: Qwen2, GPT-2, LLaMA 3 (uses `<|begin_of_text|>` etc).
     is_spm: bool,
+    /// Pre-tokenizer for the byte-level BPE path, from `tokenizer.ggml.pre`.
+    pre: PreTokenizer,
+    /// Set when `tokenizer.ggml.pre` is missing or unsupported (GPT-2 splitting is used).
+    pub pre_warning: Option<String>,
 }
 
 impl KillerTokenizer {
@@ -73,10 +78,19 @@ impl KillerTokenizer {
             }
         }
 
+        // Byte-level BPE splits text into pre-tokens first (`tokenizer.ggml.pre`); SentencePiece
+        // models do not use a pre-tokenizer.
+        let (pre, pre_warning) = if is_spm {
+            (PreTokenizer::Gpt2, None)
+        } else {
+            PreTokenizer::from_gguf_name(gguf.meta_str("tokenizer.ggml.pre").as_deref())
+        };
+        if let Some(w) = &pre_warning { eprintln!("[Killer] warning: {}", w); }
+
         eprintln!("[tok-info] is_spm={} bos={} eos={} vocab_size={}", is_spm, bos_id, eos_id, vocab_size);
         Ok(KillerTokenizer {
             vocab, token_scores, token_types, vocab_size,
-            bos_id, eos_id, pad_id, unk_id, token_to_id, merge_ranks, is_spm,
+            bos_id, eos_id, pad_id, unk_id, token_to_id, merge_ranks, is_spm, pre, pre_warning,
         })
     }
 
@@ -254,11 +268,12 @@ impl KillerTokenizer {
                 } else { break; }
             }
             let seg = &text[seg_start..pos];
-            if !seg.is_empty() {
+            // Pre-tokenize: merges never cross a pre-token boundary (GPT-2 / LLaMA 3 / Qwen2 regex).
+            for word in self.pre.split(seg) {
                 // Convert to GPT-2 byte-level encoding before BPE lookup:
                 // Qwen2/GPT-2 stores tokens with bytes mapped to specific Unicode chars
                 // (e.g. '\n' → 'Ċ', ' ' → 'Ġ'). We must encode the text the same way.
-                let gpt2_seg: String = seg.bytes().map(|b| Self::byte_to_unicode(b)).collect();
+                let gpt2_seg: String = word.bytes().map(|b| Self::byte_to_unicode(b)).collect();
                 let mut pieces = if self.merge_ranks.is_empty() {
                     let mut p = self.initial_tokenize(&gpt2_seg, parse_special);
                     self.bpe_merge(&mut p, parse_special);
@@ -419,7 +434,7 @@ mod tests {
             vocab_size,
             bos_id: 1, eos_id: 2, pad_id: 0, unk_id: 0,
             vocab, token_to_id, merge_ranks: HashMap::new(),
-            is_spm: true,
+            is_spm: true, pre: PreTokenizer::Gpt2, pre_warning: None,
         }
     }
 
@@ -445,7 +460,7 @@ mod tests {
             vocab_size,
             bos_id: 1, eos_id: 2, pad_id: 0, unk_id: 0,
             vocab, token_to_id, merge_ranks: HashMap::new(),
-            is_spm: false,
+            is_spm: false, pre: PreTokenizer::Gpt2, pre_warning: None,
         }
     }
 
@@ -499,7 +514,7 @@ mod tests {
             token_scores: vec![0.0; vocab_size],
             token_types: vec![1u32; vocab_size],
             vocab_size, bos_id: 1, eos_id: 2, pad_id: 0, unk_id: 0,
-            vocab, token_to_id, merge_ranks, is_spm: false,
+            vocab, token_to_id, merge_ranks, is_spm: false, pre: PreTokenizer::Gpt2, pre_warning: None,
         }
     }
 
@@ -546,10 +561,58 @@ mod tests {
             token_scores: vec![0.0; vocab_size],
             token_types: vec![1u32; vocab_size],
             vocab_size, bos_id: 1, eos_id: 2, pad_id: 0, unk_id: 0,
-            vocab, token_to_id, merge_ranks, is_spm: false,
+            vocab, token_to_id, merge_ranks, is_spm: false, pre: PreTokenizer::Gpt2, pre_warning: None,
         };
         // a=3, Ġb=7 (without pre-tokenization the result is [aĠ=6, b=4])
         assert_eq!(tok.encode("a b", false), vec![3, 7]);
+    }
+
+    // Minimal GGUF (no tensors) with a byte-level BPE vocab ["1","2","12","x"], merge "1 2",
+    // and an optional `tokenizer.ggml.pre`.
+    fn bpe_gguf(path: &std::path::Path, pre: Option<&str>) {
+        fn gstr(b: &mut Vec<u8>, s: &str) { b.extend((s.len() as u64).to_le_bytes()); b.extend(s.as_bytes()); }
+        fn kv_str(b: &mut Vec<u8>, k: &str, v: &str) { gstr(b, k); b.extend(8u32.to_le_bytes()); gstr(b, v); }
+        fn kv_strs(b: &mut Vec<u8>, k: &str, v: &[&str]) {
+            gstr(b, k); b.extend(9u32.to_le_bytes()); b.extend(8u32.to_le_bytes());
+            b.extend((v.len() as u64).to_le_bytes());
+            for s in v { gstr(b, s); }
+        }
+        let mut b = Vec::new();
+        b.extend(0x46554747u32.to_le_bytes()); b.extend(3u32.to_le_bytes());
+        b.extend(0u64.to_le_bytes()); b.extend((3 + pre.is_some() as u64).to_le_bytes());
+        kv_str(&mut b, "tokenizer.ggml.model", "gpt2");
+        if let Some(p) = pre { kv_str(&mut b, "tokenizer.ggml.pre", p); }
+        kv_strs(&mut b, "tokenizer.ggml.tokens", &["1", "2", "12", "x"]);
+        kv_strs(&mut b, "tokenizer.ggml.merges", &["1 2"]);
+        std::fs::write(path, b).unwrap();
+    }
+
+    #[test]
+    fn pre_tokenizer_comes_from_gguf_metadata() {
+        let dir = std::env::temp_dir().join(format!("killer_pretok_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let load = |name: &str, pre: Option<&str>| {
+            let p = dir.join(name);
+            bpe_gguf(&p, pre);
+            KillerTokenizer::from_gguf(&GgufFile::open(p.to_str().unwrap()).unwrap()).unwrap()
+        };
+        // ids: 1=0 2=1 12=2 x=3
+        // Qwen2 splits digits individually, so the "1 2" merge cannot apply.
+        let qwen = load("qwen.gguf", Some("qwen2"));
+        assert!(qwen.pre_warning.is_none());
+        assert_eq!(qwen.encode("x12", false), vec![3, 0, 1]);
+        // GPT-2 keeps the number run together: x | 12
+        let gpt2 = load("gpt2.gguf", Some("gpt-2"));
+        assert_eq!(gpt2.encode("x12", false), vec![3, 2]);
+        // LLaMA 3 groups up to 3 digits
+        let l3 = load("l3.gguf", Some("llama-bpe"));
+        assert_eq!(l3.encode("x12", false), vec![3, 2]);
+        // Unsupported or missing names are reported, not silently accepted.
+        let odd = load("odd.gguf", Some("some-new-pre"));
+        assert!(odd.pre_warning.as_deref().unwrap_or("").contains("unsupported pre-tokenizer 'some-new-pre'"));
+        let none = load("none.gguf", None);
+        assert!(none.pre_warning.as_deref().unwrap_or("").contains("missing"));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
