@@ -90,7 +90,7 @@ fn parse_alg(name: &str) -> Result<Alg, String> {
         "HS512" => Ok(Alg::Hs512),
         n if n.eq_ignore_ascii_case("none") => Err("algorithm 'none' is never accepted (unsigned tokens are refused)".to_string()),
         n if ["RS", "PS", "ES"].iter().any(|p| n.starts_with(p)) || n == "EdDSA" => {
-            Err(format!("unsupported algorithm {}: needs a public-key crate (not built)", n))
+            Err(format!("unsupported algorithm {}: needs a public-key crate (not built)", short(n)))
         }
         n => Err(format!("unsupported algorithm {}", short(n))),
     }
