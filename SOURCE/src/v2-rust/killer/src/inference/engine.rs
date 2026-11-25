@@ -1198,7 +1198,10 @@ mod tests {
     fn kv_u32(b: &mut Vec<u8>, k: &str, v: u32) { gstr(b, k); b.extend(4u32.to_le_bytes()); b.extend(v.to_le_bytes()); }
 
     /// Build a tiny llama GGUF (all F32). `q_cols` is the out-dim of attn_q (8 is correct).
-    fn tiny_gguf(path: &std::path::Path, q_cols: u64) {
+    fn tiny_gguf(path: &std::path::Path, q_cols: u64) { tiny_gguf_arch(path, q_cols, "llama") }
+
+    /// Same LLaMA-layout tensors, with `general.architecture` and the key prefix set to `arch`.
+    fn tiny_gguf_arch(path: &std::path::Path, q_cols: u64, arch: &str) {
         let mut b = Vec::new();
         let tensors: Vec<(String, Vec<u64>)> = {
             let mut t = vec![("token_embd.weight".to_string(), vec![8, 4]), ("output_norm.weight".to_string(), vec![8])];
@@ -1212,12 +1215,12 @@ mod tests {
         };
         b.extend(0x46554747u32.to_le_bytes()); b.extend(3u32.to_le_bytes());
         b.extend((tensors.len() as u64).to_le_bytes()); b.extend(7u64.to_le_bytes());
-        gstr(&mut b, "general.architecture"); b.extend(8u32.to_le_bytes()); gstr(&mut b, "llama");
-        kv_u32(&mut b, "llama.block_count", 1);
-        kv_u32(&mut b, "llama.attention.head_count", 4);
-        kv_u32(&mut b, "llama.embedding_length", 8);
-        kv_u32(&mut b, "llama.feed_forward_length", 16);
-        kv_u32(&mut b, "llama.context_length", 32);
+        gstr(&mut b, "general.architecture"); b.extend(8u32.to_le_bytes()); gstr(&mut b, arch);
+        kv_u32(&mut b, &format!("{}.block_count", arch), 1);
+        kv_u32(&mut b, &format!("{}.attention.head_count", arch), 4);
+        kv_u32(&mut b, &format!("{}.embedding_length", arch), 8);
+        kv_u32(&mut b, &format!("{}.feed_forward_length", arch), 16);
+        kv_u32(&mut b, &format!("{}.context_length", arch), 32);
         gstr(&mut b, "tokenizer.ggml.tokens"); b.extend(9u32.to_le_bytes()); b.extend(8u32.to_le_bytes()); b.extend(4u64.to_le_bytes());
         for t in ["<unk>", "<s>", "</s>", "a"] { gstr(&mut b, t); }
         let mut off = 0u64;
@@ -1250,6 +1253,28 @@ mod tests {
         let good = dir.join("good.gguf");
         tiny_gguf(&good, 8);
         assert!(KillerInference::load(good.to_str().unwrap()).is_ok());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Falcon / GPT-NeoX (and other GPT-style LayerNorm+GELU families) must be rejected at load
+    /// instead of running with LLaMA settings, even when the tensor names happen to fit.
+    #[test]
+    fn load_rejects_falcon_and_gptneox_instead_of_running_as_llama() {
+        let dir = std::env::temp_dir().join(format!("killer_arch_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        for arch in ["falcon", "gptneox", "gptj", "gpt2", "bloom", "mpt", "starcoder"] {
+            let p = dir.join(format!("{}.gguf", arch));
+            tiny_gguf_arch(&p, 8, arch);
+            let err = KillerInference::load(p.to_str().unwrap()).err()
+                .unwrap_or_else(|| panic!("{} must be rejected", arch));
+            assert!(err.contains(&format!("unsupported architecture {}:", arch)), "{}", err);
+        }
+        // Supported LLaMA-family names still load.
+        for arch in ["llama", "mistral"] {
+            let p = dir.join(format!("{}.gguf", arch));
+            tiny_gguf_arch(&p, 8, arch);
+            assert!(KillerInference::load(p.to_str().unwrap()).is_ok(), "{}", arch);
+        }
         let _ = std::fs::remove_dir_all(&dir);
     }
 
