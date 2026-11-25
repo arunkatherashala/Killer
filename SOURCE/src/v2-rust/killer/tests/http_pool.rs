@@ -579,3 +579,31 @@ println("served", n)
     }
     assert_eq!(srv.finish(60), "served 8");
 }
+
+#[test]
+fn back_to_back_requests_are_not_delayed_by_the_accept_poll() {
+    // one client sending requests one after another: each waited for the accept loop's 2 ms poll
+    // sleep before (median about 2.5 ms per request on a trivial handler); while requests keep
+    // arriving the loop must poll fast
+    let port = free_port();
+    let srv = start(&format!(
+        r#"fn h(req) {{
+  return "ok"
+}}
+n = serve({port}, h, {{"workers": 2, "max_requests": 301}})
+println("served", n)
+"#
+    ));
+    wait_ready(port);
+    let mut lat: Vec<Duration> = (0..300)
+        .map(|_| {
+            let t = Instant::now();
+            assert_eq!(get(port, "/x", 60).0, 200);
+            t.elapsed()
+        })
+        .collect();
+    lat.sort();
+    let median = lat[lat.len() / 2];
+    assert!(median < Duration::from_micros(1500), "median latency {:?} (p10 {:?}, p90 {:?})", median, lat[30], lat[270]);
+    assert_eq!(srv.finish(60), "served 301");
+}
