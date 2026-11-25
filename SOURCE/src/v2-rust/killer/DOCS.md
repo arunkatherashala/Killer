@@ -1023,23 +1023,64 @@ println(msg)    -- 42
 | `http_status(url)` | Returns HTTP status code as number |
 | `http_download(url, path)` | Download URL to local file |
 
-### HTTP server: one request at a time
+### HTTP server: worker pool
 
-`serve(port, handler[, opts])` runs the accept loop and every handler on the VM thread, so
-**requests are handled strictly one after another**; a slow handler delays the requests queued
-behind it (there is no `workers` option). Guards that keep one bad client or handler from wedging
-the process:
+`serve(port, handler[, opts])` runs the accept loop on the calling thread and hands every connection
+to a **bounded queue** served by a **fixed pool of worker threads**, so a slow handler or a long
+Server-Sent Events stream occupies one worker and the other requests keep being answered.
 
+- `workers` (default min(number of CPUs, 8), at most 256): how many requests run at the same time.
+  `workers: 1` gives the old behaviour: one request at a time, with the handler running on the
+  script's own thread and data (see below). `serve_once` always uses one worker.
+- `queue` (default 1024, `0` = no queue): connections accepted but not yet picked up by a worker. When
+  the queue is full the client gets `503 Service Unavailable` with `Retry-After: 1` at once instead
+  of waiting.
 - `read_timeout` (seconds, default 10): the total time a client has to send its request. An idle
-  or dribbling connection gets `408 Request Timeout` and the next client is served.
+  or dribbling connection gets `408 Request Timeout`; requests are read by
+  separate reader threads (up to 64, no VM), so a client that sends slowly holds a reader, not a
+  worker, and the workers keep answering complete requests.
 - `request_timeout` (seconds, default 60, `0` turns it off): wall-clock deadline for one handler
   call, checked on loop back-edges. A handler stuck in `while true` is aborted and the client gets
   `503`; the server keeps running. A single blocking builtin (`sleep_ms(1e6)`) cannot be interrupted.
+- `max_requests`: requests that reach routing are counted across all workers; exactly that many are
+  admitted, a later request that was already accepted gets `503`, and `serve` returns once the
+  admitted ones have been answered (each is still bounded by its own `request_timeout` /
+  `stream_timeout`). Connections that never send a complete request (`408`, `400`) do not count.
 - `server_stop()` is process-wide: call it from a handler or from a task on another thread (for
-  example a watchdog started with `async_spawn`). It interrupts reads and streams within about
-  200 ms; a handler that is mid-call finishes (or hits its deadline) first.
+  example a watchdog started with `async_spawn`). The server stops accepting at once, reads and
+  streams in progress are interrupted within about 200 ms, queued connections get `503`, and `serve`
+  waits up to `drain_timeout` (seconds, default 30) for handlers that are still running (a handler
+  that runs longer is abandoned: `serve` returns and its reply may never be sent). With `workers: 1`
+  the handler runs on the script's thread, so `serve` returns only once it has finished.
 - `stream_timeout` (seconds, default 300) bounds a Server-Sent Events reply.
-- Other options: `host`, `max_requests`, `idle_timeout`.
+- Other options: `host`, `idle_timeout` (stops after that long with no connection and nothing in flight).
+- `serve` returns the number of requests answered.
+
+**Handlers do not share global state (behaviour change).** With two or more workers (the default),
+each worker runs its own VM on a private
+copy of the program's data, taken when `serve` starts: top-level variables, the handler and the
+routes (and whatever their closures captured) are deep-copied once per worker. Inside one worker
+the copy persists between requests, and closures that captured the same object still share it; but
+a change made by a handler is not seen by the other workers, nor by the script after `serve`
+returns. To share state between requests use:
+
+- `mutex_new` / `mutex_get` / `mutex_set` / `mutex_add` cells (and `atomic_*`): one cell, visible to
+  every worker and to the main script;
+- channels (`chan_new`, `chan_send`, `chan_recv`) to hand work or results to one owner task;
+- a database or a file (for data that must survive a restart anyway);
+- or `workers: 1`: then there is no copy at all. The handler runs on the script's own VM, one
+  request at a time, exactly as before the pool: what it changes in a global (an in-memory store) is
+  seen by the next request and by the script after `serve` returns. `serve_once` works the same way.
+
+```killer skip
+hits = mutex_new(0)
+fn handler(req) {
+  mutex_add(hits, 1)
+  return "hello"
+}
+n = serve(8080, handler, {"workers": 4, "max_requests": 100})
+println(n, mutex_get(hits))
+```
 
 ### 7.10 JSON
 

@@ -20,6 +20,30 @@ All notable changes to `killer-native` are documented here.
   API keys no longer on command lines.
 
 ### Changed
+- **Behaviour change: `serve` runs handlers on a bounded worker pool, and handlers no longer share global state.**
+  The accept loop hands each connection to a bounded queue (`queue`, default 1024) served by `workers` threads (default
+  min(CPUs, 8), at most 256); a full queue answers `503` with `Retry-After: 1` at once, so one slow client or SSE stream
+  no longer blocks everyone. Requests are read by up to 64 reader threads (no VM) before a worker takes them, so
+  clients that send slowly do not hold the workers. Each worker runs its own VM on a private deep copy of the program data taken when `serve`
+  starts (globals, the handler, the routes and what their closures captured, copied in one walk, so closures sharing a
+  store still share it inside a worker). A handler's change to a global is therefore not seen by the other workers nor by
+  the script after `serve` returns: share state with `mutex_*` / `atomic_*` cells, channels or a database, or pass
+  `workers: 1`, which runs the handler on the script's own VM and data as before (one request at a time, no copy:
+  the script sees the handler's changes after `serve` returns; `serve_once` too; `examples/apps/todo` does this for its
+  in-memory store).
+  `max_requests` counts requests admitted to routing across all workers (exactly that many reach a handler; a later one
+  that was already accepted gets `503`; `serve` returns once they are answered). `server_stop()` stops accepting at
+  once, answers queued connections `503` and waits up to the new `drain_timeout` (default 30 s) for running handlers.
+  `serve` returns the number of requests answered. `request_timeout`, `read_timeout`, `stream_timeout`, `idle_timeout`
+  and `tls` keep their meaning. Bad `workers` / `queue` values are errors. Handlers on workers run in the interpreter
+  (the JIT is not used on worker threads, as for `async_spawn` tasks). Tests: `tests/http_pool.rs`, new HTTPS pool test
+  in `tests/tls_server.rs`. The accept loop blocks in `accept` (a watchdog thread
+  wakes it for `server_stop`, `max_requests` and `idle_timeout`) instead of polling with a 2 ms sleep. Load (release
+  builds, Windows, 8 CPUs, shared machine, Python client, 7 alternating runs, medians; base = the one-at-a-time server):
+  trivial handler, 5 bursts of 200 concurrent `GET`s: 317 req/s -> 2264 req/s, no request refused, server CPU about
+  470 vs 520 us per request; 2000 sequential `GET`s: 2.84 ms -> 2.40 ms per request (a loopback connect+close alone
+  costs about 2.5 ms on this machine); 20 clients trickling their request over 5 s plus one fast client: the fast one
+  waited 5.6 s -> 0.036 s (5 runs). `fib(32)` and a 5M-iteration loop are unchanged (CPU median of 7).
 - The eval memory cap's counting allocator is now declared by the Killer CLI binaries (`killer`, `killer_super`,
   `killer-native`, `killer-repl`) instead of the library, so the library no longer conflicts with an embedder's own
   `#[global_allocator]`; `unsafe` is allowed only in `memcap.rs` for it. Without the allocator (embedder, no

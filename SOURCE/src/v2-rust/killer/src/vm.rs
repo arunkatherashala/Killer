@@ -613,7 +613,68 @@ impl Drop for ImportGuard {
     }
 }
 
+/// A private, detached copy of a VM's program state (top-level variables, classes, capabilities,
+/// memory-cap membership) for one long-lived worker thread, such as an HTTP server worker (see
+/// `http_serve`). Every seed holds its own copies, so two workers never share an `Rc`.
+pub(crate) struct WorkerSeed {
+    task: TaskContext,
+    cap: Option<crate::memcap::Inherited>,
+}
+
+impl WorkerSeed {
+    /// Start `body` on a new named OS thread (same stack size as task threads) with a VM built from
+    /// this seed. `body` receives the VM and the program to call functions of.
+    pub(crate) fn spawn<F>(self, name: String, body: F) -> std::io::Result<std::thread::JoinHandle<()>>
+    where
+        F: FnOnce(&mut VirtualMachine, &Program) + Send + 'static,
+    {
+        std::thread::Builder::new().name(name).stack_size(SPAWN_STACK_BYTES).spawn(move || {
+            let WorkerSeed { task, cap } = self;
+            let _cap = crate::memcap::adopt(cap);
+            let _cap_guard = CapabilityScopeGuard::install(task.capabilities.clone());
+            let mut child = VirtualMachine::new_for_spawn();
+            child.capabilities = task.capabilities.clone();
+            child.current_program = Some(std::sync::Arc::clone(&task.program));
+            child.classes = task.classes;
+            child.method_names = task.method_names;
+            let mut root = Scope::default();
+            root.extend(task.globals.into_iter());
+            child.scopes.push(root);
+            let program = std::sync::Arc::clone(&task.program);
+            body(&mut child, &program);
+        })
+    }
+}
+
 impl VirtualMachine {
+    /// A fresh detached snapshot of this VM's state for a worker thread (see [`WorkerSeed`]),
+    /// together with detached copies of `extra` (handlers, for instance). The top-level variables
+    /// and `extra` are copied in one walk, so sharing between them survives inside the snapshot: two
+    /// closures that capture the same object (or a closure and the global holding that object) still
+    /// see one object in the worker.
+    pub(crate) fn worker_seed(&mut self, program: &Program, extra: &[Value]) -> (WorkerSeed, Vec<Value>) {
+        let names: Vec<String>;
+        let mut values: Vec<Value> = extra.to_vec();
+        {
+            let root: Vec<(String, Value)> = self.scopes.first().map(|r| r.iter().map(|(k, v)| (k.clone(), v.clone())).collect()).unwrap_or_default();
+            names = root.iter().map(|(k, _)| k.clone()).collect();
+            values.extend(root.into_iter().map(|(_, v)| v));
+        }
+        let copied = match Value::Array(crate::value::SharedArray::new(values)).detached() {
+            Value::Array(a) => a.to_vec(),
+            _ => Vec::new(),
+        };
+        let (extra_copies, global_copies) = copied.split_at(extra.len().min(copied.len()));
+        let task = TaskContext {
+            program: self.program_arc_for_spawn(program),
+            capabilities: crate::security::current_capabilities(),
+            globals: names.into_iter().zip(global_copies.iter().cloned()).collect(),
+            classes: self.classes.clone(),
+            method_names: self.method_names.clone(),
+        };
+        (WorkerSeed { task, cap: crate::memcap::inherit() }, extra_copies.to_vec())
+    }
+
     pub fn new() -> Self {
         Self::default()
     }

@@ -169,7 +169,7 @@ test "the HTTP API end to end inside one process" {
   build_api(store)
   port = free_port()
   h = async_spawn(client_session, "http://127.0.0.1:" + str(port))
-  served = serve(port, null, {"max_requests": 7})
+  served = serve(port, null, {"max_requests": 7, "workers": 1})
   r = async_await(h)
   routes_clear()
   assert_eq(served, 7)

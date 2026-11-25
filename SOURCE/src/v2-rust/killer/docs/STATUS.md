@@ -77,7 +77,7 @@ Dead code was moved out of `src/` with `git mv` (history kept, nothing deleted):
   call, about 1.6 s for the whole loop. Fixing it needs a different string representation.
 - Whole-number `+ - * **` results beyond 2^53 become exact big integers automatically, but an integer
   literal above 2^53 is read as a float: write `123n` for those.
-- The HTTP server handles one request at a time, has no TLS, and HTTPS client calls need `curl`.
+- The HTTP server runs handlers on a fixed worker pool (each worker has its own copy of the globals), and HTTPS client calls need `curl`.
 - Token counts from `count_tokens` are an approximation (the real tokenizer needs a model file).
 - `__setitem__` applies to non-string keys only (`obj["x"] = v` is a field write).
 - The debugger shows one stack frame; the language server does not follow imports across files.
