@@ -176,6 +176,12 @@ pub fn check_override(env_name: &str, value: &str) -> Result<PathBuf, String> {
 /// Pure lookup step of [`find_on_path`] (testable): the first `tool` (Windows: `.exe`, `.cmd`,
 /// `.bat`) in an absolute PATH directory that is not the current directory.
 pub fn find_in(tool: &str, path_var: Option<&std::ffi::OsStr>, cwd: Option<&Path>) -> Option<PathBuf> {
+    find_all_in(tool, path_var, cwd).into_iter().next()
+}
+
+/// Every match of [`find_in`], in PATH order.
+pub fn find_all_in(tool: &str, path_var: Option<&std::ffi::OsStr>, cwd: Option<&Path>) -> Vec<PathBuf> {
+    let mut out = Vec::new();
     let names: Vec<String> = if cfg!(windows) {
         if Path::new(tool).extension().is_some() {
             vec![tool.to_string()]
@@ -185,7 +191,10 @@ pub fn find_in(tool: &str, path_var: Option<&std::ffi::OsStr>, cwd: Option<&Path
     } else {
         vec![tool.to_string()]
     };
-    for dir in std::env::split_paths(path_var?) {
+    let Some(pv) = path_var else {
+        return out;
+    };
+    for dir in std::env::split_paths(pv) {
         if dir.as_os_str().is_empty() || !dir.is_absolute() {
             continue;
         }
@@ -196,19 +205,39 @@ pub fn find_in(tool: &str, path_var: Option<&std::ffi::OsStr>, cwd: Option<&Path
         }
         for n in &names {
             let full = dir.join(n);
-            if is_runnable_file(&full) {
-                return Some(full);
+            if is_runnable_file(&full) && !out.contains(&full) {
+                out.push(full);
+                break;
             }
         }
     }
-    None
+    out
 }
 
 /// Absolute path of a polyglot runtime program found through the PATH snapshot (never the current
 /// directory, never a relative PATH entry).
 pub fn find_on_path(tool: &str) -> Option<PathBuf> {
+    find_all_on_path(tool).into_iter().next()
+}
+
+/// Every match of [`find_on_path`], in PATH order.
+pub fn find_all_on_path(tool: &str) -> Vec<PathBuf> {
     let cwd = std::env::current_dir().ok();
-    find_in(tool, snap().path.as_deref(), cwd.as_deref())
+    find_all_in(tool, snap().path.as_deref(), cwd.as_deref())
+}
+
+/// A path inside a `WindowsApps` directory: a Windows Store app execution alias
+/// (`%LOCALAPPDATA%\Microsoft\WindowsApps\python3.exe`) or the packaged app behind it
+/// (`C:\Program Files\WindowsApps\...`). Pure path test, also usable off Windows.
+pub fn in_windows_apps_dir(p: &Path) -> bool {
+    p.to_string_lossy().split(['\\', '/']).any(|c| c.eq_ignore_ascii_case("WindowsApps"))
+}
+
+/// A Windows Store app alias or packaged app ([`in_windows_apps_dir`], Windows only). Such a
+/// program can start its children outside the caller's Job Object, so a timeout cannot be
+/// proven to kill them.
+pub fn is_app_alias(p: &Path) -> bool {
+    cfg!(windows) && in_windows_apps_dir(p)
 }
 
 #[cfg(test)]

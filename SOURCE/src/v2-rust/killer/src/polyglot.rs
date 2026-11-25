@@ -13,7 +13,9 @@
 //!     `KILLER_POLYGLOT_ALLOW`, `KILLER_PROFILE=strict`);
 //!   * a scrubbed environment (a short allowlist plus `KILLER_POLYGLOT_ENV_PASS`) and a private
 //!     working directory that is removed afterwards, also on errors and timeouts;
-//!   * a wall-clock timeout and an output cap; when either is hit the whole process tree is killed;
+//!   * a wall-clock timeout and an output cap; when either is hit the process tree is killed, and
+//!     the error says whether that was proven (a Windows Store app alias runtime cannot be
+//!     contained, so a regular interpreter on PATH is preferred over one);
 //!   * errors with stable `POLYGLOT_E_*` codes that carry the exit code.
 //!
 //! This is hygiene, not a sandbox: the child runs with the OS account's full permissions.
@@ -141,12 +143,13 @@ pub fn override_vars(key: &str) -> Vec<String> {
 pub enum PolyglotError {
     UnknownLang(String),
     RuntimeMissing { lang: String, detail: String },
-    /// `tree_killed`: every process of the block is known to be dead (see `kill_tree`).
-    Timeout { lang: String, secs: f64, tree_killed: bool },
+    /// `tree_killed`: every process of the block is proven dead (see `kill_tree`). `app_alias`:
+    /// the runtime is a Windows Store app alias, whose children cannot be contained.
+    Timeout { lang: String, secs: f64, tree_killed: bool, app_alias: bool },
     /// The block (or its compile step, `stage == "compile"`) exited with a non-zero code
     /// (`code == None`: killed by a signal).
     NonZeroExit { lang: String, stage: &'static str, code: Option<i32>, stderr: String, stdout: String },
-    OutputTooLarge { lang: String, limit: usize, tree_killed: bool },
+    OutputTooLarge { lang: String, limit: usize, tree_killed: bool, app_alias: bool },
     PolicyDenied { lang: String, reason: String },
     Spawn { lang: String, detail: String },
 }
@@ -183,12 +186,18 @@ impl PolyglotError {
 }
 
 /// What happened to the block's processes after a limit was hit.
-fn killed_text(tree_killed: bool) -> &'static str {
+/// The tree is claimed killed only when that was proven; otherwise the text says children may
+/// still run and, for a Windows Store app alias runtime, how to get one that can be contained.
+fn killed_text(lang: &str, tree_killed: bool, app_alias: bool) -> String {
     if tree_killed {
-        "its process tree was killed"
-    } else {
-        "the block was stopped, but its child processes could not all be killed and may still be running"
+        return " and its process tree was killed".to_string();
     }
+    let mut t = "; the block's process was killed but child processes may still be running".to_string();
+    if app_alias {
+        let var = override_vars(lang).into_iter().next().unwrap_or_default();
+        t.push_str(&format!(" (Windows Store app alias {lang} cannot be contained: set {var} to a regular {lang}.exe)"));
+    }
+    t
 }
 
 impl std::fmt::Display for PolyglotError {
@@ -201,7 +210,7 @@ impl std::fmt::Display for PolyglotError {
                 "{code}: {lang} runtime not found on this machine: {detail}. Install it, or set {} to its absolute path; check what is installed with `killer polyglot list`",
                 override_vars(lang)[0]
             ),
-            PolyglotError::Timeout { lang, secs, tree_killed } => write!(f, "{code}: @{lang} timed out after {secs} s and {} (raise KILLER_POLYGLOT_TIMEOUT)", killed_text(*tree_killed)),
+            PolyglotError::Timeout { lang, secs, tree_killed, app_alias } => write!(f, "{code}: @{lang} timed out after {secs} s{} (raise KILLER_POLYGLOT_TIMEOUT)", killed_text(lang, *tree_killed, *app_alias)),
             PolyglotError::NonZeroExit { lang, stage, code: exit, stderr, stdout } => {
                 let what = if stage.is_empty() { format!("@{lang}") } else { format!("@{lang} {stage} step") };
                 match exit {
@@ -216,7 +225,7 @@ impl std::fmt::Display for PolyglotError {
                 }
                 Ok(())
             }
-            PolyglotError::OutputTooLarge { lang, limit, tree_killed } => write!(f, "{code}: @{lang} output limit exceeded ({limit} bytes) and {} (raise KILLER_POLYGLOT_MAX_OUTPUT)", killed_text(*tree_killed)),
+            PolyglotError::OutputTooLarge { lang, limit, tree_killed, app_alias } => write!(f, "{code}: @{lang} output limit exceeded ({limit} bytes){} (raise KILLER_POLYGLOT_MAX_OUTPUT)", killed_text(lang, *tree_killed, *app_alias)),
             PolyglotError::PolicyDenied { lang, reason } => write!(f, "{code}: @{lang} is not allowed: {reason}"),
             PolyglotError::Spawn { lang, detail } => write!(f, "{code}: could not start @{lang}: {detail}"),
         }
@@ -346,6 +355,9 @@ fn check_policy(rt: &LangRuntime) -> Result<(), PolyglotError> {
 pub struct Resolved {
     pub path: PathBuf,
     pub version: String,
+    /// A Windows Store app alias (`tool_path::is_app_alias`): its children can escape the Job
+    /// Object, so a timeout cannot promise to kill them.
+    pub app_alias: bool,
 }
 
 static PROBES: AtomicUsize = AtomicUsize::new(0);
@@ -391,23 +403,41 @@ fn resolve_uncached(key: &str, exes: &[&str], detect: &[&str]) -> Result<Resolve
     for var in override_vars(key) {
         if let Some(val) = crate::tool_path::var(&var).filter(|v| !v.trim().is_empty()) {
             let path = crate::tool_path::check_override(&var, &val)?;
+            let app_alias = crate::tool_path::is_app_alias(&path);
             return match probe(&path, detect) {
-                Some(version) => Ok(Resolved { path, version }),
+                Some(version) => Ok(Resolved { path, version, app_alias }),
                 None => Err(format!("{}={} did not run `{}` successfully", var, val, detect.join(" "))),
             };
         }
     }
-    for exe in exes {
-        if let Some(path) = system_copy(exe).or_else(|| crate::tool_path::find_on_path(exe)) {
-            if let Some(version) = probe(&path, detect) {
-                return Ok(Resolved { path, version });
-            }
+    let found = candidate_order(exes, &|exe: &str| system_copy(exe).into_iter().chain(crate::tool_path::find_all_on_path(exe)).collect());
+    for path in found {
+        if let Some(version) = probe(&path, detect) {
+            let app_alias = crate::tool_path::is_app_alias(&path);
+            return Ok(Resolved { path, version, app_alias });
         }
     }
     Err(format!(
         "none of {} was found in an absolute PATH directory or passed its probe (the current directory and relative PATH entries are never searched)",
         exes.join(", ")
     ))
+}
+
+/// Every copy of every name in `exes` that `find` reports (in `exes` order, then PATH order),
+/// with Windows Store app aliases moved to the end: a regular interpreter anywhere on PATH wins
+/// over an alias that comes first (`python3.exe` in `%LOCALAPPDATA%\Microsoft\WindowsApps`), and
+/// an alias is used only when nothing else runs.
+fn candidate_order(exes: &[&str], find: &dyn Fn(&str) -> Vec<PathBuf>) -> Vec<PathBuf> {
+    let mut all: Vec<PathBuf> = Vec::new();
+    for exe in exes {
+        for p in find(exe) {
+            if !all.contains(&p) {
+                all.push(p);
+            }
+        }
+    }
+    let (aliases, regular): (Vec<PathBuf>, Vec<PathBuf>) = all.into_iter().partition(|p| crate::tool_path::is_app_alias(p));
+    regular.into_iter().chain(aliases).collect()
 }
 
 /// Windows PowerShell lives under %SystemRoot%: prefer that copy.
@@ -537,10 +567,19 @@ struct Captured {
 }
 
 /// `bool` in `Timeout` / `Overflow`: the whole process tree was killed (see [`kill_tree`]).
+/// What `kill_tree` could prove after a limit was hit.
+#[derive(Debug, Clone, Copy)]
+struct Killed {
+    /// every process of the block is proven dead
+    tree: bool,
+    /// the program is a Windows Store app alias (its children escape the job)
+    app_alias: bool,
+}
+
 enum LimitFail {
     Spawn(std::io::Error),
-    Timeout(Duration, bool),
-    Overflow(usize, bool),
+    Timeout(Duration, Killed),
+    Overflow(usize, Killed),
 }
 
 /// Windows Job Object holding a block's process tree. Every process the child starts joins the
@@ -591,6 +630,7 @@ mod job {
         fn SetInformationJobObject(job: Handle, class: i32, info: *const c_void, len: u32) -> i32;
         fn AssignProcessToJobObject(job: Handle, process: Handle) -> i32;
         fn TerminateJobObject(job: Handle, exit_code: u32) -> i32;
+        fn IsProcessInJob(process: Handle, job: Handle, result: *mut i32) -> i32;
         fn CloseHandle(h: Handle) -> i32;
     }
 
@@ -627,6 +667,24 @@ mod job {
         pub fn terminate(&self) -> bool {
             // SAFETY: `self.0` is a valid job handle owned by `self`.
             unsafe { TerminateJobObject(self.0, 1) != 0 }
+        }
+
+        /// Is process `pid` in this job? A process that no longer exists counts as held (it
+        /// cannot outlive the kill); one that cannot be queried does not.
+        pub fn holds(&self, pid: u32) -> bool {
+            // SAFETY: plain call; a null handle is checked, a valid one is closed below.
+            let h = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
+            if h.is_null() {
+                // SAFETY: plain call right after the failing one
+                return unsafe { GetLastError() } == ERROR_INVALID_PARAMETER;
+            }
+            let mut inside: i32 = 0;
+            // SAFETY: `h` is a valid process handle with query rights, `self.0` a valid job
+            // handle and `inside` a live BOOL.
+            let ok = unsafe { IsProcessInJob(h, self.0, &mut inside) } != 0;
+            // SAFETY: `h` was opened above and is closed once.
+            unsafe { CloseHandle(h) };
+            ok && inside != 0
         }
 
         /// Close the job without killing what is still running in it (the normal end of a block:
@@ -725,7 +783,8 @@ mod job {
         out
     }
 
-    /// Every live descendant of `root` (it may have exited already) that the snapshot can see.
+    /// Every live descendant of `root` (it may have exited already) that the snapshot can see,
+    /// inside or outside the job.
     pub fn descendants(root: &std::process::Child) -> Vec<u32> {
         let Some((root_created, root_exit)) = times(root.as_raw_handle() as Handle) else {
             return Vec::new();
@@ -788,11 +847,15 @@ mod job {
 
 /// Kill the child and everything it started (Unix: its process group; Windows: its Job Object, or
 /// `taskkill /T` when no job could be made, plus every descendant found by parent process id, which
-/// also reaches children a packaged runtime started outside the job). Returns `true` only when the
-/// whole tree is known to be killed. A grandchild that moved itself to another process group
-/// (Unix) or whose own parent already exited (Windows walk) can still survive.
+/// also reaches some children a packaged runtime started outside the job). `tree` is `true` only
+/// when the whole tree is proven killed. On Windows that means: the job was terminated, the
+/// program is not a Store app alias (`app_alias`), and every descendant the walk found was inside
+/// the job. A process outside the job means the tree escaped, and the walk cannot link a
+/// grandchild whose own parent already exited, so such runs are reported as unproven even when
+/// every process found was killed. A grandchild that moved itself to another process group (Unix)
+/// can still survive.
 #[cfg_attr(unix, allow(unsafe_code))] // libc::kill
-fn kill_tree(child: &mut Child, job: Option<&job::Job>) -> bool {
+fn kill_tree(child: &mut Child, job: Option<&job::Job>, app_alias: bool) -> Killed {
     let tree;
     #[cfg(unix)]
     {
@@ -805,8 +868,11 @@ fn kill_tree(child: &mut Child, job: Option<&job::Job>) -> bool {
     #[cfg(windows)]
     {
         // list the tree first: once a parent dies its children can no longer be told from strangers
-        let escaped = job::descendants(child);
-        let mut killed = job.map_or(false, |j| j.terminate());
+        let found = job::descendants(child);
+        // a descendant outside our job escaped it: what it started may not be found either
+        let outside = job.map_or(true, |j| found.iter().any(|&pid| !j.holds(pid)));
+        let by_job = job.map_or(false, |j| j.terminate());
+        let mut killed = by_job;
         if !killed && !matches!(child.try_wait(), Ok(Some(_))) {
             if let Some(root) = std::env::var_os("SystemRoot").or_else(|| std::env::var_os("windir")) {
                 let tk = Path::new(&root).join("System32").join("taskkill.exe");
@@ -822,11 +888,12 @@ fn kill_tree(child: &mut Child, job: Option<&job::Job>) -> bool {
         }
         let root_done = killed || matches!(child.try_wait(), Ok(Some(_)));
         // processes outside the job (a packaged runtime's children) are killed one by one
-        tree = job::kill_pids(&escaped) && root_done;
+        let all_found_dead = job::kill_pids(&found);
+        tree = by_job && root_done && all_found_dead && !outside && !app_alias;
     }
     let _ = child.kill();
     let _ = child.wait();
-    tree
+    Killed { tree, app_alias }
 }
 
 fn pump<R: Read + Send + 'static>(mut r: R, total: Arc<AtomicUsize>, cap: usize, over: Arc<AtomicBool>, echo: bool) -> std::thread::JoinHandle<Vec<u8>> {
@@ -877,6 +944,7 @@ fn run_limited(cmd: &mut Command, timeout: Option<Duration>, cap: usize, echo: b
         use std::os::unix::process::CommandExt;
         cmd.process_group(0);
     }
+    let app_alias = crate::tool_path::is_app_alias(Path::new(cmd.get_program()));
     let start = Instant::now();
     let mut child = cmd.spawn().map_err(LimitFail::Spawn)?;
     let job = job::Job::for_child(&child);
@@ -888,7 +956,7 @@ fn run_limited(cmd: &mut Command, timeout: Option<Duration>, cap: usize, echo: b
     let mut nap = Duration::from_millis(1);
     let status = loop {
         if over.load(Ordering::SeqCst) {
-            return Err(LimitFail::Overflow(cap, kill_tree(&mut child, job.as_ref())));
+            return Err(LimitFail::Overflow(cap, kill_tree(&mut child, job.as_ref(), app_alias)));
         }
         match child.try_wait() {
             Ok(Some(st)) => break Some(st),
@@ -896,7 +964,7 @@ fn run_limited(cmd: &mut Command, timeout: Option<Duration>, cap: usize, echo: b
             Err(_) => break None,
         }
         if expired(&start) {
-            return Err(LimitFail::Timeout(timeout.unwrap_or_default(), kill_tree(&mut child, job.as_ref())));
+            return Err(LimitFail::Timeout(timeout.unwrap_or_default(), kill_tree(&mut child, job.as_ref(), app_alias)));
         }
         std::thread::sleep(nap);
         nap = (nap * 2).min(Duration::from_millis(20));
@@ -904,17 +972,17 @@ fn run_limited(cmd: &mut Command, timeout: Option<Duration>, cap: usize, echo: b
     // a background grandchild can keep the pipes open after the child exits: stay inside the limits
     while !(t_out.is_finished() && t_err.is_finished()) {
         if over.load(Ordering::SeqCst) {
-            return Err(LimitFail::Overflow(cap, kill_tree(&mut child, job.as_ref())));
+            return Err(LimitFail::Overflow(cap, kill_tree(&mut child, job.as_ref(), app_alias)));
         }
         if expired(&start) {
-            return Err(LimitFail::Timeout(timeout.unwrap_or_default(), kill_tree(&mut child, job.as_ref())));
+            return Err(LimitFail::Timeout(timeout.unwrap_or_default(), kill_tree(&mut child, job.as_ref(), app_alias)));
         }
         std::thread::sleep(Duration::from_millis(5));
     }
     let stdout = t_out.join().unwrap_or_default();
     let stderr = t_err.join().unwrap_or_default();
     if over.load(Ordering::SeqCst) {
-        return Err(LimitFail::Overflow(cap, kill_tree(&mut child, job.as_ref())));
+        return Err(LimitFail::Overflow(cap, kill_tree(&mut child, job.as_ref(), app_alias)));
     }
     if let Some(j) = job {
         j.release();
@@ -960,8 +1028,8 @@ impl Ctx<'_> {
         match run_limited(&mut cmd, timeout, self.s.max_output, echo) {
             Ok(c) => Ok(c),
             Err(LimitFail::Spawn(e)) => Err(PolyglotError::Spawn { lang, detail: e.to_string() }),
-            Err(LimitFail::Timeout(t, tree_killed)) => Err(PolyglotError::Timeout { lang, secs: t.as_secs_f64(), tree_killed }),
-            Err(LimitFail::Overflow(limit, tree_killed)) => Err(PolyglotError::OutputTooLarge { lang, limit, tree_killed }),
+            Err(LimitFail::Timeout(t, k)) => Err(PolyglotError::Timeout { lang, secs: t.as_secs_f64(), tree_killed: k.tree, app_alias: k.app_alias }),
+            Err(LimitFail::Overflow(limit, k)) => Err(PolyglotError::OutputTooLarge { lang, limit, tree_killed: k.tree, app_alias: k.app_alias }),
         }
     }
 
@@ -1298,6 +1366,8 @@ pub struct RuntimeRow {
     pub version: String,
     pub override_var: String,
     pub detail: String,
+    /// The runtime found is a Windows Store app alias (a timeout cannot contain its children).
+    pub app_alias: bool,
 }
 
 /// Probe every language (denied languages are not probed).
@@ -1305,7 +1375,7 @@ pub fn runtime_rows() -> Vec<RuntimeRow> {
     RUNTIMES
         .iter()
         .map(|rt| {
-            let mut row = RuntimeRow { name: rt.name, aliases: rt.aliases, status: "ok", path: String::new(), version: String::new(), override_var: override_vars(rt.name)[0].clone(), detail: String::new() };
+            let mut row = RuntimeRow { name: rt.name, aliases: rt.aliases, status: "ok", path: String::new(), version: String::new(), override_var: override_vars(rt.name)[0].clone(), detail: String::new(), app_alias: false };
             if let Err(e) = policy_decision(rt.name, settings(), true) {
                 row.status = "denied";
                 row.detail = e.to_string();
@@ -1316,6 +1386,7 @@ pub fn runtime_rows() -> Vec<RuntimeRow> {
                 Ok(r) => {
                     row.path = r.path.to_string_lossy().into_owned();
                     row.version = r.version;
+                    row.app_alias = r.app_alias;
                 }
                 Err(e) => {
                     row.status = "missing";
@@ -1332,13 +1403,14 @@ fn rows_json(rows: &[RuntimeRow]) -> String {
         .iter()
         .map(|r| {
             format!(
-                "{{\"name\":{},\"aliases\":[{}],\"status\":{},\"path\":{},\"version\":{},\"override\":{}}}",
+                "{{\"name\":{},\"aliases\":[{}],\"status\":{},\"path\":{},\"version\":{},\"override\":{},\"app_alias\":{}}}",
                 js(r.name),
                 r.aliases.iter().map(|a| js(a)).collect::<Vec<_>>().join(","),
                 js(r.status),
                 js(&r.path),
                 js(&r.version),
-                js(&r.override_var)
+                js(&r.override_var),
+                r.app_alias
             )
         })
         .collect();
@@ -1349,6 +1421,12 @@ fn rows_text(rows: &[RuntimeRow]) -> String {
     let mut out = format!("{:<11} {:<8} {:<60} {}\n", "LANGUAGE", "STATUS", "PATH", "VERSION");
     for r in rows {
         out.push_str(&format!("{:<11} {:<8} {:<60} {}\n", r.name, r.status, if r.path.is_empty() { "-" } else { &r.path }, r.version));
+    }
+    for r in rows.iter().filter(|r| r.app_alias) {
+        out.push_str(&format!(
+            "warning: {} is a Windows Store app alias ({}): processes a block starts can escape the timeout kill. Install a regular {}.exe on PATH or set {} to one\n",
+            r.name, r.path, r.name, r.override_var
+        ));
     }
     out
 }
@@ -1537,17 +1615,60 @@ mod tests {
         let e = PolyglotError::NonZeroExit { lang: "bash".into(), stage: "", code: Some(3), stderr: "boom".into(), stdout: String::new() };
         assert!(matches!(e, PolyglotError::NonZeroExit { code: Some(3), .. }));
         assert!(e.to_string().starts_with("POLYGLOT_E_EXIT: @bash failed with exit code 3:\nboom"));
-        assert_eq!(PolyglotError::Timeout { lang: "x".into(), secs: 1.0, tree_killed: true }.code(), "POLYGLOT_E_TIMEOUT");
+        assert_eq!(PolyglotError::Timeout { lang: "x".into(), secs: 1.0, tree_killed: true, app_alias: false }.code(), "POLYGLOT_E_TIMEOUT");
         assert!(PolyglotError::RuntimeMissing { lang: "python".into(), detail: "d".into() }.to_string().contains("runtime not found"));
     }
 
     #[test]
     fn limit_errors_claim_a_killed_tree_only_when_it_was() {
-        let t = |k| PolyglotError::Timeout { lang: "python".into(), secs: 2.0, tree_killed: k }.to_string();
+        let t = |k| PolyglotError::Timeout { lang: "python".into(), secs: 2.0, tree_killed: k, app_alias: false }.to_string();
         assert!(t(true).contains("process tree was killed"), "{}", t(true));
         assert!(!t(false).contains("tree was killed") && t(false).contains("may still be running"), "{}", t(false));
-        let o = PolyglotError::OutputTooLarge { lang: "python".into(), limit: 9, tree_killed: false }.to_string();
+        assert!(!t(false).contains("Windows Store"), "{}", t(false));
+        let o = PolyglotError::OutputTooLarge { lang: "python".into(), limit: 9, tree_killed: false, app_alias: false }.to_string();
         assert!(!o.contains("tree was killed") && o.contains("may still be running"), "{o}");
+    }
+
+    #[test]
+    fn escaped_store_alias_tree_gets_the_truthful_message() {
+        let t = PolyglotError::Timeout { lang: "python".into(), secs: 3.0, tree_killed: false, app_alias: true }.to_string();
+        assert!(t.starts_with("POLYGLOT_E_TIMEOUT: @python timed out after 3 s; the block's process was killed but child processes may still be running"), "{t}");
+        assert!(t.contains("(Windows Store app alias python cannot be contained: set KILLER_POLYGLOT_PYTHON to a regular python.exe)"), "{t}");
+        assert!(!t.contains("tree was killed"), "{t}");
+        let o = PolyglotError::OutputTooLarge { lang: "node".into(), limit: 9, tree_killed: false, app_alias: true }.to_string();
+        assert!(o.contains("may still be running") && o.contains("set KILLER_POLYGLOT_NODE to a regular node.exe"), "{o}");
+    }
+
+    #[test]
+    fn windows_apps_paths_are_recognised() {
+        use crate::tool_path::in_windows_apps_dir;
+        assert!(in_windows_apps_dir(Path::new("C:/Users/u/AppData/Local/Microsoft/WindowsApps/python3.exe")));
+        assert!(in_windows_apps_dir(Path::new("C:/Program Files/windowsapps/PythonSoftwareFoundation.Python.3.13_x64/python.exe")));
+        assert!(!in_windows_apps_dir(Path::new("C:/Users/u/AppData/Local/Programs/Python/Python312/python.exe")));
+        assert!(!in_windows_apps_dir(Path::new("/usr/bin/WindowsAppsTool/python3")));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_regular_interpreter_wins_over_an_earlier_store_alias() {
+        let base = std::env::temp_dir().join(format!("killer_alias_{}_{}", std::process::id(), line!()));
+        let apps = base.join("Microsoft").join("WindowsApps");
+        let real = base.join("Programs").join("Python312");
+        fs::create_dir_all(&apps).unwrap();
+        fs::create_dir_all(&real).unwrap();
+        for p in [apps.join("python3.exe"), apps.join("python.exe"), real.join("python.exe")] {
+            fs::write(p, b"x").unwrap();
+        }
+        // the alias directory comes first on PATH and `python3` is tried before `python`
+        let pv = std::env::join_paths([apps.clone(), real.clone()]).unwrap();
+        let find = |exe: &str| crate::tool_path::find_all_in(exe, Some(&pv), None);
+        let order = candidate_order(&["python3", "python", "py"], &find);
+        assert_eq!(order, vec![real.join("python.exe"), apps.join("python3.exe"), apps.join("python.exe")]);
+        // only aliases: they are still used
+        let pv2 = std::env::join_paths([apps.clone()]).unwrap();
+        let only = candidate_order(&["python3", "python"], &|exe: &str| crate::tool_path::find_all_in(exe, Some(&pv2), None));
+        assert_eq!(only, vec![apps.join("python3.exe"), apps.join("python.exe")]);
+        let _ = fs::remove_dir_all(&base);
     }
 
     #[test]
@@ -1612,7 +1733,7 @@ mod tests {
         let _t = CapabilityScopeGuard::install(CapabilitySet::trusted_local());
         assert!(ai_assist_allowed(true, &fail));
         assert!(!ai_assist_allowed(false, &fail));
-        assert!(!ai_assist_allowed(true, &PolyglotError::Timeout { lang: "python".into(), secs: 1.0, tree_killed: true }));
+        assert!(!ai_assist_allowed(true, &PolyglotError::Timeout { lang: "python".into(), secs: 1.0, tree_killed: true, app_alias: false }));
         assert!(!ai_assist_allowed(true, &PolyglotError::RuntimeMissing { lang: "python".into(), detail: String::new() }));
         {
             let _g = CapabilityScopeGuard::install(CapabilitySet { allow_process_spawn: true, allow_llm: false, ..CapabilitySet::trusted_local() });
