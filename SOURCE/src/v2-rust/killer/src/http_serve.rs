@@ -19,7 +19,9 @@
 //! **Worker pool.** The accept loop runs on the calling VM thread and hands each connection to a
 //! bounded queue (`queue`, default 1024) served by a fixed pool of worker threads (`workers`, default
 //! min(CPUs, 8)). When the queue is full the connection gets `503` at once (from a small rejecter
-//! thread, so the accept loop never waits on a client). Every worker owns one VM built from a
+//! thread, so the accept loop never waits on a client). Requests are read in full by reader threads
+//! (plain threads without a VM, at most 64) before a worker takes them, so a client that sends slowly
+//! holds a reader, not a worker. Every worker owns one VM built from a
 //! private detached copy of the program state taken when `serve` starts ([`WorkerSeed`]): handler
 //! values, routes and top-level variables are deep-copied per worker, so no `Rc` crosses a thread
 //! and a handler's changes to globals stay inside its worker (share state with `mutex_*`, channels or
@@ -40,7 +42,7 @@
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
-use std::sync::mpsc::{sync_channel, Receiver, SyncSender, TrySendError};
+use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -187,7 +189,7 @@ pub fn parse_head(head: &str) -> Result<Req, String> {
 }
 
 /// One read bounded by an overall `deadline` (not per read, so a client dribbling bytes cannot
-/// hold a worker) and interruptible by `server_stop()` or by the server closing (`closing`): waits
+/// hold a reader) and interruptible by `server_stop()` or by the server closing (`closing`): waits
 /// in 200 ms slices.
 fn read_some(stream: &mut TcpStream, buf: &mut [u8], deadline: Instant, closing: &AtomicBool) -> Result<usize, String> {
     loop {
@@ -538,24 +540,54 @@ fn refuse(mut stream: TcpStream, r: &Resp) {
     }
 }
 
-/// One connection on a worker: read the request, admit it against `max_requests`, call the
-/// handler on this worker's VM and write the reply.
-fn handle_conn(vm: &mut VirtualMachine, program: &Program, routes: &[Route], handler: &Option<Value>, lim: Limits, pool: &Pool, mut stream: TcpStream) {
-    if stop_requested() || pool.closing.load(Ordering::SeqCst) {
-        refuse(stream, &unavailable("the server is stopping"));
+/// A request read in full by a reader thread, on its way to a worker. The guard keeps the
+/// connection counted as pending until the worker is done with it.
+struct Ready {
+    stream: TcpStream,
+    req: Req,
+    _done: PendingGuard,
+}
+
+/// Most reader threads one server starts. Readers are plain threads (no VM) that read requests, so
+/// a client sending slowly holds a reader, not a worker; a reader costs a small stack.
+const MAX_READERS: usize = 64;
+const READER_STACK_BYTES: usize = 256 * 1024;
+
+/// A reader thread: take accepted connections, read each request in full (bounded by
+/// `read_timeout`) and pass it to the workers; answer `408`/`400` itself.
+fn reader_loop(pool: &Arc<Pool>, lim: Limits, rx: &Mutex<Receiver<TcpStream>>, work: &std::sync::mpsc::Sender<Ready>) {
+    loop {
+        let next = rx.lock().unwrap_or_else(|p| p.into_inner()).recv();
+        let Ok(mut stream) = next else { break };
+        let done = PendingGuard(Arc::clone(pool));
+        let _ = stream.set_nonblocking(false);
+        let _ = stream.set_read_timeout(Some(Duration::from_secs(10)));
+        let _ = stream.set_write_timeout(Some(Duration::from_secs(10)));
+        if stop_requested() || pool.closing.load(Ordering::SeqCst) {
+            refuse(stream, &unavailable("the server is stopping"));
+            continue;
+        }
+        match read_request(&mut stream, Instant::now() + lim.read_limit, &pool.closing) {
+            // when the workers are gone the request is dropped (and the connection closed)
+            Ok(req) => drop(work.send(Ready { stream, req, _done: done })),
+            Err(e) => {
+                if e == "timeout" {
+                    write_resp(&mut stream, false, &text_resp(408, "text/plain; charset=utf-8", "Request Timeout".to_string()));
+                } else if e != "connection closed" && e != "server stopping" {
+                    write_resp(&mut stream, false, &text_resp(400, "text/plain; charset=utf-8", format!("Bad Request: {}", e)));
+                }
+            }
+        }
+    }
+}
+
+/// One request on a worker: admit it against `max_requests`, call the handler on this worker's VM
+/// and write the reply.
+fn handle_req(vm: &mut VirtualMachine, program: &Program, routes: &[Route], handler: &Option<Value>, lim: Limits, pool: &Pool, mut stream: TcpStream, req: &Req) {
+    if stop_requested() {
+        write_resp(&mut stream, req.method == "HEAD", &unavailable("the server is stopping"));
         return;
     }
-    let req = match read_request(&mut stream, Instant::now() + lim.read_limit, &pool.closing) {
-        Ok(r) => r,
-        Err(e) => {
-            if e == "timeout" {
-                write_resp(&mut stream, false, &text_resp(408, "text/plain; charset=utf-8", "Request Timeout".to_string()));
-            } else if e != "connection closed" && e != "server stopping" {
-                write_resp(&mut stream, false, &text_resp(400, "text/plain; charset=utf-8", format!("Bad Request: {}", e)));
-            }
-            return;
-        }
-    };
     let n = pool.admitted.fetch_add(1, Ordering::SeqCst) + 1;
     if let Some(m) = pool.max_requests {
         if n > m {
@@ -596,16 +628,12 @@ fn handle_conn(vm: &mut VirtualMachine, program: &Program, routes: &[Route], han
     pool.last_done_ms.store(pool.born.elapsed().as_millis() as u64, Ordering::SeqCst);
 }
 
-/// A worker thread: take connections from the shared queue until the accept loop drops its end.
-fn worker_loop(vm: &mut VirtualMachine, program: &Program, routes: &[Route], handler: &Option<Value>, lim: Limits, pool: &Arc<Pool>, rx: &Mutex<Receiver<TcpStream>>) {
+/// A worker thread: take read requests from the readers until every reader has finished.
+fn worker_loop(vm: &mut VirtualMachine, program: &Program, routes: &[Route], handler: &Option<Value>, lim: Limits, pool: &Pool, rx: &Mutex<Receiver<Ready>>) {
     loop {
         let next = rx.lock().unwrap_or_else(|p| p.into_inner()).recv();
-        let Ok(stream) = next else { break };
-        let _done = PendingGuard(Arc::clone(pool));
-        let _ = stream.set_nonblocking(false);
-        let _ = stream.set_read_timeout(Some(Duration::from_secs(10)));
-        let _ = stream.set_write_timeout(Some(Duration::from_secs(10)));
-        handle_conn(vm, program, routes, handler, lim, pool, stream);
+        let Ok(Ready { stream, req, _done }) = next else { break };
+        handle_req(vm, program, routes, handler, lim, pool, stream, &req);
     }
 }
 
@@ -716,8 +744,25 @@ fn serve_loop(vm: &mut VirtualMachine, args: &[Value], program: &Program, once: 
         }
     }
     let _close = CloseOnDrop(Arc::clone(&pool));
-    let (tx, rx): (SyncSender<TcpStream>, Receiver<TcpStream>) = sync_channel(queue);
+    // Accepted connections wait for a reader; read requests wait for a worker. At most
+    // `workers + queue` connections are pending at once (the accept loop answers the next one `503`),
+    // so both channels are bounded by that count.
+    let (tx, rx) = std::sync::mpsc::channel::<TcpStream>();
     let rx = Arc::new(Mutex::new(rx));
+    let (work_tx, work_rx) = std::sync::mpsc::channel::<Ready>();
+    let work_rx = Arc::new(Mutex::new(work_rx));
+    let limit = workers + queue;
+    let readers = if once { 1 } else { limit.min(MAX_READERS.max(workers * 2)) };
+    for i in 0..readers {
+        let (rx, pool, work) = (Arc::clone(&rx), Arc::clone(&pool), work_tx.clone());
+        std::thread::Builder::new()
+            .name(format!("killer-http-read-{}", i))
+            .stack_size(READER_STACK_BYTES)
+            .spawn(move || reader_loop(&pool, lim, &rx, &work))
+            .map_err(|e| VmError::runtime_error(format!("{}: cannot start reader thread: {}", who, e)))?;
+    }
+    // the workers stop once every reader has finished (and dropped its sender)
+    drop(work_tx);
     // queue full: a single rejecter thread answers 503 so the accept loop never waits on a client
     let (reject_tx, reject_rx) = sync_channel::<TcpStream>(REJECT_BACKLOG);
     let _ = std::thread::Builder::new().name("killer-http-reject".to_string()).spawn(move || {
@@ -731,16 +776,16 @@ fn serve_loop(vm: &mut VirtualMachine, args: &[Value], program: &Program, once: 
         // One worker: the handler runs on this VM, on the script's own data, as before the pool (a
         // change a handler makes to a global is seen by the script after `serve` returns; the JIT is
         // used as usual). Only the accept loop moves to a helper thread, so the queue and its `503`
-        // still work. The helper ends (and drops the queue's sender) when the server closes; this
-        // loop then answers what is left in the queue and returns.
+        // still work. The helper ends (and drops the queue's sender) when the server closes; the
+        // readers then finish and this loop answers what is left and returns.
         let acc_pool = Arc::clone(&pool);
         let acceptor = std::thread::Builder::new()
             .name("killer-http-accept".to_string())
-            .spawn(move || accept_loop(listener, tx, reject_tx, &acc_pool, idle))
+            .spawn(move || accept_loop(listener, tx, reject_tx, &acc_pool, idle, limit))
             .map_err(|e| VmError::runtime_error(format!("{}: cannot start the accept thread: {}", who, e)))?;
         let routes: Vec<Route> =
             ROUTES.with(|r| r.borrow().iter().map(|route| Route { method: route.method.clone(), segments: route.segments.clone(), handler: route.handler.clone() }).collect());
-        worker_loop(vm, program, &routes, &handler, lim, &pool, &rx);
+        worker_loop(vm, program, &routes, &handler, lim, &pool, &work_rx);
         pool.closing.store(true, Ordering::SeqCst);
         match acceptor.join() {
             Ok(Ok(())) => {}
@@ -753,11 +798,11 @@ fn serve_loop(vm: &mut VirtualMachine, args: &[Value], program: &Program, once: 
     for i in 0..workers {
         // every worker gets its own detached copy of the globals, the routes and the handler
         let (seed, handler, routes) = seed_worker(vm, program, &handler);
-        let (rx, pool) = (Arc::clone(&rx), Arc::clone(&pool));
+        let (rx, pool) = (Arc::clone(&work_rx), Arc::clone(&pool));
         seed.spawn(format!("killer-http-{}", i), move |wvm, prog| worker_loop(wvm, prog, &routes, &handler, lim, &pool, &rx))
             .map_err(|e| VmError::runtime_error(format!("{}: cannot start worker thread: {}", who, e)))?;
     }
-    if let Err(e) = accept_loop(listener, tx, reject_tx, &pool, idle) {
+    if let Err(e) = accept_loop(listener, tx, reject_tx, &pool, idle, limit) {
         return err(format!("{}: {}", who, e));
     }
     // Drain. After max_requests the admitted requests are always answered (each is bounded by its own
@@ -775,11 +820,11 @@ fn serve_loop(vm: &mut VirtualMachine, args: &[Value], program: &Program, once: 
     Ok(Value::Number(pool.completed.load(Ordering::SeqCst) as f64))
 }
 
-/// The accept loop: hand each connection to the workers' queue (or to the rejecter when the queue is
-/// full) until the server stops, closes (`max_requests` reached) or has been idle for `idle`. On the
-/// way out the pool is closed and the listener and both senders are dropped: new connections are
-/// refused by the OS and queued ones get `503` from the workers.
-fn accept_loop(listener: TcpListener, tx: SyncSender<TcpStream>, reject_tx: SyncSender<TcpStream>, pool: &Pool, idle: Option<Duration>) -> Result<(), String> {
+/// The accept loop: hand each connection to the readers (or to the rejecter when `limit`
+/// connections are already pending) until the server stops, closes (`max_requests` reached) or has
+/// been idle for `idle`. On the way out the pool is closed and the listener and both senders are
+/// dropped: new connections are refused by the OS and queued ones get `503`.
+fn accept_loop(listener: TcpListener, tx: std::sync::mpsc::Sender<TcpStream>, reject_tx: SyncSender<TcpStream>, pool: &Pool, idle: Option<Duration>, limit: usize) -> Result<(), String> {
     let mut last_accept = Instant::now();
     let result = loop {
         if stop_requested() || pool.closing.load(Ordering::SeqCst) {
@@ -789,13 +834,14 @@ fn accept_loop(listener: TcpListener, tx: SyncSender<TcpStream>, reject_tx: Sync
             Ok((stream, _)) => {
                 last_accept = Instant::now();
                 let _ = stream.set_nonblocking(false);
-                pool.pending.fetch_add(1, Ordering::SeqCst);
-                match tx.try_send(stream) {
-                    Ok(()) => {}
-                    Err(TrySendError::Full(s)) | Err(TrySendError::Disconnected(s)) => {
+                // only this thread adds to `pending`, so the check and the add cannot race past `limit`
+                if pool.pending.load(Ordering::SeqCst) >= limit {
+                    // the rejecter is backed up too: just close the connection
+                    let _ = reject_tx.try_send(stream);
+                } else {
+                    pool.pending.fetch_add(1, Ordering::SeqCst);
+                    if tx.send(stream).is_err() {
                         pool.pending.fetch_sub(1, Ordering::SeqCst);
-                        // the rejecter is backed up too: just close the connection
-                        let _ = reject_tx.try_send(s);
                     }
                 }
             }

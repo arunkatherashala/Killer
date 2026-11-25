@@ -2124,7 +2124,9 @@ Server-Sent Events stream occupies one worker and the other requests keep being 
   the queue is full the client gets `503 Service Unavailable` with `Retry-After: 1` at once instead
   of waiting.
 - `read_timeout` (seconds, default 10): the total time a client has to send its request. An idle
-  or dribbling connection gets `408 Request Timeout`; it only holds its own worker meanwhile.
+  or dribbling connection gets `408 Request Timeout`; requests are read by
+  separate reader threads (up to 64, no VM), so a client that sends slowly holds a reader, not a
+  worker, and the workers keep answering complete requests.
 - `request_timeout` (seconds, default 60, `0` turns it off): wall-clock deadline for one handler
   call, checked on loop back-edges. A handler stuck in `while true` is aborted and the client gets
   `503`; the server keeps running. A single blocking builtin (`sleep_ms(1e6)`) cannot be interrupted.
