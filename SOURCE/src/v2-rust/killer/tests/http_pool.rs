@@ -384,3 +384,111 @@ fn bad_pool_options_are_errors() {
         assert!(out.contains(msg), "{} -> {}", opts, out);
     }
 }
+
+#[test]
+fn with_one_worker_the_handler_runs_on_the_script_and_the_script_sees_its_changes() {
+    // workers: 1 (and serve_once) run the handler on the script's own VM, as before the pool:
+    // what a handler (or a route closure) adds to a global is there after serve returns
+    let port = free_port();
+    let srv = start(&format!(
+        r#"store = []
+seen = {{"n": 0}}
+fn h(req) {{
+  if req["path"] == "/ping" {{
+    return "pong"
+  }}
+  push(store, req["path"])
+  return str(len(store))
+}}
+route("GET", "/count", fn(req) {{
+  seen["n"] = seen["n"] + 1
+  return str(seen["n"])
+}})
+n = serve({port}, h, {{"workers": 1, "max_requests": 5}})
+println("served", n, "store", len(store), join(store, ","), "seen", seen["n"])
+"#
+    ));
+    wait_ready(port);
+    assert_eq!(get(port, "/a", 60), (200, "1".to_string()));
+    assert_eq!(get(port, "/b", 60), (200, "2".to_string()));
+    assert_eq!(get(port, "/count", 60), (200, "1".to_string()));
+    assert_eq!(get(port, "/c", 60), (200, "3".to_string()));
+    assert_eq!(srv.finish(60), "served 5 store 3 /a,/b,/c seen 1");
+
+    let port = free_port();
+    let srv = start(&format!(
+        r#"hits = []
+fn h(req) {{
+  push(hits, req["path"])
+  return "ok"
+}}
+println("once", serve_once({port}, h), "hits", hits)
+"#
+    ));
+    let started = Instant::now();
+    loop {
+        let r = get(port, "/one", 30);
+        if r.0 == 200 {
+            break;
+        }
+        assert!(started.elapsed() < Duration::from_secs(120), "serve_once never came up");
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    assert_eq!(srv.finish(60), "once 1 hits [/one]");
+}
+
+#[test]
+fn several_sse_streams_receive_every_event_while_a_fast_client_is_served() {
+    let port = free_port();
+    let srv = start(&format!(
+        r#"fn events(tag) {{
+  for i in range(5) {{
+    sleep_ms(400)
+    yield tag + "-" + str(i)
+  }}
+}}
+fn h(req) {{
+  if req["path"] == "/ping" {{
+    return "pong"
+  }}
+  if req["path"] == "/fast" {{
+    return "fast"
+  }}
+  return {{"stream": events(req["query"]["t"])}}
+}}
+n = serve({port}, h, {{"workers": 6, "max_requests": 6}})
+println("served", n)
+"#
+    ));
+    wait_ready(port);
+    let t0 = Instant::now();
+    let streams: Vec<_> = (0..4)
+        .map(|i| {
+            std::thread::spawn(move || {
+                let mut s = TcpStream::connect(("127.0.0.1", port)).unwrap();
+                s.set_read_timeout(Some(Duration::from_secs(120))).unwrap();
+                let nl = crlf();
+                s.write_all(format!("GET /events?t=s{i} HTTP/1.1{nl}Host: x{nl}Accept: text/event-stream{nl}{nl}").as_bytes()).unwrap();
+                let mut out = String::new();
+                let _ = s.read_to_string(&mut out);
+                (i, out, t0.elapsed())
+            })
+        })
+        .collect();
+    // the streams are under way (each takes about 2 s); a plain request is answered meanwhile
+    std::thread::sleep(Duration::from_millis(500));
+    let t = Instant::now();
+    assert_eq!(get(port, "/fast", 60), (200, "fast".to_string()));
+    let fast_done = t0.elapsed();
+    assert!(t.elapsed() < Duration::from_millis(1500), "the fast request waited {:?} behind the streams", t.elapsed());
+    for h in streams {
+        let (i, out, ended) = h.join().unwrap();
+        assert!(out.starts_with("HTTP/1.1 200"), "stream {}: {}", i, out);
+        assert!(out.contains("text/event-stream"), "stream {}: {}", i, out);
+        let data: Vec<&str> = out.lines().filter_map(|l| l.strip_prefix("data: ")).collect();
+        let want: Vec<String> = (0..5).map(|k| format!("s{}-{}", i, k)).collect();
+        assert_eq!(data, want, "stream {}: {}", i, out);
+        assert!(ended > fast_done, "stream {} ended at {:?}, before the fast client was served at {:?}", i, ended, fast_done);
+    }
+    assert_eq!(srv.finish(60), "served 6");
+}
