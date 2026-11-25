@@ -17,7 +17,7 @@
 //! send Server-Sent Events (see `http_sse`); `stream_timeout` (seconds, default 300) bounds a stream.
 //!
 //! **Worker pool.** The accept loop runs on the calling VM thread and hands each connection to a
-//! bounded queue (`queue`, default 64) served by a fixed pool of worker threads (`workers`, default
+//! bounded queue (`queue`, default 1024) served by a fixed pool of worker threads (`workers`, default
 //! min(CPUs, 8)). When the queue is full the connection gets `503` at once (from a small rejecter
 //! thread, so the accept loop never waits on a client). Every worker owns one VM built from a
 //! private detached copy of the program state taken when `serve` starts ([`WorkerSeed`]): handler
@@ -463,6 +463,10 @@ fn opt_num(opts: Option<&SharedDict>, key: &str) -> Option<f64> {
 
 /// Most workers a server may start (each one is an OS thread with its own VM).
 const MAX_WORKERS: usize = 256;
+/// Default `queue`: large enough that a burst of clients arriving together waits for a worker, as it
+/// waited in the OS backlog before the pool (with 64, 200 concurrent requests on a trivial handler got
+/// over 100 `503`s); `503` is for real overload. A queued connection costs one socket.
+const DEFAULT_QUEUE: usize = 1024;
 /// Largest accepted `queue` option.
 const MAX_QUEUE: usize = 65536;
 /// Connections waiting for a polite `503` from the rejecter thread; beyond this they are closed.
@@ -641,7 +645,7 @@ fn serve_loop(vm: &mut VirtualMachine, args: &[Value], program: &Program, once: 
     let idle = opt_num(opts.as_ref(), "idle_timeout").map(|s| Duration::from_secs_f64(s.max(0.0)));
     let default_workers = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4).min(8);
     let workers = if once { 1 } else { opt_count(opts.as_ref(), "workers", default_workers, 1, MAX_WORKERS, who)? };
-    let queue = opt_count(opts.as_ref(), "queue", 64, 0, MAX_QUEUE, who)?;
+    let queue = opt_count(opts.as_ref(), "queue", DEFAULT_QUEUE, 0, MAX_QUEUE, who)?;
     // how long server_stop() waits for handlers still running before serve returns anyway
     let drain = Duration::from_secs_f64(opt_num(opts.as_ref(), "drain_timeout").unwrap_or(30.0).clamp(0.0, 86400.0));
     let lim = Limits {

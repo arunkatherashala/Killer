@@ -21,7 +21,7 @@ All notable changes to `killer-native` are documented here.
 
 ### Changed
 - **Behaviour change: `serve` runs handlers on a bounded worker pool, and handlers no longer share global state.**
-  The accept loop hands each connection to a bounded queue (`queue`, default 64) served by `workers` threads (default
+  The accept loop hands each connection to a bounded queue (`queue`, default 1024) served by `workers` threads (default
   min(CPUs, 8), at most 256); a full queue answers `503` with `Retry-After: 1` at once, so one slow client or SSE stream
   no longer blocks everyone. Each worker runs its own VM on a private deep copy of the program data taken when `serve`
   starts (globals, the handler, the routes and what their closures captured, copied in one walk, so closures sharing a

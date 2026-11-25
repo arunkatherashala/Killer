@@ -2120,7 +2120,7 @@ Server-Sent Events stream occupies one worker and the other requests keep being 
 - `workers` (default min(number of CPUs, 8), at most 256): how many requests run at the same time.
   `workers: 1` gives the old behaviour: one request at a time, with the handler running on the
   script's own thread and data (see below). `serve_once` always uses one worker.
-- `queue` (default 64, `0` = no queue): connections accepted but not yet picked up by a worker. When
+- `queue` (default 1024, `0` = no queue): connections accepted but not yet picked up by a worker. When
   the queue is full the client gets `503 Service Unavailable` with `Retry-After: 1` at once instead
   of waiting.
 - `read_timeout` (seconds, default 10): the total time a client has to send its request. An idle
