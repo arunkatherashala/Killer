@@ -1802,10 +1802,14 @@ The client is a hardened wrapper around `curl` (which must be installed, especia
 headers and body are passed on curl's **stdin**, never on its command line, so API keys do not show up
 in the process list; TLS certificates are verified by default (`insecure: true` opts out and prints a warning to stderr naming the host, once per request); plain `http://`
 is refused except for `localhost`, `127.0.0.1` and `::1` (or `allow_http: true`); header values with
-control characters are rejected; every request has a timeout.
+control characters are rejected; every request has a timeout. An SSRF guard refuses loopback and
+private-network addresses (`127.0.0.1`, `10.x`, `192.168.x`, ...) unless the request passes
+`allow_private: true` (or the process sets `KILLER_ALLOW_PRIVATE_NET=1`); link-local and cloud metadata
+addresses are always refused.
 
 A server and its client cannot share one thread, so the example starts the client as a task. (Tasks get
-copies, so the port is passed as an argument.)
+copies, so the port is passed as an argument.) The client talks to `127.0.0.1`, so it uses
+`http_request` with `allow_private: true`.
 
 ```killer
 port = free_port()
@@ -1818,23 +1822,23 @@ route("POST", "/sum", fn(req) {
 })
 fn client(port) {
   base = "http://127.0.0.1:" + str(port)
-  a = http_get(base + "/hello/ada", {}, 10)
-  b = http_request({"method": "POST", "url": base + "/sum", "body": {"a": 2, "b": 3}, "timeout": 10})
-  c = http_get(base + "/nope", {}, 10)
+  a = http_request({"url": base + "/hello/ada", "timeout": 10, "allow_private": true})
+  b = http_request({"method": "POST", "url": base + "/sum", "body": {"a": 2, "b": 3}, "timeout": 10, "allow_private": true})
+  c = http_request({"url": base + "/nope", "timeout": 10, "allow_private": true})
   return [a, b, c]
 }
 h = async_spawn(client, port)
 n = serve(port, null, {"max_requests": 3})
 r = async_await(h)
 println("served", n)
-println(r[0])
+println(r[0]["body"])
 println(r[1]["status"], r[1]["body"])
-println(r[2])
+println(r[2]["status"], r[2]["body"])
 routes_clear()
 # expect: served 3
 # expect: hello ada
 # expect: 200 {"total":5}
-# expect: Not Found: GET /nope
+# expect: 404 Not Found: GET /nope
 ```
 
 ## Vectors, RAG and embeddings

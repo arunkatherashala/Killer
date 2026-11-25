@@ -14,7 +14,7 @@ at commit `b3de537` (see [`PLATFORMS.md`](PLATFORMS.md)); later changes were che
 |-------|--------|
 | Automated tests (`cargo test --lib --tests --no-fail-fast`) | 3,904 passed, 0 failed (local run of 2026-11-25, root `tracker.csv` row 209) |
 | Language parity probes (`python parity/run_parity.py`, 166 programs written like a Python/JS/Java programmer would) | 166 of 166 pass (it was 76 of 166, 46%, at the first audit) |
-| Documentation examples (`python docs/check_examples.py`) | 65 of 65 run and print what the docs say |
+| Documentation examples (`python docs/check_examples.py`) | 71 of 71 run and print what the docs say |
 | Documentation links (`python docs/check_links.py`) | 67 links, 0 broken |
 | Real programs | 18 programs in `parity/realworld/` and 5 applications in `examples/apps/` (REST service, RAG question answering, CSV tool, text adventure, expression interpreter), with Python mirrors for the deterministic parts |
 | Fuzzing | seeded runs of 20,000 cases over several seeds, no panic, hang or stack overflow |

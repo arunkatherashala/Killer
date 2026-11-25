@@ -281,9 +281,9 @@ route("POST", "/add", fn(req) {
 })
 fn client(port) {
   base = "http://127.0.0.1:" + str(port)
-  one = http_request({"url": base + "/greet/ada", "timeout": 10})
-  two = http_request({"method": "POST", "url": base + "/add", "body": {"a": 1, "b": 2}, "timeout": 10})
-  bad = http_request({"method": "POST", "url": base + "/add", "body": {"b": 2}, "timeout": 10})
+  one = http_request({"url": base + "/greet/ada", "timeout": 10, "allow_private": true})
+  two = http_request({"method": "POST", "url": base + "/add", "body": {"a": 1, "b": 2}, "timeout": 10, "allow_private": true})
+  bad = http_request({"method": "POST", "url": base + "/add", "body": {"b": 2}, "timeout": 10, "allow_private": true})
   return [one, two, bad]
 }
 task = async_spawn(client, port)
@@ -299,9 +299,11 @@ routes_clear()
 ```
 
 The client refuses plain `http://` except to localhost and checks TLS certificates for `https://`
-(it needs `curl` installed). Secrets such as API keys travel on curl's stdin, never on a command line.
-Pass `{"host": "0.0.0.0"}` as the options to `serve` to accept outside connections (there is no TLS in
-the server; use a reverse proxy).
+(it needs `curl` installed). Its SSRF guard also refuses loopback and private-network addresses unless
+the request passes `"allow_private": true`, which is why the client above sets it. Secrets such as API
+keys travel on curl's stdin, never on a command line. Pass `{"host": "0.0.0.0"}` as the options to
+`serve` to accept outside connections; for HTTPS pass `{"tls": {"cert": ..., "key": ...}}` (needs the
+system `openssl`, see LANGUAGE.md).
 
 ## Lesson 12: Retrieval-augmented generation, offline
 
